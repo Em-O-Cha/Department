@@ -35,7 +35,7 @@
       + '<div class="panel xfilter"><div class="xdepts">' + X.depts.map(function (d) {
         return '<button class="xdept' + (X.q.dept === d.key ? ' on' : '') + '" data-d="' + d.key + '" style="--dc:' + d.color + '"><span class="xi">' + icon(d.key, 18) + '</span>' + esc(d.name) + (d.ready ? '' : '<small>ยังไม่มีข้อมูล</small>') + '</button>';
       }).join('') + '</div>'
-      + '<div class="xdates"><label>ตั้งแต่<input type="date" id="xFrom" value="' + X.q.from + '"></label><label>ถึง<input type="date" id="xTo" value="' + X.q.to + '"></label>'
+      + '<div class="xdates"' + (curDept().embed ? ' style="display:none"' : '') + '><label>ตั้งแต่<input type="date" id="xFrom" value="' + X.q.from + '"></label><label>ถึง<input type="date" id="xTo" value="' + X.q.to + '"></label>'
       + '<div class="pchips">' + quick.map(function (q) { return '<button class="chip' + (X.q.from === q[1] && X.q.to === q[2] ? ' on' : '') + '" data-q="' + q[1] + '|' + q[2] + '">' + q[0] + '</button>'; }).join('') + '</div></div></div>'
       + '<div id="xOut"></div>';
     on('[data-d]', function (el) { X.q.dept = el.getAttribute('data-d'); X.render(); });
@@ -49,7 +49,9 @@
   };
   function on(sel, fn) { Array.prototype.forEach.call($('main').querySelectorAll(sel), function (el) { el.addEventListener('click', function () { fn(el); }); }); }
 
+  function curDept() { return (X.depts || []).filter(function (d) { return d.key === X.q.dept; })[0] || {}; }
   function load() {
+    if (curDept().embed) return embed(curDept());
     var key = X.q.dept + '|' + X.q.from + '|' + X.q.to;
     if (X.data && X.data.key === key) return draw(X.data);
     var my = ++X.seq;
@@ -108,6 +110,19 @@
       + '</div>';
     $('xOut').innerHTML = html;
   }
+  // ฝ่ายขาย: เปิด Meeting Dashboard ทั้งหน้าในกรอบ · ส่งตั๋วผู้บริหารให้ทาง postMessage (ไม่ต้องใส่รหัสซ้ำ)
+  var EMBED_ORIGIN = 'https://em-o-cha.github.io';
+  function embed(d) {
+    $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + esc(d.en) + '</span></div>'
+      + '<div class="xframe"><iframe id="xFrame" title="Meeting Dashboard" src="' + esc(d.embed) + '"></iframe></div>';
+  }
+  window.addEventListener('message', function (ev) {
+    var f = $('xFrame');
+    if (!f || ev.source !== f.contentWindow || ev.origin !== EMBED_ORIGIN || !ev.data) return;
+    if (ev.data.type === 'meeting-ready' && state.token) f.contentWindow.postMessage({ type: 'exec-token', token: state.token }, EMBED_ORIGIN);
+    if (ev.data.type === 'meeting-height') f.style.height = Math.max(600, Number(ev.data.h) || 0) + 'px';
+  });
+
   function box(title, rows, empty) { return '<div class="panel pbox"><h4>' + title + '</h4>' + (rows.length ? rows.join('') : '<div class="muted">' + empty + '</div>') + '</div>'; }
 
   // กราฟแท่งคู่ รับเข้า/จ่ายออก (รวมเป็นรายเดือนเมื่อช่วงยาวกว่า 62 วัน) · ชี้/แตะแท่งเพื่อดูตัวเลข
@@ -157,6 +172,7 @@
     '.xsvg{width:100%;height:auto;display:block}.xax{font-size:11px;fill:#64748b}.xcol:hover rect{fill:rgba(15,23,42,.05)}',
     '.xbar{display:grid;grid-template-columns:minmax(0,1.3fr) 1fr auto;gap:8px;align-items:center;padding:5px 0;border-top:1px solid var(--line);font-size:13.5px}.xn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
     '.xtrack{height:10px;background:#f1f5f9;border-radius:99px;overflow:hidden}.xtrack span{display:block;height:100%;background:' + OUT_C + ';border-radius:99px}.xv{text-align:right;font-weight:600;white-space:nowrap}.xv small{display:block;font-weight:400;color:var(--muted);font-size:11px}',
+    '.xframe{background:#fff;border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}.xframe iframe{display:block;width:100%;height:900px;border:0}',
     '@media (max-width:860px){.kpis.xk{grid-template-columns:repeat(2,1fr)}}'
   ].join('\n');
   document.head.appendChild(css);

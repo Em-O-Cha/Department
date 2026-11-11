@@ -18,12 +18,23 @@ function execRange_(from, to) {
   return { from: from, to: to };
 }
 
+// ฝ่ายขาย = Meeting Dashboard (repo dashboard-meeting + meeting-dashboard/DashboardApi.gs) เปิดในกรอบหน้า Dashboard ผู้บริหาร
+// หน้านั้นตรวจตั๋วผู้บริหารกับ execVerify (ไม่ต้องใส่รหัส Meeting Dashboard ซ้ำ)
+var EXEC_SALES_ = { key: 'SALES', name: 'ฝ่ายขาย', en: 'Sales (Meeting Dashboard)', color: '#e11d48', ready: true,
+  embed: 'https://em-o-cha.github.io/dashboard-meeting/?embed=exec' };
+
 // รายชื่อฝ่าย + ฝ่ายไหนมี Dashboard แล้ว
 function execOverview(token) {
   requireExec_(token);
-  return { ok: true, depts: activeDepartments_().filter(function (d) { return !d.exec; }).map(function (d) {
+  return { ok: true, depts: [EXEC_SALES_].concat(activeDepartments_().filter(function (d) { return !d.exec; }).map(function (d) {
     return { key: d.key, name: d.name, en: d.en, color: d.color, ready: !!EXEC_DASHBOARDS_[d.key] && !!deptConfig_(d.key).sheetId };
-  }) };
+  })) };
+}
+
+// ใช้โดย Meeting Dashboard (ฝั่ง Apps Script) ตรวจว่าตั๋วนี้เป็นของผู้บริหารที่ยังเข้าระบบอยู่
+function execVerify(token) {
+  requireExec_(token);
+  return { ok: true };
 }
 
 // Dashboard ของฝ่ายที่เลือก ในช่วงวันที่

@@ -21,7 +21,7 @@ function apiFunctions_() {
     purSaveDoc: purSaveDoc, purSaveMove: purSaveMove, purDeleteMove: purDeleteMove,
     purUploadFile: purUploadFile, purRemoveFile: purRemoveFile, purLog: purLog,
     // ผู้บริหาร (Executive.gs)
-    execOverview: execOverview, execDashboard: execDashboard
+    execOverview: execOverview, execDashboard: execDashboard, execVerify: execVerify
   };
 }
 
