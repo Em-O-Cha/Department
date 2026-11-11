@@ -31,12 +31,12 @@ var PUR_TABLES_ = {
     ['qty', 'จำนวน'], ['unit', 'หน่วย'], ['price', 'ราคาต่อหน่วย'], ['amount', 'จำนวนเงิน']] },
   moves: { tab: 'รับเข้าจ่ายออก', cols: [
     ['id', 'รหัส'], ['date', 'วันที่'], ['type', 'ประเภท'], ['materialId', 'รหัสวัตถุดิบ'], ['qty', 'จำนวน'],
-    ['lot', 'LOT'], ['expDate', 'วันหมดอายุ'], ['requester', 'ผู้เบิก'], ['issuer', 'ผู้จ่าย/ผู้รับ'], ['docId', 'รหัสใบ PO'],
+    ['lot', 'LOT'], ['expDate', 'วันหมดอายุ'], ['mfgDate', 'วันที่ผลิต'], ['requester', 'ผู้เบิก'], ['issuer', 'ผู้จ่าย/ผู้รับ'], ['docId', 'รหัสใบ PO'],
     ['qc', 'ผลตรวจรับ'], ['qcNote', 'หมายเหตุตรวจรับ'], ['files', 'ไฟล์แนบ'], ['note', 'หมายเหตุ'], ['source', 'ที่มา'],
     ['createdAt', 'บันทึกเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
   log: { tab: 'ประวัติแก้ไข', cols: [['time', 'เวลา'], ['action', 'การทำงาน'], ['table', 'ข้อมูล'], ['id', 'รหัส'], ['detail', 'รายละเอียด']] }
 };
-var PUR_DATE_KEYS_ = { priceDate: 1, effectiveDate: 1, orderDate: 1, deliveryDate: 1, approvedDate: 1, dueDate: 1, paidDate: 1, date: 1, expDate: 1 };
+var PUR_DATE_KEYS_ = { mfgDate: 1, priceDate: 1, effectiveDate: 1, orderDate: 1, deliveryDate: 1, approvedDate: 1, dueDate: 1, paidDate: 1, date: 1, expDate: 1 };
 var PUR_NUM_KEYS_ = { creditDays: 1, minStock: 1, price: 1, total: 1, paidAmount: 1, line: 1, qty: 1, amount: 1 };
 var PUR_MOVE_IN_ = { IN: 1 };                 // รับเข้า
 var PUR_MOVE_OUT_ = { OUT: 1, RETURN: 1 };   // จ่ายออก / ส่งคืนผู้ขาย · ADJ = ปรับยอด (+/-)
@@ -164,9 +164,10 @@ function purBalances_(moves) {
     var L = (lots[id] = lots[id] || []);
     if (s > 0) {
       var lk = m.lot || '-', l = L.filter(function (x) { return x.lot === lk; })[0];
-      if (!l) { l = { lot: lk, qty: 0, expDate: '', inDate: m.date }; L.push(l); }
+      if (!l) { l = { lot: lk, qty: 0, expDate: '', mfgDate: '', inDate: m.date }; L.push(l); }
       l.qty = Math.round((l.qty + s) * 1000) / 1000;
       if (m.expDate) l.expDate = m.expDate;
+      if (m.mfgDate) l.mfgDate = m.mfgDate;
       return;
     }
     var need = -s;
@@ -391,7 +392,7 @@ function purSaveMove(token, m) {
     var o = old ? JSON.parse(JSON.stringify(old)) : { id: purId_('T'), createdAt: purNow_(), source: 'ระบบ', files: '[]', date: purToday_() };
     if (purDate_(m.date)) o.date = purDate_(m.date);   // วันที่: หน้าเว็บตั้งเป็นวันนี้ให้ก่อน แก้ได้
     o.type = m.type; o.materialId = m.materialId; o.qty = qty;
-    o.lot = purClean_(m.lot, 60) || (m.type === 'IN' ? o.date.split('-').reverse().join('/') : ''); o.expDate = purDate_(m.expDate);
+    o.lot = purClean_(m.lot, 60) || (m.type === 'IN' ? o.date.split('-').reverse().join('/') : ''); o.expDate = purDate_(m.expDate); o.mfgDate = purDate_(m.mfgDate);
     o.requester = purClean_(m.requester, 100); o.issuer = purClean_(m.issuer, 100); o.docId = purClean_(m.docId, 40);
     o.qc = purClean_(m.qc, 40); o.qcNote = purClean_(m.qcNote, 500); o.note = purClean_(m.note, 500); o.updatedAt = purNow_();
     if (typeof o.files !== 'string') o.files = JSON.stringify(o.files || []);
@@ -545,4 +546,26 @@ function purDashboard_(dept, from, to) {
       overdueCount: unpaid.filter(function (d) { return d.overdue; }).length, waitingCount: waiting.length },
     days: dayList, top: topList, low: low.slice(0, 30), expiring: exp.slice(0, 30), unpaid: unpaid.slice(0, 30), waiting: waiting.slice(0, 30)
   };
+}
+
+
+// ---------- รายงานสต๊อกคงเหลือ ณ วันที่ + มูลค่า (จำนวนคงเหลือ × ราคา ณ วันที่นั้น) ----------
+function purStockReport(token, asOf) {
+  var dept = requirePur_(token), ss = purBook_(dept);
+  asOf = purDate_(asOf);
+  if (!asOf) return { ok: false, error: 'เลือกวันที่' };
+  var materials = purRead_(ss, 'materials'), prices = purRead_(ss, 'prices');
+  var moves = purRead_(ss, 'moves').filter(function (m) { return m.date <= asOf; });
+  var b = purBalances_(moves), byMat = {};
+  prices.forEach(function (p) { (byMat[p.materialId] = byMat[p.materialId] || []).push(p); });
+  var rows = materials.map(function (m) {
+    var qty = b.bal[m.id] || 0, list = (byMat[m.id] || []).sort(function (a, c) { return a.effectiveDate.localeCompare(c.effectiveDate); });
+    // ราคาล่าสุดที่มีผลไม่เกินวันที่เลือก · ถ้ายังไม่มีราคาก่อนวันนั้น ใช้ราคาแรกที่บันทึกไว้
+    var before = list.filter(function (x) { return x.effectiveDate <= asOf; }), p = before.length ? before[before.length - 1] : list[0];
+    var price = p ? p.price : '', value = price === '' ? '' : Math.round(qty * price * 100) / 100;
+    return { id: m.id, name: m.name, unit: m.unit, qty: qty, price: price, priceDate: p ? p.effectiveDate : '', value: value, lastMove: b.last[m.id] || '', active: m.active };
+  }).filter(function (r) { return Math.abs(r.qty) > 0.0005; })
+    .sort(function (a, c) { return a.name.localeCompare(c.name, 'th'); });
+  var total = Math.round(rows.reduce(function (s2, r) { return s2 + (r.value === '' ? 0 : r.value); }, 0) * 100) / 100;
+  return { ok: true, asOf: asOf, rows: rows, total: total, noPrice: rows.filter(function (r) { return r.price === ''; }).length };
 }

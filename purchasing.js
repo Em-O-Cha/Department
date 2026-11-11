@@ -37,6 +37,12 @@
   var PAY_ST = { unpaid: 'ยังไม่ชำระ', partial: 'ชำระบางส่วน', paid: 'ชำระแล้ว', none: '-' };
   // ชื่อที่ใส่ให้อัตโนมัติตอนจ่ายออก (แก้ในช่องได้)
   var DEF_REQUESTER = 'ณิชกมล', DEF_ISSUER = 'สุชาดา';
+  var STAFF = ['วิจิตรา', 'สุชาดา', 'ณิชกมล'];   // รายชื่อให้เลือก ผู้รับของ / ผู้เบิก / ผู้จ่าย
+  function staffSel(id, label, value) {
+    var opts = [['', '— เลือกชื่อ —']].concat(STAFF.map(function (n) { return [n, n]; }));
+    if (value && STAFF.indexOf(value) < 0) opts.push([value, value]);   // ชื่อเดิมในข้อมูลเก่า
+    return S(id, label, opts, value || '');
+  }
   var FILE_LABELS = ['PR ที่อนุมัติ', 'PO ที่อนุมัติ', 'ภาพอนุมัติทาง LINE', 'ใบเสนอราคา', 'ใบส่งของ / ใบกำกับ', 'COA / ผลตรวจ', 'หลักฐานการชำระเงิน', 'อื่น ๆ'];
 
   // ---------- ตัวช่วย ----------
@@ -188,17 +194,17 @@
     var openPOs = P.data.docs.filter(function (d) { return d.type === 'PO' && (/approved|ordered|partial/.test(d.status) || d.id === m.docId) && d.items.some(function (it) { return it.materialId === mm.id; }); });
     var body = '<div class="pform">'
       + (edit ? S('mvType', 'ประเภท', Object.keys(TYPE).map(function (k) { return [k, TYPE[k]]; }), type) : (type === 'OUT' ? S('mvType', 'ประเภท', [['OUT', 'จ่ายออก (เบิกใช้)'], ['RETURN', 'ส่งคืนผู้ขาย']], 'OUT') : ''))
-      + F('mvDate', 'วันที่', m.date || todayIso(), 'date')
+      + F('mvDate', 'วันที่คีย์ข้อมูล', m.date || todayIso(), 'date')
       + hl(F('mvQty', 'จำนวน (' + esc(unit) + ')' + (type === 'ADJ' ? ' (+ เพิ่ม / − ลด)' : ''), m.qty, 'number', ' step="any" inputmode="decimal" placeholder="0"'))
       + (type === 'IN'
-        ? F('mvLot', 'LOT', m.lot, 'text', ' placeholder="เว้นว่าง = วันที่รับ"') + F('mvExp', 'วันหมดอายุ', m.expDate, 'date')
+        ? F('mvLot', 'LOT', m.lot, 'text', ' placeholder="เว้นว่าง = วันที่รับ"') + F('mvMfg', 'วันที่ผลิต', m.mfgDate, 'date') + F('mvExp', 'วันหมดอายุ', m.expDate, 'date')
           + S('mvDoc', 'อ้างอิงใบ PO', [['', '— ไม่อ้างอิง —']].concat(openPOs.map(function (d) { return [d.id, d.docNo + ' · ' + d.vendorName]; })), m.docId)
           + S('mvQc', 'ผลตรวจรับ (QC)', [['', '— ยังไม่ระบุ —'], ['ผ่าน', 'ผ่าน'], ['ผ่านแบบมีเงื่อนไข', 'ผ่านแบบมีเงื่อนไข'], ['ไม่ผ่าน', 'ไม่ผ่าน']], m.qc)
           + F('mvQcNote', 'หมายเหตุตรวจรับ', m.qcNote, 'text', ' placeholder="เช่น อุณหภูมิ, สภาพบรรจุภัณฑ์, COA"')
-          + hl(F('mvIssuer', 'ผู้รับของ', m.issuer != null ? m.issuer : store('receiver')))
-        : S('mvLot', 'LOT', (lots.length ? lots.map(function (l) { return [l.lot, l.lot + ' (เหลือ ' + n3(l.qty) + (l.expDate ? ' · หมดอายุ ' + dd(l.expDate) : '') + ')']; }) : [['', '— ไม่มี LOT คงเหลือ —']])
+          + hl(staffSel('mvIssuer', 'ผู้รับของ', m.issuer != null ? m.issuer : store('receiver')))
+        : S('mvLot', 'LOT', (lots.length ? lots.map(function (l) { return [l.lot, l.lot + ' (เหลือ ' + n3(l.qty) + (l.mfgDate ? ' · ผลิต ' + dd(l.mfgDate) : '') + (l.expDate ? ' · หมดอายุ ' + dd(l.expDate) : '') + ')']; }) : [['', '— ไม่มี LOT คงเหลือ —']])
             .concat(m.lot && !lots.some(function (l) { return l.lot === m.lot; }) ? [[m.lot, m.lot]] : []), m.lot || (lots[0] && lots[0].lot))
-          + F('mvReq', 'ผู้เบิก', m.requester != null ? m.requester : DEF_REQUESTER) + F('mvIssuer', 'ผู้จ่าย', m.issuer != null ? m.issuer : DEF_ISSUER))
+          + staffSel('mvReq', 'ผู้เบิก', m.requester != null ? m.requester : DEF_REQUESTER) + staffSel('mvIssuer', 'ผู้จ่าย', m.issuer != null ? m.issuer : DEF_ISSUER))
       + T('mvNote', 'หมายเหตุ', m.note)
       + (!edit && type === 'IN' ? '<div class="pf full"><label>แนบไฟล์ (ใบส่งของ / COA / รูป) — ไม่บังคับ</label><input id="mvFile" type="file" accept="image/*,application/pdf"></div>' : '')
       + '</div>'
@@ -214,7 +220,8 @@
       check: function () {
         var q = Number(v('mvQty'));
         if (!v('mvQty') || !isFinite(q) || q === 0 || (v('mvType') !== 'ADJ' && type !== 'ADJ' && q < 0)) return 'กรอกจำนวนให้ถูกต้อง';
-        if (!v('mvDate')) return 'เลือกวันที่';
+        if (!v('mvDate')) return 'เลือกวันที่คีย์ข้อมูล';
+        if ($('mvMfg') && v('mvMfg') && v('mvExp') && v('mvMfg') > v('mvExp')) return 'วันที่ผลิตต้องไม่หลังวันหมดอายุ';
         if (v('mvDate') > todayIso()) return 'วันที่ต้องไม่เกินวันนี้';
         var nt = $('mvType') ? v('mvType') : type;
         if (nt === 'OUT' || nt === 'RETURN') {
@@ -225,7 +232,7 @@
         return '';
       },
       submit: function () {
-        var rec = { id: m.id || '', type: $('mvType') ? v('mvType') : type, materialId: mm.id, date: v('mvDate'), qty: v('mvQty'), lot: v('mvLot'), expDate: v('mvExp'),
+        var rec = { id: m.id || '', type: $('mvType') ? v('mvType') : type, materialId: mm.id, date: v('mvDate'), qty: v('mvQty'), lot: v('mvLot'), expDate: v('mvExp'), mfgDate: $('mvMfg') ? v('mvMfg') : (m.mfgDate || ''),
           docId: v('mvDoc') || (edit ? m.docId : ''), qc: v('mvQc') || (edit ? m.qc : ''), qcNote: v('mvQcNote') || (edit && !$('mvQcNote') ? m.qcNote : ''),
           requester: v('mvReq'), issuer: v('mvIssuer'), note: v('mvNote') };
         if (type === 'IN' && rec.type === 'IN') rec.requester = edit ? m.requester : '';
@@ -258,10 +265,10 @@
           if (!$('hAdj')) return;
           var bal = 0, rows = r.moves.map(function (x) { var s = x.type === 'IN' ? +x.qty : x.type === 'ADJ' ? +x.qty : -x.qty; bal = Math.round((bal + s) * 1000) / 1000; x._bal = bal; x._s = s; return x; }).reverse();
           P._hist = {}; rows.forEach(function (x) { P._hist[x.id] = x; });
-          $('mBody').innerHTML = '<div class="ptable-wrap"><table class="ptable"><thead><tr><th>วันที่</th><th>รายการ</th><th class="r">จำนวน</th><th class="r">คงเหลือ</th><th>LOT</th><th>ผู้เบิก/ผู้จ่าย</th><th></th></tr></thead><tbody>'
+          $('mBody').innerHTML = '<div class="ptable-wrap"><table class="ptable"><thead><tr><th>วันที่คีย์ข้อมูล</th><th>รายการ</th><th class="r">จำนวน</th><th class="r">คงเหลือ</th><th>LOT</th><th>ผู้เบิก/ผู้จ่าย</th><th></th></tr></thead><tbody>'
             + (rows.map(function (x) {
               return '<tr><td>' + dd(x.date) + '</td><td><span class="mt ' + x.type + '">' + TYPE[x.type] + '</span>' + (x.qc ? ' <small>QC: ' + esc(x.qc) + '</small>' : '') + (x.note ? '<br><small>' + esc(x.note) + '</small>' : '') + (x.files && x.files.length ? '<br>' + x.files.map(fileLink).join(' ') : '') + '</td>'
-                + '<td class="r ' + (x._s < 0 ? 'neg' : 'pos') + '">' + (x._s > 0 ? '+' : '') + n3(x._s) + '</td><td class="r"><b>' + n3(x._bal) + '</b></td><td>' + esc(x.lot) + (x.expDate ? '<br><small>หมดอายุ ' + dd(x.expDate) + '</small>' : '') + '</td>'
+                + '<td class="r ' + (x._s < 0 ? 'neg' : 'pos') + '">' + (x._s > 0 ? '+' : '') + n3(x._s) + '</td><td class="r"><b>' + n3(x._bal) + '</b></td><td>' + esc(x.lot) + (x.mfgDate ? '<br><small>ผลิต ' + dd(x.mfgDate) + '</small>' : '') + (x.expDate ? '<br><small>หมดอายุ ' + dd(x.expDate) + '</small>' : '') + '</td>'
                 + '<td><small>' + esc([x.requester, x.issuer].filter(String).join(' / ')) + '</small></td><td><button type="button" class="icon-btn" data-edit="' + x.id + '" title="แก้ไข">' + icon('edit', 16) + '</button></td></tr>';
             }).join('') || '<tr><td colspan="7" class="muted">ยังไม่มีรายการ</td></tr>') + '</tbody></table></div>';
           on('[data-edit]', 'click', function (el) { moveModal(P._hist[el.getAttribute('data-edit')], function () { historyModal(id); }); }, $('mBody'));
@@ -561,18 +568,33 @@
     var t = todayIso(), from = P.q.repFrom || monthStart(t), to = P.q.repTo || t;
     var lastM = addDays(monthStart(t), -1);
     $('main').innerHTML = '<h3>รายงาน / พิมพ์</h3><p class="lead">เลือกช่วงวันที่ → แสดงรายงาน → พิมพ์ หรือบันทึกเป็น PDF (เลือก "บันทึกเป็น PDF" ในหน้าพิมพ์)</p>'
-      + '<div class="panel noprint"><div class="pform">' + S('rType', 'ประเภทรายงาน', [['stock', 'รายงานเบิกจ่ายสินค้า (รับเข้า-จ่ายออก)'], ['PO', 'รายงานใบสั่งซื้อ (PO)'], ['PR', 'รายงานใบขอซื้อ (PR)']], P.q.repType || 'stock') + '<div class="pf"></div>'
+      + '<div class="panel noprint"><div class="pform">' + S('rType', 'ประเภทรายงาน', [['stock', 'รายงานเบิกจ่ายสินค้า (รับเข้า-จ่ายออก)'], ['balance', 'รายงานสต๊อกคงเหลือ + มูลค่า (ณ วันที่)'], ['PO', 'รายงานใบสั่งซื้อ (PO)'], ['PR', 'รายงานใบขอซื้อ (PR)']], P.q.repType || 'stock') + '<div class="pf"></div>'
       + F('rFrom', 'ตั้งแต่วันที่', from, 'date') + F('rTo', 'ถึงวันที่', to, 'date')
       + S('rMat', 'วัตถุดิบ', [['', 'ทุกรายการ']].concat(materialList().map(function (m) { return [m.id, m.name]; })), P.q.repMat || '')
       + '<div class="pf"><label>&nbsp;</label><label class="pchk"><input type="checkbox" id="rDetail"' + (P.q.repDetail ? ' checked' : '') + '> แสดงรายการรับเข้า-จ่ายออกทุกรายการ</label></div></div>'
       + '<div class="pchips">' + [['เดือนนี้', monthStart(t), t], ['เดือนก่อน', monthStart(lastM), lastM], ['3 เดือน', addDays(t, -90), t], ['ทั้งหมด', '2020-01-01', t]].map(function (q) { return '<button class="chip" data-r="' + q[1] + '|' + q[2] + '">' + q[0] + '</button>'; }).join('') + '</div>'
       + '<div class="actions"><button class="btn btn-primary" id="rGo">' + icon('chart', 18) + 'แสดงรายงาน</button><button class="btn btn-line" id="rPrint">' + icon('print', 18) + 'พิมพ์ / PDF</button></div></div>'
       + '<div id="rOut"></div>';
-    var stockOpts = function () { var st = v('rType') === 'stock'; [$('rMat'), $('rDetail')].forEach(function (el) { el.closest('.pf').style.display = st ? '' : 'none'; }); };
+    var stockOpts = function () {
+      var ty = v('rType'), st = ty === 'stock', bal = ty === 'balance';
+      [$('rMat'), $('rDetail')].forEach(function (el) { el.closest('.pf').style.display = st ? '' : 'none'; });
+      $('rFrom').closest('.pf').style.display = bal ? 'none' : '';
+      $('rTo').closest('.pf').querySelector('label').textContent = bal ? 'ยอดคงเหลือ ณ วันที่' : 'ถึงวันที่';
+      $('main').querySelector('.pchips').style.display = bal ? 'none' : '';
+    };
     stockOpts();
     $('rType').addEventListener('change', function () { P.q.repType = this.value; stockOpts(); $('rOut').innerHTML = ''; });
     var run = function (print) {
       P.q.repFrom = v('rFrom'); P.q.repTo = v('rTo'); P.q.repMat = v('rMat'); P.q.repDetail = $('rDetail').checked; P.q.repType = v('rType');
+      if (P.q.repType === 'balance') {
+        if (!P.q.repTo) return toast('เลือกวันที่');
+        $('rOut').innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังสร้างรายงาน…</div>';
+        return call('purStockReport', state.token, P.q.repTo).then(function (r) {
+          if (state.page !== 'p_rep') return;
+          if (!r.ok) { $('rOut').innerHTML = '<div class="panel err">' + esc(r.error) + '</div>'; return; }
+          drawBalanceReport(r); if (print) setTimeout(function () { window.print(); }, 300);
+        }).catch(onServerError);
+      }
       if (!P.q.repFrom || !P.q.repTo || P.q.repFrom > P.q.repTo) return toast('เลือกช่วงวันที่ให้ถูกต้อง');
       if (P.q.repType !== 'stock') {
         $('rOut').innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังสร้างรายงาน…</div>';
@@ -589,7 +611,7 @@
     $('rPrint').addEventListener('click', function () { run(true); });
     $('rMat').addEventListener('change', function () { if (P.report && v('rType') === 'stock') { P.q.repMat = v('rMat'); drawReport(P.report); } });
     $('rDetail').addEventListener('change', function () { if (P.report && v('rType') === 'stock') { P.q.repDetail = this.checked; drawReport(P.report); } });
-    if ((P.q.repType || 'stock') !== 'stock') run(false);
+    if ((P.q.repType || 'stock') !== 'stock') run(false);   // PO / PR / คงเหลือ
     else if (P.report && P.report.key === from + '|' + to) drawReport(P.report); else if (P.q.repMat) run(false);
   }
   // หัวกระดาษรายงาน: หน้าแรก = โลโก้ + ชื่อบริษัท + รหัสแบบฟอร์ม + ชื่อรายงาน · หน้าถัดไป = ชื่อบริษัท + รหัสแบบฟอร์ม (@page ด้านล่าง)
@@ -636,12 +658,6 @@
             + '<td class="nw">' + esc(x.lot) + '</td><td class="nw">' + esc(x.requester) + '</td><td class="nw">' + esc(x.issuer) + '</td><td>' + esc(note) + '</td></tr>';
         }).join('') || '<tr><td colspan="9" class="c muted">ไม่มีรายการ</td></tr>') + '</tbody></table>';
     }
-    if (!mm) {
-      html += '<h5>ใบสั่งซื้อ (PO) ในช่วงนี้ <small>(' + r.pos.length + ' ใบ)</small></h5><table class="rt"><thead><tr><th>เลขที่</th><th>ผู้ขาย</th><th>วันที่สั่ง</th><th>วันที่ส่ง</th><th>สถานะ</th><th class="r">ยอดรวม</th><th>การชำระ</th><th class="r">ชำระแล้ว</th></tr></thead><tbody>'
-        + (r.pos.map(function (x) { return '<tr><td class="nw">' + esc(x.docNo) + '</td><td>' + esc(x.vendorName) + '</td><td class="nw">' + dd(x.orderDate) + '</td><td class="nw">' + dd(x.deliveryDate) + '</td><td>' + (DOC_ST[x.status] || '') + '</td><td class="r">' + baht(x.total) + '</td><td>' + (PAY_ST[x.paymentStatus] || '') + (x.dueDate && x.paymentStatus !== 'paid' ? '<br><small>ครบกำหนด ' + dd(x.dueDate) + '</small>' : '') + '</td><td class="r">' + baht(x.paidAmount || 0) + '</td></tr>'; }).join('') || '<tr><td colspan="8" class="c muted">ไม่มี PO ในช่วงนี้</td></tr>')
-        + '</tbody></table>';
-    }
-    html += '<div class="psign"><div><span></span>ผู้จัดทำ<br>วันที่ ......./......./.......</div><div><span></span>ผู้ตรวจสอบ<br>วันที่ ......./......./.......</div><div><span></span>ผู้อนุมัติ<br>วันที่ ......./......./.......</div></div></div>';
     // หัวรายงานอยู่ใน <thead> ของตารางครอบ → เวลาพิมพ์ขึ้นซ้ำทุกหน้า
     var head = html.slice('<div class="preport">'.length, headEnd), body = html.slice(headEnd, html.length - '</div>'.length);
     $('rOut').innerHTML = '<div class="preport"><table class="rwrap"><thead><tr><td>' + head + '</td></tr></thead><tbody><tr><td>' + body + '</td></tr></tbody></table></div>';
@@ -655,7 +671,20 @@
       + '<h4 class="rtitle">' + title + '</h4><div class="rinfo">' + info + '<span>พิมพ์เมื่อ ' + dd(todayIso()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ' น.</span></div>';
     return '<div class="preport"><table class="rwrap"><thead><tr><td>' + head + '</td></tr></thead><tbody><tr><td>' + body + '</td></tr></tbody></table></div>';
   }
-  function signBlock() { return '<div class="psign"><div><span></span>ผู้จัดทำ<br>วันที่ ......./......./.......</div><div><span></span>ผู้ตรวจสอบ<br>วันที่ ......./......./.......</div><div><span></span>ผู้อนุมัติ<br>วันที่ ......./......./.......</div></div>'; }
+
+  // รายงานสต๊อกคงเหลือ ณ วันที่ + มูลค่า (คงเหลือ × ราคา ณ วันนั้น)
+  function drawBalanceReport(r) {
+    var body = '<div class="rbox">' + [['จำนวนวัตถุดิบที่มีของ', r.rows.length + ' รายการ'], ['มูลค่าคงเหลือรวม', baht(r.total)], ['ยังไม่มีราคา', r.noPrice + ' รายการ'], ['ณ วันที่', dd(r.asOf)]]
+        .map(function (b) { return '<div><span>' + b[0] + '</span><b>' + b[1] + '</b></div>'; }).join('') + '</div>'
+      + '<h5>สต๊อกคงเหลือ <small>(' + r.rows.length + ' รายการ)</small></h5><table class="rt"><thead><tr><th class="c">#</th><th>วัตถุดิบ</th><th>หน่วย</th><th class="r">คงเหลือ</th><th class="r">ราคา/หน่วย</th><th>ราคา ณ วันที่</th><th class="r">มูลค่า (บาท)</th></tr></thead><tbody>'
+      + (r.rows.map(function (x, i) {
+        return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(x.name) + '</td><td>' + esc(x.unit) + '</td><td class="r b' + (x.qty < 0 ? ' neg' : '') + '">' + n3(x.qty) + '</td>'
+          + '<td class="r">' + (x.price === '' ? '<span class="muted">ยังไม่มีราคา</span>' : baht(x.price)) + '</td><td class="nw">' + (x.priceDate ? dd(x.priceDate) : '–') + '</td><td class="r b">' + (x.value === '' ? '–' : baht(x.value)) + '</td></tr>';
+      }).join('') || '<tr><td colspan="7" class="c muted">ไม่มีสต๊อกคงเหลือ ณ วันที่นี้</td></tr>')
+      + '</tbody>' + (r.rows.length ? '<tfoot><tr><td colspan="6" class="r">มูลค่าคงเหลือรวม</td><td class="r">' + baht(r.total) + '</td></tr></tfoot>' : '') + '</table>'
+      + (r.noPrice ? '<p class="muted" style="margin-top:8px">* รายการที่ยังไม่มีราคาไม่ได้รวมในมูลค่า — ใส่ราคาได้ที่เมนู "วัตถุดิบ & ราคา"</p>' : '');
+    $('rOut').innerHTML = reportWrap('รายงานสต๊อกคงเหลือ', '<span>ยอดคงเหลือ ณ วันที่ <b>' + dd(r.asOf) + '</b></span>', body);
+  }
 
   // รายงานใบ PO / PR ตามวันที่สั่ง
   function drawDocReport(type, from, to) {
@@ -678,8 +707,7 @@
           + (isPO ? '<td>' + (PAY_ST[d.paymentStatus] || '-') + (d.paymentStatus !== 'paid' && d.dueDate ? '<br><small>ครบกำหนด ' + dd(d.dueDate) + '</small>' : d.paidDate ? '<br><small>' + dd(d.paidDate) + '</small>' : '') + '</td><td class="r">' + (cx ? '–' : baht(due)) + '</td>'
             : '<td>' + esc(d.approvedBy || '-') + (d.approvedDate ? '<br><small>' + dd(d.approvedDate) + '</small>' : '') + '</td>') + '</tr>';
       }).join('') || '<tr><td colspan="9" class="c muted">ไม่มี' + (isPO ? 'ใบสั่งซื้อ' : 'ใบขอซื้อ') + 'ในช่วงนี้</td></tr>')
-      + '</tbody>' + (list.length ? '<tfoot><tr><td colspan="6" class="r">รวม (ไม่นับใบที่ยกเลิก)</td><td class="r">' + baht(total) + '</td>' + (isPO ? '<td></td><td class="r">' + baht(total - paid) + '</td>' : '<td></td>') + '</tr></tfoot>' : '') + '</table>'
-      + signBlock();
+      + '</tbody>' + (list.length ? '<tfoot><tr><td colspan="6" class="r">รวม (ไม่นับใบที่ยกเลิก)</td><td class="r">' + baht(total) + '</td>' + (isPO ? '<td></td><td class="r">' + baht(total - paid) + '</td>' : '<td></td>') + '</tr></tfoot>' : '') + '</table>';
     $('rOut').innerHTML = reportWrap(isPO ? 'รายงานใบสั่งซื้อ (PO)' : 'รายงานใบขอซื้อ (PR)', '<span>วันที่สั่ง <b>' + dd(from) + ' – ' + dd(to) + '</b></span>', body);
   }
 
