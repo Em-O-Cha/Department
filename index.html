@@ -386,7 +386,8 @@
     $('topSub').textContent = d.en;
     $('home').classList.add('hidden');
     $('app').classList.remove('hidden');
-    state.page = 'home';
+    state.page = deptModule() ? 'p_dash' : 'home';
+    if (deptModule()) deptModule().reset();
     renderNav(); renderPage();
     call('getDepartmentHome', state.token).then(function (res) {
       state.dept = res.dept; if (state.page === 'home') renderPage();
@@ -396,9 +397,9 @@
   function renderNav() {
     var items = state.admin
       ? [{ id: 'adm', label: 'แผนก / รหัสตั้งค่า', ic: 'home' }, { id: 'admpw', label: 'เปลี่ยนรหัสผู้ดูแล', ic: 'key' }]
-      : [{ id: 'home', label: 'หน้าหลัก', ic: 'home' }].concat(state.dept.menus.map(function (m, i) {
+      : (deptModule() ? deptModule().menus() : [{ id: 'home', label: 'หน้าหลัก', ic: 'home' }].concat(state.dept.menus.map(function (m, i) {
           return { id: 'm' + i, label: m, ic: 'form' };
-        }), [{ id: 'pw', label: 'เปลี่ยนรหัสผ่าน', ic: 'key' }]);
+        }))).concat([{ id: 'pw', label: 'เปลี่ยนรหัสผ่าน', ic: 'key' }]);
     $('nav').innerHTML = items.map(function (it) {
       return '<button data-page="' + it.id + '" class="' + (state.page === it.id ? 'active' : '') + '">' + icon(it.ic) + esc(it.label) + '</button>';
     }).join('');
@@ -407,11 +408,14 @@
     });
   }
   function go(page) { state.page = page; renderNav(); renderPage(); window.scrollTo(0, 0); }
+  // แผนกที่มีระบบงานแล้ว (โมดูล) — เช่น PUR = purchasing.js
+  function deptModule() { return state.dept && state.dept.module === 'purchasing' && window.PUR ? window.PUR : null; }
 
   function renderPage() {
     if (state.admin) { renderAdminPage(); return; }
     var d = state.dept, html;
     if (state.page === 'pw') { renderChangePw(); return; }
+    if (deptModule()) { deptModule().render(state.page); return; }
     if (state.page === 'home') {
       var s = d.sheet;
       var status = !s
@@ -437,6 +441,7 @@
 
   function backToHome(msg) {
     state.token = null; state.dept = null; state.admin = false; state.adminData = null;
+    if (window.PUR) window.PUR.reset();
     closeModal();
     $('app').classList.add('hidden'); $('home').classList.remove('hidden');
     if (msg) toast(msg);
@@ -460,6 +465,7 @@
   function openModal(cfg) {
     modalCfg = cfg;
     $('modalForm').style.setProperty('--c', cfg.color || ADMIN_COLOR);
+    $('modalForm').classList.toggle('wide', !!cfg.wide);
     $('mIcon').innerHTML = icon(cfg.icon || 'lock', 26);
     $('mTitle').textContent = cfg.title || '';
     $('mSub').textContent = cfg.sub || '';
@@ -625,10 +631,15 @@
       var tags = !d.managed ? '<span class="tag code">ย้ายไปใช้ระบบของแผนกเองแล้ว</span>'
         : (d.hasPassword ? '<span class="tag ok">ตั้งรหัสผ่านแล้ว</span>' : '<span class="tag no">ยังไม่ตั้งรหัสผ่าน</span>')
           + (d.locked ? '<span class="tag lock">ล็อกอยู่ (ใส่รหัสผิดหลายครั้ง)</span>' : '')
-          + (d.codeExpires ? '<span class="tag code">มีรหัสตั้งค่ารอใช้ ถึง ' + fmtDate(d.codeExpires) + '</span>' : '');
+          + (d.codeExpires ? '<span class="tag code">มีรหัสตั้งค่ารอใช้ ถึง ' + fmtDate(d.codeExpires) + '</span>' : '')
+          + (!d.links ? '' : d.links.sheetId
+            ? (d.links.sheetError ? '<span class="tag lock">Sheet เปิดไม่ได้</span>' : '<span class="tag ok">Sheet: ' + esc(d.links.sheet) + '</span>')
+            : '<span class="tag no">ยังไม่ตั้ง Sheet</span>')
+          + (d.links && d.links.folderId ? (d.links.folderError ? '<span class="tag lock">โฟลเดอร์เปิดไม่ได้</span>' : '<span class="tag ok">โฟลเดอร์: ' + esc(d.links.folder) + '</span>') : '');
       var btns = !d.managed ? '' : '<button type="button" class="btn btn-sm btn-dark" data-act="issue" data-key="' + d.key + '">' + (d.hasPassword ? 'ออกรหัสรีเซ็ต' : 'ออกรหัสตั้งค่า') + '</button>'
         + (d.codeExpires ? '<button type="button" class="btn btn-sm btn-line" data-act="cancel" data-key="' + d.key + '">ยกเลิกรหัส</button>' : '')
-        + (d.locked ? '<button type="button" class="btn btn-sm btn-line" data-act="unlock" data-key="' + d.key + '">ปลดล็อก</button>' : '');
+        + (d.locked ? '<button type="button" class="btn btn-sm btn-line" data-act="unlock" data-key="' + d.key + '">ปลดล็อก</button>' : '')
+        + '<button type="button" class="btn btn-sm btn-line" data-act="links" data-key="' + d.key + '">ลิงก์ Sheet / โฟลเดอร์</button>';
       return '<div class="arow" style="--dc:' + d.color + '"><div class="icon">' + icon(d.key) + '</div><div class="info"><b>' + esc(d.name) + '</b>' + tags + '</div><div class="btns">' + btns + '</div></div>';
     }).join('') + '</div>';
     $('main').innerHTML = html;
@@ -640,6 +651,7 @@
     var d = (state.adminData || []).filter(function (x) { return x.key === key; })[0];
     if (!d) return;
     if (act === 'unlock') { call('adminUnlockDept', state.token, key).then(function () { toast('ปลดล็อก ' + d.name + ' แล้ว'); loadAdmin(); }).catch(onServerError); return; }
+    if (act === 'links') { openDeptLinks(d); return; }
     if (act === 'cancel') { call('adminCancelDeptCode', state.token, key).then(function () { toast('ยกเลิกรหัสตั้งค่าแล้ว'); loadAdmin(); }).catch(onServerError); return; }
     openModal({
       color: d.color, icon: d.key, title: (d.hasPassword ? 'ออกรหัสรีเซ็ต · ' : 'ออกรหัสตั้งค่า · ') + d.name, sub: d.en,
@@ -667,6 +679,32 @@
     });
   }
 
+  // ลิงก์ Google Sheet / โฟลเดอร์ไฟล์ของแผนก (เก็บใน Script Properties ไม่อยู่ในโค้ด)
+  function openDeptLinks(d) {
+    var l = d.links || {};
+    var st = function (id, err, name) { return !id ? '' : err ? '<div class="err" style="min-height:0">' + esc(err) + '</div>' : '<div class="note" style="margin-top:6px">✓ เปิดได้: ' + esc(name) + '</div>'; };
+    openModal({
+      color: d.color, icon: d.key, title: 'ลิงก์ข้อมูล · ' + d.name, sub: 'วางลิงก์ที่คัดลอกจาก Google Sheet / Google Drive',
+      body: '<div class="note">เจ้าของไฟล์ต้องแชร์ให้บัญชีระบบ (เจ้าของสคริปต์) เป็น <b>ผู้แก้ไข</b> ก่อน · เว้นว่าง = ยกเลิกลิงก์</div>'
+        + field('lkSheet', 'ลิงก์ Google Sheet ของแผนก', 'text', 'https://docs.google.com/spreadsheets/d/…') + st(l.sheetId, l.sheetError, l.sheet)
+        + field('lkFolder', 'ลิงก์โฟลเดอร์เก็บไฟล์แนบ (Google Drive)', 'text', 'https://drive.google.com/drive/folders/…') + st(l.folderId, l.folderError, l.folder),
+      ok: 'บันทึกและตรวจสอบ',
+      onOpen: function () {
+        if (l.sheetId) $('lkSheet').value = 'https://docs.google.com/spreadsheets/d/' + l.sheetId + '/edit';
+        if (l.folderId) $('lkFolder').value = 'https://drive.google.com/drive/folders/' + l.folderId;
+      },
+      submit: function () {
+        return call('adminSetDeptLinks', state.token, d.key, val('lkSheet'), val('lkFolder')).then(function (r) {
+          if (!r.ok) return r.error;
+          d.links = r.links; loadAdmin();
+          var e = r.links.sheetError || r.links.folderError;
+          if (e) { openDeptLinks(d); return; }
+          closeModal(); toast('บันทึกลิงก์แล้ว — ระบบเปิดได้');
+        });
+      }
+    });
+  }
+
   // ครอบหัวข้อหน้า (h3 + คำอธิบาย) ด้วยกล่องขาว ทุกครั้งที่เปลี่ยนหน้า
   new MutationObserver(function () {
     var m = $('main'), h = m.firstElementChild;
@@ -685,5 +723,6 @@
     }
   }).catch(function () { toast('โหลดรายชื่อแผนกไม่ได้'); });
 </script>
+<script src="purchasing.js?v=1"></script>
 </body>
 </html>
