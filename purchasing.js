@@ -123,14 +123,14 @@
     var unpaidSum = unpaid.reduce(function (s, x) { return s + (Number(x.total) || 0) - (Number(x.paidAmount) || 0); }, 0);
     var kpi = function (n, label, color, page) { return '<button class="kpi" data-go="' + page + '" style="--k:' + color + '"><b>' + n + '</b><span>' + label + '</span></button>'; };
     var html = '<h3>ภาพรวม จัดซื้อ & สต๊อก</h3><p class="lead">ข้อมูล ณ ' + dd(t) + ' · <a href="' + esc(d.sheetUrl) + '" target="_blank" rel="noopener">เปิด Google Sheet</a></p>'
-      + '<div class="kpis">' + kpi(active.length, 'วัตถุดิบ', '#0f766e', 'p_mat') + kpi(low.length, 'สินค้าต่ำกว่า Minimum', low.length ? '#dc2626' : '#64748b', 'p_stock')
+      + '<div class="kpis">' + kpi(active.length, 'วัตถุดิบ', '#0f766e', 'p_mat') + kpi(low.length, 'สินค้าที่ต้องจัดซื้อ (ต่ำกว่า Minimum)', low.length ? '#dc2626' : '#64748b', 'p_stock')
       + kpi(exp.length, 'LOT ใกล้หมดอายุ (30 วัน)', exp.length ? '#d97706' : '#64748b', 'p_stock') + kpi(waiting.length, 'PO รอรับของ', '#2563eb', 'p_doc')
       + kpi(baht(unpaidSum).replace('.00', ''), 'ค้างชำระผู้ขาย (' + unpaid.length + ' ใบ)', unpaid.length ? '#7c3aed' : '#64748b', 'p_doc') + '</div>';
     var box = function (title, rows, empty) { return '<div class="panel pbox"><h4>' + title + '</h4>' + (rows.length ? rows.join('') : '<div class="muted">' + empty + '</div>') + '</div>'; };
     html += '<div class="pgrid">'
-      + box(icon('warn', 18) + ' สินค้าต่ำกว่า Minimum', low.concat(neg.filter(function (m) { return low.indexOf(m) < 0; })).slice(0, 30).map(function (m) {
+      + box(icon('warn', 18) + ' สินค้าที่ต้องจัดซื้อ (ต่ำกว่า Minimum)', low.concat(neg.filter(function (m) { return low.indexOf(m) < 0; })).slice(0, 30).map(function (m) {
         return '<div class="li"><span>' + esc(m.name) + '</span><b class="' + (m.balance < 0 ? 'neg' : 'warn') + '">' + n3(m.balance) + ' ' + esc(m.unit) + '</b><small>Minimum ' + n3(m.minStock) + '</small></div>';
-      }), 'ไม่มีสินค้าต่ำกว่า Minimum (ตั้งค่า Minimum ได้ที่เมนูวัตถุดิบ & ราคา)')
+      }), 'ยังไม่มีสินค้าที่ต้องจัดซื้อ (ตั้งค่า Minimum ได้ที่เมนูวัตถุดิบ & ราคา)')
       + box(icon('clock', 18) + ' LOT ใกล้หมดอายุ', exp.slice(0, 30).map(function (x) {
         return '<div class="li"><span>' + esc(x.m.name) + ' <small>LOT ' + esc(x.l.lot) + '</small></span><b class="' + (x.left < 0 ? 'neg' : 'warn') + '">' + (x.left < 0 ? 'หมดอายุแล้ว' : 'อีก ' + x.left + ' วัน') + '</b><small>' + dd(x.l.expDate) + ' · เหลือ ' + n3(x.l.qty) + '</small></div>';
       }), 'ไม่มี LOT ที่หมดอายุใน 30 วัน')
@@ -160,7 +160,7 @@
 
   function stock() {
     $('main').innerHTML = '<h3>รับเข้า / จ่ายออก</h3><p class="lead">เลือกวัตถุดิบ แล้วกด รับเข้า หรือ จ่ายออก (วันที่ตั้งเป็นวันนี้ให้ก่อน แก้ได้)</p>'
-      + searchBar('stock', 'ค้นหาวัตถุดิบ / ผู้ขาย', '<label class="pchk"><input type="checkbox" id="pLowOnly"' + (P.q.lowOnly ? ' checked' : '') + '> เฉพาะสินค้าต่ำกว่า Minimum</label>')
+      + searchBar('stock', 'ค้นหาวัตถุดิบ / ผู้ขาย', '<label class="pchk"><input type="checkbox" id="pLowOnly"' + (P.q.lowOnly ? ' checked' : '') + '> เฉพาะสินค้าที่ต้องจัดซื้อ</label>')
       + '<div id="pList" class="plist"></div>';
     var draw = function () {
       var q = P.q.stock;
