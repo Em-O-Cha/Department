@@ -41,7 +41,10 @@
   .home-head { background: rgba(255, 255, 255, .92); border-radius: 18px; padding: 18px 22px; margin-bottom: 26px; box-shadow: 0 8px 28px rgba(15, 23, 42, .12); backdrop-filter: blur(6px); }
   .home-foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 24px; }
   .home-foot .home-note, .home-foot .admin-link { margin: 0; background: rgba(255, 255, 255, .92); border-radius: 10px; padding: 8px 14px; box-shadow: 0 4px 14px rgba(15, 23, 42, .10); }
-  .app { background: var(--bg); }
+  /* หน้าแผนก/ผู้ดูแล: ใช้พื้นไล่สีเดียวกับหน้าแรก หัวข้อหน้าอยู่ในกล่องขาวให้อ่านชัด */
+  .page-head { background: rgba(255, 255, 255, .92); border-radius: 16px; padding: 16px 20px; margin-bottom: 20px; box-shadow: 0 8px 28px rgba(15, 23, 42, .12); backdrop-filter: blur(6px); }
+  .page-head h3 { margin: 0 0 2px; }
+  .page-head .lead { margin: 0 !important; }
   .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
   .card {
     position: relative; text-align: left; border: 1px solid var(--line); background: var(--surface);
@@ -663,6 +666,16 @@
       }
     });
   }
+
+  // ครอบหัวข้อหน้า (h3 + คำอธิบาย) ด้วยกล่องขาว ทุกครั้งที่เปลี่ยนหน้า
+  new MutationObserver(function () {
+    var m = $('main'), h = m.firstElementChild;
+    if (!h || h.tagName !== 'H3') return;
+    var box = document.createElement('div'); box.className = 'page-head';
+    m.insertBefore(box, h); box.appendChild(h);
+    var next = box.nextElementSibling;
+    if (next && next.classList.contains('lead')) box.appendChild(next);
+  }).observe($('main'), { childList: true });
 
   call('getDepartments').then(function (list) {
     state.depts = list; renderHome();
