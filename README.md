@@ -1,8 +1,9 @@
 # ระบบงานองค์กร (หลายแผนก) — Google Apps Script Web App
 
-## 👉 [เปิดเว็บแอป ระบบงานองค์กร](https://em-o-cha.github.io/Department/) · [ลิงก์ตรง](https://script.google.com/macros/s/AKfycbyWj0ra2zC_T-qOE6kAr0cHHzIV944lk_5n4Nk54md9WkHcslA_Pwx7UBNF5Uc0LXTc/exec)
+## 👉 [เปิดระบบงานองค์กร](https://em-o-cha.github.io/Department/)
 
-ต้องล็อกอินบัญชี Google ก่อน แล้วเลือกแผนกและใส่รหัสผ่านของแผนก
+หน้าเว็บอยู่บน GitHub Pages (repo `Em-O-Cha/Department`, ไฟล์ `index.html`) ไม่มีแถบ Google Apps Script
+ข้อมูลและรหัสผ่านทำงานที่ Google Apps Script ผ่าน `Api.gs` (doPost) · เปิดลิงก์ Apps Script ตรง ๆ จะเจอหน้าแจ้งลิงก์ใหม่
 
 เว็บแอปกลางที่ใช้ร่วมกัน 8 แผนก: ฝ่ายบุคคล (HR), ฝ่ายบัญชี, จัดซื้อ & สต๊อกสินค้า, ฝ่ายประกันคุณภาพ (QA),
 วิจัยและพัฒนา (RD), ฝ่ายผลิต, ความปลอดภัยและสิ่งแวดล้อม (SHE), ขนส่งและคลัง (LOG) — แต่ละแผนกเข้าด้วยรหัสผ่านของตัวเอง แยกกันโดยสิ้นเชิง
@@ -17,7 +18,8 @@
 | `Code.gs` | ตั้งค่าแผนก (`DEPARTMENTS`: ชื่อ สี Sheet ID อีเมลเจ้าของ เมนู), `doGet`, เข้า/ออกระบบ, ตรวจตั๋ว |
 | `Admin.gs` | รหัสผ่าน: แผนกตั้ง/เปลี่ยนรหัสเองในหน้าเว็บ, ผู้ดูแลระบบออกรหัสตั้งค่า/ปลดล็อก, รหัสผู้ดูแลยืนยันทางอีเมล |
 | `Setup.gs` | เครื่องมือเสริมใน editor: ตรวจสถานะ (`checkSetup`), ปลดล็อก (ไม่ใช้ตั้งรหัสผ่านแล้ว) |
-| `Index.html` | หน้าเว็บทั้งหมด (HTML/CSS/JS ไฟล์เดียว) |
+| `Api.gs` | API (doPost) ให้หน้าเว็บบน GitHub Pages เรียก — เรียกได้เฉพาะฟังก์ชันในรายการ |
+| `Index.html` | หน้าแจ้งลิงก์ใหม่ (เมื่อเปิดลิงก์ Apps Script ตรง ๆ) · หน้าเว็บจริงคือ `index.html` ใน repo Department |
 | `appsscript.json` | ตั้งค่าโปรเจกต์ (เขตเวลา Asia/Bangkok, Web App รันในนามเจ้าของสคริปต์) |
 
 ## ความปลอดภัย / การแยกแผนก
@@ -38,7 +40,7 @@
 
 1. สร้างโปรเจกต์ Apps Script ใหม่ในบัญชีเจ้าของระบบ แล้วสร้างไฟล์ `Code.gs`, `Setup.gs`, `Index.html`
    (ชื่อ `Index` ตรงตัว) วางโค้ดจากโฟลเดอร์นี้
-2. Deploy → New deployment → Web app → Execute as: **Me**, Who has access: **Anyone with Google account** (ต้องล็อกอิน Google ก่อนเปิด) → ได้ลิงก์ `/exec`
+2. Deploy → New deployment → Web app → Execute as: **Me**, Who has access: **Anyone** (หน้าเว็บบน GitHub เรียก API ได้โดยไม่ต้องล็อกอิน Google — เข้าแผนกต้องใช้รหัสผ่านแผนก) → ได้ลิงก์ `/exec`
    (ครั้งแรกเจ้าของสคริปต์ต้องกดอนุญาตสิทธิ์: Run `checkSetup` ใน editor หนึ่งครั้ง)
 3. เปิดเว็บแอป → **ผู้ดูแลระบบ** → ส่งรหัสยืนยันไปอีเมลเจ้าของระบบ → ตั้งรหัสผู้ดูแล
 4. ในหน้าผู้ดูแล กด **ออกรหัสตั้งค่า** ของแต่ละแผนก → ส่งรหัสให้หัวหน้าแผนกเอง
