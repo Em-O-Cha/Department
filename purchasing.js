@@ -580,39 +580,61 @@
     $('rDetail').addEventListener('change', function () { if (P.report) { P.q.repDetail = this.checked; drawReport(P.report); } });
     if (P.report && P.report.key === from + '|' + to) drawReport(P.report); else if (P.q.repMat) run(false);
   }
+  // หัวกระดาษรายงาน: หน้าแรก = โลโก้ + ชื่อบริษัท + รหัสแบบฟอร์ม + ชื่อรายงาน · หน้าถัดไป = ชื่อบริษัท + รหัสแบบฟอร์ม (@page ด้านล่าง)
+  var COMPANY = 'บริษัท สปังกี้ฟู้ด จำกัด';
+  var FORM_CODE = 'FM-WH-01-01 Rev.00 วันที่ประกาศใช้ : 01/10/2024';
   function drawReport(r) {
-    var mid = P.q.repMat, mm = mid ? mat(mid) : null;
+    var mid = P.q.repMat, mm = mid ? mat(mid) : null, vn = mm ? ven(mm.vendorId) : null;
     var sum = r.summary.filter(function (x) { return !mid || x.id === mid; });
     var det = r.detail.filter(function (x) { return !mid || x.materialId === mid; });
+    var hasValue = sum.some(function (x) { return x.inValue || x.outValue; });
     var tot = sum.reduce(function (a, x) { a.inV += x.inValue; a.outV += x.outValue; return a; }, { inV: 0, outV: 0 });
-    var now = new Date();
-    var html = '<div class="preport"><div class="phead"><b>บริษัท สปังกี้ฟู้ด จำกัด · แผนกจัดซื้อ & สต๊อกสินค้า</b><h4>' + (mm ? 'สต๊อกการ์ด: ' + esc(mm.name) : 'รายงานรับเข้า-จ่ายออก วัตถุดิบ') + '</h4>'
-      + '<div>ช่วงวันที่ ' + dd(r.from) + ' ถึง ' + dd(r.to) + ' · พิมพ์เมื่อ ' + dd(todayIso()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + '</div></div>'
-      + '<h5>สรุปยอดตามวัตถุดิบ (' + sum.length + ' รายการ)</h5><div class="ptable-wrap"><table class="ptable"><thead><tr><th>วัตถุดิบ</th><th>หน่วย</th><th class="r">ยกมา</th><th class="r">รับเข้า</th><th class="r">จ่ายออก</th><th class="r">คงเหลือ</th><th class="r">มูลค่ารับเข้า</th><th class="r">มูลค่าจ่ายออก</th></tr></thead><tbody>'
-      + (sum.map(function (x) {
-        return '<tr><td>' + esc(x.name) + '</td><td>' + esc(x.unit) + '</td><td class="r">' + n3(x.open) + '</td><td class="r pos">' + (x.inQty ? n3(x.inQty) : '-') + '</td><td class="r neg">' + (x.outQty ? n3(x.outQty) : '-') + '</td><td class="r"><b>' + n3(x.close) + '</b></td>'
-          + '<td class="r">' + (x.inValue ? baht(x.inValue) : '-') + '</td><td class="r">' + (x.outValue ? baht(x.outValue) : '-') + '</td></tr>';
-      }).join('') || '<tr><td colspan="8" class="muted">ไม่มีข้อมูลในช่วงนี้</td></tr>')
-      + '</tbody><tfoot><tr><td colspan="6">รวมมูลค่า (คิดจากราคา ณ วันที่ของแต่ละรายการ)</td><td class="r">' + baht(tot.inV) + '</td><td class="r">' + baht(tot.outV) + '</td></tr></tfoot></table></div>';
+    var now = new Date(), logo = document.querySelector('.brand-logo');
+    var q = function (x) { return x ? n3(x) : '–'; };
+    var html = '<div class="preport"><div class="rhead">' + (logo ? '<img class="rlogo" src="' + logo.src + '" alt="">' : '')
+      + '<div class="rco"><b>' + COMPANY + '</b><span>แผนกจัดซื้อ & สต๊อกสินค้า</span></div>'
+      + '<div class="rform">' + FORM_CODE.replace(' วันที่', '<br>วันที่') + '</div></div>'
+      + '<h4 class="rtitle">' + (mm ? 'สต๊อกการ์ด (STOCK CARD)' : 'รายงานรับเข้า-จ่ายออก วัตถุดิบ') + '</h4>'
+      + '<div class="rinfo">' + (mm ? '<span>รายการ <b>' + esc(mm.name) + '</b></span><span>Supplier <b>' + (vn ? esc(vn.name) : '-') + '</b></span><span>หน่วย <b>' + esc(mm.unit || '-') + '</b></span>' : '')
+      + '<span>ช่วงวันที่ <b>' + dd(r.from) + ' – ' + dd(r.to) + '</b></span><span>พิมพ์เมื่อ ' + dd(todayIso()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ' น.</span></div>';
+    if (mm) {
+      var s0 = sum[0] || { open: 0, inQty: 0, outQty: 0, close: 0 };
+      html += '<div class="rbox">' + [['ยกมา', s0.open], ['รับเข้า', s0.inQty], ['จ่ายออก', s0.outQty], ['คงเหลือ', s0.close]].map(function (b) { return '<div><span>' + b[0] + '</span><b>' + n3(b[1]) + '</b></div>'; }).join('') + '</div>';
+    } else {
+      html += '<h5>สรุปยอดตามวัตถุดิบ <small>(' + sum.length + ' รายการ)</small></h5><table class="rt"><thead><tr><th class="c">#</th><th>วัตถุดิบ</th><th>หน่วย</th><th class="r">ยกมา</th><th class="r">รับเข้า</th><th class="r">จ่ายออก</th><th class="r">คงเหลือ</th>'
+        + (hasValue ? '<th class="r">มูลค่ารับเข้า</th><th class="r">มูลค่าจ่ายออก</th>' : '') + '</tr></thead><tbody>'
+        + (sum.map(function (x, i) {
+          return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(x.name) + '</td><td>' + esc(x.unit) + '</td><td class="r">' + q(x.open) + '</td><td class="r">' + q(x.inQty) + '</td><td class="r">' + q(x.outQty) + '</td><td class="r b">' + n3(x.close) + '</td>'
+            + (hasValue ? '<td class="r">' + (x.inValue ? baht(x.inValue) : '–') + '</td><td class="r">' + (x.outValue ? baht(x.outValue) : '–') + '</td>' : '') + '</tr>';
+        }).join('') || '<tr><td colspan="9" class="c muted">ไม่มีข้อมูลในช่วงนี้</td></tr>')
+        + '</tbody>' + (hasValue ? '<tfoot><tr><td colspan="7" class="r">รวมมูลค่า (ราคา ณ วันที่ของแต่ละรายการ)</td><td class="r">' + baht(tot.inV) + '</td><td class="r">' + baht(tot.outV) + '</td></tr></tfoot>' : '') + '</table>';
+    }
     if (P.q.repDetail || mm) {
       var bal = {};
       sum.forEach(function (x) { bal[x.id] = x.open; });
-      html += '<h5>รายการรับเข้า-จ่ายออก (' + det.length + ' รายการ)</h5><div class="ptable-wrap"><table class="ptable"><thead><tr><th>วันที่</th>' + (mm ? '' : '<th>วัตถุดิบ</th>') + '<th>รายการ</th><th class="r">รับเข้า</th><th class="r">จ่ายออก</th><th class="r">คงเหลือ</th><th>LOT</th><th>ผู้เบิก</th><th>ผู้จ่าย/ผู้รับ</th><th>หมายเหตุ</th></tr></thead><tbody>'
+      html += '<h5>' + (mm ? 'รายการเคลื่อนไหว' : 'รายการรับเข้า-จ่ายออก') + ' <small>(' + det.length + ' รายการ)</small></h5><table class="rt"><thead><tr><th>วัน/เดือน/ปี</th>' + (mm ? '' : '<th>วัตถุดิบ</th>')
+        + '<th class="r">รับเข้า</th><th class="r">จ่ายออก</th><th class="r">คงเหลือ</th><th>LOT</th><th>ผู้เบิก</th><th>ผู้จ่าย</th><th>หมายเหตุ</th></tr></thead><tbody>'
+        + (mm ? '<tr class="sub"><td>' + dd(r.from) + '</td><td colspan="2">ยอดยกมา</td><td class="r b">' + n3(bal[mid] || 0) + '</td><td colspan="4"></td></tr>' : '')
         + (det.map(function (x) {
           var s = x.type === 'IN' || (x.type === 'ADJ' && x.qty > 0) ? Math.abs(x.qty) : -Math.abs(x.qty);
           bal[x.materialId] = Math.round(((bal[x.materialId] || 0) + s) * 1000) / 1000;
-          return '<tr><td>' + dd(x.date) + '</td>' + (mm ? '' : '<td>' + esc(x.name) + '</td>') + '<td>' + TYPE[x.type] + '</td><td class="r pos">' + (s > 0 ? n3(s) : '') + '</td><td class="r neg">' + (s < 0 ? n3(-s) : '') + '</td><td class="r">' + n3(bal[x.materialId]) + '</td>'
-            + '<td>' + esc(x.lot) + '</td><td>' + esc(x.requester) + '</td><td>' + esc(x.issuer) + '</td><td><small>' + esc(x.note) + '</small></td></tr>';
-        }).join('') || '<tr><td colspan="10" class="muted">ไม่มีรายการ</td></tr>') + '</tbody></table></div>';
+          var note = [x.type === 'RETURN' ? 'ส่งคืนผู้ขาย' : x.type === 'ADJ' ? 'ปรับยอด' : '', x.note].filter(String).join(' · ');
+          return '<tr><td class="nw">' + dd(x.date) + '</td>' + (mm ? '' : '<td>' + esc(x.name) + '</td>') + '<td class="r">' + (s > 0 ? n3(s) : '') + '</td><td class="r">' + (s < 0 ? n3(-s) : '') + '</td><td class="r b">' + n3(bal[x.materialId]) + '</td>'
+            + '<td class="nw">' + esc(x.lot) + '</td><td>' + esc(x.requester) + '</td><td>' + esc(x.issuer) + '</td><td>' + esc(note) + '</td></tr>';
+        }).join('') || '<tr><td colspan="9" class="c muted">ไม่มีรายการ</td></tr>') + '</tbody></table>';
     }
     if (!mm) {
-      html += '<h5>ใบสั่งซื้อ (PO) ในช่วงนี้ (' + r.pos.length + ' ใบ)</h5><div class="ptable-wrap"><table class="ptable"><thead><tr><th>เลขที่</th><th>ผู้ขาย</th><th>วันที่สั่ง</th><th>วันที่ส่ง</th><th>สถานะ</th><th class="r">ยอดรวม</th><th>การชำระ</th><th class="r">ชำระแล้ว</th></tr></thead><tbody>'
-        + (r.pos.map(function (x) { return '<tr><td>' + esc(x.docNo) + '</td><td>' + esc(x.vendorName) + '</td><td>' + dd(x.orderDate) + '</td><td>' + dd(x.deliveryDate) + '</td><td>' + (DOC_ST[x.status] || '') + '</td><td class="r">' + baht(x.total) + '</td><td>' + (PAY_ST[x.paymentStatus] || '') + (x.dueDate && x.paymentStatus !== 'paid' ? '<br><small>ครบกำหนด ' + dd(x.dueDate) + '</small>' : '') + '</td><td class="r">' + baht(x.paidAmount || 0) + '</td></tr>'; }).join('') || '<tr><td colspan="8" class="muted">ไม่มี PO ในช่วงนี้</td></tr>')
-        + '</tbody></table></div>';
+      html += '<h5>ใบสั่งซื้อ (PO) ในช่วงนี้ <small>(' + r.pos.length + ' ใบ)</small></h5><table class="rt"><thead><tr><th>เลขที่</th><th>ผู้ขาย</th><th>วันที่สั่ง</th><th>วันที่ส่ง</th><th>สถานะ</th><th class="r">ยอดรวม</th><th>การชำระ</th><th class="r">ชำระแล้ว</th></tr></thead><tbody>'
+        + (r.pos.map(function (x) { return '<tr><td class="nw">' + esc(x.docNo) + '</td><td>' + esc(x.vendorName) + '</td><td class="nw">' + dd(x.orderDate) + '</td><td class="nw">' + dd(x.deliveryDate) + '</td><td>' + (DOC_ST[x.status] || '') + '</td><td class="r">' + baht(x.total) + '</td><td>' + (PAY_ST[x.paymentStatus] || '') + (x.dueDate && x.paymentStatus !== 'paid' ? '<br><small>ครบกำหนด ' + dd(x.dueDate) + '</small>' : '') + '</td><td class="r">' + baht(x.paidAmount || 0) + '</td></tr>'; }).join('') || '<tr><td colspan="8" class="c muted">ไม่มี PO ในช่วงนี้</td></tr>')
+        + '</tbody></table>';
     }
-    html += '<div class="psign"><div>ผู้จัดทำ ..............................<br>วันที่ ......../......../........</div><div>ผู้ตรวจสอบ ..............................<br>วันที่ ......../......../........</div></div></div>';
+    html += '<div class="psign"><div><span></span>ผู้จัดทำ<br>วันที่ ......./......./.......</div><div><span></span>ผู้ตรวจสอบ<br>วันที่ ......./......./.......</div><div><span></span>ผู้อนุมัติ<br>วันที่ ......./......./.......</div></div></div>';
     $('rOut').innerHTML = html;
   }
+  // หัวกระดาษของเบราว์เซอร์ (ถ้าเบราว์เซอร์ยังแสดง) ใช้ชื่อหน้า → ตั้งเป็นชื่อบริษัท + รหัสแบบฟอร์มระหว่างพิมพ์
+  var oldTitle = '';
+  window.addEventListener('beforeprint', function () { if (state.page === 'p_rep') { oldTitle = document.title; document.title = COMPANY + '   ' + FORM_CODE; } });
+  window.addEventListener('afterprint', function () { if (oldTitle) { document.title = oldTitle; oldTitle = ''; } });
 
   // พิมพ์ใบ PR / PO
   function printDoc(d) {
@@ -679,12 +701,23 @@
     '.mt{font-weight:600}.mt.IN{color:#15803d}.mt.OUT,.mt.RETURN{color:#dc2626}.mt.ADJ{color:#7c3aed}',
     '.pcards{display:grid;grid-template-columns:1fr 1fr;gap:12px}.vcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:8px}.vcard.off{opacity:.55}',
     '.vhead{display:flex;justify-content:space-between;gap:8px}.vacts{display:flex;gap:6px;flex-wrap:wrap}.vcall{background:#16a34a;color:#fff;text-decoration:none;font-size:15px}.vacts .btn-line{text-decoration:none}.vmeta{display:flex;flex-direction:column;gap:2px;font-size:12.5px;color:var(--muted)}',
-    '.preport{background:var(--surface);border-radius:14px;padding:18px;margin-top:14px;box-shadow:var(--shadow)}.phead{text-align:center;border-bottom:2px solid var(--ink);padding-bottom:10px;margin-bottom:10px}.phead h4{margin:4px 0;font-size:18px}.preport h5{font-size:15px;margin:16px 0 6px}',
-    '.psign{display:flex;justify-content:space-around;margin-top:40px;text-align:center;font-size:13px;line-height:2.2}',
+    '.preport{background:#fff;border-radius:14px;padding:22px;margin-top:14px;box-shadow:var(--shadow);color:#0f172a}',
+    '.rhead{display:flex;align-items:center;gap:12px;padding-bottom:10px;border-bottom:2px solid #0f172a}.rlogo{height:46px;width:auto}.rco{flex:1}.rco b{display:block;font-size:16px}.rco span{font-size:12.5px;color:#475569}',
+    '.rform{font-size:11px;color:#334155;text-align:right;line-height:1.5;border:1px solid #cbd5e1;border-radius:6px;padding:4px 8px;white-space:nowrap}',
+    '.rtitle{text-align:center;font-size:19px;margin:14px 0 6px}.rinfo{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 18px;font-size:12.5px;color:#334155;margin-bottom:12px}',
+    '.rbox{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #cbd5e1;border-radius:8px;margin:6px 0 4px;overflow:hidden}.rbox div{padding:8px;text-align:center;border-left:1px solid #cbd5e1}.rbox div:first-child{border-left:0}.rbox span{display:block;font-size:11.5px;color:#64748b}.rbox b{font-size:17px}',
+    '.preport h5{font-size:13.5px;margin:16px 0 6px;padding-left:8px;border-left:4px solid var(--c)}.preport h5 small{font-weight:400;color:#64748b}',
+    '.rt{width:100%;border-collapse:collapse;font-size:12.5px}.rt th{background:#f1f5f9;font-weight:600;text-align:left;padding:5px 6px;border:1px solid #cbd5e1;white-space:nowrap}.rt td{padding:4px 6px;border:1px solid #e2e8f0;vertical-align:top}',
+    '.rt tbody tr:nth-child(even) td{background:#f8fafc}.rt .r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.rt .c{text-align:center}.rt .b{font-weight:700}.rt .nw{white-space:nowrap}.rt tfoot td{font-weight:700;background:#f1f5f9;border:1px solid #cbd5e1}.rt tr.sub td{background:#fefce8}',
+    '.psign{display:flex;justify-content:space-around;gap:16px;margin-top:44px;text-align:center;font-size:12px;line-height:1.9;break-inside:avoid}.psign span{display:block;width:150px;border-bottom:1px dotted #475569;height:22px;margin:0 auto 4px}',
     '.spinner.dark{border-color:rgba(15,23,42,.2);border-top-color:var(--c);display:inline-block;vertical-align:-3px;margin-right:6px}',
     '@media (max-width:860px){.kpis{grid-template-columns:repeat(2,1fr)}.pgrid,.pcards{grid-template-columns:1fr}}',
     '@media (max-width:560px){.pform{grid-template-columns:1fr}.prow{flex-wrap:wrap}.pbtns{width:100%}.pbtns .btn{flex:1}.hide-sm{display:none}.pitem{grid-template-columns:1fr 1fr 1fr;}.pitem .iname{grid-column:1/-1}.pupload{grid-template-columns:1fr}.dialog.wide .dialog-body{max-height:none}}',
-    '@media print{body{background:#fff!important}.topbar,.side,.noprint,.page-head,#toast,.pbar{display:none!important}.app{display:block}.main{padding:0;max-width:none}.preport{box-shadow:none;padding:0;margin:0}.ptable{font-size:11px}.ptable th,.ptable td{padding:3px 5px;border:1px solid #cbd5e1}.ptable-wrap{overflow:visible}tr{page-break-inside:avoid}}'
+    '@page{size:A4 portrait;margin:15mm 11mm 13mm 11mm;@top-left{content:"บริษัท สปังกี้ฟู้ด จำกัด";font:600 8.5pt "IBM Plex Sans Thai",sans-serif;color:#334155}@top-right{content:"FM-WH-01-01 Rev.00 วันที่ประกาศใช้ : 01/10/2024";font:8pt "IBM Plex Sans Thai",sans-serif;color:#334155}@bottom-right{content:"หน้า " counter(page) " / " counter(pages);font:8pt "IBM Plex Sans Thai",sans-serif;color:#64748b}}',
+    '@page:first{@top-left{content:none}@top-right{content:none}}',
+    '@media print{html,body{background:#fff!important}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}.topbar,.side,.noprint,.page-head,#toast,.pbar,#modalOverlay{display:none!important}.app{display:block;min-height:0}.main{padding:0;max-width:none}',
+    '.preport{box-shadow:none;padding:0;margin:0;border-radius:0}.rhead{padding-bottom:6px}.rlogo{height:38px}.rco b{font-size:13pt}.rco span{font-size:9pt}.rform{font-size:8pt}.rtitle{font-size:14pt;margin:10px 0 4px}.rinfo{font-size:9pt;margin-bottom:8px}',
+    '.preport h5{font-size:10.5pt;margin:12px 0 4px;break-after:avoid}.rt{font-size:8.5pt}.rt th{padding:3px 4px}.rt td{padding:2.5px 4px}.rt thead{display:table-header-group}.rt tr{break-inside:avoid}.rbox b{font-size:12pt}.psign{margin-top:36px;font-size:9pt}}',
   ].join('\n');
   document.head.appendChild(css);
 })();
