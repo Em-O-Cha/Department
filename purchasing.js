@@ -574,16 +574,19 @@
     var t = todayIso(), from = P.q.repFrom || monthStart(t), to = P.q.repTo || t;
     var lastM = addDays(monthStart(t), -1);
     $('main').innerHTML = '<h3>รายงาน / พิมพ์</h3><p class="lead">เลือกช่วงวันที่ → แสดงรายงาน → พิมพ์ หรือบันทึกเป็น PDF (เลือก "บันทึกเป็น PDF" ในหน้าพิมพ์)</p>'
-      + '<div class="panel noprint"><div class="pform">' + S('rType', 'ประเภทรายงาน', [['stock', 'รายงานเบิกจ่ายสินค้า (รับเข้า-จ่ายออก)'], ['balance', 'รายงานสต๊อกคงเหลือ + มูลค่า (ณ วันที่)'], ['PO', 'รายงานใบสั่งซื้อ (PO)'], ['PR', 'รายงานใบขอซื้อ (PR)']], P.q.repType || 'stock') + '<div class="pf"></div>'
+      + '<div class="panel noprint"><div class="pform">' + S('rType', 'ประเภทรายงาน', [['stock', 'รายงานเบิกจ่ายสินค้า (รับเข้า-จ่ายออก)'], ['balance', 'รายงานสต๊อกคงเหลือ + มูลค่า (ณ วันที่)'], ['price', 'รายงานประวัติราคา (ตามผู้ขาย / วัตถุดิบ)'], ['PO', 'รายงานใบสั่งซื้อ (PO)'], ['PR', 'รายงานใบขอซื้อ (PR)']], P.q.repType || 'stock') + '<div class="pf"></div>'
       + F('rFrom', 'ตั้งแต่วันที่', from, 'date') + F('rTo', 'ถึงวันที่', to, 'date')
+      + S('rVen', 'ผู้ขาย', [['', 'ทุกผู้ขาย']].concat(P.data.vendors.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'th'); }).map(function (x) { return [x.id, x.name]; })), P.q.repVen || '')
       + S('rMat', 'วัตถุดิบ', [['', 'ทุกรายการ']].concat(materialList().map(function (m) { return [m.id, m.name]; })), P.q.repMat || '')
       + '<div class="pf"><label>&nbsp;</label><label class="pchk"><input type="checkbox" id="rDetail"' + (P.q.repDetail ? ' checked' : '') + '> แสดงรายการรับเข้า-จ่ายออกทุกรายการ</label></div></div>'
       + '<div class="pchips">' + [['เดือนนี้', monthStart(t), t], ['เดือนก่อน', monthStart(lastM), lastM], ['3 เดือน', addDays(t, -90), t], ['ทั้งหมด', '2020-01-01', t]].map(function (q) { return '<button class="chip" data-r="' + q[1] + '|' + q[2] + '">' + q[0] + '</button>'; }).join('') + '</div>'
       + '<div class="actions"><button class="btn btn-primary" id="rGo">' + icon('chart', 18) + 'แสดงรายงาน</button><button class="btn btn-line" id="rPrint">' + icon('print', 18) + 'พิมพ์ / PDF</button></div></div>'
       + '<div id="rOut"></div>';
     var stockOpts = function () {
-      var ty = v('rType'), st = ty === 'stock', bal = ty === 'balance';
-      [$('rMat'), $('rDetail')].forEach(function (el) { el.closest('.pf').style.display = st ? '' : 'none'; });
+      var ty = v('rType'), st = ty === 'stock', bal = ty === 'balance', pr = ty === 'price';
+      $('rMat').closest('.pf').style.display = st || pr ? '' : 'none';
+      $('rDetail').closest('.pf').style.display = st ? '' : 'none';
+      $('rVen').closest('.pf').style.display = pr ? '' : 'none';
       $('rFrom').closest('.pf').style.display = bal ? 'none' : '';
       $('rTo').closest('.pf').querySelector('label').textContent = bal ? 'ยอดคงเหลือ ณ วันที่' : 'ถึงวันที่';
       $('main').querySelector('.pchips').style.display = bal ? 'none' : '';
@@ -602,6 +605,15 @@
         }).catch(onServerError);
       }
       if (!P.q.repFrom || !P.q.repTo || P.q.repFrom > P.q.repTo) return toast('เลือกช่วงวันที่ให้ถูกต้อง');
+      if (P.q.repType === 'price') {
+        P.q.repVen = v('rVen');
+        $('rOut').innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังสร้างรายงาน…</div>';
+        return call('purPriceReport', state.token, P.q.repFrom, P.q.repTo).then(function (r) {
+          if (state.page !== 'p_rep') return;
+          if (!r.ok) { $('rOut').innerHTML = '<div class="panel err">' + esc(r.error) + '</div>'; return; }
+          P.priceRep = r; drawPriceReport(r); if (print) setTimeout(function () { window.print(); }, 300);
+        }).catch(onServerError);
+      }
       if (P.q.repType !== 'stock') {
         $('rOut').innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังสร้างรายงาน…</div>';
         return P.load().then(function () { if (state.page !== 'p_rep') return; drawDocReport(P.q.repType, P.q.repFrom, P.q.repTo); if (print) setTimeout(function () { window.print(); }, 300); }).catch(onServerError);
@@ -615,7 +627,8 @@
     on('[data-r]', 'click', function (el) { var p = el.getAttribute('data-r').split('|'); $('rFrom').value = p[0]; $('rTo').value = p[1]; run(); }, $('main'));
     $('rGo').addEventListener('click', function () { run(false); });
     $('rPrint').addEventListener('click', function () { run(true); });
-    $('rMat').addEventListener('change', function () { if (P.report && v('rType') === 'stock') { P.q.repMat = v('rMat'); drawReport(P.report); } });
+    $('rVen').addEventListener('change', function () { P.q.repVen = v('rVen'); if (P.priceRep && v('rType') === 'price') drawPriceReport(P.priceRep); });
+    $('rMat').addEventListener('change', function () { if (P.priceRep && v('rType') === 'price') { P.q.repMat = v('rMat'); drawPriceReport(P.priceRep); return; } if (P.report && v('rType') === 'stock') { P.q.repMat = v('rMat'); drawReport(P.report); } });
     $('rDetail').addEventListener('change', function () { if (P.report && v('rType') === 'stock') { P.q.repDetail = this.checked; drawReport(P.report); } });
     if ((P.q.repType || 'stock') !== 'stock') run(false);   // PO / PR / คงเหลือ
     else if (P.report && P.report.key === from + '|' + to) drawReport(P.report); else if (P.q.repMat) run(false);
@@ -676,6 +689,27 @@
       + '<div class="rform">' + FORM_CODE.replace(' วันที่', '<br>วันที่') + '</div></div>'
       + '<h4 class="rtitle">' + title + '</h4><div class="rinfo">' + info + '<span>พิมพ์เมื่อ ' + dd(todayIso()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ' น.</span></div>';
     return '<div class="preport"><table class="rwrap"><thead><tr><td>' + head + '</td></tr></thead><tbody><tr><td>' + body + '</td></tr></tbody></table></div>';
+  }
+
+  // รายงานประวัติราคา: จัดกลุ่มตามผู้ขาย · เทียบกับราคาก่อนหน้าของวัตถุดิบเดียวกัน
+  function drawPriceReport(r) {
+    var rows = r.rows.filter(function (x) { return (!P.q.repVen || x.vendorId === P.q.repVen) && (!P.q.repMat || x.materialId === P.q.repMat); });
+    var up = rows.filter(function (x) { return x.change !== '' && x.change > 0; }).length, down = rows.filter(function (x) { return x.change !== '' && x.change < 0; }).length;
+    var first = rows.filter(function (x) { return x.prevPrice === ''; }).length;
+    var body = '<div class="rbox">' + [['ปรับราคาทั้งหมด', rows.length + ' ครั้ง'], ['ขึ้นราคา', up + ' ครั้ง'], ['ลดราคา', down + ' ครั้ง'], ['ราคาแรก (ไม่มีราคาเดิม)', first + ' ครั้ง']]
+      .map(function (b) { return '<div><span>' + b[0] + '</span><b>' + b[1] + '</b></div>'; }).join('') + '</div>'
+      + '<h5>ประวัติราคา <small>(' + rows.length + ' รายการ)</small></h5><table class="rt"><thead><tr><th>วันที่มีผล</th><th>วัตถุดิบ</th><th>หน่วย</th><th class="r">ราคาเดิม</th><th class="r">ราคาใหม่</th><th class="r">เปลี่ยนแปลง</th><th>หมายเหตุ</th></tr></thead><tbody>';
+    var lastVen = null;
+    rows.forEach(function (x) {
+      if (x.vendor !== lastVen) { lastVen = x.vendor; body += '<tr class="sub"><td colspan="7"><b>' + esc(x.vendor || 'ไม่ระบุผู้ขาย') + '</b></td></tr>'; }
+      var ch = x.change === '' ? '<span class="muted">ราคาแรก</span>' : (x.change > 0 ? '<span class="neg">▲ ' : x.change < 0 ? '<span class="pos">▼ ' : '<span>') + baht(Math.abs(x.change)) + (x.pct !== '' ? ' (' + (x.pct > 0 ? '+' : '') + x.pct + '%)' : '') + '</span>';
+      body += '<tr><td class="nw">' + dd(x.date) + '</td><td>' + esc(x.material) + '</td><td>' + esc(x.unit) + '</td><td class="r">' + (x.prevPrice === '' ? '–' : baht(x.prevPrice) + '<br><small class="muted">' + dd(x.prevDate) + '</small>') + '</td>'
+        + '<td class="r b">' + baht(x.price) + '</td><td class="r">' + ch + '</td><td>' + esc(x.note) + '</td></tr>';
+    });
+    if (!rows.length) body += '<tr><td colspan="7" class="c muted">ไม่มีการปรับราคาในช่วงนี้</td></tr>';
+    body += '</tbody></table>';
+    var vn = P.q.repVen ? ven(P.q.repVen) : null, mm = P.q.repMat ? mat(P.q.repMat) : null;
+    $('rOut').innerHTML = reportWrap('รายงานประวัติราคา', '<span>วันที่มีผล <b>' + dd(r.from) + ' – ' + dd(r.to) + '</b></span>' + (vn ? '<span>ผู้ขาย <b>' + esc(vn.name) + '</b></span>' : '') + (mm ? '<span>วัตถุดิบ <b>' + esc(mm.name) + '</b></span>' : ''), body);
   }
 
   // รายงานสต๊อกคงเหลือ ณ วันที่ + มูลค่า (คงเหลือ × ราคา ณ วันนั้น)
@@ -794,7 +828,7 @@
     '.rbox{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #cbd5e1;border-radius:8px;margin:6px 0 4px;overflow:hidden}.rbox div{padding:8px;text-align:center;border-left:1px solid #cbd5e1}.rbox div:first-child{border-left:0}.rbox span{display:block;font-size:11.5px;color:#64748b}.rbox b{font-size:17px}',
     '.preport h5{font-size:13.5px;margin:16px 0 6px;padding-left:8px;border-left:4px solid var(--c)}.preport h5 small{font-weight:400;color:#64748b}',
     '.pf.hl label{color:#b45309;font-weight:600}.pf.hl input{background:#fef9c3;border-color:#f59e0b}.pf.hl input:focus{border-color:#d97706;box-shadow:0 0 0 3px rgba(245,158,11,.25)}.rt tr.cx td{color:#94a3b8;text-decoration:line-through}',
-    '.rt{width:100%;border-collapse:collapse;font-size:12.5px}.rt th{background:#f1f5f9;font-weight:600;text-align:left;padding:5px 6px;border:1px solid #cbd5e1;white-space:nowrap}.rt td{padding:4px 6px;border:1px solid #e2e8f0;vertical-align:top}',
+    '.rt .muted{font-size:inherit}.rt{width:100%;border-collapse:collapse;font-size:12.5px}.rt th{background:#f1f5f9;font-weight:600;text-align:left;padding:5px 6px;border:1px solid #cbd5e1;white-space:nowrap}.rt td{padding:4px 6px;border:1px solid #e2e8f0;vertical-align:top}',
     '.rt tbody tr:nth-child(even) td{background:#f8fafc}.rt .r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.rt .c{text-align:center}.rt .b{font-weight:700}.rt .nw{white-space:nowrap}.rt tfoot td{font-weight:700;background:#f1f5f9;border:1px solid #cbd5e1}.rt tr.sub td{background:#fefce8}',
     '.psign{display:flex;justify-content:space-around;gap:16px;margin-top:44px;text-align:center;font-size:12px;line-height:1.9;break-inside:avoid}.psign span{display:block;width:150px;border-bottom:1px dotted #475569;height:22px;margin:0 auto 4px}',
     '.spinner.dark{border-color:rgba(15,23,42,.2);border-top-color:var(--c);display:inline-block;vertical-align:-3px;margin-right:6px}',

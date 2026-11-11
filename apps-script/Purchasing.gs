@@ -569,3 +569,29 @@ function purStockReport(token, asOf) {
   var total = Math.round(rows.reduce(function (s2, r) { return s2 + (r.value === '' ? 0 : r.value); }, 0) * 100) / 100;
   return { ok: true, asOf: asOf, rows: rows, total: total, noPrice: rows.filter(function (r) { return r.price === ''; }).length };
 }
+
+// ---------- รายงานประวัติราคา (ตามผู้ขาย / วัตถุดิบ) · ราคาที่มีผลในช่วงวันที่ + เทียบราคาก่อนหน้า ----------
+function purPriceReport(token, from, to) {
+  var dept = requirePur_(token), ss = purBook_(dept);
+  from = purDate_(from); to = purDate_(to);
+  if (!from || !to || from > to) return { ok: false, error: 'เลือกช่วงวันที่ให้ถูกต้อง' };
+  var mats = {}, vens = {};
+  purRead_(ss, 'materials').forEach(function (m) { mats[m.id] = m; });
+  purRead_(ss, 'vendors').forEach(function (v) { vens[v.id] = v.name; });
+  var byMat = {};
+  purRead_(ss, 'prices').forEach(function (p) { (byMat[p.materialId] = byMat[p.materialId] || []).push(p); });
+  var rows = [];
+  Object.keys(byMat).forEach(function (mid) {
+    var list = byMat[mid].sort(function (a, c) { return a.effectiveDate === c.effectiveDate ? String(a.createdAt).localeCompare(String(c.createdAt)) : a.effectiveDate.localeCompare(c.effectiveDate); });
+    list.forEach(function (p, i) {
+      if (p.effectiveDate < from || p.effectiveDate > to) return;
+      var prev = i > 0 ? list[i - 1] : null, m = mats[mid] || {};
+      var vendorId = p.vendorId || m.vendorId || '';
+      rows.push({ date: p.effectiveDate, materialId: mid, material: m.name || mid, unit: m.unit || '', vendorId: vendorId, vendor: vens[vendorId] || '',
+        price: p.price, prevPrice: prev ? prev.price : '', prevDate: prev ? prev.effectiveDate : '',
+        change: prev ? Math.round((p.price - prev.price) * 100) / 100 : '', pct: prev && prev.price ? Math.round((p.price - prev.price) / prev.price * 1000) / 10 : '', note: p.note });
+    });
+  });
+  rows.sort(function (a, c) { return a.vendor.localeCompare(c.vendor, 'th') || a.material.localeCompare(c.material, 'th') || a.date.localeCompare(c.date); });
+  return { ok: true, from: from, to: to, rows: rows };
+}
