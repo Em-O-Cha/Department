@@ -197,7 +197,7 @@
       + F('mvDate', 'วันที่คีย์ข้อมูล', m.date || todayIso(), 'date')
       + hl(F('mvQty', 'จำนวน (' + esc(unit) + ')' + (type === 'ADJ' ? ' (+ เพิ่ม / − ลด)' : ''), m.qty, 'number', ' step="any" inputmode="decimal" placeholder="0"'))
       + (type === 'IN'
-        ? F('mvLot', 'LOT', m.lot, 'text', ' placeholder="เว้นว่าง = วันที่รับ"') + F('mvMfg', 'วันที่ผลิต', m.mfgDate, 'date') + F('mvExp', 'วันหมดอายุ', m.expDate, 'date')
+        ? hl(F('mvLot', 'LOT (ตั้งเป็นวันที่รับให้อัตโนมัติ แก้ได้)', m.lot || dd(m.date || todayIso()), 'text')) + F('mvMfg', 'วันที่ผลิต', m.mfgDate, 'date') + F('mvExp', 'วันหมดอายุ', m.expDate, 'date')
           + S('mvDoc', 'อ้างอิงใบ PO', [['', '— ไม่อ้างอิง —']].concat(openPOs.map(function (d) { return [d.id, d.docNo + ' · ' + d.vendorName]; })), m.docId)
           + S('mvQc', 'ผลตรวจรับ (QC)', [['', '— ยังไม่ระบุ —'], ['ผ่าน', 'ผ่าน'], ['ผ่านแบบมีเงื่อนไข', 'ผ่านแบบมีเงื่อนไข'], ['ไม่ผ่าน', 'ไม่ผ่าน']], m.qc)
           + F('mvQcNote', 'หมายเหตุตรวจรับ', m.qcNote, 'text', ' placeholder="เช่น อุณหภูมิ, สภาพบรรจุภัณฑ์, COA"')
@@ -214,6 +214,12 @@
       body: body, ok: 'บันทึก',
       foot: edit ? '<button type="button" class="link-btn danger" id="mvDel">' + icon('trash', 16) + 'ลบรายการนี้</button>' : '',
       onOpen: function () {
+        // LOT ของรับเข้า = วันที่ (dd/mm/yyyy) · เปลี่ยนวันที่แล้ว LOT เปลี่ยนตาม ถ้ายังไม่ได้พิมพ์ LOT เอง
+        if (type === 'IN' && $('mvLot')) {
+          var autoLot = $('mvLot').value === dd(v('mvDate'));
+          $('mvLot').addEventListener('input', function () { autoLot = false; });
+          $('mvDate').addEventListener('change', function () { if (autoLot && v('mvDate')) $('mvLot').value = dd(v('mvDate')); });
+        }
         var del = $('mvDel'); if (del) del.addEventListener('click', function () { confirmDelete('ลบรายการ ' + TYPE[type] + ' ' + n3(m.qty) + ' ' + unit + ' วันที่ ' + dd(m.date) + ' ?', function () { return call('purDeleteMove', state.token, m.id); }, back); });
       },
       onCancel: back,
