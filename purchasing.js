@@ -686,7 +686,7 @@
     var now = new Date(), logo = document.querySelector('.brand-logo');
     var head = '<div class="rhead">' + (logo ? '<img class="rlogo" src="' + logo.src + '" alt="">' : '')
       + '<div class="rco"><b>' + COMPANY + '</b><span>แผนกจัดซื้อ & สต๊อกสินค้า</span></div>'
-      + '<div class="rform">' + FORM_CODE.replace(' วันที่', '<br>วันที่') + '</div></div>'
+      + '</div>'   // รหัสแบบฟอร์ม FM-WH-01-01 ใช้เฉพาะรายงานเบิกจ่าย (drawReport)
       + '<h4 class="rtitle">' + title + '</h4><div class="rinfo">' + info + '<span>พิมพ์เมื่อ ' + dd(todayIso()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ' น.</span></div>';
     return '<div class="preport"><table class="rwrap"><thead><tr><td>' + head + '</td></tr></thead><tbody><tr><td>' + body + '</td></tr></tbody></table></div>';
   }
@@ -753,7 +753,7 @@
 
   // หัวกระดาษของเบราว์เซอร์ (ถ้าเบราว์เซอร์ยังแสดง) ใช้ชื่อหน้า → ตั้งเป็นชื่อบริษัท + รหัสแบบฟอร์มระหว่างพิมพ์
   var oldTitle = '';
-  window.addEventListener('beforeprint', function () { if (state.page === 'p_rep') { oldTitle = document.title; document.title = COMPANY + '   ' + FORM_CODE; } });
+  window.addEventListener('beforeprint', function () { if (state.page === 'p_rep') { oldTitle = document.title; document.title = COMPANY + ((P.q.repType || 'stock') === 'stock' ? '   ' + FORM_CODE : ''); } });
   window.addEventListener('afterprint', function () { if (oldTitle) { document.title = oldTitle; oldTitle = ''; } });
 
   // พิมพ์ใบ PR / PO
