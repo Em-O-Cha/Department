@@ -131,8 +131,18 @@ function findDept_(key) {
   return null;
 }
 
+// โมดูลที่ทำแล้วของแต่ละแผนก (หน้าเว็บสร้างเมนูตามโมดูล) — ยังไม่มี = เมนูตัวอย่าง
+var DEPT_MODULES_ = { PUR: 'purchasing' };
 function deptView_(d) {
-  return { key: d.key, name: d.name, en: d.en, color: d.color, menus: d.menus.slice(), ownerEmail: d.ownerEmail || '' };
+  return { key: d.key, name: d.name, en: d.en, color: d.color, menus: d.menus.slice(), ownerEmail: d.ownerEmail || '', module: DEPT_MODULES_[d.key] || '' };
+}
+
+// ⚡ (11/11/69) ลิงก์ Google Sheet / โฟลเดอร์ไฟล์ ของแผนก ตั้งในหน้าผู้ดูแลระบบ (เก็บใน Script Properties ไม่อยู่ในโค้ด)
+function deptConfig_(key) {
+  var raw = PropertiesService.getScriptProperties().getProperty('DEPT_CFG_' + key);
+  var c = raw ? JSON.parse(raw) : {};
+  var d = DEPARTMENTS.filter(function (x) { return x.key === key; })[0] || {};
+  return { sheetId: c.sheetId || d.sheetId || '', folderId: c.folderId || '' };
 }
 
 // ตรวจตั๋ว + ต่ออายุ (sliding) — คืนแผนกของตั๋ว ใช้ในทุกฟังก์ชันที่แตะข้อมูล
@@ -146,12 +156,13 @@ function requireDept_(token) {
 
 // เปิด Google Sheet ของแผนกในตั๋วเท่านั้น — ฟังก์ชันอ่าน/เขียนข้อมูลในอนาคตให้เรียกผ่านตัวนี้เสมอ
 function openDeptSpreadsheet_(dept) {
-  if (!dept.sheetId) throw new Error('แผนกนี้ยังไม่ได้เชื่อม Google Sheet');
-  return SpreadsheetApp.openById(dept.sheetId);
+  var id = deptConfig_(dept.key).sheetId;
+  if (!id) throw new Error('แผนกนี้ยังไม่ได้เชื่อม Google Sheet');
+  return SpreadsheetApp.openById(id);
 }
 
 function sheetStatus_(dept) {
-  if (!dept.sheetId) return { connected: false, message: 'ยังไม่ได้เชื่อม Google Sheet' };
+  if (!deptConfig_(dept.key).sheetId) return { connected: false, message: 'ยังไม่ได้เชื่อม Google Sheet' };
   try {
     var ss = openDeptSpreadsheet_(dept);
     return { connected: true, title: ss.getName(), tabs: ss.getSheets().map(function (s) { return s.getName(); }) };

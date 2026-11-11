@@ -176,7 +176,7 @@ function adminOverview(token) {
     var rec = p.getProperty('CODE_' + d.key); rec = rec ? JSON.parse(rec) : null;
     return { key: d.key, name: d.name, en: d.en, color: d.color, managed: managed, appUrl: d.appUrl || '',
       hasPassword: !!p.getProperty(pwPropKey_(d.key)), locked: !!cache.get('lock_' + d.key),
-      codeExpires: rec && rec.exp > Date.now() ? rec.exp : 0 };
+      codeExpires: rec && rec.exp > Date.now() ? rec.exp : 0, links: managed ? deptLinksStatus_(d.key) : null };
   }) };
 }
 
@@ -203,4 +203,29 @@ function adminUnlockDept(token, deptKey) {
   requireAdmin_(token);
   CacheService.getScriptCache().removeAll(['fail_' + deptKey, 'lock_' + deptKey]);
   return { ok: true };
+}
+
+// ==================== ลิงก์ Google Sheet / โฟลเดอร์ไฟล์ ของแผนก ====================
+function idFromLink_(link) {
+  var t = String(link || '').trim();
+  if (!t) return '';
+  var m = t.match(/\/d\/([A-Za-z0-9_-]{20,})/) || t.match(/\/folders\/([A-Za-z0-9_-]{20,})/) || t.match(/[?&]id=([A-Za-z0-9_-]{20,})/) || t.match(/^([A-Za-z0-9_-]{20,})$/);
+  return m ? m[1] : null;
+}
+function deptLinksStatus_(key) {
+  var c = deptConfig_(key), out = { sheetId: c.sheetId, folderId: c.folderId, sheet: '', sheetError: '', folder: '', folderError: '' };
+  if (c.sheetId) { try { out.sheet = SpreadsheetApp.openById(c.sheetId).getName(); } catch (e) { out.sheetError = 'เปิดไม่ได้ — ให้เจ้าของแชร์ให้ ' + ownerEmail_() + ' เป็นผู้แก้ไข'; } }
+  if (c.folderId) { try { out.folder = DriveApp.getFolderById(c.folderId).getName(); } catch (e2) { out.folderError = 'เปิดไม่ได้ — ให้เจ้าของแชร์ให้ ' + ownerEmail_() + ' เป็นผู้แก้ไข'; } }
+  return out;
+}
+// ใส่ลิงก์ (ว่าง = ลบ) แล้วเช็กทันทีว่าระบบเปิดได้
+function adminSetDeptLinks(token, deptKey, sheetLink, folderLink) {
+  requireAdmin_(token);
+  var dept = findDept_(deptKey);
+  if (!dept) return { ok: false, error: 'ไม่พบแผนก' };
+  var sheetId = idFromLink_(sheetLink), folderId = idFromLink_(folderLink);
+  if (sheetId === null) return { ok: false, error: 'ลิงก์ Google Sheet ไม่ถูกต้อง' };
+  if (folderId === null) return { ok: false, error: 'ลิงก์โฟลเดอร์ไม่ถูกต้อง' };
+  props_().setProperty('DEPT_CFG_' + dept.key, JSON.stringify({ sheetId: sheetId, folderId: folderId }));
+  return { ok: true, links: deptLinksStatus_(dept.key) };
 }

@@ -13,7 +13,13 @@ function apiFunctions_() {
     deptSetPasswordWithCode: deptSetPasswordWithCode, changeMyPassword: changeMyPassword,
     getAdminStatus: getAdminStatus, adminSendEmailCode: adminSendEmailCode, adminSetPasswordWithEmailCode: adminSetPasswordWithEmailCode,
     adminLogin: adminLogin, adminChangePassword: adminChangePassword, adminOverview: adminOverview,
-    adminIssueDeptCode: adminIssueDeptCode, adminCancelDeptCode: adminCancelDeptCode, adminUnlockDept: adminUnlockDept
+    adminIssueDeptCode: adminIssueDeptCode, adminCancelDeptCode: adminCancelDeptCode, adminUnlockDept: adminUnlockDept,
+    adminSetDeptLinks: adminSetDeptLinks,
+    // จัดซื้อ & สต๊อก (Purchasing.gs)
+    purLoad: purLoad, purMoves: purMoves, purReport: purReport,
+    purSaveVendor: purSaveVendor, purSaveMaterial: purSaveMaterial, purSavePrice: purSavePrice, purDeletePrice: purDeletePrice, purPriceHistory: purPriceHistory,
+    purSaveDoc: purSaveDoc, purSaveMove: purSaveMove, purDeleteMove: purDeleteMove,
+    purUploadFile: purUploadFile, purRemoveFile: purRemoveFile, purLog: purLog
   };
 }
 
@@ -23,7 +29,7 @@ function doPost(e) {
     var req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     var fns = apiFunctions_(), fn = String(req.fn || '');
     if (!Object.prototype.hasOwnProperty.call(fns, fn)) throw new Error('ไม่รองรับคำสั่งนี้');
-    var args = Array.isArray(req.args) ? req.args.slice(0, 5) : [];
+    var args = Array.isArray(req.args) ? req.args.slice(0, 8) : [];
     out = { ok: true, val: fns[fn].apply(null, args) };
   } catch (err) {
     out = { ok: false, err: String(err && err.message || err) };
