@@ -35,6 +35,8 @@
   var TYPE = { IN: 'รับเข้า', OUT: 'จ่ายออก', RETURN: 'ส่งคืนผู้ขาย', ADJ: 'ปรับยอด' };
   var DOC_ST = { draft: 'ร่าง', approved: 'อนุมัติแล้ว', ordered: 'สั่งแล้ว', partial: 'รับบางส่วน', received: 'รับของครบ', cancelled: 'ยกเลิก' };
   var PAY_ST = { unpaid: 'ยังไม่ชำระ', partial: 'ชำระบางส่วน', paid: 'ชำระแล้ว', none: '-' };
+  // ชื่อที่ใส่ให้อัตโนมัติตอนจ่ายออก (แก้ในช่องได้)
+  var DEF_REQUESTER = 'ณิชกมล', DEF_ISSUER = 'สุชาดา';
   var FILE_LABELS = ['PR ที่อนุมัติ', 'PO ที่อนุมัติ', 'ภาพอนุมัติทาง LINE', 'ใบเสนอราคา', 'ใบส่งของ / ใบกำกับ', 'COA / ผลตรวจ', 'หลักฐานการชำระเงิน', 'อื่น ๆ'];
 
   // ---------- ตัวช่วย ----------
@@ -58,6 +60,7 @@
       return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(value == null ? '' : value) ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
     }).join('') + '</select></div>';
   }
+  function hl(html) { return html.replace('<div class="pf">', '<div class="pf hl">'); }   // ช่องสำคัญ: ไฮไลต์สี
   function T(id, label, value) { return '<div class="pf full"><label for="' + id + '">' + label + '</label><textarea id="' + id + '" rows="2">' + esc(value || '') + '</textarea></div>'; }
   function v(id) { var el = $(id); return el ? el.value.trim() : ''; }
   function on(sel, ev, fn, root) { Array.prototype.forEach.call((root || document).querySelectorAll(sel), function (el) { el.addEventListener(ev, function (e) { fn(el, e); }); }); }
@@ -186,16 +189,16 @@
     var body = '<div class="pform">'
       + (edit ? S('mvType', 'ประเภท', Object.keys(TYPE).map(function (k) { return [k, TYPE[k]]; }), type) : (type === 'OUT' ? S('mvType', 'ประเภท', [['OUT', 'จ่ายออก (เบิกใช้)'], ['RETURN', 'ส่งคืนผู้ขาย']], 'OUT') : ''))
       + F('mvDate', 'วันที่', m.date || todayIso(), 'date')
-      + F('mvQty', 'จำนวน (' + esc(unit) + ')' + (type === 'ADJ' ? ' (+ เพิ่ม / − ลด)' : ''), m.qty, 'number', ' step="any" inputmode="decimal" placeholder="0"')
+      + hl(F('mvQty', 'จำนวน (' + esc(unit) + ')' + (type === 'ADJ' ? ' (+ เพิ่ม / − ลด)' : ''), m.qty, 'number', ' step="any" inputmode="decimal" placeholder="0"'))
       + (type === 'IN'
         ? F('mvLot', 'LOT', m.lot, 'text', ' placeholder="เว้นว่าง = วันที่รับ"') + F('mvExp', 'วันหมดอายุ', m.expDate, 'date')
           + S('mvDoc', 'อ้างอิงใบ PO', [['', '— ไม่อ้างอิง —']].concat(openPOs.map(function (d) { return [d.id, d.docNo + ' · ' + d.vendorName]; })), m.docId)
           + S('mvQc', 'ผลตรวจรับ (QC)', [['', '— ยังไม่ระบุ —'], ['ผ่าน', 'ผ่าน'], ['ผ่านแบบมีเงื่อนไข', 'ผ่านแบบมีเงื่อนไข'], ['ไม่ผ่าน', 'ไม่ผ่าน']], m.qc)
           + F('mvQcNote', 'หมายเหตุตรวจรับ', m.qcNote, 'text', ' placeholder="เช่น อุณหภูมิ, สภาพบรรจุภัณฑ์, COA"')
-          + F('mvIssuer', 'ผู้รับของ', m.issuer != null ? m.issuer : store('issuer'))
+          + hl(F('mvIssuer', 'ผู้รับของ', m.issuer != null ? m.issuer : store('receiver')))
         : S('mvLot', 'LOT', (lots.length ? lots.map(function (l) { return [l.lot, l.lot + ' (เหลือ ' + n3(l.qty) + (l.expDate ? ' · หมดอายุ ' + dd(l.expDate) : '') + ')']; }) : [['', '— ไม่มี LOT คงเหลือ —']])
             .concat(m.lot && !lots.some(function (l) { return l.lot === m.lot; }) ? [[m.lot, m.lot]] : []), m.lot || (lots[0] && lots[0].lot))
-          + F('mvReq', 'ผู้เบิก', m.requester != null ? m.requester : store('requester')) + F('mvIssuer', 'ผู้จ่าย', m.issuer != null ? m.issuer : store('issuer')))
+          + F('mvReq', 'ผู้เบิก', m.requester != null ? m.requester : DEF_REQUESTER) + F('mvIssuer', 'ผู้จ่าย', m.issuer != null ? m.issuer : DEF_ISSUER))
       + T('mvNote', 'หมายเหตุ', m.note)
       + (!edit && type === 'IN' ? '<div class="pf full"><label>แนบไฟล์ (ใบส่งของ / COA / รูป) — ไม่บังคับ</label><input id="mvFile" type="file" accept="image/*,application/pdf"></div>' : '')
       + '</div>'
@@ -226,7 +229,7 @@
           docId: v('mvDoc') || (edit ? m.docId : ''), qc: v('mvQc') || (edit ? m.qc : ''), qcNote: v('mvQcNote') || (edit && !$('mvQcNote') ? m.qcNote : ''),
           requester: v('mvReq'), issuer: v('mvIssuer'), note: v('mvNote') };
         if (type === 'IN' && rec.type === 'IN') rec.requester = edit ? m.requester : '';
-        if (v('mvReq')) store('requester', v('mvReq')); if (v('mvIssuer')) store('issuer', v('mvIssuer'));
+        if (rec.type === 'IN' && v('mvIssuer')) store('receiver', v('mvIssuer'));
         var file = $('mvFile') && $('mvFile').files[0];
         return call('purSaveMove', state.token, rec).then(function (r) {
           if (!r.ok) return r.error;
@@ -558,15 +561,23 @@
     var t = todayIso(), from = P.q.repFrom || monthStart(t), to = P.q.repTo || t;
     var lastM = addDays(monthStart(t), -1);
     $('main').innerHTML = '<h3>รายงาน / พิมพ์</h3><p class="lead">เลือกช่วงวันที่ → แสดงรายงาน → พิมพ์ หรือบันทึกเป็น PDF (เลือก "บันทึกเป็น PDF" ในหน้าพิมพ์)</p>'
-      + '<div class="panel noprint"><div class="pform">' + F('rFrom', 'ตั้งแต่วันที่', from, 'date') + F('rTo', 'ถึงวันที่', to, 'date')
+      + '<div class="panel noprint"><div class="pform">' + S('rType', 'ประเภทรายงาน', [['stock', 'รายงานเบิกจ่ายสินค้า (รับเข้า-จ่ายออก)'], ['PO', 'รายงานใบสั่งซื้อ (PO)'], ['PR', 'รายงานใบขอซื้อ (PR)']], P.q.repType || 'stock') + '<div class="pf"></div>'
+      + F('rFrom', 'ตั้งแต่วันที่', from, 'date') + F('rTo', 'ถึงวันที่', to, 'date')
       + S('rMat', 'วัตถุดิบ', [['', 'ทุกรายการ']].concat(materialList().map(function (m) { return [m.id, m.name]; })), P.q.repMat || '')
       + '<div class="pf"><label>&nbsp;</label><label class="pchk"><input type="checkbox" id="rDetail"' + (P.q.repDetail ? ' checked' : '') + '> แสดงรายการรับเข้า-จ่ายออกทุกรายการ</label></div></div>'
       + '<div class="pchips">' + [['เดือนนี้', monthStart(t), t], ['เดือนก่อน', monthStart(lastM), lastM], ['3 เดือน', addDays(t, -90), t], ['ทั้งหมด', '2020-01-01', t]].map(function (q) { return '<button class="chip" data-r="' + q[1] + '|' + q[2] + '">' + q[0] + '</button>'; }).join('') + '</div>'
       + '<div class="actions"><button class="btn btn-primary" id="rGo">' + icon('chart', 18) + 'แสดงรายงาน</button><button class="btn btn-line" id="rPrint">' + icon('print', 18) + 'พิมพ์ / PDF</button></div></div>'
       + '<div id="rOut"></div>';
+    var stockOpts = function () { var st = v('rType') === 'stock'; [$('rMat'), $('rDetail')].forEach(function (el) { el.closest('.pf').style.display = st ? '' : 'none'; }); };
+    stockOpts();
+    $('rType').addEventListener('change', function () { P.q.repType = this.value; stockOpts(); $('rOut').innerHTML = ''; });
     var run = function (print) {
-      P.q.repFrom = v('rFrom'); P.q.repTo = v('rTo'); P.q.repMat = v('rMat'); P.q.repDetail = $('rDetail').checked;
+      P.q.repFrom = v('rFrom'); P.q.repTo = v('rTo'); P.q.repMat = v('rMat'); P.q.repDetail = $('rDetail').checked; P.q.repType = v('rType');
       if (!P.q.repFrom || !P.q.repTo || P.q.repFrom > P.q.repTo) return toast('เลือกช่วงวันที่ให้ถูกต้อง');
+      if (P.q.repType !== 'stock') {
+        $('rOut').innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังสร้างรายงาน…</div>';
+        return P.load().then(function () { if (state.page !== 'p_rep') return; drawDocReport(P.q.repType, P.q.repFrom, P.q.repTo); if (print) setTimeout(function () { window.print(); }, 300); }).catch(onServerError);
+      }
       var key = P.q.repFrom + '|' + P.q.repTo;
       var show = function (r) { drawReport(r); if (print) setTimeout(function () { window.print(); }, 300); };
       if (P.report && P.report.key === key) return show(P.report);
@@ -576,9 +587,10 @@
     on('[data-r]', 'click', function (el) { var p = el.getAttribute('data-r').split('|'); $('rFrom').value = p[0]; $('rTo').value = p[1]; run(); }, $('main'));
     $('rGo').addEventListener('click', function () { run(false); });
     $('rPrint').addEventListener('click', function () { run(true); });
-    $('rMat').addEventListener('change', function () { if (P.report) { P.q.repMat = v('rMat'); drawReport(P.report); } });
-    $('rDetail').addEventListener('change', function () { if (P.report) { P.q.repDetail = this.checked; drawReport(P.report); } });
-    if (P.report && P.report.key === from + '|' + to) drawReport(P.report); else if (P.q.repMat) run(false);
+    $('rMat').addEventListener('change', function () { if (P.report && v('rType') === 'stock') { P.q.repMat = v('rMat'); drawReport(P.report); } });
+    $('rDetail').addEventListener('change', function () { if (P.report && v('rType') === 'stock') { P.q.repDetail = this.checked; drawReport(P.report); } });
+    if ((P.q.repType || 'stock') !== 'stock') run(false);
+    else if (P.report && P.report.key === from + '|' + to) drawReport(P.report); else if (P.q.repMat) run(false);
   }
   // หัวกระดาษรายงาน: หน้าแรก = โลโก้ + ชื่อบริษัท + รหัสแบบฟอร์ม + ชื่อรายงาน · หน้าถัดไป = ชื่อบริษัท + รหัสแบบฟอร์ม (@page ด้านล่าง)
   var COMPANY = 'บริษัท สปังกี้ฟู้ด จำกัด';
@@ -634,6 +646,43 @@
     var head = html.slice('<div class="preport">'.length, headEnd), body = html.slice(headEnd, html.length - '</div>'.length);
     $('rOut').innerHTML = '<div class="preport"><table class="rwrap"><thead><tr><td>' + head + '</td></tr></thead><tbody><tr><td>' + body + '</td></tr></tbody></table></div>';
   }
+  // หัวรายงาน (ขึ้นซ้ำทุกหน้าเวลาพิมพ์) + เนื้อหา
+  function reportWrap(title, info, body) {
+    var now = new Date(), logo = document.querySelector('.brand-logo');
+    var head = '<div class="rhead">' + (logo ? '<img class="rlogo" src="' + logo.src + '" alt="">' : '')
+      + '<div class="rco"><b>' + COMPANY + '</b><span>แผนกจัดซื้อ & สต๊อกสินค้า</span></div>'
+      + '<div class="rform">' + FORM_CODE.replace(' วันที่', '<br>วันที่') + '</div></div>'
+      + '<h4 class="rtitle">' + title + '</h4><div class="rinfo">' + info + '<span>พิมพ์เมื่อ ' + dd(todayIso()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ' น.</span></div>';
+    return '<div class="preport"><table class="rwrap"><thead><tr><td>' + head + '</td></tr></thead><tbody><tr><td>' + body + '</td></tr></tbody></table></div>';
+  }
+  function signBlock() { return '<div class="psign"><div><span></span>ผู้จัดทำ<br>วันที่ ......./......./.......</div><div><span></span>ผู้ตรวจสอบ<br>วันที่ ......./......./.......</div><div><span></span>ผู้อนุมัติ<br>วันที่ ......./......./.......</div></div>'; }
+
+  // รายงานใบ PO / PR ตามวันที่สั่ง
+  function drawDocReport(type, from, to) {
+    var isPO = type === 'PO';
+    var list = P.data.docs.filter(function (d) { return d.type === type && d.orderDate >= from && d.orderDate <= to; })
+      .sort(function (a, b) { return String(a.orderDate).localeCompare(String(b.orderDate)) || String(a.docNo).localeCompare(String(b.docNo)); });
+    var live = list.filter(function (d) { return d.status !== 'cancelled'; });
+    var total = live.reduce(function (s, d) { return s + (Number(d.total) || 0); }, 0);
+    var paid = live.reduce(function (s, d) { return s + (Number(d.paidAmount) || 0); }, 0);
+    var boxes = [['จำนวนใบ', live.length + (list.length > live.length ? ' <small>(ยกเลิก ' + (list.length - live.length) + ')</small>' : '')], ['ยอดรวม', baht(total)]]
+      .concat(isPO ? [['ชำระแล้ว', baht(paid)], ['ค้างชำระ', baht(total - paid)]] : [['อนุมัติแล้ว', live.filter(function (d) { return d.status !== 'draft'; }).length + ' ใบ'], ['รออนุมัติ', live.filter(function (d) { return d.status === 'draft'; }).length + ' ใบ']]);
+    var body = '<div class="rbox">' + boxes.map(function (b) { return '<div><span>' + b[0] + '</span><b>' + b[1] + '</b></div>'; }).join('') + '</div>'
+      + '<h5>' + (isPO ? 'ใบสั่งซื้อ' : 'ใบขอซื้อ') + ' <small>(' + list.length + ' ใบ)</small></h5><table class="rt"><thead><tr><th class="c">#</th><th>เลขที่ / วันที่</th><th>ผู้ขาย</th><th>รายการ</th><th>ส่งของ</th><th>สถานะ</th><th class="r">ยอดรวม</th>'
+      + (isPO ? '<th>การชำระ</th><th class="r">ค้างชำระ</th>' : '<th>ผู้อนุมัติ</th>') + '</tr></thead><tbody>'
+      + (list.map(function (d, i) {
+        var cx = d.status === 'cancelled', due = (Number(d.total) || 0) - (Number(d.paidAmount) || 0);
+        return '<tr' + (cx ? ' class="cx"' : '') + '><td class="c">' + (i + 1) + '</td><td class="nw"><b>' + esc(d.docNo) + '</b><br>' + dd(d.orderDate) + '</td><td>' + esc(d.vendorName || '-') + (d.vendorPhone ? '<br><small>' + esc(d.vendorPhone) + '</small>' : '') + '</td>'
+          + '<td>' + d.items.map(function (it) { return esc(it.materialName) + ' <span class="nw">' + n3(it.qty) + ' ' + esc(it.unit) + (it.price !== '' ? ' × ' + baht(it.price).replace('฿', '') : '') + '</span>'; }).join('<br>') + '</td>'
+          + '<td class="nw">' + dd(d.deliveryDate) + '</td><td>' + (DOC_ST[d.status] || '') + (d.approvedDate && !isPO ? '' : '') + '</td><td class="r b">' + baht(d.total) + '</td>'
+          + (isPO ? '<td>' + (PAY_ST[d.paymentStatus] || '-') + (d.paymentStatus !== 'paid' && d.dueDate ? '<br><small>ครบกำหนด ' + dd(d.dueDate) + '</small>' : d.paidDate ? '<br><small>' + dd(d.paidDate) + '</small>' : '') + '</td><td class="r">' + (cx ? '–' : baht(due)) + '</td>'
+            : '<td>' + esc(d.approvedBy || '-') + (d.approvedDate ? '<br><small>' + dd(d.approvedDate) + '</small>' : '') + '</td>') + '</tr>';
+      }).join('') || '<tr><td colspan="9" class="c muted">ไม่มี' + (isPO ? 'ใบสั่งซื้อ' : 'ใบขอซื้อ') + 'ในช่วงนี้</td></tr>')
+      + '</tbody>' + (list.length ? '<tfoot><tr><td colspan="6" class="r">รวม (ไม่นับใบที่ยกเลิก)</td><td class="r">' + baht(total) + '</td>' + (isPO ? '<td></td><td class="r">' + baht(total - paid) + '</td>' : '<td></td>') + '</tr></tfoot>' : '') + '</table>'
+      + signBlock();
+    $('rOut').innerHTML = reportWrap(isPO ? 'รายงานใบสั่งซื้อ (PO)' : 'รายงานใบขอซื้อ (PR)', '<span>วันที่สั่ง <b>' + dd(from) + ' – ' + dd(to) + '</b></span>', body);
+  }
+
   // หัวกระดาษของเบราว์เซอร์ (ถ้าเบราว์เซอร์ยังแสดง) ใช้ชื่อหน้า → ตั้งเป็นชื่อบริษัท + รหัสแบบฟอร์มระหว่างพิมพ์
   var oldTitle = '';
   window.addEventListener('beforeprint', function () { if (state.page === 'p_rep') { oldTitle = document.title; document.title = COMPANY + '   ' + FORM_CODE; } });
@@ -710,6 +759,7 @@
     '.rtitle{text-align:center;font-size:19px;margin:14px 0 6px}.rinfo{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 18px;font-size:12.5px;color:#334155;margin-bottom:12px}',
     '.rbox{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #cbd5e1;border-radius:8px;margin:6px 0 4px;overflow:hidden}.rbox div{padding:8px;text-align:center;border-left:1px solid #cbd5e1}.rbox div:first-child{border-left:0}.rbox span{display:block;font-size:11.5px;color:#64748b}.rbox b{font-size:17px}',
     '.preport h5{font-size:13.5px;margin:16px 0 6px;padding-left:8px;border-left:4px solid var(--c)}.preport h5 small{font-weight:400;color:#64748b}',
+    '.pf.hl label{color:#b45309;font-weight:600}.pf.hl input{background:#fef9c3;border-color:#f59e0b}.pf.hl input:focus{border-color:#d97706;box-shadow:0 0 0 3px rgba(245,158,11,.25)}.rt tr.cx td{color:#94a3b8;text-decoration:line-through}',
     '.rt{width:100%;border-collapse:collapse;font-size:12.5px}.rt th{background:#f1f5f9;font-weight:600;text-align:left;padding:5px 6px;border:1px solid #cbd5e1;white-space:nowrap}.rt td{padding:4px 6px;border:1px solid #e2e8f0;vertical-align:top}',
     '.rt tbody tr:nth-child(even) td{background:#f8fafc}.rt .r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.rt .c{text-align:center}.rt .b{font-weight:700}.rt .nw{white-space:nowrap}.rt tfoot td{font-weight:700;background:#f1f5f9;border:1px solid #cbd5e1}.rt tr.sub td{background:#fefce8}',
     '.psign{display:flex;justify-content:space-around;gap:16px;margin-top:44px;text-align:center;font-size:12px;line-height:1.9;break-inside:avoid}.psign span{display:block;width:150px;border-bottom:1px dotted #475569;height:22px;margin:0 auto 4px}',
