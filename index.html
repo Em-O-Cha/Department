@@ -46,12 +46,21 @@
   .page-head h3 { margin: 0 0 2px; }
   .page-head .lead { margin: 0 !important; }
   /* การ์ดผู้บริหาร (Dashboard ทุกฝ่าย) */
-  .card.exec-card { flex-direction: row; align-items: center; width: 100%; margin-bottom: 16px; background: linear-gradient(120deg, #2563eb 0%, #4f46e5 45%, #9333ea 100%); color: #fff; border: 0; box-shadow: 0 8px 26px rgba(79, 70, 229, .35); }
-  .card.exec-card .icon { background: rgba(255, 255, 255, .2); color: #fff; }
-  .card.exec-card .meta { flex: 1; } .card.exec-card .en { color: rgba(255, 255, 255, .78); margin-top: 0; }
-  .card.exec-card .go { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; background: rgba(255, 255, 255, .14); padding: 8px 12px; border-radius: 10px; white-space: nowrap; }
+  .card.exec-card { flex-direction: row; align-items: center; width: 100%; margin-bottom: 16px; background: #fff; color: var(--ink); border: 1px solid var(--line); overflow: hidden; }
+  .card.exec-card::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 5px; background: linear-gradient(90deg, #c62828, #e53935 35%, #43a047 70%, #2e7d32); }
+  .card.exec-card .icon { background: #fee2e2; color: #c62828; }
+  .card.exec-card .meta { flex: 1; } .card.exec-card .en { color: var(--muted); margin-top: 0; }
+  .card.exec-card .go { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; background: #e8f5e9; color: #2e7d32; padding: 8px 12px; border-radius: 10px; white-space: nowrap; }
   .exec-card .go svg.ic { width: 16px; height: 16px; }
-  .card.exec-card:hover { border-color: transparent; box-shadow: 0 12px 34px rgba(79, 70, 229, .5); }
+  .card.exec-card:hover { border-color: #c62828; box-shadow: 0 8px 28px rgba(15, 23, 42, .12); }
+  /* หน้าผู้บริหาร: แถบบนสีขาว + เส้นสีโลโก้ด้านล่าง */
+  .app.exec-theme .topbar { background: #fff; color: var(--ink); position: relative; border-bottom: 1px solid var(--line); }
+  .app.exec-theme .topbar::after { content: ''; position: absolute; left: 0; right: 0; bottom: -4px; height: 4px; background: linear-gradient(90deg, #c62828, #e53935 35%, #43a047 70%, #2e7d32); z-index: 1; }
+  .app.exec-theme .topbar .icon { background: #fee2e2; color: #c62828; }
+  .app.exec-theme .topbar .sub { color: var(--muted); opacity: 1; }
+  .app.exec-theme .topbar .lock { color: var(--muted); }
+  .app.exec-theme .btn-out { background: #fff; color: var(--ink); border: 1.5px solid var(--line); }
+  .app.exec-theme .btn-out:hover { border-color: #94a3b8; background: #f8fafc; }
   .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
   .card {
     position: relative; text-align: left; border: 1px solid var(--line); background: var(--surface);
@@ -400,6 +409,7 @@
   function openApp() {
     var d = state.dept;
     $('app').style.setProperty('--c', d.color);
+    $('app').classList.toggle('exec-theme', d.module === 'executive');
     $('topIcon').innerHTML = icon(d.key, 22);
     $('topTitle').textContent = d.name;
     $('topSub').textContent = d.en;
@@ -752,6 +762,6 @@
   }).catch(function () { toast('โหลดรายชื่อแผนกไม่ได้'); });
 </script>
 <script src="purchasing.js?v=6"></script>
-<script src="executive.js?v=2"></script>
+<script src="executive.js?v=3"></script>
 </body>
 </html>
