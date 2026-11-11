@@ -85,7 +85,7 @@
       + '</div><div class="kpis xk">'
       + tile(baht(k.unpaidTotal), 'ค้างชำระผู้ขาย (ทั้งหมด)', k.unpaidTotal ? '#b45309' : '#64748b', k.overdueCount ? 'เลยกำหนด ' + k.overdueCount + ' ใบ' : 'ไม่มีเลยกำหนด')
       + tile(k.waitingCount, 'PO รอรับของ', '#0891b2', '')
-      + tile(k.low, 'ต่ำกว่าจุดสั่งซื้อ', k.low ? '#dc2626' : '#64748b', 'จาก ' + k.materials + ' วัตถุดิบ')
+      + tile(k.low, 'สินค้าต่ำกว่า Minimum', k.low ? '#dc2626' : '#64748b', 'จาก ' + k.materials + ' วัตถุดิบ')
       + tile(k.expiring, 'LOT ใกล้หมดอายุ (30 วัน)', k.expiring ? '#d97706' : '#64748b', k.qcFail ? 'QC ไม่ผ่านในช่วงนี้ ' + k.qcFail : '')
       + '</div>';
     html += '<div class="panel xchart"><div class="xch"><b>รับเข้า / จ่ายออก ' + (r.days.length > 62 ? 'รายเดือน' : 'รายวัน') + ' (จำนวนรายการ)</b>'
@@ -98,8 +98,8 @@
       + box('ค้างชำระผู้ขาย', r.unpaid.map(function (x) {
         return '<div class="li"><span>' + esc(x.docNo) + ' · ' + esc(x.vendorName) + '</span><b class="' + (x.overdue ? 'neg' : '') + '">' + baht(x.due) + '</b><small>ครบกำหนด ' + dd(x.dueDate) + (x.overdue ? ' (เลยกำหนด)' : '') + '</small></div>';
       }), 'ไม่มียอดค้างชำระ')
-      + box('ต่ำกว่าจุดสั่งซื้อ', r.low.map(function (x) {
-        return '<div class="li"><span>' + esc(x.name) + '</span><b class="' + (x.balance < 0 ? 'neg' : 'warn') + '">' + n3(x.balance) + ' ' + esc(x.unit) + '</b><small>ขั้นต่ำ ' + (x.minStock === '' ? '-' : n3(x.minStock)) + '</small></div>';
+      + box('สินค้าต่ำกว่า Minimum', r.low.map(function (x) {
+        return '<div class="li"><span>' + esc(x.name) + '</span><b class="' + (x.balance < 0 ? 'neg' : 'warn') + '">' + n3(x.balance) + ' ' + esc(x.unit) + '</b><small>Minimum ' + (x.minStock === '' ? '-' : n3(x.minStock)) + '</small></div>';
       }), 'ไม่มี')
       + box('LOT ใกล้หมดอายุ', r.expiring.map(function (x) {
         return '<div class="li"><span>' + esc(x.name) + ' <small>LOT ' + esc(x.lot) + '</small></span><b class="' + (x.left < 0 ? 'neg' : 'warn') + '">' + (x.left < 0 ? 'หมดอายุแล้ว' : 'อีก ' + x.left + ' วัน') + '</b><small>' + dd(x.expDate) + ' · เหลือ ' + n3(x.qty) + ' ' + esc(x.unit) + '</small></div>';

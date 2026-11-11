@@ -123,14 +123,14 @@
     var unpaidSum = unpaid.reduce(function (s, x) { return s + (Number(x.total) || 0) - (Number(x.paidAmount) || 0); }, 0);
     var kpi = function (n, label, color, page) { return '<button class="kpi" data-go="' + page + '" style="--k:' + color + '"><b>' + n + '</b><span>' + label + '</span></button>'; };
     var html = '<h3>ภาพรวม จัดซื้อ & สต๊อก</h3><p class="lead">ข้อมูล ณ ' + dd(t) + ' · <a href="' + esc(d.sheetUrl) + '" target="_blank" rel="noopener">เปิด Google Sheet</a></p>'
-      + '<div class="kpis">' + kpi(active.length, 'วัตถุดิบ', '#0f766e', 'p_mat') + kpi(low.length, 'ต่ำกว่าจุดสั่งซื้อ', low.length ? '#dc2626' : '#64748b', 'p_stock')
+      + '<div class="kpis">' + kpi(active.length, 'วัตถุดิบ', '#0f766e', 'p_mat') + kpi(low.length, 'สินค้าต่ำกว่า Minimum', low.length ? '#dc2626' : '#64748b', 'p_stock')
       + kpi(exp.length, 'LOT ใกล้หมดอายุ (30 วัน)', exp.length ? '#d97706' : '#64748b', 'p_stock') + kpi(waiting.length, 'PO รอรับของ', '#2563eb', 'p_doc')
       + kpi(baht(unpaidSum).replace('.00', ''), 'ค้างชำระผู้ขาย (' + unpaid.length + ' ใบ)', unpaid.length ? '#7c3aed' : '#64748b', 'p_doc') + '</div>';
     var box = function (title, rows, empty) { return '<div class="panel pbox"><h4>' + title + '</h4>' + (rows.length ? rows.join('') : '<div class="muted">' + empty + '</div>') + '</div>'; };
     html += '<div class="pgrid">'
-      + box(icon('warn', 18) + ' ต่ำกว่าจุดสั่งซื้อ', low.concat(neg.filter(function (m) { return low.indexOf(m) < 0; })).slice(0, 30).map(function (m) {
-        return '<div class="li"><span>' + esc(m.name) + '</span><b class="' + (m.balance < 0 ? 'neg' : 'warn') + '">' + n3(m.balance) + ' ' + esc(m.unit) + '</b><small>ขั้นต่ำ ' + n3(m.minStock) + '</small></div>';
-      }), 'ไม่มี (ตั้ง "จุดสั่งซื้อขั้นต่ำ" ได้ที่เมนูวัตถุดิบ)')
+      + box(icon('warn', 18) + ' สินค้าต่ำกว่า Minimum', low.concat(neg.filter(function (m) { return low.indexOf(m) < 0; })).slice(0, 30).map(function (m) {
+        return '<div class="li"><span>' + esc(m.name) + '</span><b class="' + (m.balance < 0 ? 'neg' : 'warn') + '">' + n3(m.balance) + ' ' + esc(m.unit) + '</b><small>Minimum ' + n3(m.minStock) + '</small></div>';
+      }), 'ไม่มีสินค้าต่ำกว่า Minimum (ตั้งค่า Minimum ได้ที่เมนูวัตถุดิบ & ราคา)')
       + box(icon('clock', 18) + ' LOT ใกล้หมดอายุ', exp.slice(0, 30).map(function (x) {
         return '<div class="li"><span>' + esc(x.m.name) + ' <small>LOT ' + esc(x.l.lot) + '</small></span><b class="' + (x.left < 0 ? 'neg' : 'warn') + '">' + (x.left < 0 ? 'หมดอายุแล้ว' : 'อีก ' + x.left + ' วัน') + '</b><small>' + dd(x.l.expDate) + ' · เหลือ ' + n3(x.l.qty) + '</small></div>';
       }), 'ไม่มี LOT ที่หมดอายุใน 30 วัน')
@@ -160,7 +160,7 @@
 
   function stock() {
     $('main').innerHTML = '<h3>รับเข้า / จ่ายออก</h3><p class="lead">เลือกวัตถุดิบ แล้วกด รับเข้า หรือ จ่ายออก (วันที่ตั้งเป็นวันนี้ให้ก่อน แก้ได้)</p>'
-      + searchBar('stock', 'ค้นหาวัตถุดิบ / ผู้ขาย', '<label class="pchk"><input type="checkbox" id="pLowOnly"' + (P.q.lowOnly ? ' checked' : '') + '> เฉพาะต่ำกว่าขั้นต่ำ</label>')
+      + searchBar('stock', 'ค้นหาวัตถุดิบ / ผู้ขาย', '<label class="pchk"><input type="checkbox" id="pLowOnly"' + (P.q.lowOnly ? ' checked' : '') + '> เฉพาะสินค้าต่ำกว่า Minimum</label>')
       + '<div id="pList" class="plist"></div>';
     var draw = function () {
       var q = P.q.stock;
@@ -296,14 +296,14 @@
 
   // ==================== วัตถุดิบ & ราคา ====================
   function materials() {
-    $('main').innerHTML = '<h3>วัตถุดิบ & ราคา</h3><p class="lead">แก้ชื่อ หน่วย ผู้ขาย จุดสั่งซื้อขั้นต่ำ · ปรับราคา (เก็บประวัติราคาทุกครั้ง)</p>'
+    $('main').innerHTML = '<h3>วัตถุดิบ & ราคา</h3><p class="lead">แก้ชื่อ หน่วย ผู้ขาย Minimum · ปรับราคา (เก็บประวัติราคาทุกครั้ง)</p>'
       + searchBar('mat', 'ค้นหาวัตถุดิบ', '<button class="btn btn-sm btn-primary" id="pAddMat">' + icon('plus', 16) + 'เพิ่มวัตถุดิบ</button>') + '<div id="pList" class="plist"></div>';
     var draw = function () {
       var list = materialList().filter(function (m) { var vn = ven(m.vendorId); return match(P.q.mat, m.name + ' ' + (vn ? vn.name : '') + ' ' + m.category); });
       $('pList').innerHTML = list.map(function (m) {
         var vn = ven(m.vendorId);
         return '<button class="prow click" data-mat="' + m.id + '"><div class="pinfo"><b>' + esc(m.name) + (m.active === 'ปิด' ? ' <span class="tag no">ปิดใช้งาน</span>' : '') + '</b><small>'
-          + (m.unit ? 'หน่วย: ' + esc(m.unit) : '<span class="warn">ยังไม่ระบุหน่วย</span>') + ' · ' + (vn ? esc(vn.name) : 'ไม่ระบุผู้ขาย') + (m.minStock !== '' ? ' · ขั้นต่ำ ' + n3(m.minStock) : '') + '</small></div>'
+          + (m.unit ? 'หน่วย: ' + esc(m.unit) : '<span class="warn">ยังไม่ระบุหน่วย</span>') + ' · ' + (vn ? esc(vn.name) : 'ไม่ระบุผู้ขาย') + (m.minStock !== '' ? ' · Minimum ' + n3(m.minStock) : '') + '</small></div>'
           + '<div class="pprice">' + (m.price !== '' ? baht(m.price) + '<small>ณ ' + dd(m.priceDate) + '</small>' : '<small>ยังไม่มีราคา</small>') + '</div></button>';
       }).join('') || '<div class="panel muted">ไม่พบวัตถุดิบ</div>';
       on('[data-mat]', 'click', function (el) { materialModal(mat(el.getAttribute('data-mat'))); }, $('pList'));
@@ -317,7 +317,7 @@
     var body = '<div class="pform">' + F('maName', 'ชื่อวัตถุดิบ *', m.name) + F('maUnit', 'หน่วย', m.unit, 'text', ' placeholder="เช่น กก. / ถุง / ลัง / ขวด" list="unitList"')
       + '<datalist id="unitList">' + ['กก.', 'กรัม', 'ถุง', 'ลัง', 'ขวด', 'แกลลอน', 'ถัง', 'กล่อง', 'แพ็ค', 'ลิตร', 'ปี๊บ', 'กระสอบ'].map(function (u) { return '<option value="' + u + '">'; }).join('') + '</datalist>'
       + S('maVendor', 'ผู้ขายหลัก', vendorOptions(), m.vendorId) + F('maCat', 'หมวด', m.category, 'text', ' placeholder="เช่น เครื่องเทศ, น้ำมัน, บรรจุภัณฑ์"')
-      + F('maMin', 'จุดสั่งซื้อขั้นต่ำ (แจ้งเตือนเมื่อเหลือไม่เกิน)', m.minStock, 'number', ' step="any" inputmode="decimal"')
+      + F('maMin', 'Minimum (จำนวนขั้นต่ำที่ต้องมี — เหลือเท่านี้ระบบเตือนให้สั่งซื้อ)', m.minStock, 'number', ' step="any" inputmode="decimal"')
       + S('maActive', 'สถานะ', [['ใช้งาน', 'ใช้งาน'], ['ปิด', 'ปิดใช้งาน (ซ่อนจากรายการรับ-จ่าย)']], m.active) + T('maNote', 'หมายเหตุ', m.note) + '</div>'
       + (edit ? '<div class="psec"><div class="psec-h"><b>ราคา</b><button type="button" class="btn btn-sm btn-primary" id="maPrice">' + icon('plus', 16) + 'ปรับราคา</button></div><div id="maPrices"><div class="muted">กำลังโหลดประวัติราคา…</div></div></div>' : '<div class="note">บันทึกแล้วจึงใส่ราคาได้</div>');
     wide({
