@@ -34,7 +34,7 @@
 
 1. สร้างโปรเจกต์ Apps Script ใหม่ในบัญชีเจ้าของระบบ แล้วสร้างไฟล์ `Code.gs`, `Setup.gs`, `Index.html`
    (ชื่อ `Index` ตรงตัว) วางโค้ดจากโฟลเดอร์นี้
-2. Deploy → New deployment → Web app → Execute as: **Me**, Who has access: **Anyone** → ได้ลิงก์ `/exec`
+2. Deploy → New deployment → Web app → Execute as: **Me**, Who has access: **Anyone with Google account** (ต้องล็อกอิน Google ก่อนเปิด) → ได้ลิงก์ `/exec`
    (ครั้งแรกเจ้าของสคริปต์ต้องกดอนุญาตสิทธิ์: Run `checkSetup` ใน editor หนึ่งครั้ง)
 3. เปิดเว็บแอป → **ผู้ดูแลระบบ** → ส่งรหัสยืนยันไปอีเมลเจ้าของระบบ → ตั้งรหัสผู้ดูแล
 4. ในหน้าผู้ดูแล กด **ออกรหัสตั้งค่า** ของแต่ละแผนก → ส่งรหัสให้หัวหน้าแผนกเอง
