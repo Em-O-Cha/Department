@@ -1,8 +1,8 @@
 # ระบบงานองค์กร (หลายแผนก) — Google Apps Script Web App
 
-## 👉 [เปิดเว็บแอป ระบบงานองค์กร](https://script.google.com/macros/s/AKfycbyWj0ra2zC_T-qOE6kAr0cHHzIV944lk_5n4Nk54md9WkHcslA_Pwx7UBNF5Uc0LXTc/exec)
+## 👉 [เปิดเว็บแอป ระบบงานองค์กร](https://em-o-cha.github.io/Department/) · [ลิงก์ตรง](https://script.google.com/macros/s/AKfycbyWj0ra2zC_T-qOE6kAr0cHHzIV944lk_5n4Nk54md9WkHcslA_Pwx7UBNF5Uc0LXTc/exec)
 
-ต้องล็อกอินบัญชี Google ก่อน แล้วเลือกแผนกและใส่รหัสผ่านของแผนก · [หน้าแก้ไขสคริปต์ (เจ้าของระบบ)](https://script.google.com/d/10eEJBwBRdo_VC-KFO6d9wzDrFApGEE5dXIOLFSLFxkff2yxznkOcpPC7/edit)
+ต้องล็อกอินบัญชี Google ก่อน แล้วเลือกแผนกและใส่รหัสผ่านของแผนก
 
 เว็บแอปกลางที่ใช้ร่วมกัน 8 แผนก: ฝ่ายบุคคล (HR), ฝ่ายบัญชี, จัดซื้อ & สต๊อกสินค้า, ฝ่ายประกันคุณภาพ (QA),
 วิจัยและพัฒนา (RD), ฝ่ายผลิต, ความปลอดภัยและสิ่งแวดล้อม (SHE), ขนส่งและคลัง (LOG) — แต่ละแผนกเข้าด้วยรหัสผ่านของตัวเอง แยกกันโดยสิ้นเชิง
