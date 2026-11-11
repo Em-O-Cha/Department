@@ -21,7 +21,7 @@ function execRange_(from, to) {
 // ฝ่ายขาย = Meeting Dashboard (repo dashboard-meeting + meeting-dashboard/DashboardApi.gs) เปิดในกรอบหน้า Dashboard ผู้บริหาร
 // หน้านั้นตรวจตั๋วผู้บริหารกับ execVerify (ไม่ต้องใส่รหัส Meeting Dashboard ซ้ำ)
 var EXEC_SALES_ = { key: 'SALES', name: 'ฝ่ายขาย', en: 'Sales (Meeting Dashboard)', color: '#e11d48', ready: true,
-  embed: 'https://em-o-cha.github.io/dashboard-meeting/?embed=exec' };
+  embed: 'https://em-o-cha.github.io/Dashboard-Meeting/?embed=exec' };
 
 // รายชื่อฝ่าย + ฝ่ายไหนมี Dashboard แล้ว
 function execOverview(token) {
