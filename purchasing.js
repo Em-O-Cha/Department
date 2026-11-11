@@ -129,7 +129,7 @@
     var box = function (title, rows, empty) { return '<div class="panel pbox"><h4>' + title + '</h4>' + (rows.length ? rows.join('') : '<div class="muted">' + empty + '</div>') + '</div>'; };
     html += '<div class="pgrid">'
       + box(icon('warn', 18) + ' สินค้าที่ต้องจัดซื้อ (ต่ำกว่า Minimum)', low.concat(neg.filter(function (m) { return low.indexOf(m) < 0; })).slice(0, 30).map(function (m) {
-        return '<div class="li"><span>' + esc(m.name) + '</span><b class="' + (m.balance < 0 ? 'neg' : 'warn') + '">' + n3(m.balance) + ' ' + esc(m.unit) + '</b><small>Minimum ' + n3(m.minStock) + '</small></div>';
+        return '<div class="li"><span>' + esc(m.name) + '</span><b class="' + (m.balance < 0 ? 'neg' : 'warn') + '">' + n3(m.balance) + ' ' + esc(m.unit) + '</b><small>' + (m.minStock === '' || m.minStock == null ? 'ยอดติดลบ — ควรนับสต๊อกจริง' : 'Minimum ' + n3(m.minStock)) + '</small></div>';
       }), 'ยังไม่มีสินค้าที่ต้องจัดซื้อ (ตั้งค่า Minimum ได้ที่เมนูวัตถุดิบ & ราคา)')
       + box(icon('clock', 18) + ' LOT ใกล้หมดอายุ', exp.slice(0, 30).map(function (x) {
         return '<div class="li"><span>' + esc(x.m.name) + ' <small>LOT ' + esc(x.l.lot) + '</small></span><b class="' + (x.left < 0 ? 'neg' : 'warn') + '">' + (x.left < 0 ? 'หมดอายุแล้ว' : 'อีก ' + x.left + ' วัน') + '</b><small>' + dd(x.l.expDate) + ' · เหลือ ' + n3(x.l.qty) + '</small></div>';

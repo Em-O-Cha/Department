@@ -99,7 +99,7 @@
         return '<div class="li"><span>' + esc(x.docNo) + ' · ' + esc(x.vendorName) + '</span><b class="' + (x.overdue ? 'neg' : '') + '">' + baht(x.due) + '</b><small>ครบกำหนด ' + dd(x.dueDate) + (x.overdue ? ' (เลยกำหนด)' : '') + '</small></div>';
       }), 'ไม่มียอดค้างชำระ')
       + box('สินค้าที่ต้องจัดซื้อ (ต่ำกว่า Minimum)', r.low.map(function (x) {
-        return '<div class="li"><span>' + esc(x.name) + '</span><b class="' + (x.balance < 0 ? 'neg' : 'warn') + '">' + n3(x.balance) + ' ' + esc(x.unit) + '</b><small>Minimum ' + (x.minStock === '' ? '-' : n3(x.minStock)) + '</small></div>';
+        return '<div class="li"><span>' + esc(x.name) + '</span><b class="' + (x.balance < 0 ? 'neg' : 'warn') + '">' + n3(x.balance) + ' ' + esc(x.unit) + '</b><small>' + (x.minStock === '' ? 'ยอดติดลบ — ควรนับสต๊อกจริง' : 'Minimum ' + n3(x.minStock)) + '</small></div>';
       }), 'ไม่มี')
       + box('LOT ใกล้หมดอายุ', r.expiring.map(function (x) {
         return '<div class="li"><span>' + esc(x.name) + ' <small>LOT ' + esc(x.lot) + '</small></span><b class="' + (x.left < 0 ? 'neg' : 'warn') + '">' + (x.left < 0 ? 'หมดอายุแล้ว' : 'อีก ' + x.left + ' วัน') + '</b><small>' + dd(x.expDate) + ' · เหลือ ' + n3(x.qty) + ' ' + esc(x.unit) + '</small></div>';
