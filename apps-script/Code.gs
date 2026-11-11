@@ -53,7 +53,7 @@ var DEPARTMENTS = [
     sheetId: '', ownerEmail: '', appUrl: '',
     menus: ['รอกำหนดข้อมูล'] },
   // ผู้บริหาร: ไม่ใช่แผนก — ดู Dashboard ของทุกฝ่ายได้อย่างเดียว (Executive.gs) · ตั้งรหัสผ่านเองด้วยรหัสตั้งค่าจากผู้ดูแลระบบ
-  { key: 'EXEC', name: 'ผู้บริหาร',            en: 'Executive Dashboard', color: '#0f172a', exec: true,
+  { key: 'EXEC', name: 'ผู้บริหาร',            en: 'Executive Dashboard', color: '#4f46e5', exec: true,
     sheetId: '', ownerEmail: '', appUrl: '',
     menus: [] }
 ];

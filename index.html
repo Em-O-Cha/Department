@@ -46,12 +46,12 @@
   .page-head h3 { margin: 0 0 2px; }
   .page-head .lead { margin: 0 !important; }
   /* การ์ดผู้บริหาร (Dashboard ทุกฝ่าย) */
-  .card.exec-card { flex-direction: row; align-items: center; width: 100%; margin-bottom: 16px; background: linear-gradient(120deg, #0f172a, #1e293b 60%, #334155); color: #fff; border: 0; }
-  .card.exec-card .icon { background: rgba(255, 255, 255, .14); color: #fff; }
+  .card.exec-card { flex-direction: row; align-items: center; width: 100%; margin-bottom: 16px; background: linear-gradient(120deg, #2563eb 0%, #4f46e5 45%, #9333ea 100%); color: #fff; border: 0; box-shadow: 0 8px 26px rgba(79, 70, 229, .35); }
+  .card.exec-card .icon { background: rgba(255, 255, 255, .2); color: #fff; }
   .card.exec-card .meta { flex: 1; } .card.exec-card .en { color: rgba(255, 255, 255, .78); margin-top: 0; }
   .card.exec-card .go { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; background: rgba(255, 255, 255, .14); padding: 8px 12px; border-radius: 10px; white-space: nowrap; }
   .exec-card .go svg.ic { width: 16px; height: 16px; }
-  .card.exec-card:hover { border-color: transparent; box-shadow: 0 10px 30px rgba(15, 23, 42, .35); }
+  .card.exec-card:hover { border-color: transparent; box-shadow: 0 12px 34px rgba(79, 70, 229, .5); }
   .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
   .card {
     position: relative; text-align: left; border: 1px solid var(--line); background: var(--surface);
@@ -142,6 +142,7 @@
   .admin-link svg.ic { width: 16px; height: 16px; }
   .field { margin-top: 12px; }
   .field:first-child { margin-top: 0; }
+  .field .pw input { padding-right: 46px; }
   .field input { width: 100%; padding: 11px 14px; border: 1.5px solid var(--line); border-radius: 10px; font: inherit; font-size: 16px; background: #fff; color: var(--ink); }
   .field input:focus { outline: none; border-color: var(--c, var(--accent)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c, var(--accent)) 18%, transparent); }
   .field input.code { letter-spacing: .12em; text-transform: uppercase; font-weight: 600; }
@@ -334,7 +335,7 @@
   function renderHome() {
     // การ์ดผู้บริหาร (Dashboard ทุกฝ่าย) แยกไว้ด้านบน
     $('execSlot').innerHTML = state.depts.filter(function (d) { return d.exec; }).map(function (d) {
-      return '<button class="card exec-card" style="--c:#0f172a" data-key="' + d.key + '"><div class="icon">' + icon('EXEC') + '</div>'
+      return '<button class="card exec-card" style="--c:' + d.color + '" data-key="' + d.key + '"><div class="icon">' + icon('EXEC') + '</div>'
         + '<div class="meta"><p class="name">Dashboard ผู้บริหาร</p><div class="en">ดูข้อมูลสรุปของทุกฝ่าย · เลือกฝ่ายและช่วงวันที่ได้</div></div>'
         + '<span class="go">' + icon('lock', 15) + 'ใช้รหัสผู้บริหาร ' + icon('arrow') + '</span></button>';
     }).join('');
@@ -477,8 +478,15 @@
   // ---------- กล่องทั่วไป ----------
   var modalCfg = null;
   function field(id, label, type, ph, cls) {
-    return '<div class="field"><label for="' + id + '">' + label + '</label><input id="' + id + '" type="' + (type || 'password') + '" autocomplete="' + (type === 'text' ? 'off' : 'new-password') + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + (cls ? ' class="' + cls + '"' : '') + '></div>';
+    var inp = '<input id="' + id + '" type="' + (type || 'password') + '" autocomplete="' + (type === 'text' ? 'off' : 'new-password') + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + (cls ? ' class="' + cls + '"' : '') + '>';
+    // ช่องรหัสผ่าน: มีปุ่มรูปตา กดเพื่อแสดง/ซ่อนรหัส
+    if (!type || type === 'password') inp = '<div class="pw">' + inp + '<button type="button" class="eye feye" tabindex="-1" aria-label="แสดงรหัสผ่าน">' + $('eyeBtn').innerHTML + '</button></div>';
+    return '<div class="field"><label for="' + id + '">' + label + '</label>' + inp + '</div>';
   }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('.feye'); if (!b) return;
+    var i = b.parentNode.querySelector('input'); i.type = i.type === 'password' ? 'text' : 'password'; i.focus();
+  });
   function val(id) { var el = $(id); return el ? el.value : ''; }
   function openModal(cfg) {
     modalCfg = cfg;
@@ -530,15 +538,16 @@
   function openDeptSetup(d, first) {
     openModal({
       color: d.color, icon: d.key, title: (d.ready === false ? 'ตั้งรหัสผ่านครั้งแรก · ' : 'ตั้ง / รีเซ็ตรหัสผ่าน · ') + d.name, sub: d.en,
-      body: (d.ready === false ? '<div class="note" style="margin-bottom:12px">แผนกนี้ยังไม่มีรหัสผ่าน ใช้รหัสตั้งค่าที่ได้จากผู้ดูแลระบบ แล้วตั้งรหัสผ่านของแผนกเอง</div>' : '')
-        + field('mCode', 'รหัสตั้งค่าจากผู้ดูแลระบบ', 'text', 'เช่น ABCD-2345', 'code')
-        + field('mPw1', 'รหัสผ่านใหม่ของแผนก (อย่างน้อย 6 ตัวอักษร)')
+      body: '<div class="note" style="margin-bottom:12px">' + (d.ready === false ? (d.exec ? 'ผู้บริหารยังไม่มีรหัสผ่าน' : 'แผนกนี้ยังไม่มีรหัสผ่าน') + ' — ' : '')
+          + 'ขอ <b>รหัสตั้งค่า 8 ตัว</b> (หน้าตาแบบ ABCD-2345) จากผู้ดูแลระบบ ใส่ในช่องแรก แล้วตั้งรหัสผ่านของ' + (d.exec ? 'ตัวเอง' : 'แผนกเอง') + 'ในช่องถัดไป</div>'
+        + field('mCode', 'รหัสตั้งค่า 8 ตัว จากผู้ดูแลระบบ (ไม่ใช่รหัสผ่าน)', 'text', 'เช่น ABCD-2345', 'code')
+        + field('mPw1', 'รหัสผ่านใหม่' + (d.exec ? '' : 'ของแผนก') + ' (อย่างน้อย 6 ตัวอักษร)')
         + field('mPw2', 'พิมพ์รหัสผ่านใหม่อีกครั้ง'),
       foot: '<div class="hint">' + icon('lock') + 'รหัสผ่านนี้รู้เฉพาะคนในแผนก ผู้ดูแลระบบไม่เห็นและตั้งแทนไม่ได้ · รหัสตั้งค่าใช้ได้ครั้งเดียว</div>',
       ok: 'ตั้งรหัสและเข้าสู่ระบบ', sticky: state.single,
       noCancel: state.single && d.ready === false,
       onCancel: function () { if (state.single || (d.ready !== false && !first)) openLogin(d.key); },
-      check: function () { return val('mCode').replace(/[^A-Za-z0-9]/g, '').length < 8 ? 'กรอกรหัสตั้งค่าให้ครบ 8 ตัว' : pwPairError(val('mPw1'), val('mPw2')); },
+      check: function () { return val('mCode').replace(/[^A-Za-z0-9]/g, '').length !== 8 ? 'ช่องแรกต้องเป็นรหัสตั้งค่า 8 ตัว (เช่น ABCD-2345) ที่ผู้ดูแลระบบออกให้ — ยังไม่มี ให้ขอจากผู้ดูแลระบบก่อน' : pwPairError(val('mPw1'), val('mPw2')); },
       submit: function () {
         return call('deptSetPasswordWithCode', d.key, val('mCode'), val('mPw1')).then(function (r) {
           if (!r.ok) return r.error;
