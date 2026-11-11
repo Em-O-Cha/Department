@@ -19,7 +19,9 @@ function apiFunctions_() {
     purLoad: purLoad, purMoves: purMoves, purReport: purReport,
     purSaveVendor: purSaveVendor, purSaveMaterial: purSaveMaterial, purSavePrice: purSavePrice, purDeletePrice: purDeletePrice, purPriceHistory: purPriceHistory,
     purSaveDoc: purSaveDoc, purSaveMove: purSaveMove, purDeleteMove: purDeleteMove,
-    purUploadFile: purUploadFile, purRemoveFile: purRemoveFile, purLog: purLog
+    purUploadFile: purUploadFile, purRemoveFile: purRemoveFile, purLog: purLog,
+    // ผู้บริหาร (Executive.gs)
+    execOverview: execOverview, execDashboard: execDashboard
   };
 }
 

@@ -176,7 +176,7 @@ function adminOverview(token) {
     var rec = p.getProperty('CODE_' + d.key); rec = rec ? JSON.parse(rec) : null;
     return { key: d.key, name: d.name, en: d.en, color: d.color, managed: managed, appUrl: d.appUrl || '',
       hasPassword: !!p.getProperty(pwPropKey_(d.key)), locked: !!cache.get('lock_' + d.key),
-      codeExpires: rec && rec.exp > Date.now() ? rec.exp : 0, links: managed ? deptLinksStatus_(d.key) : null };
+      codeExpires: rec && rec.exp > Date.now() ? rec.exp : 0, exec: !!d.exec, links: managed && !d.exec ? deptLinksStatus_(d.key) : null };
   }) };
 }
 

@@ -485,3 +485,64 @@ function purLog(token, limit) {
   var list = purRead_(ss, 'log');
   return { ok: true, log: list.slice(-Math.min(500, Number(limit) || 200)).reverse() };
 }
+
+// ---------- สรุปสำหรับ Dashboard ผู้บริหาร (ดูอย่างเดียว · เรียกจาก Executive.gs) ----------
+function purDashboard_(dept, from, to) {
+  var ss = purBook_(dept), today = purToday_();
+  var materials = purRead_(ss, 'materials'), moves = purRead_(ss, 'moves'), prices = purRead_(ss, 'prices'), docs = purRead_(ss, 'docs');
+  var b = purBalances_(moves), byId = {};
+  materials.forEach(function (m) { byId[m.id] = m; });
+  var priceList = {};
+  prices.forEach(function (p) { (priceList[p.materialId] = priceList[p.materialId] || []).push(p); });
+  Object.keys(priceList).forEach(function (k) { priceList[k].sort(function (a, c) { return a.effectiveDate.localeCompare(c.effectiveDate); }); });
+  var priceAt = function (mid, date) {
+    var list = priceList[mid] || [], p = '';
+    for (var i = 0; i < list.length; i++) { if (list[i].effectiveDate <= date) p = list[i].price; else break; }
+    return p === '' && list.length ? list[0].price : p;
+  };
+  var active = materials.filter(function (m) { return m.active !== 'ปิด'; });
+  var low = [], exp = [];
+  active.forEach(function (m) {
+    var bal = b.bal[m.id] || 0;
+    if ((m.minStock !== '' && bal <= m.minStock) || bal < 0) low.push({ name: m.name, unit: m.unit, balance: bal, minStock: m.minStock });
+    (b.lots[m.id] || []).forEach(function (l) {
+      if (!l.expDate) return;
+      var left = Math.round((purToDate_(l.expDate) - purToDate_(today)) / 864e5);
+      if (left <= 30) exp.push({ name: m.name, lot: l.lot, expDate: l.expDate, qty: l.qty, unit: m.unit, left: left });
+    });
+  });
+  exp.sort(function (a, c) { return a.left - c.left; });
+  // การเคลื่อนไหวในช่วงวันที่
+  var days = {}, top = {}, inN = 0, outN = 0, inV = 0, outV = 0, qcFail = 0, returns = 0;
+  moves.forEach(function (m) {
+    if (m.date < from || m.date > to) return;
+    var s = purSigned_(m), d = (days[m.date] = days[m.date] || { date: m.date, inN: 0, outN: 0 });
+    var price = priceAt(m.materialId, m.date), value = price === '' ? 0 : Math.abs(s) * price;
+    if (s >= 0) { inN++; d.inN++; inV += value; if (m.qc === 'ไม่ผ่าน') qcFail++; }
+    else {
+      outN++; d.outN++; outV += value; if (m.type === 'RETURN') returns++;
+      var t = (top[m.materialId] = top[m.materialId] || { name: (byId[m.materialId] || {}).name || m.materialId, unit: (byId[m.materialId] || {}).unit || '', count: 0, qty: 0, value: 0 });
+      t.count++; t.qty += -s; t.value += value;
+    }
+  });
+  var topList = Object.keys(top).map(function (k) { var t = top[k]; t.qty = Math.round(t.qty * 1000) / 1000; t.value = Math.round(t.value * 100) / 100; return t; })
+    .sort(function (a, c) { return c.count - a.count || c.qty - a.qty; }).slice(0, 10);
+  // PR / PO ในช่วงวันที่ (ตามวันที่สั่ง) + ค้างทั้งหมด ณ วันนี้
+  var inRange = docs.filter(function (d) { return d.status !== 'cancelled' && d.orderDate >= from && d.orderDate <= to; });
+  var po = inRange.filter(function (d) { return d.type === 'PO'; }), pr = inRange.filter(function (d) { return d.type === 'PR'; });
+  var sumOf = function (list, k) { return Math.round(list.reduce(function (s, d) { return s + (Number(d[k]) || 0); }, 0) * 100) / 100; };
+  var unpaid = docs.filter(function (d) { return d.type === 'PO' && d.status !== 'cancelled' && d.paymentStatus !== 'paid' && d.paymentStatus !== 'none'; })
+    .map(function (d) { return { docNo: d.docNo, vendorName: d.vendorName, dueDate: d.dueDate, due: Math.round(((Number(d.total) || 0) - (Number(d.paidAmount) || 0)) * 100) / 100, overdue: !!d.dueDate && d.dueDate < today }; })
+    .sort(function (a, c) { return String(a.dueDate || '9').localeCompare(String(c.dueDate || '9')); });
+  var waiting = docs.filter(function (d) { return d.type === 'PO' && /approved|ordered|partial/.test(d.status); })
+    .map(function (d) { return { docNo: d.docNo, vendorName: d.vendorName, deliveryDate: d.deliveryDate, late: !!d.deliveryDate && d.deliveryDate < today, status: d.status }; });
+  var dayList = Object.keys(days).sort().map(function (k) { return days[k]; });
+  return {
+    kind: 'purchasing', today: today, hasPrices: prices.length > 0,
+    kpi: { materials: active.length, low: low.length, expiring: exp.length, inCount: inN, outCount: outN, inValue: Math.round(inV * 100) / 100, outValue: Math.round(outV * 100) / 100,
+      qcFail: qcFail, returns: returns, poCount: po.length, poTotal: sumOf(po, 'total'), poPaid: sumOf(po, 'paidAmount'), prCount: pr.length, prTotal: sumOf(pr, 'total'),
+      prDraft: pr.filter(function (d) { return d.status === 'draft'; }).length, unpaidTotal: Math.round(unpaid.reduce(function (s, d) { return s + d.due; }, 0) * 100) / 100,
+      overdueCount: unpaid.filter(function (d) { return d.overdue; }).length, waitingCount: waiting.length },
+    days: dayList, top: topList, low: low.slice(0, 30), expiring: exp.slice(0, 30), unpaid: unpaid.slice(0, 30), waiting: waiting.slice(0, 30)
+  };
+}

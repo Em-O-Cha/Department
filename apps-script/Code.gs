@@ -48,7 +48,14 @@ var DEPARTMENTS = [
     menus: ['อุบัติเหตุ / เหตุการณ์เกือบเกิด', 'ตรวจความปลอดภัย', 'อบรมความปลอดภัย', 'ของเสีย / สิ่งแวดล้อม'] },
   { key: 'LOG',  name: 'ขนส่งและคลัง',       en: 'Logistics & Warehouse', color: '#475569',
     sheetId: '', ownerEmail: '', appUrl: '',
-    menus: ['รับสินค้าเข้าคลัง', 'จ่ายสินค้า / ส่งของ', 'ตารางรถขนส่ง', 'สินค้าคงคลัง'] }
+    menus: ['รับสินค้าเข้าคลัง', 'จ่ายสินค้า / ส่งของ', 'ตารางรถขนส่ง', 'สินค้าคงคลัง'] },
+  { key: 'COST', name: 'ต้นทุนสินค้า',        en: 'Product Costing',     color: '#0f766e',
+    sheetId: '', ownerEmail: '', appUrl: '',
+    menus: ['รอกำหนดข้อมูล'] },
+  // ผู้บริหาร: ไม่ใช่แผนก — ดู Dashboard ของทุกฝ่ายได้อย่างเดียว (Executive.gs) · ตั้งรหัสผ่านเองด้วยรหัสตั้งค่าจากผู้ดูแลระบบ
+  { key: 'EXEC', name: 'ผู้บริหาร',            en: 'Executive Dashboard', color: '#0f172a', exec: true,
+    sheetId: '', ownerEmail: '', appUrl: '',
+    menus: [] }
 ];
 
 var SESSION_TTL_SEC_ = 30 * 60;     // ไม่ได้ใช้งาน 30 นาที ต้องเข้าใหม่
@@ -67,7 +74,7 @@ function doGet() {
 // รายชื่อแผนกสำหรับหน้าแรก (ไม่มี sheetId / อีเมล)
 function getDepartments() {
   return activeDepartments_().map(function (d) {
-    return { key: d.key, name: d.name, en: d.en, color: d.color, appUrl: ONLY_DEPT ? '' : (d.appUrl || ''),
+    return { key: d.key, name: d.name, en: d.en, color: d.color, appUrl: ONLY_DEPT ? '' : (d.appUrl || ''), exec: !!d.exec,
       ready: !!PropertiesService.getScriptProperties().getProperty(pwPropKey_(d.key)) };   // ตั้งรหัสผ่านแล้วหรือยัง
   });
 }
@@ -132,7 +139,7 @@ function findDept_(key) {
 }
 
 // โมดูลที่ทำแล้วของแต่ละแผนก (หน้าเว็บสร้างเมนูตามโมดูล) — ยังไม่มี = เมนูตัวอย่าง
-var DEPT_MODULES_ = { PUR: 'purchasing' };
+var DEPT_MODULES_ = { PUR: 'purchasing', EXEC: 'executive' };
 function deptView_(d) {
   return { key: d.key, name: d.name, en: d.en, color: d.color, menus: d.menus.slice(), ownerEmail: d.ownerEmail || '', module: DEPT_MODULES_[d.key] || '' };
 }
