@@ -597,6 +597,7 @@
       + '<h4 class="rtitle">' + (mm ? 'สต๊อกการ์ด (STOCK CARD)' : 'รายงานรับเข้า-จ่ายออก วัตถุดิบ') + '</h4>'
       + '<div class="rinfo">' + (mm ? '<span>รายการ <b>' + esc(mm.name) + '</b></span><span>Supplier <b>' + (vn ? esc(vn.name) : '-') + '</b></span><span>หน่วย <b>' + esc(mm.unit || '-') + '</b></span>' : '')
       + '<span>ช่วงวันที่ <b>' + dd(r.from) + ' – ' + dd(r.to) + '</b></span><span>พิมพ์เมื่อ ' + dd(todayIso()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ' น.</span></div>';
+    var headEnd = html.length;
     if (mm) {
       var s0 = sum[0] || { open: 0, inQty: 0, outQty: 0, close: 0 };
       html += '<div class="rbox">' + [['ยกมา', s0.open], ['รับเข้า', s0.inQty], ['จ่ายออก', s0.outQty], ['คงเหลือ', s0.close]].map(function (b) { return '<div><span>' + b[0] + '</span><b>' + n3(b[1]) + '</b></div>'; }).join('') + '</div>';
@@ -620,7 +621,7 @@
           bal[x.materialId] = Math.round(((bal[x.materialId] || 0) + s) * 1000) / 1000;
           var note = [x.type === 'RETURN' ? 'ส่งคืนผู้ขาย' : x.type === 'ADJ' ? 'ปรับยอด' : '', x.note].filter(String).join(' · ');
           return '<tr><td class="nw">' + dd(x.date) + '</td>' + (mm ? '' : '<td>' + esc(x.name) + '</td>') + '<td class="r">' + (s > 0 ? n3(s) : '') + '</td><td class="r">' + (s < 0 ? n3(-s) : '') + '</td><td class="r b">' + n3(bal[x.materialId]) + '</td>'
-            + '<td class="nw">' + esc(x.lot) + '</td><td>' + esc(x.requester) + '</td><td>' + esc(x.issuer) + '</td><td>' + esc(note) + '</td></tr>';
+            + '<td class="nw">' + esc(x.lot) + '</td><td class="nw">' + esc(x.requester) + '</td><td class="nw">' + esc(x.issuer) + '</td><td>' + esc(note) + '</td></tr>';
         }).join('') || '<tr><td colspan="9" class="c muted">ไม่มีรายการ</td></tr>') + '</tbody></table>';
     }
     if (!mm) {
@@ -629,7 +630,9 @@
         + '</tbody></table>';
     }
     html += '<div class="psign"><div><span></span>ผู้จัดทำ<br>วันที่ ......./......./.......</div><div><span></span>ผู้ตรวจสอบ<br>วันที่ ......./......./.......</div><div><span></span>ผู้อนุมัติ<br>วันที่ ......./......./.......</div></div></div>';
-    $('rOut').innerHTML = html;
+    // หัวรายงานอยู่ใน <thead> ของตารางครอบ → เวลาพิมพ์ขึ้นซ้ำทุกหน้า
+    var head = html.slice('<div class="preport">'.length, headEnd), body = html.slice(headEnd, html.length - '</div>'.length);
+    $('rOut').innerHTML = '<div class="preport"><table class="rwrap"><thead><tr><td>' + head + '</td></tr></thead><tbody><tr><td>' + body + '</td></tr></tbody></table></div>';
   }
   // หัวกระดาษของเบราว์เซอร์ (ถ้าเบราว์เซอร์ยังแสดง) ใช้ชื่อหน้า → ตั้งเป็นชื่อบริษัท + รหัสแบบฟอร์มระหว่างพิมพ์
   var oldTitle = '';
@@ -713,11 +716,11 @@
     '.spinner.dark{border-color:rgba(15,23,42,.2);border-top-color:var(--c);display:inline-block;vertical-align:-3px;margin-right:6px}',
     '@media (max-width:860px){.kpis{grid-template-columns:repeat(2,1fr)}.pgrid,.pcards{grid-template-columns:1fr}}',
     '@media (max-width:560px){.pform{grid-template-columns:1fr}.prow{flex-wrap:wrap}.pbtns{width:100%}.pbtns .btn{flex:1}.hide-sm{display:none}.pitem{grid-template-columns:1fr 1fr 1fr;}.pitem .iname{grid-column:1/-1}.pupload{grid-template-columns:1fr}.dialog.wide .dialog-body{max-height:none}}',
-    '@page{size:A4 portrait;margin:15mm 11mm 13mm 11mm;@top-left{content:"บริษัท สปังกี้ฟู้ด จำกัด";font:600 8.5pt "IBM Plex Sans Thai",sans-serif;color:#334155}@top-right{content:"FM-WH-01-01 Rev.00 วันที่ประกาศใช้ : 01/10/2024";font:8pt "IBM Plex Sans Thai",sans-serif;color:#334155}@bottom-right{content:"หน้า " counter(page) " / " counter(pages);font:8pt "IBM Plex Sans Thai",sans-serif;color:#64748b}}',
-    '@page:first{@top-left{content:none}@top-right{content:none}}',
+    '@page{size:A4 portrait;margin:10mm 11mm 13mm 11mm;@bottom-right{content:"หน้า " counter(page) " / " counter(pages);font:8pt "IBM Plex Sans Thai",sans-serif;color:#64748b}}',
+    '.rwrap{width:100%;border-collapse:collapse}.rwrap>thead>tr>td,.rwrap>tbody>tr>td{padding:0;border:0;background:none}.rwrap>thead>tr>td{padding-bottom:4px}',
     '@media print{html,body{background:#fff!important}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}.topbar,.side,.noprint,.page-head,#toast,.pbar,#modalOverlay{display:none!important}.app{display:block;min-height:0}.main{padding:0;max-width:none}',
     '.preport{box-shadow:none;padding:0;margin:0;border-radius:0}.rhead{padding-bottom:6px}.rlogo{height:38px}.rco b{font-size:13pt}.rco span{font-size:9pt}.rform{font-size:8pt}.rtitle{font-size:14pt;margin:10px 0 4px}.rinfo{font-size:9pt;margin-bottom:8px}',
-    '.preport h5{font-size:10.5pt;margin:12px 0 4px;break-after:avoid}.rt{font-size:8.5pt}.rt th{padding:3px 4px}.rt td{padding:2.5px 4px}.rt thead{display:table-header-group}.rt tr{break-inside:avoid}.rbox b{font-size:12pt}.psign{margin-top:36px;font-size:9pt}}',
+    '.preport h5{font-size:10.5pt;margin:12px 0 4px;break-after:avoid}.rt{font-size:8.5pt}.rt th{padding:3px 4px}.rt td{padding:2.5px 4px}.rt thead,.rwrap>thead{display:table-header-group}.rt tr{break-inside:avoid}.rbox b{font-size:12pt}.psign{margin-top:36px;font-size:9pt}}',
   ].join('\n');
   document.head.appendChild(css);
 })();
