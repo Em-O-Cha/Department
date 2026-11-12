@@ -4,7 +4,8 @@
 // ตั๋วผู้บริหารเรียกได้เฉพาะ execOverview / execDashboard — ฟังก์ชันแก้ไขข้อมูลของแผนก (pur*) ใช้ตั๋วนี้ไม่ได้
 // ฝ่ายที่มีระบบข้อมูลแล้วจะมีตัวสรุปของฝ่ายนั้น (เช่น PUR = purDashboard_ ใน Purchasing.gs)
 
-var EXEC_DASHBOARDS_ = { PUR: function (dept, from, to) { return purDashboard_(dept, from, to); } };
+var EXEC_DASHBOARDS_ = { PUR: function (dept, from, to) { return purDashboard_(dept, from, to); },
+  SHE: function (dept, from, to) { var d = sheDashboard_(dept, from, to); d.kind = 'safety'; return d; } };
 
 function requireExec_(token) {
   var d = requireDept_(token);

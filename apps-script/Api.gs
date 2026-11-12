@@ -24,6 +24,11 @@ function apiFunctions_() {
     purDeleteDoc: purDeleteDoc, purSaveInvoice: purSaveInvoice, purDeleteInvoice: purDeleteInvoice,
     purSaveRfq: purSaveRfq, purDeleteRfq: purDeleteRfq, purSaveQuote: purSaveQuote, purDeleteQuote: purDeleteQuote, purDecideRfq: purDecideRfq,
     purVendorMetrics: purVendorMetrics, purSaveEval: purSaveEval, purDeleteEval: purDeleteEval, purVendorReport: purVendorReport,
+    // ความปลอดภัยและสิ่งแวดล้อม (She.gs)
+    sheLoad: sheLoad, sheSaveCheck: sheSaveCheck, sheDeleteCheck: sheDeleteCheck, sheSaveFinding: sheSaveFinding, sheDeleteFinding: sheDeleteFinding,
+    sheSaveIncident: sheSaveIncident, sheDeleteIncident: sheDeleteIncident, sheUploadFile: sheUploadFile, sheRemoveFile: sheRemoveFile,
+    sheSaveArea: sheSaveArea, sheSaveSettings: sheSaveSettings, sheMonthReport: sheMonthReport, sheFindingReport: sheFindingReport,
+    sheDashboard: sheDashboard, sheLog: sheLog,
     // ผู้บริหาร (Executive.gs)
     execOverview: execOverview, execDashboard: execDashboard, execVerify: execVerify
   };
