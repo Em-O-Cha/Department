@@ -15,7 +15,7 @@
 
   var MENUS = [
     { id: 's_dash', label: 'ภาพรวม / Dashboard', ic: 'home' },
-    { id: 's_check', label: 'เดินตรวจ (iPad)', ic: 'shield' },
+    { id: 's_check', label: 'ตรวจเช็คประจำวันแต่ละอาคาร', ic: 'shield' },
     { id: 's_find', label: 'ข้อบกพร่อง / ติดตามแก้ไข', ic: 'warn' },
     { id: 's_inc', label: 'อุบัติเหตุ / เกือบเกิดเหตุ', ic: 'alert' },
     { id: 's_rep', label: 'รายงาน / พิมพ์ PDF', ic: 'print' },
@@ -210,7 +210,7 @@
     return html;
   };
 
-  // ==================== เดินตรวจ (iPad) ====================
+  // ==================== ตรวจเช็คประจำวันแต่ละอาคาร ====================
   function walk() {
     var w = H.walk = H.walk || {};
     if (!w.date) w.date = H.data.today;
@@ -227,7 +227,7 @@
   }
   function walkAreas() {
     var w = H.walk, t = w.date;
-    $('main').innerHTML = '<h3>เดินตรวจความปลอดภัย</h3><p class="lead">เลือกพื้นที่ที่จะตรวจ · ถือ iPad เดินตรวจแล้วกด ผ่าน / ไม่ผ่าน ทีละข้อ · ข้อที่ไม่ผ่านถ่ายรูปได้เลย</p>'
+    $('main').innerHTML = '<h3>ตรวจเช็คประจำวันแต่ละอาคาร</h3><p class="lead">เลือกอาคาร / พื้นที่ที่จะตรวจ แล้วกด ผ่าน / ไม่ผ่าน ทีละข้อ · ข้อที่ไม่ผ่านถ่ายรูปได้เลย</p>'
       + '<div class="panel"><div class="pform" style="margin:0">' + F('wDate', 'วันที่ตรวจ', t, 'date', ' max="' + H.data.today + '"') + inspectorField('wInsp') + '</div></div>'
       + '<div class="sareas">' + activeAreas().map(function (a) {
         var done = H.data.checks.filter(function (c) { return c.date === t && c.areaId === a.id; });
@@ -356,7 +356,7 @@
       return !s || [f.code, f.location, f.dept, f.problem, f.responsible, f.recommendation].join(' ').toLowerCase().indexOf(s) >= 0;
     });
     var count = function (k) { return H.data.findings.filter(function (f) { return k === 'pending' ? f.status !== 'done' : k === 'late' ? f.status !== 'done' && f.dueDate && f.dueDate < t : k === 'done' ? f.status === 'done' : true; }).length; };
-    $('main').innerHTML = '<h3>ข้อบกพร่อง / ติดตามการแก้ไข</h3><p class="lead">รายการจากการเดินตรวจ (ข้อที่ไม่ผ่าน) และที่บันทึกเพิ่มเอง · แตะรายการเพื่อใส่รูปหลังปรับปรุงและปิดงาน</p>'
+    $('main').innerHTML = '<h3>ข้อบกพร่อง / ติดตามการแก้ไข</h3><p class="lead">รายการจากการตรวจเช็คประจำวัน (ข้อที่ไม่ผ่าน) และที่บันทึกเพิ่มเอง · แตะรายการเพื่อใส่รูปหลังปรับปรุงและปิดงาน</p>'
       + '<div class="pchips">' + [['pending', 'ค้างแก้ไข'], ['late', 'เกินกำหนด'], ['done', 'แก้ไขเรียบร้อย'], ['all', 'ทั้งหมด']].map(function (c) { return '<button class="chip' + (q.fst === c[0] ? ' on' : '') + '" data-fst="' + c[0] + '">' + c[1] + ' (' + count(c[0]) + ')</button>'; }).join('') + '</div>'
       + '<div class="pbar"><div class="psearch">' + icon('search', 18) + '<input id="fq" type="search" placeholder="ค้นหา เลขที่ / พื้นที่ / ปัญหา / ผู้รับผิดชอบ" value="' + esc(q.fq || '') + '"></div>'
       + '<select id="fArea"><option value="">ทุกพื้นที่</option>' + areas.map(function (a) { return '<option value="' + a.id + '"' + (q.farea === a.id ? ' selected' : '') + '>' + esc(a.name) + '</option>'; }).join('') + '</select>'
