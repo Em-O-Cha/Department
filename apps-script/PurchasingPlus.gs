@@ -398,3 +398,26 @@ function purInsights_(ss, from, to) {
     delivery: delivery, overdue: overdue.slice(0, 20), openPOs: openPOs.slice(0, 40), opportunities: opps.slice(0, 20), saveTotal: saveTotal,
     missingVendor: cur.filter(function (d) { return !d.vendorId; }).length, missingDelivery: cur.filter(function (d) { return !d.deliveryDate; }).length };
 }
+
+// ---------- ลบใบ PR / PO (ทดลองบันทึก / บันทึกผิด) ----------
+// ลบได้เมื่อยังไม่มีการรับของที่อ้างอิงใบนี้ (กันยอดสต๊อกเพี้ยน) · ลบรายการ ใบแจ้งหนี้ และไฟล์แนบของใบนี้ด้วย
+function purDeleteDoc(token, docId) {
+  var dept = requirePur_(token);
+  return purLocked_(function () {
+    var ss = purBook_(dept), doc = purRead_(ss, 'docs').filter(function (x) { return x.id === docId; })[0];
+    if (!doc) return { ok: false, error: 'ไม่พบเอกสารนี้' };
+    var recv = purRead_(ss, 'moves').filter(function (m) { return m.docId === docId; });
+    if (recv.length) return { ok: false, error: 'ใบนี้มีการรับของอ้างอิงอยู่ ' + recv.length + ' รายการ — ลบรายการรับของก่อน (เมนูรับเข้า/จ่ายออก → ประวัติ) หรือเปลี่ยนสถานะเป็น "ยกเลิก" แทน' };
+    var trash = function (files) { purParseFiles_(files).forEach(function (f) { try { DriveApp.getFileById(f.id).setTrashed(true); } catch (e) {} }); };
+    var delRows = function (name, rows) { var sh = purSheet_(ss, name); rows.sort(function (a, c) { return c - a; }).forEach(function (r) { sh.deleteRow(r); }); };
+    var invs = purRead_(ss, 'invoices').filter(function (x) { return x.docId === docId; });
+    invs.forEach(function (x) { trash(x.files); });
+    delRows('invoices', invs.map(function (x) { return x._row; }));
+    delRows('docItems', purRead_(ss, 'docItems').filter(function (x) { return x.docId === docId; }).map(function (x) { return x._row; }));
+    purRead_(ss, 'rfqs').filter(function (r) { return r.poId === docId; }).forEach(function (r) { r.poId = ''; r.updatedAt = purNow_(); purWrite_(ss, 'rfqs', r); });
+    trash(doc.files);
+    purSheet_(ss, 'docs').deleteRow(doc._row);
+    purLogWrite_(ss, 'ลบ', 'docs', docId, doc.type + ' ' + doc.docNo + ' ' + (doc.vendorName || '') + ' ฿' + doc.total + (invs.length ? ' (+ใบแจ้งหนี้ ' + invs.length + ')' : ''));
+    return { ok: true };
+  });
+}

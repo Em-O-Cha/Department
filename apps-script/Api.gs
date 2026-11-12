@@ -21,7 +21,7 @@ function apiFunctions_() {
     purSaveDoc: purSaveDoc, purSaveMove: purSaveMove, purDeleteMove: purDeleteMove,
     purUploadFile: purUploadFile, purRemoveFile: purRemoveFile, purLog: purLog,
     // ตรวจ 3 ทาง / เปรียบเทียบราคา / บริหารคู่ค้า (PurchasingPlus.gs)
-    purSaveInvoice: purSaveInvoice, purDeleteInvoice: purDeleteInvoice,
+    purDeleteDoc: purDeleteDoc, purSaveInvoice: purSaveInvoice, purDeleteInvoice: purDeleteInvoice,
     purSaveRfq: purSaveRfq, purDeleteRfq: purDeleteRfq, purSaveQuote: purSaveQuote, purDeleteQuote: purDeleteQuote, purDecideRfq: purDecideRfq,
     purVendorMetrics: purVendorMetrics, purSaveEval: purSaveEval, purDeleteEval: purDeleteEval, purVendorReport: purVendorReport,
     // ผู้บริหาร (Executive.gs)

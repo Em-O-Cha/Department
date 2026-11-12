@@ -467,7 +467,7 @@
     wide({
       icon: 'doc', title: (edit ? d.type + ' ' + d.docNo : 'สร้าง ' + d.type) + (from ? ' จาก ' + from.docNo : ''), sub: edit ? (DOC_ST[d.status] || '') + ' · ' + baht(d.total) : (isPO ? 'ใบสั่งซื้อ' : 'ใบขอซื้อ'),
       body: body, ok: 'บันทึก',
-      foot: '<div class="pfoot">' + (edit && !isPO ? '<button type="button" class="btn btn-sm btn-line" id="dToPO">' + icon('doc', 16) + 'ลง PO ที่อ้างอิง PR นี้</button>' : '')
+      foot: (edit ? '<button type="button" class="link-btn danger" id="dDel">' + icon('trash', 16) + 'ลบใบนี้</button>' : '') + '<div class="pfoot">' + (edit && !isPO ? '<button type="button" class="btn btn-sm btn-line" id="dToPO">' + icon('doc', 16) + 'ลง PO ที่อ้างอิง PR นี้</button>' : '')
         + (edit && isPO && /approved|ordered|partial/.test(d.status) ? '<button type="button" class="btn btn-sm btn-line" id="dRecv">' + icon('plus', 16) + 'รับของตาม PO</button>' : '') + '</div>',
       onOpen: function () {
         drawItems();
@@ -493,6 +493,11 @@
             $('dInv').addEventListener('click', function () { invoiceModal(d, null); });
           }
           if ($('dToPO')) $('dToPO').addEventListener('click', function () { docModal(null, 'PO', d); });
+          $('dDel').addEventListener('click', function () {
+            var invN = P.data.invoices.filter(function (x) { return x.docId === d.id; }).length;
+            confirmDelete('ลบ ' + d.type + ' ' + d.docNo + (d.vendorName ? ' (' + d.vendorName + ')' : '') + ' ?' + (invN ? ' ใบแจ้งหนี้ ' + invN + ' ใบของ PO นี้จะถูกลบด้วย' : '') + ' — ถ้ามีการรับของตาม PO นี้แล้ว ต้องลบรายการรับของก่อน',
+              function () { return call('purDeleteDoc', state.token, d.id); }, function () { if (P.idx.doc[d.id]) docModal(P.idx.doc[d.id]); });
+          });
           if ($('dRecv')) $('dRecv').addEventListener('click', function () {
             var first = d.items.filter(function (i) { return mat(i.materialId); })[0];
             if (!first) return toast('รายการในใบนี้ไม่ได้ผูกกับวัตถุดิบในระบบ');
