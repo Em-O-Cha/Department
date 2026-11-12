@@ -70,6 +70,7 @@
       return;
     }
     if (r.kind === 'purchasing') drawPurchasing(r, d);
+    else if (r.kind === 'hr' && window.HRM) $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + dd(r.from) + ' – ' + dd(r.to) + '</span></div>' + window.HRM.dashHtml(r);
     else if (r.kind === 'safety' && window.SHE) $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + dd(r.from) + ' – ' + dd(r.to) + '</span></div>' + window.SHE.dashHtml(r);
   }
 

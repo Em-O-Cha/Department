@@ -29,6 +29,10 @@ function apiFunctions_() {
     sheSaveIncident: sheSaveIncident, sheDeleteIncident: sheDeleteIncident, sheUploadFile: sheUploadFile, sheRemoveFile: sheRemoveFile,
     sheSaveArea: sheSaveArea, sheSaveSettings: sheSaveSettings, sheMonthReport: sheMonthReport, sheFindingReport: sheFindingReport,
     sheDashboard: sheDashboard, sheLog: sheLog,
+    // ฝ่ายบุคคล (Hr.gs)
+    hrLoad: hrLoad, hrPhotos: hrPhotos, hrSaveEmp: hrSaveEmp, hrDeleteEmp: hrDeleteEmp, hrSaveDoc: hrSaveDoc, hrSaveLeave: hrSaveLeave,
+    hrSaveTraining: hrSaveTraining, hrSaveDisc: hrSaveDisc, hrDeleteRow: hrDeleteRow, hrUploadFile: hrUploadFile, hrRemoveFile: hrRemoveFile,
+    hrSaveSettings: hrSaveSettings, hrLeaves: hrLeaves, hrLog: hrLog, hrDashboard: hrDashboard,
     // ผู้บริหาร (Executive.gs)
     execOverview: execOverview, execDashboard: execDashboard, execVerify: execVerify
   };

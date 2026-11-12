@@ -139,7 +139,7 @@ function findDept_(key) {
 }
 
 // โมดูลที่ทำแล้วของแต่ละแผนก (หน้าเว็บสร้างเมนูตามโมดูล) — ยังไม่มี = เมนูตัวอย่าง
-var DEPT_MODULES_ = { PUR: 'purchasing', SHE: 'safety', EXEC: 'executive' };
+var DEPT_MODULES_ = { HR: 'hr', PUR: 'purchasing', SHE: 'safety', EXEC: 'executive' };
 function deptView_(d) {
   return { key: d.key, name: d.name, en: d.en, color: d.color, menus: d.menus.slice(), ownerEmail: d.ownerEmail || '', module: DEPT_MODULES_[d.key] || '' };
 }
