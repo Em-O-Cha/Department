@@ -641,11 +641,12 @@
       + '<select id="rB"><option value="">ทุกอาคาร</option>' + uniq(H.data.emps.map(function (e) { return e.building; })).map(function (g) { return '<option' + (q.rB === g ? ' selected' : '') + '>' + esc(g) + '</option>'; }).join('') + '</select>';
     else if (q.rep === 'profile') ctl = '<select id="rEmp">' + H.data.emps.map(function (e) { return '<option value="' + e.id + '"' + (q.rEmp === e.id ? ' selected' : '') + '>' + esc(empLabel(e)) + '</option>'; }).join('') + '</select>';
     else if (q.rep !== 'docs') ctl = '<label class="pchk">ตั้งแต่ <input type="date" id="rFrom" value="' + q.rFrom + '"></label><label class="pchk">ถึง <input type="date" id="rTo" value="' + q.rTo + '"></label>';
+    if (q.rep === 'leave') ctl += '<label class="pchk"><input type="checkbox" id="rAll"' + (q.rAll ? ' checked' : '') + '> แสดงทุกคน (รวมคนที่ไม่ได้ลา)</label>';
     $('main').innerHTML = '<h3>รายงาน / พิมพ์ PDF</h3><p class="lead">กด "พิมพ์ / บันทึก PDF" แล้วเลือกบันทึกเป็น PDF</p>'
       + '<div class="pchips noprint">' + REPS.map(function (c) { return '<button class="chip' + (q.rep === c[0] ? ' on' : '') + '" data-rep="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>'
       + '<div class="pbar noprint">' + ctl + '<button class="btn btn-sm btn-primary" id="rGo">ดูรายงาน</button><button class="btn btn-sm btn-line" id="rPrint">' + icon('print', 16) + ' พิมพ์ / บันทึก PDF</button></div><div id="rOut"></div>';
     on('[data-rep]', 'click', function (el) { q.rep = el.getAttribute('data-rep'); report(); }, $('main'));
-    var read = function () { ['rSt', 'rG', 'rB', 'rEmp', 'rFrom', 'rTo'].forEach(function (id) { if ($(id)) q[id] = v(id); }); };
+    var read = function () { ['rSt', 'rG', 'rB', 'rEmp', 'rFrom', 'rTo'].forEach(function (id) { if ($(id)) q[id] = v(id); }); if ($('rAll')) q.rAll = $('rAll').checked; };
     $('rGo').addEventListener('click', function () { read(); run(); });
     $('rPrint').addEventListener('click', function () {
       var old = document.title; document.title = 'HR_' + (REPS.filter(function (r) { return r[0] === q.rep; })[0] || [])[1] + '_' + t;
@@ -711,7 +712,7 @@
       sum[l.empId][k] = (sum[l.empId][k] || 0) + (l.type === 'late' ? 1 : Number(l.days) || 0);
       if (l.type === 'late') sum[l.empId].min = (sum[l.empId].min || 0) + (Number(l.minutes) || 0);
     });
-    var rows = H.data.emps.filter(function (e) { return sum[e.id] || e.status !== 'ลาออก'; });
+    var rows = H.data.emps.filter(function (e) { return sum[e.id] || (q.rAll && e.status !== 'ลาออก'); });   // ค่าเริ่มต้น: เฉพาะคนที่มีการลา
     var oneYear = from.slice(0, 4) === to.slice(0, 4) && loadedYear(from.slice(0, 4));   // คงเหลือ = สิทธิ์ทั้งปีของปีนั้น
     var body = '<table class="hrt"><thead><tr><th>ลำดับ</th><th>ชื่อ-นามสกุล</th><th>ตำแหน่ง</th><th>แผนก</th>' + ks.map(function (k) { return '<th class="c">' + LT[k] + (quotas[k] ? '<br><small>สิทธิ์ ' + quotas[k] + '</small>' : '') + '</th>'; }).join('') + '<th class="c">รวมวันลา</th></tr></thead><tbody>'
       + rows.map(function (e, i) {
@@ -722,8 +723,8 @@
             return '<td class="c' + (rem != null && rem < 0 ? ' neg b' : '') + '">' + (n ? n + (k === 'late' ? ' ครั้ง' + (s.min ? '<br><small>' + s.min + ' นาที</small>' : '') : '') : '')
               + (rem != null ? '<br><small>' + (rem < 0 ? 'เกิน ' + (-rem) : 'เหลือ ' + rem) + '</small>' : '') + '</td>';
           }).join('') + '<td class="c b">' + (tot || '') + '</td></tr>';
-      }).join('') + '</tbody></table>';
-    return wrap('สรุปการลา ขาดงาน มาสาย รายบุคคล', '<span>ช่วงวันที่ <b>' + thDate(from) + ' – ' + thDate(to) + '</b></span>' + printedAt(), H.data.settings.fmLeave, body);
+      }).join('') + (rows.length ? '' : '<tr><td colspan="' + (ks.length + 5) + '" class="c muted" style="padding:20px">ไม่มีการลาในช่วงวันที่นี้</td></tr>') + '</tbody></table>';
+    return wrap('สรุปการลา ขาดงาน มาสาย รายบุคคล', '<span>ช่วงวันที่ <b>' + thDate(from) + ' – ' + thDate(to) + '</b></span><span>' + (q.rAll ? 'พนักงานทุกคน' : 'เฉพาะคนที่มีการลา') + ' <b>' + rows.length + '</b> คน</span>' + printedAt(), H.data.settings.fmLeave, body);
   }
   function docRep() {
     var t = H.data.today, alert = Number(H.data.settings.alertDays) || 60;
