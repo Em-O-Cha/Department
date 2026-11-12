@@ -30,6 +30,8 @@
   var ACC = { lti: 1, acc: 1, first: 1 };
   var MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
   var COMPANY_TH = 'บริษัท สปังกี้ ฟู้ด จำกัด', COMPANY_EN = 'Spunky Food Co., Ltd.';
+  var DEF_INSPECTOR = 'จิราลักษณ์ สุนทรวัฒน์';   // ผู้ตรวจของฝ่าย (ใส่ให้อัตโนมัติ · แก้ในช่องได้ · ตั้งรายชื่อเพิ่มได้ในหน้าตั้งค่า)
+  function inspectors() { var l = list(H.data.settings.inspectors); return l.length ? l : [DEF_INSPECTOR]; }
 
   // ---------- ตัวช่วย ----------
   function pad(n) { return ('0' + n).slice(-2); }
@@ -221,7 +223,7 @@
   function walk() {
     var w = H.walk = H.walk || {};
     if (!w.date) w.date = H.data.today;
-    if (!w.inspector) w.inspector = store('inspector') || (list(H.data.settings.inspectors).length === 1 ? list(H.data.settings.inspectors)[0] : '');
+    if (!w.inspector) w.inspector = store('inspector') || inspectors()[0];
     if (!w.areaId || !area(w.areaId)) return walkAreas();
     var a = area(w.areaId);
     if (!w.round) return walkRounds(a);
@@ -229,7 +231,7 @@
   }
   function checkOf(date, areaId, round) { return H.data.checks.filter(function (c) { return c.date === date && c.areaId === areaId && Number(c.round) === Number(round); })[0]; }
   function inspectorField(id) {
-    var opts = list(H.data.settings.inspectors);
+    var opts = inspectors();
     return '<div class="pf"><label for="' + id + '">ผู้ตรวจ</label><input id="' + id + '" list="sInsp" value="' + esc(H.walk.inspector || '') + '" placeholder="ชื่อผู้ตรวจ">' + datalist('sInsp', opts) + '</div>';
   }
   function walkAreas() {
@@ -298,6 +300,7 @@
       var saved = null; try { saved = JSON.parse(store(draftKey()) || 'null'); } catch (e) {}
       w.draft = saved || { results: ex ? Object.assign({}, ex.results) : {}, problem: ex ? ex.problem : '', fix: ex ? ex.fix : '', fails: {} };
       w.draft.photos = {};   // รูปที่ยังไม่อัปโหลด (อยู่ในเครื่องเท่านั้น)
+      w.draft.gphotos = [];  // รูปปัญหาที่พบ (ภาพรวมรอบนี้) ที่ยังไม่อัปโหลด
     }
     var D = w.draft, depts = list(H.data.settings.depts);
     var answered = items.filter(function (it) { return D.results[it.id]; }).length;
@@ -324,7 +327,10 @@
         }
         return h + '</div>';
       }).join('') + '</div>'
-      + '<div class="panel"><div class="pform" style="margin:0">' + T('wProb', 'ปัญหาที่พบ (ภาพรวมรอบนี้ · ไม่บังคับ)', D.problem) + T('wFix', 'แนวทางการแก้ไข (ไม่บังคับ)', D.fix) + inspectorField('wInsp2') + '</div></div>'
+      + '<div class="panel"><div class="pform" style="margin:0">' + T('wProb', 'ปัญหาที่พบ (ภาพรวมรอบนี้ · ไม่บังคับ)', D.problem)
+        + '<div class="pf full"><label>รูปปัญหาที่พบ (ไม่บังคับ)</label><div class="sphotos">' + thumbs(ex ? ex.files : [], ex ? 'ckfile' : '')
+        + thumbs((D.gphotos || []).map(function (p, k) { return { dataUrl: p.dataUrl, tmp: 'g:' + k }; }), 'gtmp') + shotBtns('gshot', '1', 'ปัญหาที่พบ') + '</div></div>'
+        + T('wFix', 'แนวทางการแก้ไข (ไม่บังคับ)', D.fix) + inspectorField('wInsp2') + '</div></div>'
       + datalist('sDepts', depts)
       + '<div class="ssave"><button class="btn btn-primary" id="wSave">' + icon('check', 18) + (ex ? ' บันทึกการแก้ไข รอบที่ ' : ' บันทึกผลตรวจรอบที่ ') + w.round + '</button>' + (ex ? '<button class="btn btn-line" id="wDel">' + icon('trash', 16) + ' ลบผลรอบนี้</button>' : '') + '</div>';
     $('main').innerHTML = html;
@@ -346,6 +352,17 @@
     }, $('main'));
     on('[data-del="tmp"]', 'click', function (el) { var p = el.getAttribute('data-fid').split(':'); (D.photos[p[0]] || []).splice(+p[1], 1); var y = window.scrollY; walkForm(a); window.scrollTo(0, y); }, $('main'));
     on('[data-fd]', 'click', function (el) { var f = H.data.findings.filter(function (x) { return x.id === el.getAttribute('data-fd'); })[0]; if (f) findingModal(f); }, $('main'));
+    on('[data-gshot]', 'click', function (el) {
+      pickPhotos(function (arr) { D.gphotos = (D.gphotos || []).concat(arr).slice(0, 6); var y = window.scrollY; walkForm(a); window.scrollTo(0, y); }, el.getAttribute('data-src') === 'cam');
+    }, $('main'));
+    on('[data-del="gtmp"]', 'click', function (el) { D.gphotos.splice(+el.getAttribute('data-fid').split(':')[1], 1); var y = window.scrollY; walkForm(a); window.scrollTo(0, y); }, $('main'));
+    on('[data-del="ckfile"]', 'click', function (el) {
+      if (!window.confirm('ลบรูปนี้?')) return;
+      call('sheRemoveFile', state.token, 'check', ex.id, 'files', el.getAttribute('data-fid')).then(function (r) {
+        if (!r.ok) return toast(r.error);
+        ex.files = r.files; var y = window.scrollY; walkForm(a); window.scrollTo(0, y);
+      }).catch(onServerError);
+    }, $('main'));
     ['wProb', 'wFix'].forEach(function (id) { $(id).addEventListener('input', function () { D[id === 'wProb' ? 'problem' : 'fix'] = $(id).value; keep(); }); });
     $('wInsp2').addEventListener('change', function () { w.inspector = v('wInsp2'); store('inspector', w.inspector); });
     if (ex) $('wDel').addEventListener('click', function () {
@@ -367,6 +384,7 @@
         if (!r.ok) throw new Error(r.error);
         var jobs = [];
         r.findings.forEach(function (f) { (D.photos[f.itemId] || []).forEach(function (p) { jobs.push(['finding', f.id, 'before', p]); }); });
+        (D.gphotos || []).forEach(function (p) { jobs.push(['check', r.check.id, 'files', p]); });
         return uploadAll(jobs).then(function (fails) {
           store(draftKey(), null);
           var n = r.findings.length;
@@ -519,7 +537,7 @@
         + S('iArea', 'พื้นที่', [['', '— อื่นๆ —']].concat(H.data.areas.map(function (a) { return [a.id, a.name]; })), x.areaId || '')
         + F('iLoc', 'สถานที่ (ระบุจุด)', x.location) + F('iPerson', 'ผู้ประสบเหตุ', x.person) + F('iDept', 'แผนก', x.dept, 'text', ' list="sDepts3"') + datalist('sDepts3', list(H.data.settings.depts))
         + F('iLost', 'จำนวนวันหยุดงาน', x.lostDays, 'number', ' min="0"') + T('iInj', 'การบาดเจ็บ / ความเสียหาย', x.injury) + T('iCause', 'สาเหตุ', x.cause)
-        + T('iAct', 'การแก้ไข / มาตรการป้องกัน', x.action) + F('iRep', 'ผู้รายงาน', x.reporter || store('inspector')) + '</div>'
+        + T('iAct', 'การแก้ไข / มาตรการป้องกัน', x.action) + F('iRep', 'ผู้รายงาน', x.reporter || store('inspector') || inspectors()[0]) + '</div>'
         + '<div class="psec"><div class="psec-h"><b>รูปถ่าย</b></div><div class="sphotos" id="g_inc"></div></div>',
       foot: isNew ? '' : '<div class="pfoot"><button type="button" class="link-btn danger" id="iDel">' + icon('trash', 16) + ' ลบรายการนี้</button></div>',
       ok: 'บันทึก',
@@ -623,12 +641,17 @@
       .concat(r.findings.map(function (f) { return +f.date.slice(8, 10) + '/' + m + ': ' + f.problem + (f.status === 'done' ? ' (แก้แล้ว)' : ''); }));
     var fixes = r.checks.filter(function (c) { return c.fix; }).map(function (c) { return +c.date.slice(8, 10) + '/' + m + ': ' + c.fix; })
       .concat(r.findings.filter(function (f) { return f.recommendation; }).map(function (f) { return f.code + ': ' + f.recommendation; }));
+    var gimgs = [];
+    r.checks.slice().sort(function (x, y2) { return String(x.date + x.round).localeCompare(String(y2.date + y2.round)); }).forEach(function (c) {
+      (c.files || []).forEach(function (f) { gimgs.push({ id: f.id, cap: +c.date.slice(8, 10) + '/' + m + ' ร.' + c.round }); });
+    });
     var insp = r.checks.map(function (c) { return c.inspector; }).filter(function (x, i, arr) { return x && arr.indexOf(x) === i; }).join(', ');
     var head = '<div class="shead s6">' + logoHtml() + '<div class="sco"><b>' + COMPANY_TH + '</b><span>' + COMPANY_EN + '</span></div><div class="stitle">' + esc(a.title) + '</div><div class="sfm">' + esc(s.fm06).replace(' วันที่', '<br>วันที่') + '</div></div>';
     var cols = '<colgroup><col style="width:2.6%"><col style="width:8.6%"><col style="width:17.5%"><col style="width:3.3%">' + new Array(32).join('<col style="width:2.193%">') + '</colgroup>';
     var body = '<table class="st06">' + cols + '<thead><tr><td colspan="' + (4 + 31) + '" class="smonths">เดือน&nbsp;&nbsp; ' + monthsRow + '&nbsp;&nbsp;&nbsp; ปี พ.ศ. ' + (y + 543) + '</td></tr>'
       + '<tr><th class="c">ลำดับ</th><th>หมวด</th><th>รายละเอียด</th><th class="c">ความถี่</th>' + dayHead + '</tr></thead><tbody>' + rows
-      + '<tr class="sbottom"><td colspan="3"><b>ปัญหาที่พบ</b></td><td colspan="32">' + (probs.map(esc).join(' · ') || '-') + '</td></tr>'
+      + '<tr class="sbottom"><td colspan="3"><b>ปัญหาที่พบ</b></td><td colspan="32">' + (probs.map(esc).join(' · ') || '-')
+      + (gimgs.length ? '<div class="s6imgs">' + gimgs.map(function (g) { return '<figure><img src="' + img(g.id, 300) + '" alt=""><figcaption>' + esc(g.cap) + '</figcaption></figure>'; }).join('') + '</div>' : '') + '</td></tr>'
       + '<tr class="sbottom"><td colspan="3"><b>แนวทางการแก้ไข</b></td><td colspan="32">' + (fixes.map(esc).join(' · ') || '-') + '</td></tr>'
       + '<tr><td colspan="35" class="snote">หมายเหตุ เลือก ✓ ผ่าน / ✗ ไม่ผ่าน / – ไม่มีหรือไม่เกี่ยวข้องกับพื้นที่ หากพบข้อบกพร่องให้ระบุห้องและบันทึกการแก้ไขด้านล่าง</td></tr></tbody></table>'
       + '<div class="ssign s6"><div><span>' + esc(insp) + '</span>' + esc(s.signCheck) + '</div><div><span></span>' + esc(s.signReview) + '</div></div>';
@@ -718,7 +741,7 @@
     '.sseg{display:flex;gap:6px}.sseg button{flex:1;border:1.5px solid var(--line);background:#fff;border-radius:9px;padding:9px 4px;font-weight:600}.sseg .rL.on{background:#16a34a;color:#fff;border-color:#16a34a}.sseg .rM.on{background:#d97706;color:#fff;border-color:#d97706}.sseg .rH.on{background:#dc2626;color:#fff;border-color:#dc2626}',
     '.sphotos{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.sth{position:relative;display:inline-block}.sth img{width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid var(--line);display:block;background:#f1f5f9}',
     '.sth-x{position:absolute;top:-8px;right:-8px;width:26px;height:26px;border-radius:50%;border:0;background:#dc2626;color:#fff;display:grid;place-items:center;padding:0}.sth-x svg{width:14px;height:14px}',
-    '.sedit{display:inline-flex;align-items:center;gap:3px;font-size:12.5px;font-weight:600;color:var(--c);white-space:nowrap}.sedit svg{width:15px;height:15px}.sshot.lib{border-style:solid;background:#fff}.sshot{width:96px;height:96px;border:2px dashed var(--c);border-radius:10px;background:color-mix(in srgb,var(--c) 7%,white);color:var(--c);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px;font-weight:600;line-height:1.2}',
+    '.sedit{display:inline-flex;align-items:center;gap:3px;font-size:12.5px;font-weight:600;color:var(--c);white-space:nowrap}.sedit svg{width:15px;height:15px}.s6imgs{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.s6imgs figure{margin:0;text-align:center;font-size:9px;color:#475569}.s6imgs img{height:70px;width:auto;max-width:110px;object-fit:cover;border-radius:4px;display:block}.sshot.lib{border-style:solid;background:#fff}.sshot{width:96px;height:96px;border:2px dashed var(--c);border-radius:10px;background:color-mix(in srgb,var(--c) 7%,white);color:var(--c);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px;font-weight:600;line-height:1.2}',
     '.ssave{position:sticky;bottom:0;display:flex;gap:10px;padding:12px 0;background:linear-gradient(transparent,var(--bg,#f1f5f9) 30%);z-index:5}.ssave .btn-primary{flex:1;font-size:18px;padding:16px}',
     '.stag{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:99px;vertical-align:1px}.stag.sopen{background:#fee2e2;color:#b91c1c}.stag.sprogress{background:#fef3c7;color:#b45309}.stag.sdone{background:#dcfce7;color:#15803d}.stag.late{background:#b91c1c;color:#fff}',
     '.stag.rL{background:#f0fdf4;color:#15803d}.stag.rM{background:#fffbeb;color:#b45309}.stag.rH{background:#fef2f2;color:#b91c1c;border:1px solid #fca5a5}',
