@@ -562,7 +562,9 @@
         return '<tr><td class="c">' + (i + 1) + '</td><td class="sph">' + pic(f.beforeFiles) + '</td><td><b>' + esc(f.location) + '</b><br>' + esc(f.problem) + '<div class="ssm">' + dd(f.date) + ' · ' + esc(f.code) + ' · เสี่ยง' + (RISK[f.risk] || '') + '</div></td><td>' + esc(f.dept || '-') + '</td>'
           + '<td class="sph">' + pic(f.afterFiles) + '</td><td>' + esc(f.recommendation || '-') + '</td><td>' + esc(f.responsible || '-') + (f.dueDate ? '<div class="ssm">กำหนด ' + dd(f.dueDate) + '</div>' : '') + '</td>'
           + '<td class="c sck">' + (f.status !== 'done' ? '✓' : '') + '</td><td class="c sck">' + (f.status === 'done' ? '✓' : '') + (f.doneDate ? '<div class="ssm">' + sdd(f.doneDate) + '</div>' : '') + '</td><td>' + esc([f.remark, late ? 'เกินกำหนด' : ''].filter(String).join(' · ')) + '</td></tr>';
-      }).join('') || '<tr><td colspan="10" class="c muted" style="padding:30px">ไม่มีข้อบกพร่องในช่วงนี้</td></tr>') + '</tbody></table>';
+      }).join('') || '<tr><td colspan="10" class="c muted" style="padding:30px">ไม่มีข้อบกพร่องในช่วงนี้</td></tr>') + '</tbody></table>'
+      + '<div class="ssign"><div><b>จัดทำโดย</b><span></span>ลงชื่อ<br>' + esc(s.signPrep) + '<br>วันที่ ..........................</div><div><b>อนุมัติโดย</b><span></span>ลงชื่อ<br>' + esc(s.signApprove) + '<br>วันที่ ..........................</div></div>'
+      + '<div class="ssum noprint muted">ทั้งหมด ' + rows.length + ' รายการ · แก้ไขเรียบร้อย ' + rows.filter(function (f) { return f.status === 'done'; }).length + ' · อยู่ระหว่างดำเนินการ ' + rows.filter(function (f) { return f.status !== 'done'; }).length + '</div>';
     return '<div class="sreport"><table class="rwrap"><thead><tr><td>' + head + '</td></tr></thead><tbody><tr><td>' + body + '</td></tr></tbody></table></div>';
   }
   function f06Html(r) {
@@ -608,13 +610,14 @@
       + '<div class="panel" style="margin-top:14px"><h4 style="margin-top:0">รหัสแบบฟอร์ม / รายชื่อ / ผู้ลงนาม</h4><div class="pform">'
       + F('sFm05', 'รหัสแบบฟอร์มสรุปรายงานสำรวจ', s.fm05) + F('sFm06', 'รหัสแบบฟอร์มแบบตรวจรายเดือน', s.fm06)
       + T('sInsp', 'รายชื่อผู้ตรวจ (คั่นด้วย , )', s.inspectors, 'เช่น สมชาย, สมหญิง') + T('sDepts', 'หน่วยงาน / แผนก / ฝ่าย (คั่นด้วย , )', s.depts)
+      + F('sPrep', 'FM-05 จัดทำโดย (ตำแหน่ง)', s.signPrep) + F('sAppr', 'FM-05 อนุมัติโดย (ตำแหน่ง)', s.signApprove)
       + F('sChk', 'FM-06 ผู้ตรวจสอบ', s.signCheck) + F('sRev', 'FM-06 ผู้ทวนสอบ', s.signReview)
       + '</div><button class="btn btn-primary" id="sSave">' + icon('check', 16) + ' บันทึกการตั้งค่า</button></div>';
     $('aNew').addEventListener('click', function () { areaModal(null); });
     on('[data-area]', 'click', function (el) { areaModal(area(el.getAttribute('data-area'))); }, $('main'));
     $('sSave').addEventListener('click', function () {
       var b = $('sSave'); b.disabled = true;
-      call('sheSaveSettings', state.token, { fm05: v('sFm05'), fm06: v('sFm06'), inspectors: v('sInsp'), depts: v('sDepts'), signCheck: v('sChk'), signReview: v('sRev') })
+      call('sheSaveSettings', state.token, { fm05: v('sFm05'), fm06: v('sFm06'), inspectors: v('sInsp'), depts: v('sDepts'), signPrep: v('sPrep'), signApprove: v('sAppr'), signCheck: v('sChk'), signReview: v('sRev') })
         .then(function (r) { b.disabled = false; if (!r.ok) return toast(r.error); H.data.settings = r.settings; toast('บันทึกการตั้งค่าแล้ว'); }).catch(onServerError);
     });
   }
