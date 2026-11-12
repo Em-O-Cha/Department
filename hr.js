@@ -60,6 +60,20 @@
     var src = e && H.photos[e.id];
     return src ? '<img class="' + (cls || 'hph') + '" src="' + src + '" alt="">' : '<span class="' + (cls || 'hph') + ' none">' + esc(String((e && (e.nickname || e.fullName)) || '?').replace(/^(นาย|นางสาว|นาง|คุณ|MISS\.?|MR\.?|MRS\.?)\s*/i, '').slice(0, 1)) + '</span>';
   }
+  // ---------- สิทธิ์วันลา (นับตามปีปฏิทิน ม.ค.–ธ.ค. · ขึ้นปีใหม่เริ่มนับใหม่เอง) ----------
+  var QK = ['sick', 'personal', 'vacation', 'maternity', 'ordain'];
+  function quotaOf(e, k, year) {   // null = ไม่จำกัด/ไม่ได้ตั้ง · พักร้อน: ต้องทำงานครบ 1 ปี (ถ้ารู้วันเริ่มงาน)
+    var q = (H.data.settings.quotaMap || {})[k];
+    if (q == null || q === '' || QK.indexOf(k) < 0) return null;
+    q = Number(q) || 0;
+    if (k === 'vacation' && e && e.startDate) { var ref = year + '-12-31' < H.data.today ? year + '-12-31' : H.data.today; if (days(e.startDate, ref) < 365) return 0; }
+    return q;
+  }
+  function usedOf(empId, k, year, skipId) {
+    return H.data.leaves.filter(function (l) { return l.empId === empId && l.type === k && String(l.dateFrom).slice(0, 4) === year && l.status !== 'ไม่อนุมัติ' && l.id !== skipId; })
+      .reduce(function (s, l) { return s + (k === 'late' ? 1 : Number(l.days) || 0); }, 0);
+  }
+  function loadedYear(y) { return y >= String(+H.data.today.slice(0, 4) - 1); }
   function empLabel(e) { return (e.code ? e.code + ' · ' : '') + e.fullName + (e.nickname ? ' (' + e.nickname + ')' : ''); }
   // ช่องเลือกพนักงาน (พิมพ์ค้นชื่อ/ชื่อเล่น/รหัส)
   function empField(id, label, empId) {
@@ -272,7 +286,11 @@
       + '</div></div>'
       + '<div class="pgrid">'
       + '<div class="panel pbox"><h4>' + icon('cal', 18) + ' วันลาปี ' + (+y + 543) + ' <button class="btn btn-sm btn-line" style="margin-left:auto" data-new="leave">' + icon('plus', 14) + ' บันทึกการลา</button></h4><div class="hquota">'
-        + ['sick', 'personal', 'vacation', 'absent', 'late'].map(function (k) { var u = used[k] || 0, qq = quotas[k]; return '<div><span>' + LT[k] + '</span><b class="' + (qq && u > qq ? 'neg' : '') + '">' + u + (qq ? '/' + qq : '') + '</b><small>' + (k === 'late' ? 'ครั้ง' : 'วัน') + '</small></div>'; }).join('') + '</div>'
+        + ['sick', 'personal', 'vacation', 'absent', 'late'].map(function (k) {
+          var u = used[k] || 0, qq = quotaOf(e, k, y);
+          return '<div><span>' + LT[k] + '</span><b class="' + (qq != null && u > qq ? 'neg' : '') + '">' + u + (qq != null ? '/' + qq : '') + '</b><small>' + (k === 'late' ? 'ครั้ง' : 'วัน') + '</small>'
+            + (qq != null ? '<em class="' + (qq - u < 0 ? 'neg' : '') + '">' + (qq - u < 0 ? 'เกิน ' + (u - qq) : 'เหลือ ' + (qq - u)) + '</em>' : '') + (k === 'vacation' && qq === 0 && e.startDate ? '<em>ยังไม่ครบ 1 ปี</em>' : '') + '</div>';
+        }).join('') + '</div>'
         + lv.slice(0, 12).map(function (l) { return '<div class="li click" data-lv="' + l.id + '"><span>' + LT[l.type] + (l.reason ? ' · ' + esc(l.reason) : '') + '</span><b>' + (l.type === 'late' ? (l.minutes || 0) + ' นาที' : l.days + ' วัน') + '</b><small>' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + (l.status !== 'อนุมัติ' ? ' · ' + esc(l.status) : '') + '</small></div>'; }).join('') + '</div>'
       + '<div class="panel pbox"><h4>' + icon('idcard', 18) + ' เอกสาร <button class="btn btn-sm btn-line" style="margin-left:auto" data-new="doc">' + icon('plus', 14) + ' เพิ่มเอกสาร</button></h4>'
         + (dc.map(function (d) { var left = d.expiryDate ? days(H.data.today, d.expiryDate) : null; return '<div class="li click" data-dc="' + d.id + '"><span>' + esc(DT[d.type] || d.type) + (d.number ? ' · ' + esc(d.number) : '') + '</span><b class="' + (left != null && left < 0 ? 'neg' : left != null && left <= Number(H.data.settings.alertDays || 60) ? 'warn' : '') + '">' + (d.expiryDate ? 'หมด ' + dd(d.expiryDate) : '-') + '</b><small>' + (left != null ? (left < 0 ? 'หมดอายุแล้ว ' + (-left) + ' วัน' : 'เหลือ ' + left + ' วัน') : '') + (d.files.length ? ' · ไฟล์ ' + d.files.length : '') + '</small></div>'; }).join('') || '<div class="muted">ยังไม่มีเอกสาร</div>') + '</div>'
@@ -352,8 +370,11 @@
     var y = q.lm.slice(0, 4), quotas = H.data.settings.quotaMap || {}, sum = {};
     H.data.leaves.filter(function (l) { return l.dateFrom.slice(0, 4) === y && l.status !== 'ไม่อนุมัติ'; }).forEach(function (l) { sum[l.empId] = sum[l.empId] || {}; sum[l.empId][l.type] = (sum[l.empId][l.type] || 0) + (l.type === 'late' ? 1 : Number(l.days) || 0); });
     var over = Object.keys(sum).filter(function (id) { return ['sick', 'personal', 'vacation'].some(function (k) { return quotas[k] && (sum[id][k] || 0) > quotas[k]; }); });
+    q.lview = q.lview || 'list';
+    if (q.lview === 'bal') return leaveBalances(y);
     $('main').innerHTML = '<h3>การลา / ขาดงาน / มาสาย</h3><p class="lead">บันทึกการลาทุกประเภท · ระบบนับวันทำงาน (ไม่นับวันอาทิตย์) ให้เอง แก้เป็นครึ่งวันได้</p>'
       + (over.length ? '<div class="panel sins" style="margin-bottom:12px"><div class="sin bad">ลาเกินสิทธิ์ปี ' + (+y + 543) + ': ' + over.map(function (id) { return esc((emp(id) || {}).fullName || id); }).join(', ') + '</div></div>' : '')
+      + leaveTabs()
       + '<div class="pbar"><label class="pchk">เดือน <input type="month" id="lM" value="' + esc(q.lm) + '"></label><select id="lT"><option value="">ทุกประเภท</option>' + Object.keys(LT).map(function (k) { return '<option value="' + k + '"' + (q.lt === k ? ' selected' : '') + '>' + LT[k] + '</option>'; }).join('') + '</select>'
       + '<b style="flex:1">' + rows.length + ' รายการ</b><button class="btn btn-sm btn-primary" id="lNew">' + icon('plus', 16) + ' บันทึกการลา</button></div>'
       + '<div class="plist">' + (rows.map(function (l) {
@@ -365,6 +386,33 @@
     $('lT').addEventListener('change', function () { q.lt = v('lT'); leaves(); });
     $('lNew').addEventListener('click', function () { leaveModal(null); });
     on('[data-lv]', 'click', function (el) { leaveModal(H.data.leaves.filter(function (x) { return x.id === el.getAttribute('data-lv'); })[0]); }, $('main'));
+    bindLeaveTabs();
+  }
+  function leaveTabs() { return '<div class="pchips">' + [['list', 'รายการลา'], ['bal', 'สิทธิ์คงเหลือรายคน']].map(function (c) { return '<button class="chip' + (H.q.lview === c[0] ? ' on' : '') + '" data-lview="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>'; }
+  function bindLeaveTabs() { on('[data-lview]', 'click', function (el) { H.q.lview = el.getAttribute('data-lview'); leaves(); }, $('main')); }
+  // สิทธิ์วันลาคงเหลือของทุกคน ในปีที่เลือก
+  function leaveBalances(y) {
+    var q = H.q, years = [H.data.today.slice(0, 4), String(+H.data.today.slice(0, 4) - 1)];
+    if (years.indexOf(y) < 0) y = years[0];
+    var ks = ['sick', 'personal', 'vacation'], s = String(q.bq || '').toLowerCase();
+    var rows = active().filter(function (e) { return !s || (e.fullName + ' ' + e.nickname + ' ' + e.code).toLowerCase().indexOf(s) >= 0; });
+    var cell = function (e, k) {
+      var u = usedOf(e.id, k, y), qq = quotaOf(e, k, y);
+      if (qq == null) return '<td class="c">' + (u || '') + '</td>';
+      var r = qq - u;
+      return '<td class="c"><b class="' + (r < 0 ? 'neg' : r <= 1 && qq ? 'warn' : '') + '">' + (r < 0 ? 'เกิน ' + (-r) : r) + '</b><small>ใช้ ' + u + '/' + qq + '</small></td>';
+    };
+    $('main').innerHTML = '<h3>การลา / ขาดงาน / มาสาย</h3><p class="lead">สิทธิ์คงเหลือ = สิทธิ์ต่อปี − วันที่ลาไปแล้วในปีนั้น (ไม่นับรายการ "ไม่อนุมัติ") · ขึ้นปีใหม่ระบบเริ่มนับใหม่ให้เอง</p>'
+      + leaveTabs()
+      + '<div class="pbar"><select id="bY">' + years.map(function (x) { return '<option value="' + x + '"' + (x === y ? ' selected' : '') + '>ปี ' + (+x + 543) + '</option>'; }).join('') + '</select>'
+      + '<div class="psearch">' + icon('search', 18) + '<input id="bq" type="search" placeholder="ค้นหาชื่อ" value="' + esc(q.bq || '') + '"></div></div>'
+      + '<div class="ptable-wrap"><table class="ptable hbal"><thead><tr><th>พนักงาน</th>' + ks.map(function (k) { return '<th class="c">' + LT[k] + '<br><small>คงเหลือ (วัน)</small></th>'; }).join('') + '<th class="c">ขาดงาน<br><small>วัน</small></th><th class="c">มาสาย<br><small>ครั้ง</small></th></tr></thead><tbody>'
+      + rows.map(function (e) { return '<tr data-emp="' + e.id + '"><td>' + esc(e.fullName) + (e.nickname ? ' <small>(' + esc(e.nickname) + ')</small>' : '') + '</td>' + ks.map(function (k) { return cell(e, k); }).join('')
+        + '<td class="c">' + (usedOf(e.id, 'absent', y) || '') + '</td><td class="c">' + (usedOf(e.id, 'late', y) || '') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    bindLeaveTabs();
+    $('bY').addEventListener('change', function () { q.lm = v('bY') + H.q.lm.slice(4); leaves(); });
+    $('bq').addEventListener('input', function () { q.bq = $('bq').value; clearTimeout(H.bt); H.bt = setTimeout(function () { leaves(); var el = $('bq'); el.focus(); el.setSelectionRange(el.value.length, el.value.length); }, 250); });
+    on('[data-emp]', 'click', function (el) { profile(el.getAttribute('data-emp')); }, $('main'));
   }
   function loadOld(ym) {   // เดือนที่เก่ากว่าที่โหลดไว้ → ดึงเพิ่ม
     call('hrLeaves', state.token, ym + '-01', ym + '-31').then(function (r) {
@@ -376,11 +424,27 @@
   function leaveModal(l, empId) {
     var isNew = !l, t = H.data.today, pend = [];
     l = l || { empId: empId || '', type: 'sick', dateFrom: t, dateTo: t, status: 'อนุมัติ', files: [] };
+    var overAck = false;
+    // แสดงสิทธิ์: ปีของวันที่ลา · สิทธิ์ · ใช้ไปแล้ว (ไม่รวมรายการนี้) · คงเหลือหลังบันทึก — คืนจำนวนวันที่เกินสิทธิ์
+    var quotaInfo = function () {
+      var box = $('lQuota'); if (!box) return 0;
+      var id = empIdOf('lEmp'), e = emp(id), k = v('lType'), y = String(v('lFrom') || t).slice(0, 4);
+      if (!e) { box.innerHTML = ''; return 0; }
+      if (!loadedYear(y)) { box.innerHTML = '<span class="muted">ปี ' + (+y + 543) + ' เก่ากว่าข้อมูลที่โหลดไว้ — ระบบไม่ได้คำนวณสิทธิ์คงเหลือ</span>'; return 0; }
+      var used = usedOf(id, k, y, l.id), qq = quotaOf(e, k, y), now = v('lSt') === 'ไม่อนุมัติ' ? 0 : (k === 'late' ? 1 : Number(v('lDays')) || 0);
+      if (qq == null) { box.innerHTML = '<b>' + esc(LT[k]) + ' ปี ' + (+y + 543) + '</b> · ' + esc(e.nickname || e.fullName) + ' ใช้ไปแล้ว ' + used + (k === 'late' ? ' ครั้ง' : ' วัน') + ' (ไม่มีกำหนดสิทธิ์)'; box.className = 'hqinfo'; return 0; }
+      var left = qq - used, after = left - now;
+      box.className = 'hqinfo' + (after < 0 ? ' bad' : after <= 1 ? ' warn' : ' ok');
+      box.innerHTML = '<b>สิทธิ์' + esc(LT[k]) + ' ปี ' + (+y + 543) + ' ของ ' + esc(e.nickname || e.fullName) + '</b>'
+        + '<div class="hqrow"><span>สิทธิ์ทั้งปี <b>' + qq + '</b></span><span>ใช้ไปแล้ว <b>' + used + '</b></span><span>คงเหลือ <b>' + left + '</b></span><span>หลังบันทึกครั้งนี้ <b>' + (after < 0 ? 'เกิน ' + (-after) : after) + '</b> วัน</span></div>'
+        + (k === 'vacation' && qq === 0 && e.startDate ? '<small>ยังทำงานไม่ครบ 1 ปี จึงยังไม่มีสิทธิ์ลาพักร้อน</small>' : '');
+      return after < 0 ? -after : 0;
+    };
     var calc = function () {
       if (v('lType') === 'late') return;
       var f = v('lFrom'), to = v('lTo') || f; if (!f || to < f) return;
       var n = 0, d = f; while (d <= to) { var w = new Date(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)).getDay(); if (w !== 0 && !(H.data.settings.workDays === 'จ-ศ' && w === 6)) n++; d = addDays(d, 1); }
-      $('lDays').value = n;
+      $('lDays').value = n; quotaInfo();
     };
     wide({
       icon: 'cal', title: isNew ? 'บันทึกการลา' : 'แก้ไขการลา', sub: (emp(l.empId) || {}).fullName || 'การลา / ขาดงาน / มาสาย',
@@ -388,7 +452,7 @@
         + F('lFrom', 'ตั้งแต่วันที่ *', l.dateFrom, 'date') + F('lTo', 'ถึงวันที่', l.dateTo || l.dateFrom, 'date')
         + F('lDays', 'จำนวนวัน (ครึ่งวัน = 0.5)', l.days === '' || l.days == null ? '' : l.days, 'number', ' step="0.5" min="0"') + F('lMin', 'มาสาย (นาที)', l.minutes, 'number', ' min="0"')
         + S('lSt', 'สถานะ', [['อนุมัติ', 'อนุมัติ'], ['รออนุมัติ', 'รออนุมัติ'], ['ไม่อนุมัติ', 'ไม่อนุมัติ']], l.status) + F('lAppr', 'ผู้อนุมัติ', l.approver)
-        + T('lReason', 'เหตุผล', l.reason) + '</div>'
+        + T('lReason', 'เหตุผล', l.reason) + '</div><div id="lQuota" class="hqinfo"></div>'
         + '<div class="psec"><div class="psec-h"><b>ใบรับรองแพทย์ / เอกสารประกอบ</b></div><div class="hfiles" id="lFiles"></div><div class="pfoot">' + attachBtns('leave') + '</div></div>',
       foot: isNew ? '' : '<div class="pfoot"><button type="button" class="link-btn danger" id="lDel">' + icon('trash', 16) + ' ลบรายการนี้</button></div>',
       ok: 'บันทึก',
@@ -401,9 +465,16 @@
         $('lFrom').addEventListener('change', function () { if (!v('lTo') || v('lTo') < v('lFrom')) $('lTo').value = v('lFrom'); calc(); });
         $('lTo').addEventListener('change', calc);
         if (isNew) calc();
+        ['lEmp', 'lType', 'lFrom', 'lTo', 'lDays', 'lSt'].forEach(function (id) { ['input', 'change'].forEach(function (ev) { $(id).addEventListener(ev, function () { overAck = false; quotaInfo(); }); }); });
+        quotaInfo();
         if (!isNew) $('lDel').addEventListener('click', function () { confirmBox('ลบรายการลานี้?', function () { return call('hrDeleteRow', state.token, 'leave', l.id).then(function (r) { if (!r.ok) return r.error; closeModal(); reload('ลบแล้ว'); }); }); });
       },
-      check: function () { return empIdOf('lEmp') ? '' : 'เลือกพนักงานจากรายชื่อ'; },
+      check: function () {
+        if (!empIdOf('lEmp')) return 'เลือกพนักงานจากรายชื่อ';
+        var o = quotaInfo();
+        if (o > 0 && !overAck) { overAck = true; return 'ลาเกินสิทธิ์ ' + o + ' วัน — ถ้ายืนยัน (เช่น ลาไม่รับค่าจ้าง) กด "บันทึก" อีกครั้ง'; }
+        return '';
+      },
       submit: function () {
         return call('hrSaveLeave', state.token, { id: l.id || '', empId: empIdOf('lEmp'), type: v('lType'), dateFrom: v('lFrom'), dateTo: v('lTo'), days: v('lDays'), minutes: v('lMin'), status: v('lSt'), approver: v('lAppr'), reason: v('lReason') }).then(function (r) {
           if (!r.ok) return r.error;
@@ -641,11 +712,16 @@
       if (l.type === 'late') sum[l.empId].min = (sum[l.empId].min || 0) + (Number(l.minutes) || 0);
     });
     var rows = H.data.emps.filter(function (e) { return sum[e.id] || e.status !== 'ลาออก'; });
+    var oneYear = from.slice(0, 4) === to.slice(0, 4) && loadedYear(from.slice(0, 4));   // คงเหลือ = สิทธิ์ทั้งปีของปีนั้น
     var body = '<table class="hrt"><thead><tr><th>ลำดับ</th><th>ชื่อ-นามสกุล</th><th>ตำแหน่ง</th><th>แผนก</th>' + ks.map(function (k) { return '<th class="c">' + LT[k] + (quotas[k] ? '<br><small>สิทธิ์ ' + quotas[k] + '</small>' : '') + '</th>'; }).join('') + '<th class="c">รวมวันลา</th></tr></thead><tbody>'
       + rows.map(function (e, i) {
         var s = sum[e.id] || {}, tot = ks.filter(function (k) { return k !== 'late'; }).reduce(function (a, k) { return a + (s[k] || 0); }, 0);
         return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</td><td>' + esc(e.position) + '</td><td>' + esc(e.group) + '</td>'
-          + ks.map(function (k) { var n = s[k] || 0; return '<td class="c' + (quotas[k] && n > quotas[k] ? ' neg b' : '') + '">' + (n ? n + (k === 'late' ? ' ครั้ง' + (s.min ? '<br><small>' + s.min + ' นาที</small>' : '') : '') : '') + '</td>'; }).join('') + '<td class="c b">' + (tot || '') + '</td></tr>';
+          + ks.map(function (k) {
+            var n = s[k] || 0, qq = oneYear ? quotaOf(e, k, from.slice(0, 4)) : null, rem = qq != null ? qq - usedOf(e.id, k, from.slice(0, 4)) : null;
+            return '<td class="c' + (rem != null && rem < 0 ? ' neg b' : '') + '">' + (n ? n + (k === 'late' ? ' ครั้ง' + (s.min ? '<br><small>' + s.min + ' นาที</small>' : '') : '') : '')
+              + (rem != null ? '<br><small>' + (rem < 0 ? 'เกิน ' + (-rem) : 'เหลือ ' + rem) + '</small>' : '') + '</td>';
+          }).join('') + '<td class="c b">' + (tot || '') + '</td></tr>';
       }).join('') + '</tbody></table>';
     return wrap('สรุปการลา ขาดงาน มาสาย รายบุคคล', '<span>ช่วงวันที่ <b>' + thDate(from) + ' – ' + thDate(to) + '</b></span>' + printedAt(), H.data.settings.fmLeave, body);
   }
@@ -705,7 +781,7 @@
     '.hinfo{min-width:0;display:flex;flex-direction:column;gap:2px;font-size:13.5px}.hinfo b{font-size:14.5px}.hinfo span{color:#334155}.hinfo small{font-size:12px}',
     '.hprof{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px}.hprof-ph{display:flex;flex-direction:column;gap:6px;align-items:center}.hbig{width:150px;height:188px;object-fit:cover;border-radius:14px;background:#e2e8f0;display:inline-grid;place-items:center;font-size:48px;font-weight:700;color:#64748b}',
     '.hkvs{flex:1;min-width:260px;display:grid;grid-template-columns:1fr 1fr;gap:6px 18px}.hkv{display:flex;flex-direction:column;font-size:14px;border-bottom:1px dashed var(--line);padding-bottom:4px}.hkv span{font-size:12px;color:var(--muted)}',
-    '.hquota{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:6px}.hquota div{background:#f8fafc;border-radius:10px;padding:6px;text-align:center}.hquota span{display:block;font-size:11.5px;color:var(--muted)}.hquota b{font-size:18px}.hquota small{font-size:11px;color:var(--muted);margin-left:2px}',
+    '.hquota{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:6px}.hquota div{background:#f8fafc;border-radius:10px;padding:6px;text-align:center}.hquota span{display:block;font-size:11.5px;color:var(--muted)}.hquota b{font-size:18px}.hquota small{font-size:11px;color:var(--muted);margin-left:2px}.hquota em{display:block;font-style:normal;font-size:11.5px;font-weight:600;color:#15803d}.hquota em.neg{color:#dc2626}.hqinfo{margin:4px 0 10px;padding:10px 12px;border-radius:10px;background:#f8fafc;border-left:4px solid #94a3b8;font-size:13.5px}.hqinfo:empty{display:none}.hqinfo.ok{background:#f0fdf4;border-color:#16a34a}.hqinfo.warn{background:#fffbeb;border-color:#d97706}.hqinfo.bad{background:#fef2f2;border-color:#dc2626}.hqrow{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:4px}.hqrow b{font-size:16px}.hbal td small{display:block;font-size:11px;color:var(--muted)}.hbal tr{cursor:pointer}.hbal tr:hover td{background:#f8fafc}',
     '.hfiles{display:flex;flex-direction:column;gap:4px}.hfile{display:flex;align-items:center;gap:8px;font-size:13.5px}.hfile a{display:inline-flex;gap:4px;align-items:center;color:var(--c);word-break:break-all}.hfile svg{width:14px;height:14px}',
     '.htype{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;background:#fef3c7;color:#b45309}.htype.sick{background:#dbeafe;color:#1d4ed8}.htype.absent{background:#fee2e2;color:#b91c1c}.htype.late{background:#f1f5f9;color:#475569}.htype.vacation{background:#dcfce7;color:#15803d}',
     '.hpicks{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px;max-height:320px;overflow:auto;margin-top:8px}.hpick{display:flex;align-items:center;gap:8px;border:1.5px solid var(--line);border-radius:10px;padding:5px 8px;font-size:13.5px;cursor:pointer;margin:0}.hpick.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 7%,white)}.hpick small{display:block;font-size:11px;color:var(--muted)}',
