@@ -12,7 +12,8 @@ var PUR_TABLES_ = {
     ['id', 'รหัส'], ['name', 'ชื่อผู้ขาย'], ['contact', 'ผู้ติดต่อ'], ['phone', 'เบอร์โทร'], ['phone2', 'เบอร์โทร 2'],
     ['line', 'LINE'], ['email', 'อีเมล'], ['address', 'ที่อยู่'], ['taxId', 'เลขผู้เสียภาษี'], ['creditDays', 'เครดิต (วัน)'],
     ['bank', 'ธนาคาร'], ['bankAccount', 'เลขบัญชี'], ['items', 'สินค้าที่ขาย'], ['note', 'หมายเหตุ'], ['active', 'ใช้งาน'],
-    ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
+    ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด'],
+    ['contractStart', 'สัญญาเริ่ม'], ['contractEnd', 'สัญญาสิ้นสุด'], ['contractNote', 'รายละเอียดสัญญา'], ['files', 'ไฟล์แนบ']] },
   materials: { tab: 'วัตถุดิบ', cols: [
     ['id', 'รหัส'], ['name', 'ชื่อวัตถุดิบ'], ['unit', 'หน่วย'], ['category', 'หมวด'], ['vendorId', 'รหัสผู้ขาย'],
     ['minStock', 'จุดสั่งซื้อขั้นต่ำ'], ['price', 'ราคาปัจจุบัน'], ['priceDate', 'ราคา ณ วันที่'], ['note', 'หมายเหตุ'],
@@ -25,7 +26,8 @@ var PUR_TABLES_ = {
     ['vendorName', 'ชื่อผู้ขาย'], ['vendorPhone', 'เบอร์ผู้ขาย'], ['orderDate', 'วันที่สั่ง'], ['deliveryDate', 'วันที่ส่งของ'],
     ['status', 'สถานะ'], ['total', 'ยอดรวม'], ['approvedBy', 'ผู้อนุมัติ'], ['approvedDate', 'วันที่อนุมัติ'],
     ['paymentStatus', 'สถานะชำระเงิน'], ['dueDate', 'ครบกำหนดชำระ'], ['paidDate', 'วันที่ชำระ'], ['paidAmount', 'ยอดที่ชำระ'],
-    ['note', 'หมายเหตุ'], ['files', 'ไฟล์แนบ'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
+    ['note', 'หมายเหตุ'], ['files', 'ไฟล์แนบ'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด'],
+    ['matchNote', 'เหตุผลชำระแม้ตรวจ3ทางไม่ตรง'], ['rfqId', 'รหัสใบเปรียบเทียบราคา']] },
   docItems: { tab: 'รายการPRPO', cols: [
     ['id', 'รหัส'], ['docId', 'รหัสใบ'], ['line', 'ลำดับ'], ['materialId', 'รหัสวัตถุดิบ'], ['materialName', 'วัตถุดิบ'],
     ['qty', 'จำนวน'], ['unit', 'หน่วย'], ['price', 'ราคาต่อหน่วย'], ['amount', 'จำนวนเงิน']] },
@@ -34,10 +36,26 @@ var PUR_TABLES_ = {
     ['lot', 'LOT'], ['expDate', 'วันหมดอายุ'], ['mfgDate', 'วันที่ผลิต'], ['requester', 'ผู้เบิก'], ['issuer', 'ผู้จ่าย/ผู้รับ'], ['docId', 'รหัสใบ PO'],
     ['qc', 'ผลตรวจรับ'], ['qcNote', 'หมายเหตุตรวจรับ'], ['files', 'ไฟล์แนบ'], ['note', 'หมายเหตุ'], ['source', 'ที่มา'],
     ['createdAt', 'บันทึกเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
+  // ใบแจ้งหนี้ผู้ขาย (สำหรับตรวจ 3 ทาง: PO ↔ รับของ ↔ ใบแจ้งหนี้) · items = JSON [{materialId, materialName, qty, unit, price, amount}]
+  invoices: { tab: 'ใบแจ้งหนี้', cols: [
+    ['id', 'รหัส'], ['docId', 'รหัสใบ PO'], ['invoiceNo', 'เลขที่ใบแจ้งหนี้'], ['invoiceDate', 'วันที่ใบแจ้งหนี้'], ['vendorName', 'ชื่อผู้ขาย'],
+    ['amount', 'ยอดเงิน'], ['items', 'รายการ'], ['note', 'หมายเหตุ'], ['files', 'ไฟล์แนบ'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
+  // เปรียบเทียบราคา: 1 เรื่อง (rfqs) มีหลายใบเสนอราคา (quotes) · items = JSON
+  rfqs: { tab: 'เปรียบเทียบราคา', cols: [
+    ['id', 'รหัส'], ['title', 'เรื่อง'], ['prId', 'อ้างอิง PR'], ['items', 'รายการ'], ['status', 'สถานะ'], ['winnerId', 'ใบที่เลือก'],
+    ['reason', 'เหตุผลที่เลือก'], ['decidedAt', 'วันที่ตัดสิน'], ['poId', 'รหัสใบ PO'], ['note', 'หมายเหตุ'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
+  quotes: { tab: 'ใบเสนอราคา', cols: [
+    ['id', 'รหัส'], ['rfqId', 'รหัสเรื่อง'], ['vendorId', 'รหัสผู้ขาย'], ['vendorName', 'ชื่อผู้ขาย'], ['quoteNo', 'เลขที่ใบเสนอราคา'], ['quoteDate', 'วันที่เสนอ'],
+    ['validUntil', 'ยืนราคาถึง'], ['leadDays', 'ส่งของภายใน (วัน)'], ['paymentTerms', 'เงื่อนไขชำระเงิน'], ['creditDays', 'เครดิต (วัน)'],
+    ['items', 'ราคารายการ'], ['total', 'ยอดรวม'], ['spec', 'สเปก / คุณภาพ'], ['note', 'หมายเหตุ'], ['files', 'ไฟล์แนบ'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
+  // ประเมินผู้ขาย รายไตรมาส (1-5)
+  evals: { tab: 'ประเมินผู้ขาย', cols: [
+    ['id', 'รหัส'], ['vendorId', 'รหัสผู้ขาย'], ['period', 'รอบประเมิน'], ['quality', 'คุณภาพ'], ['delivery', 'ส่งตรงเวลา'], ['price', 'ราคา'],
+    ['service', 'บริการ'], ['score', 'คะแนนเฉลี่ย'], ['comment', 'ความเห็น'], ['evaluator', 'ผู้ประเมิน'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
   log: { tab: 'ประวัติแก้ไข', cols: [['time', 'เวลา'], ['action', 'การทำงาน'], ['table', 'ข้อมูล'], ['id', 'รหัส'], ['detail', 'รายละเอียด']] }
 };
-var PUR_DATE_KEYS_ = { mfgDate: 1, priceDate: 1, effectiveDate: 1, orderDate: 1, deliveryDate: 1, approvedDate: 1, dueDate: 1, paidDate: 1, date: 1, expDate: 1 };
-var PUR_NUM_KEYS_ = { creditDays: 1, minStock: 1, price: 1, total: 1, paidAmount: 1, line: 1, qty: 1, amount: 1 };
+var PUR_DATE_KEYS_ = { contractStart: 1, contractEnd: 1, invoiceDate: 1, quoteDate: 1, validUntil: 1, decidedAt: 1, mfgDate: 1, priceDate: 1, effectiveDate: 1, orderDate: 1, deliveryDate: 1, approvedDate: 1, dueDate: 1, paidDate: 1, date: 1, expDate: 1 };
+var PUR_NUM_KEYS_ = { leadDays: 1, quality: 1, delivery: 1, service: 1, score: 1, creditDays: 1, minStock: 1, price: 1, total: 1, paidAmount: 1, line: 1, qty: 1, amount: 1 };
 var PUR_MOVE_IN_ = { IN: 1 };                 // รับเข้า
 var PUR_MOVE_OUT_ = { OUT: 1, RETURN: 1 };   // จ่ายออก / ส่งคืนผู้ขาย · ADJ = ปรับยอด (+/-)
 var PUR_TZ_ = 'Asia/Bangkok';
@@ -194,8 +212,15 @@ function purLoad(token) {
     m.lastMove = b.last[m.id] || '';
     m.lots = b.lots[m.id] || [];
   });
+  var invoices = purRead_(ss, 'invoices'), rfqs = purRead_(ss, 'rfqs'), quotes = purRead_(ss, 'quotes'), evals = purRead_(ss, 'evals');
+  invoices.forEach(function (x) { x.items = purJson_(x.items); x.files = purParseFiles_(x.files); });
+  rfqs.forEach(function (x) { x.items = purJson_(x.items); });
+  quotes.forEach(function (x) { x.items = purJson_(x.items); x.files = purParseFiles_(x.files); });
+  vendors.forEach(function (v) { v.files = purParseFiles_(v.files); });
+  docs.forEach(function (d) { if (d.type === 'PO') d.match = purMatch_(d, d.items, moves, invoices); });
   var cfg = deptConfig_(dept.key);
-  return { ok: true, vendors: vendors, materials: materials, docs: docs, moveCount: moves.length, today: purToday_(),
+  return { ok: true, vendors: vendors, materials: materials, docs: docs, invoices: invoices, rfqs: rfqs, quotes: quotes, evals: evals,
+    moveCount: moves.length, today: purToday_(),
     sheetUrl: 'https://docs.google.com/spreadsheets/d/' + cfg.sheetId + '/edit', hasFolder: !!cfg.folderId };
 }
 
@@ -256,10 +281,12 @@ function purSaveVendor(token, v) {
     var o = old ? JSON.parse(JSON.stringify(old)) : { id: purId_('V'), createdAt: purNow_(), active: 'ใช้งาน' };
     ['contact', 'phone', 'phone2', 'line', 'email', 'taxId', 'bank', 'bankAccount'].forEach(function (k) { o[k] = purClean_(v[k], 150); });
     ['address', 'items', 'note'].forEach(function (k) { o[k] = purClean_(v[k], 1000); });
+    o.contractStart = purDate_(v.contractStart); o.contractEnd = purDate_(v.contractEnd); o.contractNote = purClean_(v.contractNote, 1000);
+    if (typeof o.files !== 'string') o.files = JSON.stringify(o.files || []);
     o.name = name; o.creditDays = purNum_(v.creditDays); o.active = v.active === false || v.active === 'ปิด' ? 'ปิด' : 'ใช้งาน'; o.updatedAt = purNow_();
     purWrite_(ss, 'vendors', o);
-    purLogWrite_(ss, old ? 'แก้ไข' : 'เพิ่ม', 'vendors', o.id, old ? purDiff_(old, o, ['name', 'contact', 'phone', 'phone2', 'line', 'email', 'address', 'taxId', 'creditDays', 'bank', 'bankAccount', 'items', 'note', 'active']) : name);
-    delete o._row;
+    purLogWrite_(ss, old ? 'แก้ไข' : 'เพิ่ม', 'vendors', o.id, old ? purDiff_(old, o, ['name', 'contact', 'phone', 'phone2', 'line', 'email', 'address', 'taxId', 'creditDays', 'bank', 'bankAccount', 'items', 'note', 'active', 'contractStart', 'contractEnd', 'contractNote']) : name);
+    delete o._row; o.files = purParseFiles_(o.files);
     return { ok: true, vendor: o };
   });
 }
@@ -361,6 +388,13 @@ function purSaveDoc(token, d, items) {
     o.paymentStatus = PUR_PAY_STATUS_[d.paymentStatus] ? d.paymentStatus : (type === 'PO' ? 'unpaid' : 'none');
     o.dueDate = purDate_(d.dueDate); o.paidDate = purDate_(d.paidDate); o.paidAmount = purNum_(d.paidAmount); o.note = purClean_(d.note, 1000);
     o.total = Math.round(lines.reduce(function (s, it) { return s + (Number(it.amount) || 0); }, 0) * 100) / 100;
+    o.matchNote = purClean_(d.matchNote, 300);
+    // ตรวจ 3 ทาง: จะบันทึก "ชำระแล้ว" ได้เมื่อ PO = รับของ = ใบแจ้งหนี้ หรือใส่เหตุผล
+    if (type === 'PO' && o.paymentStatus === 'paid' && (!old || old.paymentStatus !== 'paid')) {
+      var mt = purMatch_(o, lines, purRead_(ss, 'moves'), purRead_(ss, 'invoices').map(function (x) { x.items = purJson_(x.items); return x; }));
+      if (mt.status !== 'ok' && !o.matchNote) return { ok: false, needReason: true, match: mt, error: 'ตรวจ 3 ทางยังไม่ผ่าน (' + mt.label + ') — ใส่เหตุผลในช่อง "เหตุผลที่ชำระแม้ไม่ตรง" ก่อนบันทึกชำระแล้ว' };
+    }
+    if (d.rfqId) o.rfqId = purClean_(d.rfqId, 40);
     o.updatedAt = purNow_();
     if (typeof o.files !== 'string') o.files = JSON.stringify(o.files || []);
     purWrite_(ss, 'docs', o);
@@ -371,6 +405,7 @@ function purSaveDoc(token, d, items) {
     var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
     var rows = lines.map(function (it, i) { it.id = purId_('I'); it.docId = o.id; it.line = i + 1; return purRowValues_(sh, 'docItems', it, head); });
     sh.getRange(sh.getLastRow() + 1, 1, rows.length, head.length).setValues(rows);
+    if (o.rfqId) { var rq = purRead_(ss, 'rfqs').filter(function (x) { return x.id === o.rfqId; })[0]; if (rq && !rq.poId) { rq.poId = o.id; rq.updatedAt = purNow_(); purWrite_(ss, 'rfqs', rq); } }
     purLogWrite_(ss, old ? 'แก้ไข' : 'สร้าง', 'docs', o.id, o.docNo + (old ? ' ' + purDiff_(old, o, ['docNo', 'vendorName', 'vendorPhone', 'orderDate', 'deliveryDate', 'status', 'total', 'approvedBy', 'paymentStatus', 'dueDate', 'paidDate', 'paidAmount', 'note']) : ' ' + o.vendorName + ' ฿' + o.total));
     return { ok: true, id: o.id, docNo: o.docNo };
   });
@@ -427,10 +462,11 @@ function purUpdateDocReceipt_(ss, docId) {
 
 // ---------- ไฟล์แนบ (PR/PO ที่อนุมัติ, ภาพอนุมัติทาง LINE, COA, ใบส่งของ) ----------
 function purParseFiles_(v) { try { var a = typeof v === 'string' ? JSON.parse(v || '[]') : v; return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+var PUR_FILE_OWNERS_ = { move: 'moves', doc: 'docs', vendor: 'vendors', invoice: 'invoices', quote: 'quotes' };
 var PUR_FILE_TYPES_ = { 'image/jpeg': 1, 'image/png': 1, 'image/webp': 1, 'image/heic': 1, 'application/pdf': 1 };
 function purUploadFile(token, ownerType, ownerId, fileName, mimeType, base64, label) {
   var dept = requirePur_(token);
-  var table = ownerType === 'move' ? 'moves' : ownerType === 'doc' ? 'docs' : '';
+  var table = PUR_FILE_OWNERS_[ownerType] || '';
   if (!table) return { ok: false, error: 'ไม่รู้ว่าจะแนบกับรายการไหน' };
   if (!PUR_FILE_TYPES_[mimeType]) return { ok: false, error: 'แนบได้เฉพาะรูปภาพหรือ PDF' };
   var bytes = Utilities.base64Decode(String(base64 || ''));
@@ -442,7 +478,8 @@ function purUploadFile(token, ownerType, ownerId, fileName, mimeType, base64, la
     if (!row) return { ok: false, error: 'ไม่พบรายการ' };
     var folder = DriveApp.getFolderById(folderId);
     var safe = purClean_(fileName, 120).replace(/[\\/:*?"<>|]/g, '_') || 'file';
-    var prefix = table === 'docs' ? (row.docNo || row.id) : (row.date + '_' + row.id);
+    var prefix = table === 'docs' ? (row.docNo || row.id) : table === 'moves' ? (row.date + '_' + row.id)
+      : table === 'invoices' ? ('INV_' + (row.invoiceNo || row.id)) : table === 'quotes' ? ('QT_' + (row.vendorName || '') + '_' + (row.quoteNo || row.id)) : ('V_' + (row.name || row.id));
     var f = folder.createFile(Utilities.newBlob(bytes, mimeType, prefix + '_' + safe));
     var files = purParseFiles_(row.files);
     var rec = { id: f.getId(), name: safe, mime: mimeType, label: purClean_(label, 60), url: 'https://drive.google.com/file/d/' + f.getId() + '/view', at: purNow_() };
@@ -455,7 +492,7 @@ function purUploadFile(token, ownerType, ownerId, fileName, mimeType, base64, la
 }
 function purRemoveFile(token, ownerType, ownerId, fileId) {
   var dept = requirePur_(token);
-  var table = ownerType === 'move' ? 'moves' : ownerType === 'doc' ? 'docs' : '';
+  var table = PUR_FILE_OWNERS_[ownerType] || '';
   if (!table) return { ok: false, error: 'ไม่รู้ว่าจะลบจากรายการไหน' };
   return purLocked_(function () {
     var ss = purBook_(dept), row = purRead_(ss, table).filter(function (x) { return x.id === ownerId; })[0];

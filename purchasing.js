@@ -27,13 +27,16 @@
     { id: 'p_dash', label: 'ภาพรวม', ic: 'home' },
     { id: 'p_stock', label: 'รับเข้า / จ่ายออก', ic: 'box' },
     { id: 'p_mat', label: 'วัตถุดิบ & ราคา', ic: 'tag' },
-    { id: 'p_doc', label: 'ใบ PR / PO', ic: 'doc' },
+    { id: 'p_doc', label: 'ใบ PR / PO (PEAK)', ic: 'doc' },
+    { id: 'p_rfq', label: 'เปรียบเทียบราคา', ic: 'list' },
     { id: 'p_ven', label: 'ผู้ขาย (Vendor)', ic: 'phone' },
     { id: 'p_rep', label: 'รายงาน / พิมพ์', ic: 'chart' },
     { id: 'p_log', label: 'ประวัติการแก้ไข', ic: 'clock' }
   ];
   var TYPE = { IN: 'รับเข้า', OUT: 'จ่ายออก', RETURN: 'ส่งคืนผู้ขาย', ADJ: 'ปรับยอด' };
   var DOC_ST = { draft: 'ร่าง', approved: 'อนุมัติแล้ว', ordered: 'สั่งแล้ว', partial: 'รับบางส่วน', received: 'รับของครบ', cancelled: 'ยกเลิก' };
+  var MATCH_TAG = { ok: ['ok', '✓ ตรง 3 ทาง'], diff: ['lock', '⚠ ตรวจ 3 ทางไม่ตรง'], noinv: ['no', 'รอใบแจ้งหนี้'], norecv: ['', 'รอรับของ'] };
+  function matchTag(d) { var m = d.type === 'PO' && d.status !== 'cancelled' && d.match && MATCH_TAG[d.match.status]; return m ? '<span class="tag ' + m[0] + '">' + m[1] + '</span>' : ''; }
   var PAY_ST = { unpaid: 'ยังไม่ชำระ', partial: 'ชำระบางส่วน', paid: 'ชำระแล้ว', none: '-' };
   // ชื่อที่ใส่ให้อัตโนมัติตอนจ่ายออก (แก้ในช่องได้)
   var DEF_REQUESTER = 'ณิชกมล', DEF_ISSUER = 'สุชาดา';
@@ -43,7 +46,7 @@
     if (value && STAFF.indexOf(value) < 0) opts.push([value, value]);   // ชื่อเดิมในข้อมูลเก่า
     return S(id, label, opts, value || '');
   }
-  var FILE_LABELS = ['PR ที่อนุมัติ', 'PO ที่อนุมัติ', 'ภาพอนุมัติทาง LINE', 'ใบเสนอราคา', 'ใบส่งของ / ใบกำกับ', 'COA / ผลตรวจ', 'หลักฐานการชำระเงิน', 'อื่น ๆ'];
+  var FILE_LABELS = ['ไฟล์ PR/PO จาก PEAK', 'ใบแจ้งหนี้ / ใบกำกับภาษี', 'PR ที่อนุมัติ', 'PO ที่อนุมัติ', 'ภาพอนุมัติทาง LINE', 'ใบเสนอราคา', 'ใบส่งของ / ใบกำกับ', 'COA / ผลตรวจ', 'หลักฐานการชำระเงิน', 'อื่น ๆ'];
 
   // ---------- ตัวช่วย ----------
   function pad(n) { return ('0' + n).slice(-2); }
@@ -106,7 +109,7 @@
       });
       return;
     }
-    ({ p_dash: dash, p_stock: stock, p_mat: materials, p_doc: docs, p_ven: vendors, p_rep: report, p_log: logPage }[page] || dash)();
+    ({ p_dash: dash, p_stock: stock, p_mat: materials, p_doc: docs, p_rfq: rfqs, p_ven: vendors, p_rep: report, p_log: logPage }[page] || dash)();
   };
 
   // ==================== ภาพรวม ====================
@@ -138,6 +141,12 @@
         var late = x.deliveryDate && x.deliveryDate < t;
         return '<div class="li click" data-doc="' + x.id + '"><span>' + esc(x.docNo) + ' · ' + esc(x.vendorName) + '</span><b class="' + (late ? 'neg' : '') + '">ส่ง ' + dd(x.deliveryDate) + '</b><small>' + DOC_ST[x.status] + '</small></div>';
       }), 'ไม่มี PO ค้างรับ')
+      + box(icon('warn', 18) + ' PO ตรวจ 3 ทางไม่ตรง', d.docs.filter(function (x) { return x.type === 'PO' && x.status !== 'cancelled' && x.match && x.match.status === 'diff'; }).map(function (x) {
+        return '<div class="li click" data-doc="' + x.id + '"><span>' + esc(x.docNo) + ' · ' + esc(x.vendorName) + '</span><b class="neg">ไม่ตรง</b><small>' + esc((x.match.lines.filter(function (l) { return !l.ok; })[0] || { issues: [''] }).issues[0]) + '</small></div>';
+      }), 'ไม่มี — PO ที่มีใบแจ้งหนี้ตรงกันทั้งหมด')
+      + box(icon('doc', 18) + ' สัญญาผู้ขายใกล้หมด / หมดแล้ว (60 วัน)', d.vendors.filter(function (x) { var c = contractInfo(x); return c && c.left <= 60 && x.active !== 'ปิด'; }).map(function (x) {
+        var c = contractInfo(x); return '<div class="li"><span>' + esc(x.name) + '</span><b class="' + (c.left < 0 ? 'neg' : 'warn') + '">' + (c.left < 0 ? 'หมดแล้ว' : 'อีก ' + c.left + ' วัน') + '</b><small>สิ้นสุด ' + dd(x.contractEnd) + '</small></div>';
+      }), 'ไม่มีสัญญาที่ใกล้หมดอายุ')
       + box(icon('tag', 18) + ' ค้างชำระผู้ขาย', unpaid.sort(function (a, b) { return String(a.dueDate || '9').localeCompare(String(b.dueDate || '9')); }).map(function (x) {
         var over = x.dueDate && x.dueDate < t;
         return '<div class="li click" data-doc="' + x.id + '"><span>' + esc(x.docNo) + ' · ' + esc(x.vendorName) + '</span><b class="' + (over ? 'neg' : '') + '">' + baht((Number(x.total) || 0) - (Number(x.paidAmount) || 0)) + '</b><small>ครบกำหนด ' + dd(x.dueDate) + (over ? ' (เลยกำหนด)' : '') + '</small></div>';
@@ -365,7 +374,7 @@
   // ==================== ใบ PR / PO ====================
   function docs() {
     var f = P.q.docType || '';
-    $('main').innerHTML = '<h3>ใบ PR / PO</h3><p class="lead">ใบขอซื้อ (PR) และใบสั่งซื้อ (PO) หลายรายการต่อใบ · แนบไฟล์ใบที่อนุมัติ / ภาพอนุมัติทาง LINE · ติดตามการชำระเงิน</p>'
+    $('main').innerHTML = '<h3>ใบ PR / PO (จาก PEAK)</h3><p class="lead">PR / PO ออกจากระบบ PEAK แล้วนำมาลงที่นี่: ใส่เลขที่ + แนบไฟล์ + รายการ · ใช้รับของตาม PO และตรวจ 3 ทางกับใบแจ้งหนี้ · ใบขอซื้อ (PR) และใบสั่งซื้อ (PO) หลายรายการต่อใบ · แนบไฟล์ใบที่อนุมัติ / ภาพอนุมัติทาง LINE · ติดตามการชำระเงิน</p>'
       + searchBar('doc', 'ค้นหาเลขที่ / ผู้ขาย / วัตถุดิบ', '<button class="btn btn-sm btn-primary" data-new="PR">' + icon('plus', 16) + 'PR</button><button class="btn btn-sm btn-primary" data-new="PO">' + icon('plus', 16) + 'PO</button>')
       + '<div class="pchips">' + [['', 'ทั้งหมด'], ['PR', 'PR'], ['PO', 'PO'], ['open', 'PO รอรับของ'], ['unpaid', 'ค้างชำระ']].map(function (c) { return '<button class="chip' + (f === c[0] ? ' on' : '') + '" data-f="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>'
       + '<div id="pList" class="plist"></div>';
@@ -381,7 +390,7 @@
         var over = d.type === 'PO' && d.paymentStatus !== 'paid' && d.dueDate && d.dueDate < t;
         return '<button class="prow click" data-doc="' + d.id + '"><div class="pinfo"><b><span class="dt ' + d.type + '">' + d.type + '</span> ' + esc(d.docNo) + ' · ' + esc(d.vendorName || '-') + '</b>'
           + '<small>สั่ง ' + dd(d.orderDate) + ' · ส่ง ' + dd(d.deliveryDate) + ' · ' + d.items.length + ' รายการ' + (d.files.length ? ' · ' + icon('clip', 12) + d.files.length : '') + '</small>'
-          + '<div><span class="tag st-' + d.status + '">' + (DOC_ST[d.status] || d.status) + '</span>' + (d.type === 'PO' ? '<span class="tag ' + (d.paymentStatus === 'paid' ? 'ok' : over ? 'lock' : 'no') + '">' + PAY_ST[d.paymentStatus] + (over ? ' · เลยกำหนด' : '') + '</span>' : '') + '</div></div>'
+          + '<div><span class="tag st-' + d.status + '">' + (DOC_ST[d.status] || d.status) + '</span>' + matchTag(d) + (d.type === 'PO' ? '<span class="tag ' + (d.paymentStatus === 'paid' ? 'ok' : over ? 'lock' : 'no') + '">' + PAY_ST[d.paymentStatus] + (over ? ' · เลยกำหนด' : '') + '</span>' : '') + '</div></div>'
           + '<div class="pprice">' + baht(d.total) + '</div></button>';
       }).join('') || '<div class="panel muted">ยังไม่มีเอกสาร</div>';
       on('[data-doc]', 'click', function (el) { docModal(P.idx.doc[el.getAttribute('data-doc')]); }, $('pList'));
@@ -394,14 +403,14 @@
 
   function docModal(d, newType, from) {
     var edit = !!d, t = todayIso();
-    d = d || { type: newType, docNo: '', refId: from ? from.id : '', vendorId: from ? from.vendorId : '', vendorName: from ? from.vendorName : '', vendorPhone: from ? from.vendorPhone : '',
+    d = d || { type: newType, docNo: '', rfqId: from && from.rfqId || '', refId: from ? from.id || '' : '', vendorId: from ? from.vendorId : '', vendorName: from ? from.vendorName : '', vendorPhone: from ? from.vendorPhone : '',
       orderDate: t, deliveryDate: from ? from.deliveryDate : '', status: 'draft', approvedBy: '', approvedDate: '', paymentStatus: newType === 'PO' ? 'unpaid' : 'none', dueDate: '', paidDate: '', paidAmount: '', note: '',
       items: from ? from.items.map(function (i) { return { materialId: i.materialId, materialName: i.materialName, qty: i.qty, unit: i.unit, price: i.price }; }) : [], files: [] };
     var isPO = d.type === 'PO';
     var prs = P.data.docs.filter(function (x) { return x.type === 'PR' && x.status !== 'cancelled'; });
     var body = '<datalist id="matList">' + materialList().filter(function (m) { return m.active !== 'ปิด'; }).map(function (m) { return '<option value="' + esc(m.name) + '">'; }).join('') + '</datalist>'
       + '<div class="pform">'
-      + F('dNo', 'เลขที่ ' + d.type, d.docNo, 'text', ' placeholder="เว้นว่าง = ออกเลขอัตโนมัติ"')
+      + hl(F('dNo', 'เลขที่ ' + d.type + ' (จาก PEAK) *', d.docNo, 'text', ' placeholder="เลขที่ตามใบใน PEAK"'))
       + (isPO ? S('dRef', 'อ้างอิง PR', [['', '— ไม่อ้างอิง —']].concat(prs.map(function (x) { return [x.id, x.docNo + ' · ' + (x.vendorName || '')]; })), d.refId) : '')
       + S('dVendor', 'ผู้ขาย (เลือกจากรายชื่อ)', vendorOptions('— เลือก / พิมพ์เองด้านล่าง —'), d.vendorId)
       + F('dVName', 'ชื่อผู้ขาย', d.vendorName) + F('dVPhone', 'เบอร์โทรผู้ขาย', d.vendorPhone, 'tel')
@@ -412,10 +421,12 @@
       + '<div class="psec"><div class="psec-h"><b>รายการ</b><button type="button" class="btn btn-sm btn-line" id="dAdd">' + icon('plus', 16) + 'เพิ่มรายการ</button></div><div id="dItems"></div><div class="ptotal">รวม <b id="dTotal">฿0.00</b></div></div>'
       + (isPO ? '<div class="psec"><div class="psec-h"><b>การชำระเงินผู้ขาย</b></div><div class="pform">'
         + S('dPay', 'สถานะชำระเงิน', [['unpaid', 'ยังไม่ชำระ'], ['partial', 'ชำระบางส่วน'], ['paid', 'ชำระแล้ว']], d.paymentStatus)
-        + F('dDue', 'ครบกำหนดชำระ', d.dueDate, 'date') + F('dPaidDate', 'วันที่ชำระ', d.paidDate, 'date') + F('dPaid', 'ยอดที่ชำระ (บาท)', d.paidAmount, 'number', ' step="any" inputmode="decimal"') + '</div></div>' : '')
+        + F('dDue', 'ครบกำหนดชำระ', d.dueDate, 'date') + F('dPaidDate', 'วันที่ชำระ', d.paidDate, 'date') + F('dPaid', 'ยอดที่ชำระ (บาท)', d.paidAmount, 'number', ' step="any" inputmode="decimal"')
+        + '<div class="pf full"><label for="dMatchNote">เหตุผลที่ชำระแม้ตรวจ 3 ทางไม่ตรง (ใส่เมื่อจำเป็นเท่านั้น)</label><input id="dMatchNote" type="text" value="' + esc(d.matchNote || '') + '"></div></div></div>'
+        + (edit ? '<div class="psec"><div class="psec-h"><b>ตรวจ 3 ทาง: PO ↔ รับของ ↔ ใบแจ้งหนี้</b><button type="button" class="btn btn-sm btn-line" id="dInv">' + icon('plus', 16) + 'เพิ่มใบแจ้งหนี้</button></div><div id="dMatch"></div></div>' : '') : '')
       + '<div class="pform">' + T('dNote', 'หมายเหตุ', d.note) + '</div>'
       + '<div class="psec"><div class="psec-h"><b>' + icon('clip', 16) + ' ไฟล์แนบ</b></div>' + (edit
-        ? '<div id="dFiles"></div><div class="pupload">' + S('dFileLabel', 'ประเภทไฟล์', FILE_LABELS.map(function (x) { return [x, x]; }), isPO ? 'PO ที่อนุมัติ' : 'PR ที่อนุมัติ') + '<div class="pf"><label>เลือกรูป / PDF (อัปโหลดทันที)</label><input id="dFile" type="file" accept="image/*,application/pdf" multiple></div></div>'
+        ? '<div id="dFiles"></div><div class="pupload">' + S('dFileLabel', 'ประเภทไฟล์', FILE_LABELS.map(function (x) { return [x, x]; }), 'ไฟล์ PR/PO จาก PEAK') + '<div class="pf"><label>เลือกรูป / PDF (อัปโหลดทันที)</label><input id="dFile" type="file" accept="image/*,application/pdf" multiple></div></div>'
         : '<div class="note">กดบันทึกก่อน แล้วจึงแนบไฟล์ PR/PO ที่อนุมัติ หรือภาพอนุมัติทาง LINE ได้</div>') + '</div>';
     var items = d.items.map(function (i) { return { materialId: i.materialId, materialName: i.materialName, qty: i.qty, unit: i.unit, price: i.price }; });
     if (!items.length) items.push({ materialId: '', materialName: '', qty: '', unit: '', price: '' });
@@ -456,8 +467,7 @@
     wide({
       icon: 'doc', title: (edit ? d.type + ' ' + d.docNo : 'สร้าง ' + d.type) + (from ? ' จาก ' + from.docNo : ''), sub: edit ? (DOC_ST[d.status] || '') + ' · ' + baht(d.total) : (isPO ? 'ใบสั่งซื้อ' : 'ใบขอซื้อ'),
       body: body, ok: 'บันทึก',
-      foot: '<div class="pfoot">' + (edit ? '<button type="button" class="btn btn-sm btn-line" id="dPrint">' + icon('print', 16) + 'พิมพ์ / PDF</button>' : '')
-        + (edit && !isPO ? '<button type="button" class="btn btn-sm btn-line" id="dToPO">' + icon('doc', 16) + 'สร้าง PO จาก PR นี้</button>' : '')
+      foot: '<div class="pfoot">' + (edit && !isPO ? '<button type="button" class="btn btn-sm btn-line" id="dToPO">' + icon('doc', 16) + 'ลง PO (จาก PEAK) ที่อ้างอิง PR นี้</button>' : '')
         + (edit && isPO && /approved|ordered|partial/.test(d.status) ? '<button type="button" class="btn btn-sm btn-line" id="dRecv">' + icon('plus', 16) + 'รับของตาม PO</button>' : '') + '</div>',
       onOpen: function () {
         drawItems();
@@ -478,7 +488,10 @@
               .then(function () { $('mErr').textContent = ''; toast('แนบไฟล์แล้ว'); reload(); }, function (e) { $('mErr').textContent = 'อัปโหลดไม่สำเร็จ: ' + e.message; })
               .then(function () { inp.disabled = false; inp.value = ''; });
           });
-          $('dPrint').addEventListener('click', function () { printDoc(d); });
+          if (isPO) {
+            drawMatch($('dMatch'), d);
+            $('dInv').addEventListener('click', function () { invoiceModal(d, null); });
+          }
           if ($('dToPO')) $('dToPO').addEventListener('click', function () { docModal(null, 'PO', d); });
           if ($('dRecv')) $('dRecv').addEventListener('click', function () {
             var first = d.items.filter(function (i) { return mat(i.materialId); })[0];
@@ -489,17 +502,18 @@
       },
       check: function () {
         var filled = items.filter(function (it) { return it.materialName.trim() && it.qty !== ''; });
+        if (!v('dNo')) return 'กรอกเลขที่ ' + d.type + ' ตามใบใน PEAK';
         if (!filled.length) return 'เพิ่มรายการวัตถุดิบ (ชื่อ + จำนวน) อย่างน้อย 1 รายการ';
         if (items.some(function (it) { return it.materialName.trim() && it.qty === ''; })) return 'กรอกจำนวนให้ครบทุกรายการ';
         return '';
       },
       submit: function () {
         var rec = { id: edit ? d.id : '', type: d.type, docNo: v('dNo'), refId: v('dRef'), vendorId: v('dVendor'), vendorName: v('dVName'), vendorPhone: v('dVPhone'), orderDate: v('dOrder'), deliveryDate: v('dDeliver'),
-          status: v('dStatus'), approvedBy: v('dAppBy'), approvedDate: v('dAppDate'), paymentStatus: isPO ? v('dPay') : 'none', dueDate: v('dDue'), paidDate: v('dPaidDate'), paidAmount: v('dPaid'), note: v('dNote') };
+          status: v('dStatus'), approvedBy: v('dAppBy'), approvedDate: v('dAppDate'), paymentStatus: isPO ? v('dPay') : 'none', dueDate: v('dDue'), paidDate: v('dPaidDate'), paidAmount: v('dPaid'), note: v('dNote'), matchNote: v('dMatchNote'), rfqId: d.rfqId || '' };
         return call('purSaveDoc', state.token, rec, items.filter(function (it) { return it.materialName.trim(); })).then(function (r) {
-          if (!r.ok) return r.error;
+          if (!r.ok) { if (r.needReason && $('dMatchNote')) $('dMatchNote').focus(); return r.error; }
           closeModal();
-          reload((edit ? 'บันทึก ' : 'สร้าง ') + r.docNo + ' แล้ว').then(function () { if (!edit) docModal(P.idx.doc[r.id]); });
+          reload((edit ? 'บันทึก ' : 'ลง ') + r.docNo + ' แล้ว').then(function () { if (!edit) docModal(P.idx.doc[r.id]); });
         });
       }
     });
@@ -542,6 +556,7 @@
         var phones = [x.phone, x.phone2].filter(String);
         return '<div class="vcard' + (x.active === 'ปิด' ? ' off' : '') + '"><div class="vhead"><b>' + esc(x.name) + '</b><button type="button" class="icon-btn" data-ven="' + x.id + '" title="แก้ไข">' + icon('edit', 16) + '</button></div>'
           + (x.contact ? '<div class="muted">ผู้ติดต่อ: ' + esc(x.contact) + '</div>' : '')
+          + (function () { var c = contractInfo(x), e = latestEval(x.id); return c || e ? '<div>' + (c ? '<span class="tag ' + c.cls + '">' + c.text + '</span>' : '') + (e ? '<span class="tag code">' + qLabel(e.period) + ' ' + stars(e.score) + ' ' + e.score + '</span>' : '') + '</div>' : ''; })()
           + '<div class="vacts">' + phones.map(function (p) { return '<a class="btn btn-sm vcall" href="' + telHref(p) + '">' + icon('phone', 16) + esc(p) + '</a>'; }).join('')
           + (x.line ? '<span class="btn btn-sm btn-line">' + icon('line', 16) + esc(x.line) + '</span>' : '') + (x.email ? '<a class="btn btn-sm btn-line" href="mailto:' + esc(x.email) + '">' + icon('mail', 16) + 'อีเมล</a>' : '')
           + (!phones.length ? '<span class="muted">ยังไม่มีเบอร์โทร — กดแก้ไขเพื่อเพิ่ม</span>' : '') + '</div>'
@@ -560,11 +575,290 @@
       body: '<div class="pform">' + F('vnName', 'ชื่อผู้ขาย / บริษัท *', x.name) + F('vnContact', 'ผู้ติดต่อ', x.contact) + F('vnPhone', 'เบอร์โทร', x.phone, 'tel') + F('vnPhone2', 'เบอร์โทร 2', x.phone2, 'tel')
         + F('vnLine', 'LINE ID', x.line) + F('vnEmail', 'อีเมล', x.email, 'email') + F('vnTax', 'เลขผู้เสียภาษี', x.taxId, 'text', ' inputmode="numeric"') + F('vnCredit', 'เครดิต (วัน)', x.creditDays, 'number', ' inputmode="numeric"')
         + F('vnBank', 'ธนาคาร', x.bank) + F('vnAcc', 'เลขบัญชี', x.bankAccount, 'text', ' inputmode="numeric"') + T('vnAddr', 'ที่อยู่', x.address) + T('vnItems', 'สินค้าที่ขาย', x.items) + T('vnNote', 'หมายเหตุ', x.note)
-        + S('vnActive', 'สถานะ', [['ใช้งาน', 'ใช้งาน'], ['ปิด', 'เลิกใช้']], x.active) + '</div>',
+        + S('vnActive', 'สถานะ', [['ใช้งาน', 'ใช้งาน'], ['ปิด', 'เลิกใช้']], x.active) + '</div>'
+        + '<div class="psec"><div class="psec-h"><b>สัญญา / ข้อตกลง</b></div><div class="pform">' + F('vnCs', 'สัญญาเริ่ม', x.contractStart, 'date') + F('vnCe', 'สัญญาสิ้นสุด', x.contractEnd, 'date') + T('vnCn', 'รายละเอียดสัญญา (ราคาตกลง, เงื่อนไข)', x.contractNote) + '</div>'
+        + (edit ? '<div id="vnFiles"></div><div class="pupload">' + S('vnFileLabel', 'ประเภทไฟล์', [['สัญญา / ข้อตกลง', 'สัญญา / ข้อตกลง'], ['เอกสารบริษัท (ภพ.20 / หนังสือรับรอง)', 'เอกสารบริษัท (ภพ.20 / หนังสือรับรอง)'], ['ใบรับรองมาตรฐาน (GMP / HACCP / อย.)', 'ใบรับรองมาตรฐาน (GMP / HACCP / อย.)'], ['อื่น ๆ', 'อื่น ๆ']], 'สัญญา / ข้อตกลง') + '<div class="pf"><label>เลือกรูป / PDF (อัปโหลดทันที)</label><input id="vnFile" type="file" accept="image/*,application/pdf" multiple></div></div>' : '<div class="note">บันทึกก่อนแล้วจึงแนบไฟล์สัญญาได้</div>') + '</div>'
+        + (edit ? '<div class="psec"><div class="psec-h"><b>ผลประเมินผู้ขาย (รายไตรมาส)</b><button type="button" class="btn btn-sm btn-primary" id="vnEval">' + icon('check', 16) + 'ประเมิน</button></div><div id="vnEvals"></div></div>' : ''),
       ok: 'บันทึก', check: function () { return v('vnName') ? '' : 'กรอกชื่อผู้ขาย'; },
+      onOpen: function () {
+        if (!edit) return;
+        var drawF = function (files) {
+          $('vnFiles').innerHTML = files.length ? files.map(function (f) { return '<div class="pfile">' + fileLink(f) + '<small>' + esc(f.at || '') + '</small><button type="button" class="icon-btn" data-rf="' + esc(f.id) + '">' + icon('trash', 16) + '</button></div>'; }).join('') : '<div class="muted">ยังไม่มีไฟล์แนบ</div>';
+          on('[data-rf]', 'click', function (el) { if (!confirm('ลบไฟล์นี้?')) return; call('purRemoveFile', state.token, 'vendor', x.id, el.getAttribute('data-rf')).then(function (r) { if (!r.ok) return toast(r.error); x.files = r.files; drawF(r.files); reload(); }).catch(onServerError); }, $('vnFiles'));
+        };
+        drawF(x.files || []);
+        $('vnFile').addEventListener('change', function () {
+          var files = Array.prototype.slice.call(this.files), label = v('vnFileLabel'), inp = this;
+          if (!files.length) return; inp.disabled = true; $('mErr').textContent = 'กำลังอัปโหลด…';
+          files.reduce(function (pr, f) { return pr.then(function () { return upload('vendor', x.id, f, label).then(function (r) { x.files = r.files; drawF(r.files); }); }); }, Promise.resolve())
+            .then(function () { $('mErr').textContent = ''; toast('แนบไฟล์แล้ว'); reload(); }, function (e2) { $('mErr').textContent = 'อัปโหลดไม่สำเร็จ: ' + e2.message; }).then(function () { inp.disabled = false; inp.value = ''; });
+        });
+        var evs = P.data.evals.filter(function (e) { return e.vendorId === x.id; }).sort(function (a, b) { return b.period.localeCompare(a.period); });
+        $('vnEvals').innerHTML = evs.length ? '<table class="ptable"><thead><tr><th>รอบ</th><th class="r">คุณภาพ</th><th class="r">ตรงเวลา</th><th class="r">ราคา</th><th class="r">บริการ</th><th class="r">เฉลี่ย</th><th></th></tr></thead><tbody>'
+          + evs.map(function (e) { return '<tr><td>' + qLabel(e.period) + (e.comment ? '<br><small class="muted">' + esc(e.comment) + '</small>' : '') + '</td><td class="r">' + e.quality + '</td><td class="r">' + e.delivery + '</td><td class="r">' + e.price + '</td><td class="r">' + e.service + '</td><td class="r"><b>' + e.score + '</b><br>' + stars(e.score) + '</td><td><button type="button" class="icon-btn" data-ev="' + e.id + '">' + icon('edit', 16) + '</button></td></tr>'; }).join('')
+          + '</tbody></table>' : '<div class="muted">ยังไม่มีผลประเมิน</div>';
+        on('[data-ev]', 'click', function (el) { evalModal(x, evs.filter(function (e) { return e.id === el.getAttribute('data-ev'); })[0]); }, $('vnEvals'));
+        $('vnEval').addEventListener('click', function () { evalModal(x, null); });
+      },
       submit: function () {
         return call('purSaveVendor', state.token, { id: edit ? x.id : '', name: v('vnName'), contact: v('vnContact'), phone: v('vnPhone'), phone2: v('vnPhone2'), line: v('vnLine'), email: v('vnEmail'), taxId: v('vnTax'),
-          creditDays: v('vnCredit'), bank: v('vnBank'), bankAccount: v('vnAcc'), address: v('vnAddr'), items: v('vnItems'), note: v('vnNote'), active: v('vnActive') }).then(function (r) { if (!r.ok) return r.error; closeModal(); reload('บันทึกผู้ขายแล้ว'); });
+          creditDays: v('vnCredit'), bank: v('vnBank'), bankAccount: v('vnAcc'), address: v('vnAddr'), items: v('vnItems'), note: v('vnNote'), active: v('vnActive'),
+          contractStart: v('vnCs'), contractEnd: v('vnCe'), contractNote: v('vnCn') }).then(function (r) { if (!r.ok) return r.error; closeModal(); reload('บันทึกผู้ขายแล้ว'); });
+      } });
+  }
+
+  // ==================== ตรวจ 3 ทาง (PO ↔ รับของ ↔ ใบแจ้งหนี้) ====================
+  function drawMatch(box, d) {
+    var m = d.match; if (!box || !m) return;
+    var tag = MATCH_TAG[m.status] || ['', ''];
+    var invs = P.data.invoices.filter(function (x) { return x.docId === d.id; });
+    box.innerHTML = '<div class="mstat ' + m.status + '">' + (m.status === 'ok' ? '✓ ' : m.status === 'diff' ? '⚠ ' : '') + esc(m.label) + '</div>'
+      + '<div class="ptable-wrap"><table class="ptable"><thead><tr><th>รายการ</th><th class="r">PO</th><th class="r">รับจริง</th><th class="r">ใบแจ้งหนี้</th><th class="r">ราคา PO</th><th class="r">ราคาใบแจ้งหนี้</th><th></th></tr></thead><tbody>'
+      + m.lines.map(function (l) {
+        return '<tr><td>' + esc(l.name) + '<br><small class="muted">' + esc(l.unit) + '</small>' + (l.issues.length ? '<br><small class="neg">' + l.issues.map(esc).join('<br>') + '</small>' : '') + '</td>'
+          + '<td class="r">' + n3(l.ordered) + '</td><td class="r">' + n3(l.received) + '</td><td class="r">' + (m.invoiceCount ? n3(l.invoiced) : '–') + '</td>'
+          + '<td class="r">' + (l.poPrice === '' ? '–' : baht(l.poPrice)) + '</td><td class="r">' + (l.invPrice === '' ? '–' : baht(l.invPrice)) + '</td><td>' + (m.status === 'norecv' || m.status === 'noinv' ? '' : l.ok ? '<span class="pos">✓</span>' : '<span class="neg">✗</span>') + '</td></tr>';
+      }).join('') + '</tbody></table></div>'
+      + (invs.length ? '<div class="minv">' + invs.map(function (x) {
+        return '<div class="pfile"><b>ใบแจ้งหนี้ ' + esc(x.invoiceNo) + '</b><small>' + dd(x.invoiceDate) + ' · ' + baht(x.amount) + (x.files.length ? ' · ' + x.files.map(fileLink).join(' ') : '') + '</small><button type="button" class="icon-btn" data-inv="' + x.id + '" title="แก้ไข">' + icon('edit', 16) + '</button></div>';
+      }).join('') + '</div>' : '<div class="muted" style="margin-top:6px">ยังไม่มีใบแจ้งหนี้ — กด "เพิ่มใบแจ้งหนี้" เมื่อได้รับจากผู้ขาย</div>');
+    on('[data-inv]', 'click', function (el) { invoiceModal(d, P.data.invoices.filter(function (x) { return x.id === el.getAttribute('data-inv'); })[0]); }, box);
+  }
+  function invoiceModal(d, inv) {
+    var edit = !!inv, recv = {};
+    (d.match ? d.match.lines : []).forEach(function (l) { recv[l.key] = l.received; });
+    var items = edit ? inv.items.map(function (it) { return Object.assign({}, it); }) : d.items.map(function (it) {
+      var k = it.materialId || ('n:' + it.materialName);
+      return { materialId: it.materialId, materialName: it.materialName, qty: recv[k] !== undefined && recv[k] !== 0 ? recv[k] : it.qty, unit: it.unit, price: it.price };
+    });
+    var back = function () { docModal(P.idx.doc[d.id]); };
+    wide({ icon: 'doc', title: (edit ? 'ใบแจ้งหนี้ ' + inv.invoiceNo : 'เพิ่มใบแจ้งหนี้') + ' · ' + d.docNo, sub: d.vendorName + ' · ใส่จำนวนและราคาตามใบแจ้งหนี้ของผู้ขาย',
+      body: '<div class="pform">' + hl(F('ivNo', 'เลขที่ใบแจ้งหนี้ / ใบกำกับภาษี *', edit ? inv.invoiceNo : '')) + F('ivDate', 'วันที่ใบแจ้งหนี้', edit ? inv.invoiceDate : todayIso(), 'date') + '</div>'
+        + '<div class="ptable-wrap"><table class="ptable"><thead><tr><th>รายการ</th><th class="r">จำนวน</th><th class="r">ราคา/หน่วย</th></tr></thead><tbody>'
+        + items.map(function (it, i) { return '<tr><td>' + esc(it.materialName) + ' <small class="muted">' + esc(it.unit || '') + '</small></td><td class="r"><input class="ivq" data-i="' + i + '" type="number" step="any" inputmode="decimal" value="' + esc(it.qty) + '"></td><td class="r"><input class="ivp" data-i="' + i + '" type="number" step="any" inputmode="decimal" value="' + esc(it.price) + '"></td></tr>'; }).join('')
+        + '</tbody></table></div><div class="ptotal">รวม <b id="ivTotal"></b></div>'
+        + '<div class="pform">' + F('ivAmount', 'ยอดตามใบแจ้งหนี้ (เว้นว่าง = คำนวณจากรายการ)', edit ? inv.amount : '', 'number', ' step="any" inputmode="decimal"') + T('ivNote', 'หมายเหตุ', edit ? inv.note : '')
+        + '<div class="pf full"><label>แนบไฟล์ใบแจ้งหนี้ (รูป / PDF)</label><input id="ivFile" type="file" accept="image/*,application/pdf"></div></div>'
+        + (edit && inv.files.length ? '<div>' + inv.files.map(fileLink).join(' ') + '</div>' : ''),
+      ok: 'บันทึก', onCancel: back,
+      foot: edit ? '<button type="button" class="link-btn danger" id="ivDel">' + icon('trash', 16) + 'ลบใบแจ้งหนี้นี้</button>' : '',
+      onOpen: function () {
+        var sum = function () { $('ivTotal').textContent = baht(items.reduce(function (s2, it) { return s2 + (Number(it.qty) || 0) * (Number(it.price) || 0); }, 0)); };
+        on('.ivq', 'input', function (el) { items[+el.getAttribute('data-i')].qty = el.value; sum(); }, $('mBody'));
+        on('.ivp', 'input', function (el) { items[+el.getAttribute('data-i')].price = el.value; sum(); }, $('mBody'));
+        sum();
+        if ($('ivDel')) $('ivDel').addEventListener('click', function () { confirmDelete('ลบใบแจ้งหนี้ ' + inv.invoiceNo + ' ?', function () { return call('purDeleteInvoice', state.token, inv.id); }, back); });
+      },
+      check: function () { return v('ivNo') ? '' : 'กรอกเลขที่ใบแจ้งหนี้'; },
+      submit: function () {
+        var file = $('ivFile').files[0];
+        return call('purSaveInvoice', state.token, { id: edit ? inv.id : '', docId: d.id, invoiceNo: v('ivNo'), invoiceDate: v('ivDate'), amount: v('ivAmount'), note: v('ivNote'), items: items }).then(function (r) {
+          if (!r.ok) return r.error;
+          var done = function () { closeModal(); reload('บันทึกใบแจ้งหนี้แล้ว').then(back); };
+          if (!file) return done();
+          return upload('invoice', r.id, file, 'ใบแจ้งหนี้ / ใบกำกับภาษี').then(done, function (e) { closeModal(); reload('บันทึกแล้ว แต่แนบไฟล์ไม่สำเร็จ: ' + e.message).then(back); });
+        });
+      } });
+  }
+
+  // ==================== เปรียบเทียบราคา (ใบเสนอราคาหลายเจ้า) ====================
+  function rfqs() {
+    $('main').innerHTML = '<h3>เปรียบเทียบราคา</h3><p class="lead">รวบรวมใบเสนอราคาจากผู้ขายหลายเจ้า เทียบราคา ระยะเวลาส่ง เงื่อนไขชำระเงิน และคุณภาพ ก่อนตัดสินใจสั่งซื้อ</p>'
+      + searchBar('rfq', 'ค้นหาเรื่อง / ผู้ขาย', '<button class="btn btn-sm btn-primary" id="pAddRfq">' + icon('plus', 16) + 'เปรียบเทียบใหม่</button>') + '<div id="pList" class="plist"></div>';
+    var draw = function () {
+      var list = P.data.rfqs.slice().sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).filter(function (r) {
+        var qs = P.data.quotes.filter(function (q) { return q.rfqId === r.id; });
+        return match(P.q.rfq, r.title + ' ' + qs.map(function (q) { return q.vendorName; }).join(' '));
+      });
+      $('pList').innerHTML = list.map(function (r) {
+        var qs = P.data.quotes.filter(function (q) { return q.rfqId === r.id; }), win = qs.filter(function (q) { return q.id === r.winnerId; })[0];
+        var po = r.poId ? P.idx.doc[r.poId] : null;
+        return '<button class="prow click" data-rfq="' + r.id + '"><div class="pinfo"><b>' + esc(r.title) + '</b><small>' + r.items.length + ' รายการ · ใบเสนอราคา ' + qs.length + ' เจ้า · สร้าง ' + dd(String(r.createdAt).slice(0, 10)) + '</small>'
+          + '<div>' + (win ? '<span class="tag ok">เลือก: ' + esc(win.vendorName) + '</span>' : '<span class="tag no">ยังไม่ได้เลือก</span>') + (po ? '<span class="tag code">PO ' + esc(po.docNo) + '</span>' : '') + '</div></div>'
+          + '<div class="pprice">' + (win ? baht(win.total) : qs.length ? 'ต่ำสุด ' + baht(Math.min.apply(null, qs.map(function (q) { return q.total; }))) : '') + '</div></button>';
+      }).join('') || '<div class="panel muted">ยังไม่มีการเปรียบเทียบราคา — กด "เปรียบเทียบใหม่"</div>';
+      on('[data-rfq]', 'click', function (el) { rfqDetail(el.getAttribute('data-rfq')); }, $('pList'));
+    };
+    bindSearch('rfq', draw);
+    $('pAddRfq').addEventListener('click', function () { rfqModal(null); });
+    draw();
+  }
+  function rfqModal(r) {
+    var edit = !!r;
+    var prs = P.data.docs.filter(function (x) { return x.type === 'PR' && x.status !== 'cancelled'; });
+    var items = edit ? r.items.map(function (it) { return Object.assign({}, it); }) : [{ materialId: '', materialName: '', qty: '', unit: '' }];
+    wide({ icon: 'list', title: edit ? 'แก้ไข · ' + r.title : 'เปรียบเทียบราคาใหม่', sub: 'ระบุสิ่งที่จะซื้อ แล้วเพิ่มใบเสนอราคาของแต่ละผู้ขาย',
+      body: '<datalist id="matList2">' + materialList().map(function (m) { return '<option value="' + esc(m.name) + '">'; }).join('') + '</datalist>'
+        + '<div class="pform">' + hl(F('rqTitle', 'เรื่อง *', edit ? r.title : '', 'text', ' placeholder="เช่น ซื้อพริกป่น ธ.ค. 69"'))
+        + S('rqPr', 'อ้างอิง PR (ดึงรายการมาให้)', [['', '— ไม่อ้างอิง —']].concat(prs.map(function (x) { return [x.id, x.docNo + ' · ' + x.items.length + ' รายการ']; })), edit ? r.prId : '') + '</div>'
+        + '<div class="psec"><div class="psec-h"><b>รายการที่ต้องการซื้อ</b><button type="button" class="btn btn-sm btn-line" id="rqAdd">' + icon('plus', 16) + 'เพิ่มรายการ</button></div><div id="rqItems"></div></div>'
+        + '<div class="pform">' + T('rqNote', 'หมายเหตุ', edit ? r.note : '') + '</div>',
+      ok: 'บันทึก', onCancel: edit ? function () { rfqDetail(r.id); } : null,
+      foot: edit ? '<button type="button" class="link-btn danger" id="rqDel">' + icon('trash', 16) + 'ลบเรื่องนี้ (รวมใบเสนอราคา)</button>' : '',
+      onOpen: function () {
+        var draw = function () {
+          $('rqItems').innerHTML = '<div class="pitems">' + items.map(function (it, i) {
+            return '<div class="pitem rq" data-i="' + i + '"><input class="iname" list="matList2" placeholder="วัตถุดิบ" value="' + esc(it.materialName) + '"><input class="iqty" type="number" step="any" inputmode="decimal" placeholder="จำนวน" value="' + esc(it.qty) + '"><input class="iunit" placeholder="หน่วย" value="' + esc(it.unit) + '"><button type="button" class="icon-btn" data-rm="' + i + '">' + icon('trash', 16) + '</button></div>';
+          }).join('') + '</div>';
+          on('.pitem input', 'input', function (el) {
+            var it = items[+el.closest('.pitem').getAttribute('data-i')];
+            if (el.classList.contains('iname')) { it.materialName = el.value; var m = P.data.materials.filter(function (x) { return x.name === el.value; })[0]; it.materialId = m ? m.id : ''; if (m && !it.unit) { it.unit = m.unit; el.closest('.pitem').querySelector('.iunit').value = m.unit; } }
+            else if (el.classList.contains('iqty')) it.qty = el.value; else it.unit = el.value;
+          }, $('rqItems'));
+          on('[data-rm]', 'click', function (el) { items.splice(+el.getAttribute('data-rm'), 1); if (!items.length) items.push({ materialId: '', materialName: '', qty: '', unit: '' }); draw(); }, $('rqItems'));
+        };
+        draw();
+        $('rqAdd').addEventListener('click', function () { items.push({ materialId: '', materialName: '', qty: '', unit: '' }); draw(); });
+        $('rqPr').addEventListener('change', function () {
+          var pr = P.idx.doc[this.value]; if (!pr) return;
+          items = pr.items.map(function (it) { return { materialId: it.materialId, materialName: it.materialName, qty: it.qty, unit: it.unit }; }); draw();
+          if (!v('rqTitle')) $('rqTitle').value = 'ตาม ' + pr.docNo;
+        });
+        if ($('rqDel')) $('rqDel').addEventListener('click', function () { confirmDelete('ลบ "' + r.title + '" และใบเสนอราคาทั้งหมด?', function () { return call('purDeleteRfq', state.token, r.id); }); });
+      },
+      check: function () { return !v('rqTitle') ? 'กรอกเรื่อง' : !items.some(function (it) { return it.materialName.trim() && it.qty !== ''; }) ? 'เพิ่มรายการ (ชื่อ + จำนวน) อย่างน้อย 1 รายการ' : ''; },
+      submit: function () {
+        var keep = items.filter(function (it) { return it.materialName.trim() && it.qty !== ''; }).map(function (it, i) { return Object.assign({}, it, { key: it.key || ('L' + Date.now().toString(36) + i) }); });
+        return call('purSaveRfq', state.token, { id: edit ? r.id : '', title: v('rqTitle'), prId: v('rqPr'), note: v('rqNote'), items: keep }).then(function (res) {
+          if (!res.ok) return res.error; closeModal(); reload('บันทึกแล้ว').then(function () { rfqDetail(res.id); });
+        });
+      } });
+  }
+  function rfqDetail(id) {
+    var r = P.data.rfqs.filter(function (x) { return x.id === id; })[0]; if (!r) return;
+    var qs = P.data.quotes.filter(function (q) { return q.rfqId === id; }).sort(function (a, b) { return a.total - b.total; });
+    var priceOf = function (q, key) { var p = q.items.filter(function (x) { return x.key === key; })[0]; return p && p.price !== '' ? Number(p.price) : null; };
+    var best = {}; r.items.forEach(function (it) { var ps = qs.map(function (q) { return priceOf(q, it.key); }).filter(function (p) { return p !== null; }); best[it.key] = ps.length ? Math.min.apply(null, ps) : null; });
+    var minTotal = qs.length ? Math.min.apply(null, qs.map(function (q) { return q.total; })) : null;
+    var minLead = Math.min.apply(null, qs.map(function (q) { return q.leadDays === '' ? 1e9 : q.leadDays; }).concat([1e9]));
+    var head = '<tr><th>รายการ</th><th class="r">จำนวน</th>' + qs.map(function (q) { return '<th class="r qh' + (q.id === r.winnerId ? ' win' : '') + '">' + esc(q.vendorName) + (q.id === r.winnerId ? '<br><span class="tag ok">เลือกแล้ว</span>' : '') + '</th>'; }).join('') + '</tr>';
+    var rows = r.items.map(function (it) {
+      return '<tr><td>' + esc(it.materialName) + '</td><td class="r">' + n3(it.qty) + ' ' + esc(it.unit) + '</td>' + qs.map(function (q) {
+        var p = priceOf(q, it.key);
+        return '<td class="r' + (p !== null && p === best[it.key] && qs.length > 1 ? ' best' : '') + '">' + (p === null ? '<span class="muted">ไม่เสนอ</span>' : baht(p) + '<br><small class="muted">รวม ' + baht(p * (Number(it.qty) || 0)) + '</small>') + '</td>';
+      }).join('') + '</tr>';
+    }).join('');
+    var row = function (label, fn) { return '<tr class="sub"><td colspan="2"><b>' + label + '</b></td>' + qs.map(function (q) { return '<td class="r">' + fn(q) + '</td>'; }).join('') + '</tr>'; };
+    var table = qs.length ? '<div class="ptable-wrap"><table class="ptable cmp"><thead>' + head + '</thead><tbody>' + rows
+      + row('ยอดรวม', function (q) { return '<b' + (q.total === minTotal && qs.length > 1 ? ' class="pos"' : '') + '>' + baht(q.total) + '</b>' + (q.total === minTotal && qs.length > 1 ? '<br><small class="pos">ถูกที่สุด</small>' : ''); })
+      + row('ส่งของภายใน', function (q) { return q.leadDays === '' ? '–' : '<span' + (q.leadDays === minLead && qs.length > 1 ? ' class="pos"' : '') + '>' + q.leadDays + ' วัน</span>'; })
+      + row('เครดิต / เงื่อนไขชำระ', function (q) { return (q.creditDays !== '' ? q.creditDays + ' วัน' : '–') + (q.paymentTerms ? '<br><small>' + esc(q.paymentTerms) + '</small>' : ''); })
+      + row('ยืนราคาถึง', function (q) { return q.validUntil ? dd(q.validUntil) : '–'; })
+      + row('สเปก / คุณภาพ', function (q) { return q.spec ? '<small>' + esc(q.spec) + '</small>' : '–'; })
+      + row('ไฟล์', function (q) { return q.files.length ? q.files.map(fileLink).join('<br>') : '–'; })
+      + row('', function (q) { return '<button type="button" class="btn btn-sm btn-line" data-qe="' + q.id + '">แก้ไข</button> ' + (q.id === r.winnerId ? '' : '<button type="button" class="btn btn-sm btn-primary" data-qw="' + q.id + '">เลือกเจ้านี้</button>'); })
+      + '</tbody></table></div>' : '<div class="muted">ยังไม่มีใบเสนอราคา — กด "เพิ่มใบเสนอราคา" ของแต่ละผู้ขาย</div>';
+    var win = qs.filter(function (q) { return q.id === r.winnerId; })[0], po = r.poId ? P.idx.doc[r.poId] : null;
+    wide({ icon: 'list', title: r.title, sub: r.items.length + ' รายการ · ' + qs.length + ' ผู้ขาย', noOk: true, cancel: 'ปิด',
+      body: (win ? '<div class="note"><b>เลือก: ' + esc(win.vendorName) + '</b> (' + baht(win.total) + ') · ' + dd(r.decidedAt) + (r.reason ? '<br>เหตุผล: ' + esc(r.reason) : '') + (po ? '<br>PO: ' + esc(po.docNo) : '') + '</div>' : '') + table,
+      foot: '<div class="pfoot"><button type="button" class="btn btn-sm btn-primary" id="qAdd">' + icon('plus', 16) + 'เพิ่มใบเสนอราคา</button><button type="button" class="btn btn-sm btn-line" id="rqEdit">' + icon('edit', 16) + 'แก้ไขรายการ</button>'
+        + (win && !po ? '<button type="button" class="btn btn-sm btn-line" id="rqPo">' + icon('doc', 16) + 'ลง PO จาก PEAK (ผู้ขายที่เลือก)</button>' : '') + (win ? '<button type="button" class="btn btn-sm btn-line" id="rqUndo">ยกเลิกการเลือก</button>' : '') + '</div>',
+      onOpen: function () {
+        $('qAdd').addEventListener('click', function () { quoteModal(r, null); });
+        $('rqEdit').addEventListener('click', function () { rfqModal(r); });
+        on('[data-qe]', 'click', function (el) { quoteModal(r, qs.filter(function (q) { return q.id === el.getAttribute('data-qe'); })[0]); }, $('mBody'));
+        on('[data-qw]', 'click', function (el) { decideModal(r, qs.filter(function (q) { return q.id === el.getAttribute('data-qw'); })[0], minTotal); }, $('mBody'));
+        if ($('rqUndo')) $('rqUndo').addEventListener('click', function () { call('purDecideRfq', state.token, r.id, '', '').then(function () { closeModal(); reload('ยกเลิกการเลือกแล้ว').then(function () { rfqDetail(r.id); }); }).catch(onServerError); });
+        if ($('rqPo')) $('rqPo').addEventListener('click', function () {
+          var vn = ven(win.vendorId);
+          docModal(null, 'PO', { id: r.prId || '', rfqId: r.id, docNo: r.title, vendorId: win.vendorId, vendorName: win.vendorName, vendorPhone: vn ? (vn.phone || vn.phone2 || '') : '', deliveryDate: win.leadDays !== '' ? addDays(todayIso(), Number(win.leadDays)) : '',
+            items: r.items.map(function (it) { return { materialId: it.materialId, materialName: it.materialName, qty: it.qty, unit: it.unit, price: priceOf(win, it.key) === null ? '' : priceOf(win, it.key) }; }) });
+        });
+      } });
+  }
+  function decideModal(r, q, minTotal) {
+    wide({ icon: 'check', title: 'เลือก ' + q.vendorName, sub: r.title + ' · ' + baht(q.total),
+      body: (q.total > minTotal ? '<div class="note">เจ้านี้ไม่ใช่ราคาต่ำสุด (ต่ำสุด ' + baht(minTotal) + ') — ควรระบุเหตุผล เช่น คุณภาพดีกว่า ส่งเร็วกว่า เครดิตยาวกว่า</div>' : '')
+        + '<div class="pform">' + T('dcReason', 'เหตุผลที่เลือก', '') + '</div>',
+      ok: 'ยืนยันเลือกเจ้านี้', onCancel: function () { rfqDetail(r.id); },
+      check: function () { return q.total > minTotal && !v('dcReason') ? 'เจ้านี้ไม่ใช่ราคาต่ำสุด กรุณาใส่เหตุผล' : ''; },
+      submit: function () { return call('purDecideRfq', state.token, r.id, q.id, v('dcReason')).then(function (res) { if (!res.ok) return res.error; closeModal(); reload('เลือกผู้ขายแล้ว').then(function () { rfqDetail(r.id); }); }); } });
+  }
+  function quoteModal(r, q) {
+    var edit = !!q, prices = {};
+    if (edit) q.items.forEach(function (p) { prices[p.key] = p.price; });
+    wide({ icon: 'doc', title: (edit ? 'แก้ไขใบเสนอราคา · ' + q.vendorName : 'เพิ่มใบเสนอราคา') , sub: r.title,
+      body: '<div class="pform">' + S('qtVen', 'ผู้ขาย', vendorOptions('— เลือก / พิมพ์ชื่อด้านขวา —'), edit ? q.vendorId : '') + F('qtVName', 'ชื่อผู้ขาย *', edit ? q.vendorName : '')
+        + F('qtNo', 'เลขที่ใบเสนอราคา', edit ? q.quoteNo : '') + F('qtDate', 'วันที่เสนอ', edit ? q.quoteDate : todayIso(), 'date')
+        + F('qtValid', 'ยืนราคาถึง', edit ? q.validUntil : '', 'date') + F('qtLead', 'ส่งของภายใน (วัน)', edit ? q.leadDays : '', 'number', ' inputmode="numeric"')
+        + F('qtCredit', 'เครดิต (วัน)', edit ? q.creditDays : '', 'number', ' inputmode="numeric"') + F('qtTerms', 'เงื่อนไขชำระเงิน', edit ? q.paymentTerms : '', 'text', ' placeholder="เช่น โอนก่อนส่ง / วางบิล 30 วัน"') + '</div>'
+        + '<div class="ptable-wrap"><table class="ptable"><thead><tr><th>รายการ</th><th class="r">จำนวน</th><th class="r">ราคา/หน่วย</th></tr></thead><tbody>'
+        + r.items.map(function (it) { return '<tr><td>' + esc(it.materialName) + '</td><td class="r">' + n3(it.qty) + ' ' + esc(it.unit) + '</td><td class="r"><input class="qtp" data-k="' + esc(it.key) + '" type="number" step="any" inputmode="decimal" placeholder="ไม่เสนอ = ว่าง" value="' + esc(prices[it.key] === undefined ? '' : prices[it.key]) + '"></td></tr>'; }).join('')
+        + '</tbody></table></div><div class="ptotal">รวม <b id="qtTotal"></b></div>'
+        + '<div class="pform">' + T('qtSpec', 'สเปก / คุณภาพ', edit ? q.spec : '') + T('qtNote', 'หมายเหตุ', edit ? q.note : '')
+        + '<div class="pf full"><label>แนบไฟล์ใบเสนอราคา (รูป / PDF)</label><input id="qtFile" type="file" accept="image/*,application/pdf"></div></div>',
+      ok: 'บันทึก', onCancel: function () { rfqDetail(r.id); },
+      foot: edit ? '<button type="button" class="link-btn danger" id="qtDel">' + icon('trash', 16) + 'ลบใบเสนอราคานี้</button>' : '',
+      onOpen: function () {
+        var sum = function () { var t2 = 0; Array.prototype.forEach.call($('mBody').querySelectorAll('.qtp'), function (el) { var it = r.items.filter(function (x) { return x.key === el.getAttribute('data-k'); })[0]; if (el.value !== '') t2 += Number(el.value) * (Number(it.qty) || 0); }); $('qtTotal').textContent = baht(t2); };
+        on('.qtp', 'input', sum, $('mBody')); sum();
+        $('qtVen').addEventListener('change', function () { var vn = ven(this.value); if (vn) { $('qtVName').value = vn.name; if (!v('qtCredit') && vn.creditDays !== '') $('qtCredit').value = vn.creditDays; } });
+        if ($('qtDel')) $('qtDel').addEventListener('click', function () { confirmDelete('ลบใบเสนอราคาของ ' + q.vendorName + ' ?', function () { return call('purDeleteQuote', state.token, q.id); }, function () { rfqDetail(r.id); }); });
+      },
+      check: function () { return !v('qtVName') ? 'เลือกหรือกรอกชื่อผู้ขาย' : !Array.prototype.some.call($('mBody').querySelectorAll('.qtp'), function (el) { return el.value !== ''; }) ? 'ใส่ราคาอย่างน้อย 1 รายการ' : ''; },
+      submit: function () {
+        var items = Array.prototype.map.call($('mBody').querySelectorAll('.qtp'), function (el) { return { key: el.getAttribute('data-k'), price: el.value }; });
+        var file = $('qtFile').files[0];
+        return call('purSaveQuote', state.token, { id: edit ? q.id : '', rfqId: r.id, vendorId: v('qtVen'), vendorName: v('qtVName'), quoteNo: v('qtNo'), quoteDate: v('qtDate'), validUntil: v('qtValid'),
+          leadDays: v('qtLead'), creditDays: v('qtCredit'), paymentTerms: v('qtTerms'), spec: v('qtSpec'), note: v('qtNote'), items: items }).then(function (res) {
+          if (!res.ok) return res.error;
+          var done = function () { closeModal(); reload('บันทึกใบเสนอราคาแล้ว').then(function () { rfqDetail(r.id); }); };
+          if (!file) return done();
+          return upload('quote', res.id, file, 'ใบเสนอราคา').then(done, function (e) { closeModal(); reload('บันทึกแล้ว แต่แนบไฟล์ไม่สำเร็จ: ' + e.message).then(function () { rfqDetail(r.id); }); });
+        });
+      } });
+  }
+
+  // ==================== บริหารคู่ค้า: สัญญา + ประเมินผู้ขาย ====================
+  function quarterOf(iso) { return iso.slice(0, 4) + '-Q' + (Math.floor((+iso.slice(5, 7) - 1) / 3) + 1); }
+  function quarterList(n) {
+    var out = [], y = +todayIso().slice(0, 4), q = +quarterOf(todayIso()).slice(-1);
+    for (var i = 0; i < n; i++) { out.push(y + '-Q' + q); q--; if (!q) { q = 4; y--; } }
+    return out;
+  }
+  function qLabel(p) { var y = +p.slice(0, 4); return 'ไตรมาส ' + p.slice(-1) + '/' + (y + 543); }
+  function contractInfo(x) {
+    if (!x.contractEnd) return null;
+    var left = days(todayIso(), x.contractEnd);
+    return { left: left, cls: left < 0 ? 'lock' : left <= 60 ? 'no' : 'ok', text: left < 0 ? 'สัญญาหมดอายุแล้ว' : left <= 60 ? 'สัญญาเหลือ ' + left + ' วัน' : 'สัญญาถึง ' + dd(x.contractEnd) };
+  }
+  function latestEval(vid) { return P.data.evals.filter(function (e) { return e.vendorId === vid; }).sort(function (a, b) { return b.period.localeCompare(a.period); })[0]; }
+  function stars(n) { var r = Math.round(Number(n) || 0); return '<span class="stars">' + '★★★★★'.slice(0, r) + '<i>' + '★★★★★'.slice(r) + '</i></span>'; }
+  function evalModal(x, e) {
+    var periods = quarterList(6), cur = e ? e.period : periods[0];
+    var K = [['quality', 'คุณภาพสินค้า'], ['delivery', 'ส่งตรงเวลา'], ['price', 'ราคา'], ['service', 'บริการ / การติดต่อ']];
+    var opts = [['', '—'], ['5', '5 ดีมาก'], ['4', '4 ดี'], ['3', '3 พอใช้'], ['2', '2 ต้องปรับปรุง'], ['1', '1 ไม่ผ่าน']];
+    wide({ icon: 'check', title: 'ประเมินผู้ขาย · ' + x.name, sub: 'ให้คะแนน 1–5 ต่อไตรมาส · ระบบเสนอคะแนนจากข้อมูลจริงให้ แก้ได้',
+      body: '<div class="pform">' + S('evP', 'รอบประเมิน', periods.map(function (p) { return [p, qLabel(p)]; }), cur) + '<div class="pf"></div></div>'
+        + '<div id="evMet" class="note">กำลังดึงข้อมูลจริงของไตรมาสนี้…</div>'
+        + '<div class="pform">' + K.map(function (k) { return S('ev_' + k[0], k[1], opts, e ? e[k[0]] : ''); }).join('') + T('evComment', 'ความเห็น', e ? e.comment : '') + staffSel('evBy', 'ผู้ประเมิน', e ? e.evaluator : '') + '</div>',
+      ok: 'บันทึกผลประเมิน', onCancel: function () { vendorModal(ven(x.id)); },
+      foot: e ? '<button type="button" class="link-btn danger" id="evDel">' + icon('trash', 16) + 'ลบผลประเมินนี้</button>' : '',
+      onOpen: function () {
+        var loadMet = function () {
+          var p = v('evP'), ex = P.data.evals.filter(function (z) { return z.vendorId === x.id && z.period === p; })[0];
+          call('purVendorMetrics', state.token, p).then(function (r) {
+            if (!$('evMet') || v('evP') !== p) return;
+            var m = r.metrics && r.metrics[x.id];
+            $('evMet').innerHTML = !m ? 'ไตรมาสนี้ยังไม่มีข้อมูล PO / รับของ ของผู้ขายนี้ — ให้คะแนนตามความเห็น'
+              : 'ข้อมูลจริง ' + qLabel(p) + ': PO ' + m.poCount + ' ใบ (' + baht(m.poTotal) + ')' + (m.delivered ? ' · ส่งตรงเวลา ' + m.onTime + '/' + m.delivered + ' (' + m.onTimeRate + '%)' : '')
+                + (m.qcChecked ? ' · QC ไม่ผ่าน ' + m.qcFail + '/' + m.qcChecked : '') + (m.priceUp || m.priceDown ? ' · ขึ้นราคา ' + m.priceUp + ' ครั้ง ลด ' + m.priceDown + ' ครั้ง' : '');
+            if (!ex && m) {
+              if (m.suggestQuality !== '' && !v('ev_quality')) $('ev_quality').value = String(m.suggestQuality);
+              if (m.suggestDelivery !== '' && !v('ev_delivery')) $('ev_delivery').value = String(m.suggestDelivery);
+              if (m.suggestPrice !== '' && !v('ev_price')) $('ev_price').value = String(m.suggestPrice);
+            }
+          }).catch(function () { if ($('evMet')) $('evMet').textContent = 'ดึงข้อมูลจริงไม่ได้ — ให้คะแนนตามความเห็น'; });
+          if (ex) { K.forEach(function (k) { $('ev_' + k[0]).value = String(ex[k[0]]); }); $('evComment').value = ex.comment || ''; }
+        };
+        $('evP').addEventListener('change', loadMet); loadMet();
+        if ($('evDel')) $('evDel').addEventListener('click', function () { confirmDelete('ลบผลประเมิน ' + qLabel(e.period) + ' ?', function () { return call('purDeleteEval', state.token, e.id); }, function () { vendorModal(ven(x.id)); }); });
+      },
+      check: function () { return K.some(function (k) { return !v('ev_' + k[0]); }) ? 'ให้คะแนนครบ 4 หัวข้อ' : ''; },
+      submit: function () {
+        var rec = { vendorId: x.id, period: v('evP'), comment: v('evComment'), evaluator: v('evBy') };
+        K.forEach(function (k) { rec[k[0]] = v('ev_' + k[0]); });
+        return call('purSaveEval', state.token, rec).then(function (r) { if (!r.ok) return r.error; closeModal(); reload('บันทึกผลประเมินแล้ว').then(function () { vendorModal(ven(x.id)); }); });
       } });
   }
 
@@ -574,8 +868,9 @@
     var t = todayIso(), from = P.q.repFrom || monthStart(t), to = P.q.repTo || t;
     var lastM = addDays(monthStart(t), -1);
     $('main').innerHTML = '<h3>รายงาน / พิมพ์</h3><p class="lead">เลือกช่วงวันที่ → แสดงรายงาน → พิมพ์ หรือบันทึกเป็น PDF (เลือก "บันทึกเป็น PDF" ในหน้าพิมพ์)</p>'
-      + '<div class="panel noprint"><div class="pform">' + S('rType', 'ประเภทรายงาน', [['stock', 'รายงานเบิกจ่ายสินค้า (รับเข้า-จ่ายออก)'], ['reorder', 'รายงานสินค้าที่ต้องจัดซื้อ (ต่ำกว่า Minimum)'], ['balance', 'รายงานสต๊อกคงเหลือ + มูลค่า (ณ วันที่)'], ['price', 'รายงานประวัติราคา (ตามผู้ขาย / วัตถุดิบ)'], ['PO', 'รายงานใบสั่งซื้อ (PO)'], ['PR', 'รายงานใบขอซื้อ (PR)']], P.q.repType || 'stock') + '<div class="pf"></div>'
+      + '<div class="panel noprint"><div class="pform">' + S('rType', 'ประเภทรายงาน', [['stock', 'รายงานเบิกจ่ายสินค้า (รับเข้า-จ่ายออก)'], ['reorder', 'รายงานสินค้าที่ต้องจัดซื้อ (ต่ำกว่า Minimum)'], ['balance', 'รายงานสต๊อกคงเหลือ + มูลค่า (ณ วันที่)'], ['price', 'รายงานประวัติราคา (ตามผู้ขาย / วัตถุดิบ)'], ['match', 'รายงานตรวจ 3 ทาง (PO / รับของ / ใบแจ้งหนี้)'], ['veval', 'รายงานประเมินผู้ขาย (จัดอันดับ)'], ['PO', 'รายงานใบสั่งซื้อ (PO)'], ['PR', 'รายงานใบขอซื้อ (PR)']], P.q.repType || 'stock') + '<div class="pf"></div>'
       + F('rFrom', 'ตั้งแต่วันที่', from, 'date') + F('rTo', 'ถึงวันที่', to, 'date')
+      + S('rPeriod', 'รอบประเมิน', quarterList(8).map(function (p) { return [p, qLabel(p)]; }), P.q.repPeriod || quarterList(1)[0])
       + S('rVen', 'ผู้ขาย', [['', 'ทุกผู้ขาย']].concat(P.data.vendors.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'th'); }).map(function (x) { return [x.id, x.name]; })), P.q.repVen || '')
       + S('rMat', 'วัตถุดิบ', [['', 'ทุกรายการ']].concat(materialList().map(function (m) { return [m.id, m.name]; })), P.q.repMat || '')
       + '<div class="pf"><label>&nbsp;</label><label class="pchk"><input type="checkbox" id="rDetail"' + (P.q.repDetail ? ' checked' : '') + '> แสดงรายการรับเข้า-จ่ายออกทุกรายการ</label></div></div>'
@@ -583,7 +878,8 @@
       + '<div class="actions"><button class="btn btn-primary" id="rGo">' + icon('chart', 18) + 'แสดงรายงาน</button><button class="btn btn-line" id="rPrint">' + icon('print', 18) + 'พิมพ์ / PDF</button></div></div>'
       + '<div id="rOut"></div>';
     var stockOpts = function () {
-      var ty = v('rType'), st = ty === 'stock', bal = ty === 'balance', pr = ty === 'price', ro = ty === 'reorder';
+      var ty = v('rType'), st = ty === 'stock', bal = ty === 'balance', pr = ty === 'price', ro = ty === 'reorder' || ty === 'veval';
+      $('rPeriod').closest('.pf').style.display = ty === 'veval' ? '' : 'none';
       $('rMat').closest('.pf').style.display = st || pr ? '' : 'none';
       $('rDetail').closest('.pf').style.display = st ? '' : 'none';
       $('rVen').closest('.pf').style.display = pr ? '' : 'none';
@@ -596,6 +892,20 @@
     $('rType').addEventListener('change', function () { P.q.repType = this.value; stockOpts(); $('rOut').innerHTML = ''; });
     var run = function (print) {
       P.q.repFrom = v('rFrom'); P.q.repTo = v('rTo'); P.q.repMat = v('rMat'); P.q.repDetail = $('rDetail').checked; P.q.repType = v('rType');
+      if (P.q.repType === 'veval') {
+        P.q.repPeriod = v('rPeriod');
+        $('rOut').innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังสร้างรายงาน…</div>';
+        return call('purVendorReport', state.token, P.q.repPeriod).then(function (r) {
+          if (state.page !== 'p_rep') return;
+          if (!r.ok) { $('rOut').innerHTML = '<div class="panel err">' + esc(r.error) + '</div>'; return; }
+          drawVendorReport(r); if (print) setTimeout(function () { window.print(); }, 300);
+        }).catch(onServerError);
+      }
+      if (P.q.repType === 'match' && P.q.repFrom && P.q.repTo && P.q.repFrom <= P.q.repTo) {
+        $('rOut').innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังสร้างรายงาน…</div>';
+        P.data = null;
+        return P.load().then(function () { if (state.page !== 'p_rep') return; drawMatchReport(P.q.repFrom, P.q.repTo); if (print) setTimeout(function () { window.print(); }, 300); }).catch(onServerError);
+      }
       if (P.q.repType === 'reorder') {   // ใช้ยอดคงเหลือปัจจุบัน — โหลดข้อมูลใหม่ก่อน
         $('rOut').innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังสร้างรายงาน…</div>';
         P.data = null;
@@ -718,6 +1028,39 @@
     $('rOut').innerHTML = reportWrap('รายงานประวัติราคา', '<span>วันที่มีผล <b>' + dd(r.from) + ' – ' + dd(r.to) + '</b></span>' + (vn ? '<span>ผู้ขาย <b>' + esc(vn.name) + '</b></span>' : '') + (mm ? '<span>วัตถุดิบ <b>' + esc(mm.name) + '</b></span>' : ''), body);
   }
 
+  // รายงานตรวจ 3 ทาง: PO ตามวันที่สั่ง
+  function drawMatchReport(from, to) {
+    var pos = P.data.docs.filter(function (d) { return d.type === 'PO' && d.status !== 'cancelled' && d.orderDate >= from && d.orderDate <= to; })
+      .sort(function (a, b) { return String(a.orderDate).localeCompare(String(b.orderDate)) || String(a.docNo).localeCompare(String(b.docNo)); });
+    var cnt = function (st) { return pos.filter(function (d) { return d.match && d.match.status === st; }).length; };
+    var body = '<div class="rbox">' + [['PO ทั้งหมด', pos.length + ' ใบ'], ['ตรงกันครบ 3 ทาง', cnt('ok') + ' ใบ'], ['ไม่ตรง', cnt('diff') + ' ใบ'], ['รอรับของ / รอใบแจ้งหนี้', (cnt('norecv') + cnt('noinv')) + ' ใบ']]
+        .map(function (b) { return '<div><span>' + b[0] + '</span><b>' + b[1] + '</b></div>'; }).join('') + '</div>'
+      + '<h5>ผลตรวจ 3 ทาง <small>(' + pos.length + ' ใบ)</small></h5><table class="rt"><thead><tr><th>PO / วันที่</th><th>ผู้ขาย</th><th class="r">ยอด PO</th><th>ใบแจ้งหนี้</th><th class="r">ยอดใบแจ้งหนี้</th><th>ผล</th><th>รายละเอียดที่ไม่ตรง</th><th>การชำระ</th></tr></thead><tbody>'
+      + (pos.map(function (d) {
+        var m = d.match || {}, invs = P.data.invoices.filter(function (x) { return x.docId === d.id; });
+        var issues = (m.lines || []).filter(function (l) { return !l.ok; }).map(function (l) { return esc(l.name) + ': ' + l.issues.map(esc).join(', '); });
+        return '<tr><td class="nw"><b>' + esc(d.docNo) + '</b><br>' + dd(d.orderDate) + '</td><td>' + esc(d.vendorName) + '</td><td class="r">' + baht(d.total) + '</td><td>' + (invs.map(function (x) { return esc(x.invoiceNo); }).join('<br>') || '–') + '</td>'
+          + '<td class="r">' + (invs.length ? baht(m.invoiceTotal) : '–') + '</td><td class="nw ' + (m.status === 'ok' ? 'pos' : m.status === 'diff' ? 'neg' : '') + '">' + esc(m.label || '') + '</td><td><small>' + (m.status === 'diff' ? issues.join('<br>') : '') + '</small></td>'
+          + '<td>' + (PAY_ST[d.paymentStatus] || '') + (d.matchNote ? '<br><small class="neg">ชำระแม้ไม่ตรง: ' + esc(d.matchNote) + '</small>' : '') + '</td></tr>';
+      }).join('') || '<tr><td colspan="8" class="c muted">ไม่มี PO ในช่วงนี้</td></tr>') + '</tbody></table>';
+    $('rOut').innerHTML = reportWrap('รายงานตรวจ 3 ทาง (PO / รับของ / ใบแจ้งหนี้)', '<span>วันที่สั่ง <b>' + dd(from) + ' – ' + dd(to) + '</b></span>', body);
+  }
+  // รายงานประเมินผู้ขาย (จัดอันดับตามคะแนนเฉลี่ย) + ตัวชี้วัดจากข้อมูลจริง
+  function drawVendorReport(r) {
+    var ev = r.rows.filter(function (x) { return x.eval; });
+    var avg = ev.length ? Math.round(ev.reduce(function (a, x) { return a + x.eval.score; }, 0) / ev.length * 100) / 100 : '';
+    var body = '<div class="rbox">' + [['ผู้ขายที่ประเมินแล้ว', ev.length + ' ราย'], ['ยังไม่ประเมิน (มี PO)', (r.rows.length - ev.length) + ' ราย'], ['คะแนนเฉลี่ย', avg === '' ? '–' : avg + ' / 5'], ['ต่ำกว่า 3 คะแนน', ev.filter(function (x) { return x.eval.score < 3; }).length + ' ราย']]
+        .map(function (b) { return '<div><span>' + b[0] + '</span><b>' + b[1] + '</b></div>'; }).join('') + '</div>'
+      + '<h5>จัดอันดับผู้ขาย <small>(' + qLabel(r.period) + ')</small></h5><table class="rt"><thead><tr><th class="c">อันดับ</th><th>ผู้ขาย</th><th class="r">คุณภาพ</th><th class="r">ตรงเวลา</th><th class="r">ราคา</th><th class="r">บริการ</th><th class="r">เฉลี่ย</th>'
+      + '<th class="r">PO (ใบ / บาท)</th><th class="r">ส่งตรงเวลา</th><th class="r">QC ไม่ผ่าน</th><th>ความเห็น</th></tr></thead><tbody>'
+      + (r.rows.map(function (x, i) {
+        var e = x.eval;
+        return '<tr><td class="c">' + (e ? i + 1 : '–') + '</td><td>' + esc(x.name) + '</td>' + (e ? '<td class="r">' + e.quality + '</td><td class="r">' + e.delivery + '</td><td class="r">' + e.price + '</td><td class="r">' + e.service + '</td><td class="r b' + (e.score < 3 ? ' neg' : '') + '">' + e.score + '</td>' : '<td colspan="5" class="c muted">ยังไม่ประเมิน</td>')
+          + '<td class="r">' + x.poCount + ' / ' + baht(x.poTotal) + '</td><td class="r">' + (x.onTimeRate === '' ? '–' : x.onTimeRate + '%') + '</td><td class="r">' + (x.qcFailRate === '' ? '–' : x.qcFailRate + '%') + '</td><td><small>' + esc(e ? e.comment : '') + '</small></td></tr>';
+      }).join('') || '<tr><td colspan="11" class="c muted">ยังไม่มีข้อมูลของไตรมาสนี้</td></tr>') + '</tbody></table>';
+    $('rOut').innerHTML = reportWrap('รายงานประเมินผู้ขาย', '<span>รอบ <b>' + qLabel(r.period) + '</b> (' + dd(r.from) + ' – ' + dd(r.to) + ')</span>', body);
+  }
+
   // รายงานสินค้าที่ต้องจัดซื้อ: คงเหลือ ≤ Minimum (หรือติดลบ) · ควรสั่งอย่างน้อย = Minimum − คงเหลือ − ที่สั่งแล้วรอรับ
   function drawReorderReport() {
     var onOrder = {};
@@ -796,23 +1139,7 @@
   window.addEventListener('beforeprint', function () { if (state.page === 'p_rep') { oldTitle = document.title; document.title = COMPANY + ((P.q.repType || 'stock') === 'stock' ? '   ' + FORM_CODE : ''); } });
   window.addEventListener('afterprint', function () { if (oldTitle) { document.title = oldTitle; oldTitle = ''; } });
 
-  // พิมพ์ใบ PR / PO
-  function printDoc(d) {
-    var w = window.open('', '_blank');
-    if (!w) return toast('เบราว์เซอร์บล็อกหน้าต่างใหม่ — อนุญาตป๊อปอัปแล้วลองอีกครั้ง');
-    var title = d.type === 'PO' ? 'ใบสั่งซื้อ (Purchase Order)' : 'ใบขอซื้อ (Purchase Requisition)';
-    w.document.write('<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>' + esc(d.docNo) + '</title><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600;700&display=swap" rel="stylesheet">'
-      + '<style>body{font-family:"IBM Plex Sans Thai",sans-serif;margin:24px;color:#0f172a;font-size:14px}h1{font-size:20px;margin:0}table{width:100%;border-collapse:collapse;margin-top:14px}th,td{border:1px solid #94a3b8;padding:6px 8px}th{background:#f1f5f9}.r{text-align:right}.top{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:12px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px}.sign{display:flex;justify-content:space-around;margin-top:60px;text-align:center}@media print{body{margin:10mm}}</style></head><body>'
-      + '<div class="top"><div><b>บริษัท สปังกี้ฟู้ด จำกัด</b><h1>' + title + '</h1></div><div class="r"><b>เลขที่ ' + esc(d.docNo) + '</b><br>วันที่ ' + dd(d.orderDate) + '</div></div>'
-      + '<div class="grid"><div>ผู้ขาย: <b>' + esc(d.vendorName || '-') + '</b></div><div>โทร: ' + esc(d.vendorPhone || '-') + '</div><div>วันที่ส่งของ: ' + dd(d.deliveryDate) + '</div><div>อ้างอิง: ' + esc(d.refId ? (P.idx.doc[d.refId] || {}).docNo || '' : '-') + '</div></div>'
-      + '<table><thead><tr><th>#</th><th>รายการ</th><th class="r">จำนวน</th><th>หน่วย</th><th class="r">ราคา/หน่วย</th><th class="r">จำนวนเงิน</th></tr></thead><tbody>'
-      + d.items.map(function (it, i) { return '<tr><td>' + (i + 1) + '</td><td>' + esc(it.materialName) + '</td><td class="r">' + n3(it.qty) + '</td><td>' + esc(it.unit) + '</td><td class="r">' + (it.price === '' ? '-' : baht(it.price)) + '</td><td class="r">' + (it.amount === '' ? '-' : baht(it.amount)) + '</td></tr>'; }).join('')
-      + '</tbody><tfoot><tr><th colspan="5" class="r">รวม</th><th class="r">' + baht(d.total) + '</th></tr></tfoot></table>'
-      + (d.note ? '<p>หมายเหตุ: ' + esc(d.note) + '</p>' : '')
-      + '<div class="sign"><div>..............................<br>ผู้จัดทำ</div><div>..............................<br>ผู้อนุมัติ' + (d.approvedBy ? ' (' + esc(d.approvedBy) + ')' : '') + '<br>' + (d.approvedDate ? dd(d.approvedDate) : '') + '</div></div>'
-      + '<script>setTimeout(function(){window.print()},600)<\/script></body></html>');
-    w.document.close();
-  }
+
 
   // ==================== ประวัติการแก้ไข ====================
   function logPage() {
@@ -868,6 +1195,10 @@
     '.rbox{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #cbd5e1;border-radius:8px;margin:6px 0 4px;overflow:hidden}.rbox div{padding:8px;text-align:center;border-left:1px solid #cbd5e1}.rbox div:first-child{border-left:0}.rbox span{display:block;font-size:11.5px;color:#64748b}.rbox b{font-size:17px}',
     '.preport h5{font-size:13.5px;margin:16px 0 6px;padding-left:8px;border-left:4px solid var(--c)}.preport h5 small{font-weight:400;color:#64748b}',
     '.pf.hl label{color:#b45309;font-weight:600}.pf.hl input{background:#fef9c3;border-color:#f59e0b}.pf.hl input:focus{border-color:#d97706;box-shadow:0 0 0 3px rgba(245,158,11,.25)}.rt tr.cx td{color:#94a3b8;text-decoration:line-through}',
+    '.mstat{display:inline-block;font-weight:700;border-radius:8px;padding:4px 10px;margin-bottom:8px;background:#f1f5f9;color:#475569}.mstat.ok{background:#dcfce7;color:#15803d}.mstat.diff{background:#fee2e2;color:#b91c1c}.mstat.noinv{background:#fef3c7;color:#b45309}',
+    '.minv{margin-top:6px}.minv .pfile b{font-size:13px}.ptable input{width:100%;min-width:70px;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;font:inherit;font-size:14px;text-align:right}',
+    '.ptable.cmp th.qh{min-width:120px}.ptable.cmp th.win{background:#dcfce7}.ptable.cmp td.best{background:#f0fdf4;color:#15803d;font-weight:700}.ptable.cmp tr.sub td{background:#f8fafc}.ptable.cmp td .btn{margin:2px 0}',
+    '.stars{color:#f59e0b;letter-spacing:1px}.stars i{color:#e2e8f0;font-style:normal}.pitem.rq{grid-template-columns:2.2fr 1fr 1fr auto}',
     '.preport p.muted{font-size:11.5px}.rt .muted{font-size:inherit}.rt{width:100%;border-collapse:collapse;font-size:12.5px}.rt th{background:#f1f5f9;font-weight:600;text-align:left;padding:5px 6px;border:1px solid #cbd5e1;white-space:nowrap}.rt td{padding:4px 6px;border:1px solid #e2e8f0;vertical-align:top}',
     '.rt tbody tr:nth-child(even) td{background:#f8fafc}.rt .r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.rt .c{text-align:center}.rt .b{font-weight:700}.rt .nw{white-space:nowrap}.rt tfoot td{font-weight:700;background:#f1f5f9;border:1px solid #cbd5e1}.rt tr.sub td{background:#fefce8}',
     '.psign{display:flex;justify-content:space-around;gap:16px;margin-top:44px;text-align:center;font-size:12px;line-height:1.9;break-inside:avoid}.psign span{display:block;width:150px;border-bottom:1px dotted #475569;height:22px;margin:0 auto 4px}',
