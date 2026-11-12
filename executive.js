@@ -158,7 +158,24 @@
       + (x.opportunities.length ? x.opportunities.map(function (o) {
         return '<div class="li"><span>' + esc(o.title) + '</span><b class="pos">' + (o.amount ? baht(o.amount) : '') + '</b><small>' + esc(o.detail) + '</small></div>';
       }).join('') : '<div class="muted">ยังไม่พบ — ระบบจะเทียบราคาที่จ่ายกับราคาต่ำสุดที่เคยได้ (PO / ประวัติราคา / ใบเสนอราคา) และการเลือกผู้ขายที่ไม่ใช่ราคาต่ำสุด</div>') + '</div>'
+      + (x.rfq ? rfqBlock(x) : '')
       + (x.missingVendor || x.missingDelivery ? '<div class="note" style="margin-bottom:14px">⚠ ข้อมูลยังไม่ครบ: PO ในช่วงนี้ ' + (x.missingVendor ? x.missingVendor + ' ใบไม่ได้เลือกผู้ขายจากรายชื่อ ' : '') + (x.missingDelivery ? x.missingDelivery + ' ใบไม่มีวันที่ส่งของ ' : '') + '— รายงานข้อ 3–4 จะไม่ครบ</div>' : '');
+    return html;
+  }
+  // 7. การเปรียบเทียบราคา (เมนู "เปรียบเทียบราคา" ของฝ่ายจัดซื้อ)
+  function rfqBlock(x) {
+    var r = x.rfq, tile = function (v, label, color, sub) { return '<div class="kpi" style="--k:' + color + '"><b>' + v + '</b><span>' + label + '</span>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>'; };
+    var html = '<h4 class="xsec">7. การเปรียบเทียบราคา</h4><div class="kpis xk">'
+      + tile(r.total + ' เรื่อง', 'เปรียบเทียบราคา', '#0891b2', 'ตัดสินแล้ว ' + r.decided + ' · รอตัดสิน ' + r.open)
+      + tile(baht(r.saved), 'ประหยัดได้จากการเปรียบเทียบ', r.saved ? '#16a34a' : '#64748b', 'เทียบกับใบเสนอราคาที่แพงที่สุด')
+      + tile(r.cheapest + ' / ' + r.decided, 'เลือกราคาต่ำสุด', r.notCheapest ? '#d97706' : '#16a34a', r.notCheapest ? 'ไม่ใช่ต่ำสุด ' + r.notCheapest + ' เรื่อง (จ่ายเพิ่ม ' + baht(r.extra) + ')' : 'เลือกราคาต่ำสุดทุกเรื่อง')
+      + tile(r.poWithRfq + ' / ' + r.poCount, 'PO ที่ผ่านการเปรียบเทียบราคา', '#7c3aed', 'เฉลี่ย ' + r.avgQuotes + ' ผู้ขายต่อเรื่อง') + '</div>';
+    html += '<div class="panel pbox xopp"><h4>รายการเปรียบเทียบราคา</h4>' + (x.rfqList.length ? x.rfqList.map(function (q) {
+      return '<div class="li"><span>' + esc(q.title) + ' <small>' + q.quotes + ' ผู้ขาย' + (q.poNo ? ' · PO ' + esc(q.poNo) : '') + '</small></span>'
+        + (q.decided ? '<b class="' + (q.cheapest ? 'pos' : 'warn') + '">' + baht(q.winTotal) + '</b>' : '<b class="muted">รอตัดสิน</b>')
+        + '<small>' + (q.decided ? 'เลือก ' + esc(q.winner) + (q.cheapest ? ' (ราคาต่ำสุด)' : ' · แพงกว่าต่ำสุด ' + baht(q.extra) + (q.reason ? ' · เหตุผล: ' + esc(q.reason) : '')) + (q.saved ? ' · ประหยัด ' + baht(q.saved) : '')
+          : q.quotes ? 'ราคาต่ำสุด ' + baht(q.minTotal) + ' · สูงสุด ' + baht(q.maxTotal) : 'ยังไม่มีใบเสนอราคา') + '</small></div>';
+    }).join('') : '<div class="muted">ยังไม่มีการเปรียบเทียบราคาในช่วงนี้ — ฝ่ายจัดซื้อใช้เมนู "เปรียบเทียบราคา" ก่อนออก PO</div>') + '</div>';
     return html;
   }
   function baht2(v) { return '฿' + Number(v || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }

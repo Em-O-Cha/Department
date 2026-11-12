@@ -380,7 +380,20 @@ function purInsights_(ss, from, to) {
   opps.sort(function (a, c) { return (Number(c.amount) || 0) - (Number(a.amount) || 0); });
   var saveTotal = purR2_(opps.reduce(function (a, x) { return a + (Number(x.amount) || 0); }, 0));
 
-  return { spend: spend, vendorShare: vendorShare.slice(0, 12), singleSource: singleSource, priceChanges: priceChanges.slice(0, 30),
+  // 7) การเปรียบเทียบราคา: เรื่องที่สร้างหรือตัดสินในช่วงนี้ · ประหยัดได้ = ใบที่แพงที่สุด − ใบที่เลือก
+  var rfqList = rfqs.filter(function (r) { return inRange(String(r.createdAt).slice(0, 10)) || (r.decidedAt && inRange(String(r.decidedAt))); }).map(function (r) {
+    var qs = quotes.filter(function (q) { return q.rfqId === r.id; }), tot = qs.map(function (q) { return Number(q.total) || 0; });
+    var win = qs.filter(function (q) { return q.id === r.winnerId; })[0], min = tot.length ? Math.min.apply(null, tot) : 0, max = tot.length ? Math.max.apply(null, tot) : 0;
+    var po = r.poId ? docs.filter(function (d) { return d.id === r.poId; })[0] : null;
+    return { title: r.title, quotes: qs.length, decided: !!win, winner: win ? win.vendorName : '', winTotal: win ? purR2_(win.total) : '', minTotal: purR2_(min), maxTotal: purR2_(max),
+      cheapest: win ? win.total <= min + 0.005 : null, saved: win && qs.length > 1 ? purR2_(max - win.total) : 0, extra: win ? purR2_(win.total - min) : 0, reason: r.reason || '', decidedAt: r.decidedAt || '', poNo: po ? po.docNo : '' };
+  }).sort(function (a, c) { return (a.decided ? 1 : 0) - (c.decided ? 1 : 0) || String(c.decidedAt).localeCompare(String(a.decidedAt)); });
+  var rfqDec = rfqList.filter(function (x) { return x.decided; });
+  var rfqSummary = { total: rfqList.length, decided: rfqDec.length, open: rfqList.length - rfqDec.length, cheapest: rfqDec.filter(function (x) { return x.cheapest; }).length,
+    notCheapest: rfqDec.filter(function (x) { return !x.cheapest; }).length, saved: purR2_(rfqDec.reduce(function (a, x) { return a + x.saved; }, 0)),
+    extra: purR2_(rfqDec.reduce(function (a, x) { return a + x.extra; }, 0)), avgQuotes: rfqList.length ? Math.round(rfqList.reduce(function (a, x) { return a + x.quotes; }, 0) / rfqList.length * 10) / 10 : 0,
+    poWithRfq: cur.filter(function (d) { return d.rfqId; }).length, poCount: cur.length };
+  return { rfq: rfqSummary, rfqList: rfqList.slice(0, 20), spend: spend, vendorShare: vendorShare.slice(0, 12), singleSource: singleSource, priceChanges: priceChanges.slice(0, 30),
     priceUp: priceChanges.filter(function (x) { return x.pct > 0; }).length, priceDown: priceChanges.filter(function (x) { return x.pct < 0; }).length,
     delivery: delivery, overdue: overdue.slice(0, 20), openPOs: openPOs.slice(0, 40), opportunities: opps.slice(0, 20), saveTotal: saveTotal,
     missingVendor: cur.filter(function (d) { return !d.vendorId; }).length, missingDelivery: cur.filter(function (d) { return !d.deliveryDate; }).length };
