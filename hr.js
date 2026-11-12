@@ -155,7 +155,33 @@
     return H.load().then(function () { if (String(state.page).indexOf('h_') === 0) H.render(state.page); }).catch(onServerError);
   }
   H.reset = function () { H.data = null; H.q = {}; H.photos = {}; H.photosLoaded = false; pageSize(''); };
-  H.menus = function () { return MENUS; };
+  H.menus = function () {   // เมนูการลาโชว์จำนวนคำขอที่รออนุมัติ
+    var n = H.data ? pendingLeaves().length : 0;
+    return MENUS.map(function (m) { return m.id === 'h_leave' && n ? Object.assign({}, m, { label: m.label + ' 🔴 ' + n }) : m; });
+  };
+  function pendingLeaves() { return H.data.leaves.filter(function (l) { return l.status === 'รออนุมัติ'; }).sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); }); }
+  // กล่องคำขอลาที่รออนุมัติ (หน้าภาพรวม + หน้าการลา)
+  function pendingBox() {
+    var rows = pendingLeaves(); if (!rows.length) return '';
+    return '<div class="panel hpend"><h4>🔔 คำขอลารออนุมัติ (' + rows.length + ')</h4>' + rows.map(function (l) {
+      var e = emp(l.empId) || { fullName: '-' }, y = String(l.dateFrom).slice(0, 4), qq = quotaOf(e, l.type, y), left = qq == null ? null : qq - usedOf(e.id, l.type, y, l.id);
+      return '<div class="hpr-row">' + photo(e, 'hph sm') + '<div class="pinfo"><b>' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</b>'
+        + '<small><span class="htype ' + l.type + '">' + LT[l.type] + '</span> ' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + ' · ' + l.days + ' วัน'
+        + (left != null ? ' · <b class="' + (left - l.days < 0 ? 'neg' : 'pos') + '">คงเหลือ ' + left + ' → หลังอนุมัติ ' + (left - l.days) + '</b>' : '') + '</small>'
+        + (l.reason ? '<small>เหตุผล: ' + esc(l.reason) + '</small>' : '') + (l.files.length ? '<small>' + fileLinks(l.files) + '</small>' : '') + '<small class="muted">ส่งเมื่อ ' + esc(String(l.createdAt).slice(0, 16)) + (l.source ? ' · ' + esc(l.source) : '') + '</small></div>'
+        + '<div class="hpr-btns"><button class="btn btn-sm hok" data-ok="' + l.id + '">✅ อนุมัติ</button><button class="btn btn-sm hno" data-no="' + l.id + '">❌ ไม่อนุมัติ</button></div></div>';
+    }).join('') + '</div>';
+  }
+  function bindPending(root) {
+    var go2 = function (el, ok) {
+      el.disabled = true;
+      call('hrDecideLeave', state.token, el.getAttribute(ok ? 'data-ok' : 'data-no'), ok).then(function (r) {
+        reload(r.ok ? (ok ? 'อนุมัติแล้ว' : 'ไม่อนุมัติแล้ว') : r.error).then(function () { renderNav(); });
+      }).catch(onServerError);
+    };
+    on('[data-ok]', 'click', function (el) { go2(el, true); }, root);
+    on('[data-no]', 'click', function (el) { if (window.confirm('ไม่อนุมัติคำขอลานี้?')) go2(el, false); }, root);
+  }
   H.render = function (page) {
     pageSize('');
     if (!H.data) {
@@ -181,11 +207,12 @@
     if (!q.from) { q.from = t.slice(0, 8) + '01'; q.to = t; }
     var quick = [['เดือนนี้', t.slice(0, 8) + '01', t], ['เดือนก่อน', addDays(t.slice(0, 8) + '01', -1).slice(0, 8) + '01', addDays(t.slice(0, 8) + '01', -1)],
       ['3 เดือน', addDays(t, -89), t], ['ปีนี้', t.slice(0, 4) + '-01-01', t]];
-    $('main').innerHTML = '<h3>ภาพรวม ฝ่ายบุคคล</h3><p class="lead">ข้อมูล ณ ' + dd(t) + ' · <a href="' + esc(H.data.sheetUrl) + '" target="_blank" rel="noopener">เปิด Google Sheet</a></p>'
+    $('main').innerHTML = '<h3>ภาพรวม ฝ่ายบุคคล</h3><p class="lead">ข้อมูล ณ ' + dd(t) + ' · <a href="' + esc(H.data.sheetUrl) + '" target="_blank" rel="noopener">เปิด Google Sheet</a></p>' + pendingBox()
       + '<div class="pbar noprint"><div class="pchips" style="margin:0">' + quick.map(function (x) { return '<button class="chip' + (q.from === x[1] && q.to === x[2] ? ' on' : '') + '" data-q="' + x[1] + '|' + x[2] + '">' + x[0] + '</button>'; }).join('') + '</div>'
       + '<input type="date" id="dFrom" value="' + q.from + '"> – <input type="date" id="dTo" value="' + q.to + '"><button class="btn btn-sm btn-line" id="dPrint">' + icon('print', 16) + ' พิมพ์</button></div>'
       + '<div id="dOut"><div class="panel"><span class="spinner dark"></span> กำลังสรุป…</div></div>';
     on('[data-q]', 'click', function (el) { var p = el.getAttribute('data-q').split('|'); q.from = p[0]; q.to = p[1]; dash(); }, $('main'));
+    bindPending($('main'));
     ['dFrom', 'dTo'].forEach(function (id) { $(id).addEventListener('change', function () { if (v('dFrom') && v('dTo') && v('dFrom') <= v('dTo')) { q.from = v('dFrom'); q.to = v('dTo'); dash(); } }); });
     $('dPrint').addEventListener('click', function () { window.print(); });
     var my = H.dseq = (H.dseq || 0) + 1;
@@ -374,6 +401,7 @@
     if (q.lview === 'bal') return leaveBalances(y);
     $('main').innerHTML = '<h3>การลา / ขาดงาน / มาสาย</h3><p class="lead">บันทึกการลาทุกประเภท · ระบบนับวันทำงาน (ไม่นับวันอาทิตย์) ให้เอง แก้เป็นครึ่งวันได้</p>'
       + (over.length ? '<div class="panel sins" style="margin-bottom:12px"><div class="sin bad">ลาเกินสิทธิ์ปี ' + (+y + 543) + ': ' + over.map(function (id) { return esc((emp(id) || {}).fullName || id); }).join(', ') + '</div></div>' : '')
+      + pendingBox()
       + leaveTabs()
       + '<div class="pbar"><label class="pchk">เดือน <input type="month" id="lM" value="' + esc(q.lm) + '"></label><select id="lT"><option value="">ทุกประเภท</option>' + Object.keys(LT).map(function (k) { return '<option value="' + k + '"' + (q.lt === k ? ' selected' : '') + '>' + LT[k] + '</option>'; }).join('') + '</select>'
       + '<b style="flex:1">' + rows.length + ' รายการ</b><button class="btn btn-sm btn-primary" id="lNew">' + icon('plus', 16) + ' บันทึกการลา</button></div>'
@@ -386,7 +414,7 @@
     $('lT').addEventListener('change', function () { q.lt = v('lT'); leaves(); });
     $('lNew').addEventListener('click', function () { leaveModal(null); });
     on('[data-lv]', 'click', function (el) { leaveModal(H.data.leaves.filter(function (x) { return x.id === el.getAttribute('data-lv'); })[0]); }, $('main'));
-    bindLeaveTabs();
+    bindLeaveTabs(); bindPending($('main'));
   }
   function leaveTabs() { return '<div class="pchips">' + [['list', 'รายการลา'], ['bal', 'สิทธิ์คงเหลือรายคน']].map(function (c) { return '<button class="chip' + (H.q.lview === c[0] ? ' on' : '') + '" data-lview="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>'; }
   function bindLeaveTabs() { on('[data-lview]', 'click', function (el) { H.q.lview = el.getAttribute('data-lview'); leaves(); }, $('main')); }
@@ -758,13 +786,50 @@
       + F('sAlert', 'แจ้งเตือนเอกสารล่วงหน้า (วัน)', s.alertDays, 'number', ' min="7"') + S('sWork', 'วันทำงาน (ใช้นับวันลา)', [['จ-ส', 'จันทร์–เสาร์'], ['จ-ศ', 'จันทร์–ศุกร์']], s.workDays) + '</div>'
       + '<h4>รหัสแบบฟอร์ม (แสดงมุมขวาบนของรายงาน · เว้นว่าง = ไม่แสดง)</h4><div class="pform">' + F('sFmR', 'ทะเบียนประวัติพนักงาน', s.fmRegister, 'text', ' placeholder="เช่น FM-HR-01-01 Rev.00 วันที่ประกาศใช้ 01/01/2026"')
       + F('sFmP', 'ประวัติพนักงานรายบุคคล', s.fmProfile) + F('sFmL', 'สรุปการลา', s.fmLeave) + '</div>'
-      + '<button class="btn btn-primary" id="sSave">' + icon('check', 16) + ' บันทึกการตั้งค่า</button></div>';
+      + '<button class="btn btn-primary" id="sSave">' + icon('check', 16) + ' บันทึกการตั้งค่า</button></div>'
+      + '<div class="panel" id="formBox" style="margin-top:14px"><span class="spinner dark"></span> กำลังโหลดลิงก์แบบฟอร์มขอลา…</div>';
+    formSettings();
     $('sSave').addEventListener('click', function () {
       var qq = {}; ['sick', 'personal', 'vacation', 'maternity', 'ordain'].forEach(function (k) { if (v('q_' + k) !== '') qq[k] = Number(v('q_' + k)); });
       var b = $('sSave'); b.disabled = true;
       call('hrSaveSettings', state.token, { quotas: JSON.stringify(qq), groups: v('sGroups'), buildings: v('sBld'), alertDays: v('sAlert'), workDays: v('sWork'), fmRegister: v('sFmR'), fmProfile: v('sFmP'), fmLeave: v('sFmL') })
         .then(function (r) { b.disabled = false; if (!r.ok) return toast(r.error); H.data.settings = r.settings; toast('บันทึกการตั้งค่าแล้ว'); }).catch(onServerError);
     });
+  }
+  // แบบฟอร์มขอลาของพนักงาน (ลิงก์ + QR) และการแจ้งเตือน LINE กลุ่ม
+  function formSettings() {
+    call('hrFormInfo', state.token).then(function (r) {
+      var box = $('formBox'); if (!box || !r.ok) return;
+      var L = r.line;
+      box.innerHTML = '<h4 style="margin-top:0">📝 แบบฟอร์มขอลาของพนักงาน (ไม่ต้องเข้าระบบ)</h4>'
+        + '<p class="muted" style="margin:0 0 8px">พนักงานสแกน QR → เลือกชื่อตัวเอง → กรอกการลา → คำขอเข้าระบบเป็น "รออนุมัติ" ทันที · ภาษาไทย / ภาษาเมียนมา</p>'
+        + '<div class="hform"><div id="qrBox" class="hqr"></div><div style="flex:1;min-width:220px"><div class="pf"><label>ลิงก์แบบฟอร์ม</label><input id="fUrl" readonly value="' + esc(r.url) + '"></div>'
+        + '<div class="pfoot"><button class="btn btn-sm btn-line" id="fCopy">' + icon('copy', 16) + ' คัดลอกลิงก์</button><a class="btn btn-sm btn-line" href="' + esc(r.url) + '" target="_blank" rel="noopener">เปิดดูแบบฟอร์ม</a>'
+        + '<button class="btn btn-sm btn-line" id="fPoster">' + icon('print', 16) + ' พิมพ์ป้าย QR</button><button class="btn btn-sm btn-line" id="fNew">เปลี่ยนลิงก์ใหม่</button></div>'
+        + '<small class="muted">เปลี่ยนลิงก์ใหม่ = QR เดิมใช้ไม่ได้ทันที (ใช้เมื่อลิงก์หลุดไปนอกบริษัท)</small></div></div>'
+        + '<h4>🔔 แจ้งเตือนคำขอลาเข้า LINE กลุ่ม</h4>'
+        + '<div class="hline"><div class="' + (L.token ? 'ok' : '') + '">1. ใส่รหัส LINE OA ของฝ่ายบุคคลในระบบ ' + (L.token ? '✅' : '⏳ ยังไม่ได้ใส่') + '</div>'
+        + '<div class="' + (L.group ? 'ok' : '') + '">2. ผูกกลุ่ม LINE ' + (L.group ? '✅ ผูกแล้ว' : '⏳ เชิญบอทเข้ากลุ่ม HR แล้วพิมพ์ในกลุ่ม: <b>ตั้งค่ากลุ่ม HR ' + esc(L.setupCode) + '</b>') + '</div>'
+        + (L.token && L.group ? '<div><button class="btn btn-sm btn-line" id="fTest">ส่งข้อความทดสอบเข้ากลุ่ม</button></div>' : '') + '</div>';
+      loadQr(function () { if (window.QRCode) new window.QRCode($('qrBox'), { text: r.url, width: 160, height: 160, correctLevel: window.QRCode.CorrectLevel.M }); });
+      $('fCopy').addEventListener('click', function () { var i = $('fUrl'); i.select(); try { navigator.clipboard.writeText(r.url); } catch (e) { document.execCommand('copy'); } toast('คัดลอกลิงก์แล้ว'); });
+      $('fNew').addEventListener('click', function () { if (!window.confirm('เปลี่ยนลิงก์ใหม่? QR ที่ติดไว้เดิมจะใช้ไม่ได้ ต้องพิมพ์ป้ายใหม่')) return; call('hrFormNewKey', state.token).then(function () { formSettings(); toast('เปลี่ยนลิงก์แล้ว'); }).catch(onServerError); });
+      $('fPoster').addEventListener('click', function () { poster(r.url); });
+      if ($('fTest')) $('fTest').addEventListener('click', function () { call('hrLineTest', state.token).then(function (x) { toast(x.ok ? 'ส่งข้อความทดสอบแล้ว' : x.error); }).catch(onServerError); });
+    }).catch(onServerError);
+  }
+  function loadQr(cb) {
+    if (window.QRCode) return cb();
+    var sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; sc.onload = cb; document.head.appendChild(sc);
+  }
+  function poster(url) {   // ป้าย A4 ติดที่จุดตอกบัตร
+    pageSize('portrait');
+    $('main').innerHTML = '<div class="pbar noprint"><button class="btn btn-sm btn-line" id="pBack2">' + icon('back', 16) + ' กลับ</button><button class="btn btn-sm btn-primary" id="pPrint2">' + icon('print', 16) + ' พิมพ์</button></div>'
+      + '<div class="hposter">' + (document.querySelector('.brand-logo') ? '<img class="slogo" src="' + document.querySelector('.brand-logo').src + '" alt="">' : '') + '<h2>ขอลา สแกนที่นี่</h2><h3 lang="my">ခွင့်တောင်းရန် ဤနေရာတွင် စကင်ဖတ်ပါ</h3><div id="qrBig"></div>'
+      + '<p>1. สแกน QR ด้วยกล้องมือถือ · 2. เลือกชื่อตัวเอง · 3. กรอกการลาแล้วกดส่ง</p><p lang="my">၁။ ဖုန်းကင်မရာဖြင့် QR ကို စကင်ဖတ်ပါ · ၂။ သင့်နာမည်ကို ရွေးပါ · ၃။ ခွင့်အချက်အလက်ဖြည့်ပြီး ပို့ပါ</p><small>' + COMPANY_TH + ' · ฝ่ายบุคคล</small></div>';
+    loadQr(function () { new window.QRCode($('qrBig'), { text: url, width: 420, height: 420, correctLevel: window.QRCode.CorrectLevel.M }); });
+    $('pBack2').addEventListener('click', function () { pageSize(''); settings(); });
+    $('pPrint2').addEventListener('click', function () { window.print(); });
   }
   function logPage() {
     $('main').innerHTML = '<h3>ประวัติการแก้ไข</h3><p class="lead">บันทึกทุกครั้งที่เพิ่ม/แก้/ลบข้อมูล</p><div id="lOut" class="panel"><span class="spinner dark"></span> กำลังโหลด</div>';
@@ -786,7 +851,7 @@
     '.hfiles{display:flex;flex-direction:column;gap:4px}.hfile{display:flex;align-items:center;gap:8px;font-size:13.5px}.hfile a{display:inline-flex;gap:4px;align-items:center;color:var(--c);word-break:break-all}.hfile svg{width:14px;height:14px}',
     '.htype{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;background:#fef3c7;color:#b45309}.htype.sick{background:#dbeafe;color:#1d4ed8}.htype.absent{background:#fee2e2;color:#b91c1c}.htype.late{background:#f1f5f9;color:#475569}.htype.vacation{background:#dcfce7;color:#15803d}',
     '.hpicks{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px;max-height:320px;overflow:auto;margin-top:8px}.hpick{display:flex;align-items:center;gap:8px;border:1.5px solid var(--line);border-radius:10px;padding:5px 8px;font-size:13.5px;cursor:pointer;margin:0}.hpick.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 7%,white)}.hpick small{display:block;font-size:11px;color:var(--muted)}',
-    '.hnewph{display:flex;align-items:center;gap:10px;margin-bottom:10px}.xsep{height:1px;background:var(--line);margin:8px 0}',
+    '.hnewph{display:flex;align-items:center;gap:10px;margin-bottom:10px}.xsep{height:1px;background:var(--line);margin:8px 0}.hpend{border:2px solid #f59e0b;margin-bottom:14px}.hpend h4{margin:0 0 6px}.hpr-row{display:flex;gap:10px;align-items:center;border-top:1px solid var(--line);padding:8px 0;flex-wrap:wrap}.hpr-row .pinfo small{display:block}.hpr-btns{display:flex;gap:6px}.hok{background:#16a34a;color:#fff}.hno{background:#fee2e2;color:#b91c1c}.hform{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}.hqr{background:#fff;padding:8px;border-radius:10px;border:1px solid var(--line);min-width:176px;min-height:176px}.hline div{padding:6px 10px;border-radius:8px;background:#fffbeb;margin-bottom:6px;font-size:14px}.hline div.ok{background:#f0fdf4}.hposter{background:#fff;text-align:center;padding:30px;border-radius:14px}.hposter h2{font-size:40px;margin:10px 0 0}.hposter h3{font-size:24px;margin:6px 0 16px;color:#334155}.hposter #qrBig{display:inline-block;padding:14px;border:3px solid #0f172a;border-radius:16px}.hposter p{font-size:17px;margin:10px 0}.hposter .slogo{height:70px}',
     '.hrt{width:100%;border-collapse:collapse;font-size:11.5px;table-layout:auto}.hrt th{background:#f1f5f9;border:1px solid #0f172a;padding:4px;text-align:center;font-size:11px}.hrt th small{font-weight:400;color:#475569}.hrt td{border:1px solid #0f172a;padding:4px;vertical-align:top}.hrt .c{text-align:center}.hrt .r{text-align:right}.hrt .b{font-weight:700}.hrt tfoot td{background:#f1f5f9;font-weight:700}.hrt.sm{font-size:11.5px;margin-bottom:6px}',
     '.hrimg{width:52px;height:65px;object-fit:cover;border-radius:4px;display:inline-grid;place-items:center;background:#e2e8f0;font-size:16px;font-weight:700;color:#64748b}',
     '.hpr{display:flex;gap:16px;align-items:flex-start;margin:8px 0}.hprimg{width:130px;height:163px;object-fit:cover;border-radius:6px;border:1px solid #cbd5e1;display:inline-grid;place-items:center;background:#e2e8f0;font-size:40px;color:#64748b}',

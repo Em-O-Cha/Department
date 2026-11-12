@@ -20,7 +20,7 @@ var HR_TABLES_ = {
   hr_leaves: { tab: 'การลา', cols: [
     ['id', 'รหัส'], ['empId', 'รหัสพนักงานในระบบ'], ['type', 'ประเภท'], ['dateFrom', 'ตั้งแต่วันที่'], ['dateTo', 'ถึงวันที่'],
     ['days', 'จำนวนวัน'], ['minutes', 'นาที (มาสาย)'], ['reason', 'เหตุผล'], ['status', 'สถานะ'], ['approver', 'ผู้อนุมัติ'],
-    ['files', 'ไฟล์แนบ'], ['createdAt', 'บันทึกเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
+    ['files', 'ไฟล์แนบ'], ['createdAt', 'บันทึกเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด'], ['source', 'ช่องทาง'], ['decidedAt', 'วันที่อนุมัติ']] },
   hr_trainings: { tab: 'การอบรม', cols: [
     ['id', 'รหัส'], ['title', 'หลักสูตร'], ['date', 'วันที่อบรม'], ['hours', 'จำนวนชั่วโมง'], ['kind', 'ประเภท'], ['trainer', 'วิทยากร'],
     ['place', 'สถานที่'], ['attendees', 'ผู้เข้าอบรม'], ['note', 'หมายเหตุ'], ['files', 'ไฟล์แนบ'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
@@ -218,6 +218,26 @@ function hrSaveDisc(token, x) {
     rec.date = purDate_(x.date); rec.level = x.level; rec.reason = hrText_(x.reason, 500); rec.action = hrText_(x.action, 300);
   }, 'วินัย');
 }
+// อนุมัติ / ไม่อนุมัติ คำขอลา (จากหน้า HR หรือปุ่มใน LINE)
+function hrDecideLeave(token, id, approve) {
+  var dept = requireHr_(token);
+  var r = hrDecideLeave_(dept, id, approve, 'ฝ่ายบุคคล');
+  if (r.ok && r.leave.source === 'แบบฟอร์มพนักงาน') { try { hrLinePush_([hrLeaveFlex_(r.leave, r.emp || {}, null, true)]); } catch (e) {} }   // แจ้งกลุ่มว่าจัดการแล้ว
+  return r;
+}
+function hrDecideLeave_(dept, id, approve, who) {
+  return purLocked_(function () {
+    var ss = hrBook_(dept), row = hrById_(purRead_(ss, 'hr_leaves'), id);
+    if (!row) return { ok: false, error: 'ไม่พบคำขอลา' };
+    if (row.status !== 'รออนุมัติ') return { ok: false, already: true, status: row.status, approver: row.approver, error: 'คำขอนี้' + row.status + 'ไปแล้ว' + (row.approver ? ' โดย ' + row.approver : '') };
+    row.status = approve ? 'อนุมัติ' : 'ไม่อนุมัติ'; row.approver = hrText_(who, 80); row.decidedAt = purNow_(); row.updatedAt = purNow_();
+    purWrite_(ss, 'hr_leaves', row);
+    var emp = hrById_(purRead_(ss, 'hr_emps'), row.empId);
+    purLogWrite_(ss, row.status + 'คำขอลา', 'hr_leaves', id, (emp ? emp.fullName : '') + ' · ' + (HR_LEAVE_TYPES_[row.type] || row.type) + ' ' + row.dateFrom + ' · โดย ' + row.approver);
+    return { ok: true, status: row.status, leave: hrFilesOut_(row), emp: emp ? { fullName: emp.fullName, nickname: emp.nickname } : null };
+  });
+}
+
 var HR_DEL_TABLES_ = { doc: 'hr_docs', leave: 'hr_leaves', training: 'hr_trainings', disc: 'hr_disc' };
 function hrDeleteRow(token, kind, id) {
   var dept = requireHr_(token), table = HR_DEL_TABLES_[kind];

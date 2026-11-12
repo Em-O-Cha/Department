@@ -32,7 +32,10 @@ function apiFunctions_() {
     // ฝ่ายบุคคล (Hr.gs)
     hrLoad: hrLoad, hrPhotos: hrPhotos, hrSaveEmp: hrSaveEmp, hrDeleteEmp: hrDeleteEmp, hrSaveDoc: hrSaveDoc, hrSaveLeave: hrSaveLeave,
     hrSaveTraining: hrSaveTraining, hrSaveDisc: hrSaveDisc, hrDeleteRow: hrDeleteRow, hrUploadFile: hrUploadFile, hrRemoveFile: hrRemoveFile,
-    hrSaveSettings: hrSaveSettings, hrLeaves: hrLeaves, hrLog: hrLog, hrDashboard: hrDashboard,
+    hrSaveSettings: hrSaveSettings, hrLeaves: hrLeaves, hrLog: hrLog, hrDashboard: hrDashboard, hrDecideLeave: hrDecideLeave,
+    hrFormInfo: hrFormInfo, hrFormNewKey: hrFormNewKey, hrLineTest: hrLineTest,
+    // แบบฟอร์มขอลาของพนักงาน (HrPublic.gs) — ใช้รหัสแบบฟอร์มแทนตั๋ว
+    hrFormInit: hrFormInit, hrFormPhotos: hrFormPhotos, hrFormBalance: hrFormBalance, hrFormSubmit: hrFormSubmit, hrFormUpload: hrFormUpload,
     // ผู้บริหาร (Executive.gs)
     execOverview: execOverview, execDashboard: execDashboard, execVerify: execVerify
   };
@@ -42,6 +45,10 @@ function doPost(e) {
   var out;
   try {
     var req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    if (Array.isArray(req.events)) {   // Webhook ของ LINE OA ฝ่ายบุคคล (HrPublic.gs)
+      hrLineWebhook_(req.events);
+      return ContentService.createTextOutput('OK');
+    }
     var fns = apiFunctions_(), fn = String(req.fn || '');
     if (!Object.prototype.hasOwnProperty.call(fns, fn)) throw new Error('ไม่รองรับคำสั่งนี้');
     var args = Array.isArray(req.args) ? req.args.slice(0, 8) : [];
