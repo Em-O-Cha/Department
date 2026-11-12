@@ -77,6 +77,8 @@
     var k = r.kpi;
     var tile = function (v, label, color, sub) { return '<div class="kpi" style="--k:' + color + '"><b>' + v + '</b><span>' + label + '</span>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>'; };
     var html = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + dd(r.from) + ' – ' + dd(r.to) + '</span></div>'
+      + (r.insights ? insights(r.insights, tile) : '')
+      + '<h4 class="xsec">สต๊อกวัตถุดิบ</h4>'
       + '<div class="kpis xk">'
       + tile(n3(k.inCount), 'รายการรับเข้า', IN_C, r.hasPrices ? 'มูลค่า ' + baht(k.inValue) : '')
       + tile(n3(k.outCount), 'รายการจ่ายออก', OUT_C, r.hasPrices ? 'มูลค่า ' + baht(k.outValue) : (k.returns ? 'ส่งคืนผู้ขาย ' + k.returns : ''))
@@ -122,6 +124,44 @@
     if (ev.data.type === 'meeting-ready' && state.token) f.contentWindow.postMessage({ type: 'exec-token', token: state.token }, EMBED_ORIGIN);
     if (ev.data.type === 'meeting-height') f.style.height = Math.max(600, Number(ev.data.h) || 0) + 'px';
   });
+
+  // คำถามผู้บริหาร 6 ข้อ (ข้อมูลจาก purInsights_ ใน PurchasingPlus.gs)
+  function insights(x, tile) {
+    var s = x.spend, ch = s.changePct;
+    var chTxt = ch === '' ? 'ช่วงก่อนหน้าไม่มีข้อมูล' : (ch > 0 ? '▲ ' : ch < 0 ? '▼ ' : '') + Math.abs(ch) + '% จากช่วงก่อน (' + baht(s.prevTotal) + ')';
+    var html = '<h4 class="xsec">1. ซื้อไปทั้งหมดกี่บาท?</h4><div class="kpis xk">'
+      + tile(baht(s.poTotal), 'ยอดซื้อตาม PO (' + s.poCount + ' ใบ)', '#2563eb', chTxt)
+      + tile(baht(s.invTotal), 'ยอดตามใบแจ้งหนี้ (' + s.invCount + ' ใบ)', '#7c3aed', 'ตามวันที่ในใบแจ้งหนี้')
+      + tile(x.priceUp + ' / ' + x.priceDown, 'วัตถุดิบราคาขึ้น / ลง', x.priceUp ? '#dc2626' : '#64748b', 'ดูข้อ 2')
+      + tile(baht(x.saveTotal), 'โอกาสประหยัด (ประมาณการ)', x.saveTotal ? '#16a34a' : '#64748b', 'ดูข้อ 6') + '</div>';
+    html += '<div class="pgrid">'
+      + box('2. ราคาซื้อเพิ่มขึ้นหรือลดลง?', x.priceChanges.map(function (p) {
+        return '<div class="li"><span>' + esc(p.name) + (p.vendor ? ' <small>' + esc(p.vendor) + '</small>' : '') + '</span><b class="' + (p.pct > 0 ? 'neg' : 'pos') + '">' + (p.pct > 0 ? '▲ ' : '▼ ') + Math.abs(p.pct) + '%</b><small>' + baht2(p.from) + ' → ' + baht2(p.to) + ' ต่อ' + esc(p.unit || 'หน่วย') + ' · ' + dd(p.toDate) + '</small></div>';
+      }), 'ไม่มีการเปลี่ยนราคาในช่วงนี้ (บันทึกราคาที่เมนู "วัตถุดิบ & ราคา")')
+      + box('3. Supplier รายไหนส่งของช้า?', x.delivery.filter(function (v) { return v.late; }).map(function (v) {
+        return '<div class="li"><span>' + esc(v.name) + '</span><b class="neg">ช้า ' + v.late + '/' + v.delivered + ' ครั้ง</b><small>ส่งตรงเวลา ' + v.onTimeRate + '% · ช้าเฉลี่ย ' + v.avgLateDays + ' วัน</small></div>';
+      }).concat(x.overdue.map(function (o) {
+        return '<div class="li"><span>' + esc(o.docNo) + ' · ' + esc(o.vendor) + '</span><b class="neg">เลยกำหนด ' + o.daysLate + ' วัน</b><small>ยังไม่ได้รับ' + (o.partial ? 'ครบ' : 'ของ') + ' · กำหนดส่ง ' + dd(o.deliveryDate) + '</small></div>';
+      })), x.delivery.length ? 'ทุกรายส่งตรงเวลา 👍' : 'ยังไม่มีข้อมูลรับของตาม PO ในช่วงนี้')
+      + box('4. ซื้อจาก Supplier รายใดมากเกินไปไหม?', x.vendorShare.map(function (v) {
+        var hi = v.share >= 40;
+        return '<div class="xbar" title="' + esc(v.name) + ': ' + baht(v.total) + '"><span class="xn">' + esc(v.name) + '</span><span class="xtrack"><span style="width:' + Math.max(3, v.share) + '%;background:' + (hi ? '#dc2626' : '#2563eb') + '"></span></span><span class="xv">' + v.share + '%<small>' + baht(v.total) + (hi ? ' · พึ่งพาสูง' : '') + '</small></span></div>';
+      }).concat(x.singleSource.length ? ['<div class="xsub">วัตถุดิบที่ซื้อจากผู้ขายรายเดียว (12 เดือน)</div>'].concat(x.singleSource.slice(0, 8).map(function (m) {
+        return '<div class="li"><span>' + esc(m.name) + '</span><b>' + baht(m.spend) + '</b><small>' + esc(m.vendor) + '</small></div>';
+      })) : []), 'ยังไม่มี PO ในช่วงนี้')
+      + box('5. PO ไหนยังค้าง?', x.openPOs.map(function (o) {
+        var tags = (o.waitGoods ? '<span class="tag no">' + (o.partial ? 'รับบางส่วน' : 'รอรับของ') + '</span>' : '') + (o.unpaid ? '<span class="tag ' + (o.overduePay ? 'lock' : 'code') + '">' + (o.overduePay ? 'เลยกำหนดจ่าย' : 'ค้างจ่าย ' + baht(o.due)) + '</span>' : '');
+        return '<div class="li"><span>' + esc(o.docNo) + ' · ' + esc(o.vendor) + '</span><b>' + baht(o.total) + '</b><small>สั่ง ' + dd(o.orderDate) + (o.deliveryDate ? ' · ส่ง ' + dd(o.deliveryDate) : '') + (o.dueDate ? ' · ครบกำหนดจ่าย ' + dd(o.dueDate) : '') + '<br>' + tags + '</small></div>';
+      }), 'ไม่มี PO ค้าง')
+      + '</div>'
+      + '<div class="panel pbox xopp"><h4>6. มีโอกาสลดต้นทุนตรงไหนอีกบ้าง? ' + (x.saveTotal ? '<span class="pos">ประมาณการประหยัดได้ ' + baht(x.saveTotal) + '</span>' : '') + '</h4>'
+      + (x.opportunities.length ? x.opportunities.map(function (o) {
+        return '<div class="li"><span>' + esc(o.title) + '</span><b class="pos">' + (o.amount ? baht(o.amount) : '') + '</b><small>' + esc(o.detail) + '</small></div>';
+      }).join('') : '<div class="muted">ยังไม่พบ — ระบบจะเทียบราคาที่จ่ายกับราคาต่ำสุดที่เคยได้ (PO / ประวัติราคา / ใบเสนอราคา) และการเลือกผู้ขายที่ไม่ใช่ราคาต่ำสุด</div>') + '</div>'
+      + (x.missingVendor || x.missingDelivery ? '<div class="note" style="margin-bottom:14px">⚠ ข้อมูลยังไม่ครบ: PO ในช่วงนี้ ' + (x.missingVendor ? x.missingVendor + ' ใบไม่ได้เลือกผู้ขายจากรายชื่อ ' : '') + (x.missingDelivery ? x.missingDelivery + ' ใบไม่มีวันที่ส่งของ ' : '') + '— รายงานข้อ 3–4 จะไม่ครบ</div>' : '');
+    return html;
+  }
+  function baht2(v) { return '฿' + Number(v || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
   function box(title, rows, empty) { return '<div class="panel pbox"><h4>' + title + '</h4>' + (rows.length ? rows.join('') : '<div class="muted">' + empty + '</div>') + '</div>'; }
 
@@ -173,6 +213,8 @@
     '.xbar{display:grid;grid-template-columns:minmax(0,1.3fr) 1fr auto;gap:8px;align-items:center;padding:5px 0;border-top:1px solid var(--line);font-size:13.5px}.xn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
     '.xtrack{height:10px;background:#f1f5f9;border-radius:99px;overflow:hidden}.xtrack span{display:block;height:100%;background:' + OUT_C + ';border-radius:99px}.xv{text-align:right;font-weight:600;white-space:nowrap}.xv small{display:block;font-weight:400;color:var(--muted);font-size:11px}',
     '.xframe{background:#fff;border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}.xframe iframe{display:block;width:100%;height:900px;border:0}',
+    '.xsec{margin:18px 0 8px;font-size:15px;background:rgba(255,255,255,.92);display:inline-block;padding:4px 12px;border-radius:9px;box-shadow:var(--shadow)}.xsub{font-size:12.5px;font-weight:600;color:var(--muted);margin:10px 0 2px}',
+    '.xopp{margin:14px 0}.xopp h4{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.xopp h4 .pos{font-size:13px}.li .tag{margin-top:3px}',
     '@media (max-width:860px){.kpis.xk{grid-template-columns:repeat(2,1fr)}}'
   ].join('\n');
   document.head.appendChild(css);

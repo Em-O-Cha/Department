@@ -581,7 +581,8 @@ function purDashboard_(dept, from, to) {
       qcFail: qcFail, returns: returns, poCount: po.length, poTotal: sumOf(po, 'total'), poPaid: sumOf(po, 'paidAmount'), prCount: pr.length, prTotal: sumOf(pr, 'total'),
       prDraft: pr.filter(function (d) { return d.status === 'draft'; }).length, unpaidTotal: Math.round(unpaid.reduce(function (s, d) { return s + d.due; }, 0) * 100) / 100,
       overdueCount: unpaid.filter(function (d) { return d.overdue; }).length, waitingCount: waiting.length },
-    days: dayList, top: topList, low: low.slice(0, 30), expiring: exp.slice(0, 30), unpaid: unpaid.slice(0, 30), waiting: waiting.slice(0, 30)
+    days: dayList, top: topList, low: low.slice(0, 30), expiring: exp.slice(0, 30), unpaid: unpaid.slice(0, 30), waiting: waiting.slice(0, 30),
+    insights: purInsights_(ss, from, to)   // คำถามผู้บริหาร: ซื้อเท่าไร ราคาขึ้นลง ใครส่งช้า พึ่งพาใครมากไป PO ค้าง โอกาสลดต้นทุน (PurchasingPlus.gs)
   };
 }
 

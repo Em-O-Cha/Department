@@ -271,3 +271,117 @@ function purVendorReport(token, period) {
   }).sort(function (a, c) { return (c.eval ? c.eval.score : -1) - (a.eval ? a.eval.score : -1) || c.poTotal - a.poTotal; });
   return { ok: true, period: period, from: r.from, to: r.to, rows: rows };
 }
+
+// ---------- Dashboard ผู้บริหาร: ข้อมูลเชิงลึกการจัดซื้อในช่วงวันที่ ----------
+// 1) ซื้อไปเท่าไร (PO + ใบแจ้งหนี้ เทียบช่วงก่อนหน้า)  2) ราคาขึ้น/ลง  3) ผู้ขายส่งช้า  4) พึ่งพาผู้ขายรายใดมากเกินไป
+// 5) PO ค้าง (รอรับของ / ค้างชำระ)  6) โอกาสลดต้นทุน (ประมาณการเงินที่ประหยัดได้)
+function purInsights_(ss, from, to) {
+  var today = purToday_();
+  var docs = purRead_(ss, 'docs'), items = purRead_(ss, 'docItems'), moves = purRead_(ss, 'moves'), prices = purRead_(ss, 'prices');
+  var vendors = purRead_(ss, 'vendors'), mats = purRead_(ss, 'materials'), invoices = purRead_(ss, 'invoices'), rfqs = purRead_(ss, 'rfqs'), quotes = purRead_(ss, 'quotes');
+  var vName = {}, mInfo = {}; vendors.forEach(function (v) { vName[v.id] = v.name; }); mats.forEach(function (m) { mInfo[m.id] = m; });
+  var itemsByDoc = {}; items.forEach(function (it) { (itemsByDoc[it.docId] = itemsByDoc[it.docId] || []).push(it); });
+  var pos = docs.filter(function (d) { return d.type === 'PO' && d.status !== 'cancelled'; });
+  var inRange = function (dt) { return dt >= from && dt <= to; };
+  var span = Math.round((purToDate_(to) - purToDate_(from)) / 864e5) + 1;
+  var pFrom = Utilities.formatDate(new Date(purToDate_(from).getTime() - span * 864e5), PUR_TZ_, 'yyyy-MM-dd');
+  var pTo = Utilities.formatDate(new Date(purToDate_(from).getTime() - 864e5), PUR_TZ_, 'yyyy-MM-dd');
+  var vendorKey = function (d) { return d.vendorId || ('n:' + (d.vendorName || 'ไม่ระบุผู้ขาย')); };
+  var vendorLabel = function (d) { return vName[d.vendorId] || d.vendorName || 'ไม่ระบุผู้ขาย'; };
+
+  // 1) ยอดซื้อ
+  var cur = pos.filter(function (d) { return inRange(d.orderDate); }), prev = pos.filter(function (d) { return d.orderDate >= pFrom && d.orderDate <= pTo; });
+  var sum = function (list) { return purR2_(list.reduce(function (a, d) { return a + (Number(d.total) || 0); }, 0)); };
+  var invCur = invoices.filter(function (x) { return inRange(x.invoiceDate); });
+  var spend = { poTotal: sum(cur), poCount: cur.length, prevTotal: sum(prev), prevFrom: pFrom, prevTo: pTo,
+    invTotal: purR2_(invCur.reduce(function (a, x) { return a + (Number(x.amount) || 0); }, 0)), invCount: invCur.length };
+  spend.changePct = spend.prevTotal ? Math.round((spend.poTotal - spend.prevTotal) / spend.prevTotal * 1000) / 10 : '';
+
+  // 4) สัดส่วนตามผู้ขาย + วัตถุดิบที่ซื้อจากผู้ขายรายเดียว (ดูย้อน 12 เดือน)
+  var byV = {};
+  cur.forEach(function (d) { var k = vendorKey(d), x = (byV[k] = byV[k] || { name: vendorLabel(d), total: 0, count: 0 }); x.total += Number(d.total) || 0; x.count++; });
+  var vendorShare = Object.keys(byV).map(function (k) { var x = byV[k]; x.total = purR2_(x.total); x.share = spend.poTotal ? Math.round(x.total / spend.poTotal * 1000) / 10 : 0; return x; })
+    .sort(function (a, c) { return c.total - a.total; });
+  var yearAgo = Utilities.formatDate(new Date(purToDate_(to).getTime() - 365 * 864e5), PUR_TZ_, 'yyyy-MM-dd');
+  var matVendors = {};
+  pos.filter(function (d) { return d.orderDate >= yearAgo && d.orderDate <= to; }).forEach(function (d) {
+    (itemsByDoc[d.id] || []).forEach(function (it) {
+      var mk = it.materialId || ('n:' + it.materialName), x = (matVendors[mk] = matVendors[mk] || { name: (mInfo[it.materialId] || {}).name || it.materialName, vendors: {}, spend: 0 });
+      x.vendors[vendorLabel(d)] = 1; x.spend += Number(it.amount) || 0;
+    });
+  });
+  var singleSource = Object.keys(matVendors).map(function (k) { var x = matVendors[k]; return { name: x.name, vendor: Object.keys(x.vendors)[0], vendorCount: Object.keys(x.vendors).length, spend: purR2_(x.spend) }; })
+    .filter(function (x) { return x.vendorCount === 1; }).sort(function (a, c) { return c.spend - a.spend; }).slice(0, 15);
+
+  // 2) ราคาขึ้น/ลง: ราคาล่าสุดในช่วง เทียบราคาก่อนหน้า (ก่อนช่วง หรือรายการแรกในช่วง)
+  var pByMat = {}; prices.forEach(function (p) { (pByMat[p.materialId] = pByMat[p.materialId] || []).push(p); });
+  var priceChanges = [];
+  Object.keys(pByMat).forEach(function (mid) {
+    var list = pByMat[mid].sort(function (a, c) { return a.effectiveDate.localeCompare(c.effectiveDate) || String(a.createdAt).localeCompare(String(c.createdAt)); });
+    var inR = list.filter(function (p) { return inRange(p.effectiveDate); }); if (!inR.length) return;
+    var before = list.filter(function (p) { return p.effectiveDate < from; }), base = before.length ? before[before.length - 1] : (inR.length > 1 ? inR[0] : null);
+    var last = inR[inR.length - 1]; if (!base || base === last || !base.price) return;
+    var pct = Math.round((last.price - base.price) / base.price * 1000) / 10; if (!pct) return;
+    priceChanges.push({ name: (mInfo[mid] || {}).name || mid, unit: (mInfo[mid] || {}).unit || '', vendor: vName[last.vendorId || (mInfo[mid] || {}).vendorId] || '', from: base.price, to: last.price, fromDate: base.effectiveDate, toDate: last.effectiveDate, pct: pct });
+  });
+  priceChanges.sort(function (a, c) { return c.pct - a.pct; });
+
+  // 3) ส่งของช้า: PO ในช่วงที่มีวันส่ง เทียบวันรับของครั้งแรก + PO ที่เลยวันส่งแต่ยังไม่ได้รับ
+  var firstRecv = {}, recvQty = {};
+  moves.forEach(function (m) { if (m.type === 'IN' && m.docId) { if (!firstRecv[m.docId] || m.date < firstRecv[m.docId]) firstRecv[m.docId] = m.date; recvQty[m.docId] = (recvQty[m.docId] || 0) + (Number(m.qty) || 0); } });
+  var dv = {};
+  cur.forEach(function (d) {
+    var r = firstRecv[d.id]; if (!r || !d.deliveryDate) return;
+    var k = vendorKey(d), x = (dv[k] = dv[k] || { name: vendorLabel(d), delivered: 0, late: 0, lateDays: 0 });
+    x.delivered++; var ld = Math.round((purToDate_(r) - purToDate_(d.deliveryDate)) / 864e5); if (ld > 0) { x.late++; x.lateDays += ld; }
+  });
+  var delivery = Object.keys(dv).map(function (k) { var x = dv[k]; x.onTimeRate = Math.round((x.delivered - x.late) / x.delivered * 100); x.avgLateDays = x.late ? Math.round(x.lateDays / x.late * 10) / 10 : 0; delete x.lateDays; return x; })
+    .sort(function (a, c) { return a.onTimeRate - c.onTimeRate || c.late - a.late; });
+  var overdue = pos.filter(function (d) { return /approved|ordered|partial/.test(d.status) && d.deliveryDate && d.deliveryDate < today; })
+    .map(function (d) { return { docNo: d.docNo, vendor: vendorLabel(d), deliveryDate: d.deliveryDate, daysLate: Math.round((purToDate_(today) - purToDate_(d.deliveryDate)) / 864e5), partial: d.status === 'partial' }; })
+    .sort(function (a, c) { return c.daysLate - a.daysLate; });
+
+  // 5) PO ค้าง
+  var openPOs = pos.filter(function (d) { return /approved|ordered|partial/.test(d.status) || (d.paymentStatus !== 'paid' && d.paymentStatus !== 'none'); }).map(function (d) {
+    return { docNo: d.docNo, vendor: vendorLabel(d), orderDate: d.orderDate, deliveryDate: d.deliveryDate, total: d.total, due: purR2_((Number(d.total) || 0) - (Number(d.paidAmount) || 0)),
+      waitGoods: /approved|ordered|partial/.test(d.status), partial: d.status === 'partial', unpaid: d.paymentStatus !== 'paid', dueDate: d.dueDate, overduePay: !!d.dueDate && d.dueDate < today && d.paymentStatus !== 'paid' };
+  }).sort(function (a, c) { return String(a.orderDate).localeCompare(String(c.orderDate)); });
+
+  // 6) โอกาสลดต้นทุน
+  var opps = [];
+  // 6.1 จ่ายแพงกว่าราคาต่ำสุดที่เคยได้ (12 เดือน: ราคา PO / ประวัติราคา / ใบเสนอราคา)
+  var low = {};
+  var seeLow = function (mid, price, src) { if (!mid || price === '' || price == null || !(price > 0)) return; if (!low[mid] || price < low[mid].price) low[mid] = { price: price, src: src }; };
+  pos.filter(function (d) { return d.orderDate >= yearAgo && d.orderDate <= to; }).forEach(function (d) { (itemsByDoc[d.id] || []).forEach(function (it) { seeLow(it.materialId, Number(it.price), 'PO ' + d.docNo + ' (' + vendorLabel(d) + ')'); }); });
+  prices.filter(function (p) { return p.effectiveDate >= yearAgo && p.effectiveDate <= to; }).forEach(function (p) { seeLow(p.materialId, Number(p.price), 'ราคา ' + p.effectiveDate); });
+  var rfqItems = {}; rfqs.forEach(function (r) { rfqItems[r.id] = purJson_(r.items); });
+  quotes.forEach(function (q) { var its = rfqItems[q.rfqId] || []; purJson_(q.items).forEach(function (p) { var it = its.filter(function (x) { return x.key === p.key; })[0]; if (it) seeLow(it.materialId, Number(p.price), 'ใบเสนอราคา ' + q.vendorName); }); });
+  var paidMore = {};
+  cur.forEach(function (d) {
+    (itemsByDoc[d.id] || []).forEach(function (it) {
+      var l = low[it.materialId], pr = Number(it.price), q = Number(it.qty) || 0;
+      if (!l || !(pr > l.price + 0.005)) return;
+      var x = (paidMore[it.materialId] = paidMore[it.materialId] || { name: (mInfo[it.materialId] || {}).name || it.materialName, unit: it.unit, low: l.price, lowSrc: l.src, paid: 0, qty: 0, extra: 0 });
+      x.qty += q; x.paid += pr * q; x.extra += (pr - l.price) * q;
+    });
+  });
+  Object.keys(paidMore).forEach(function (k) { var x = paidMore[k]; opps.push({ kind: 'price', title: x.name + ': จ่ายเฉลี่ย ' + purR2_(x.paid / x.qty) + ' แต่เคยได้ ' + x.low + ' ต่อ' + (x.unit || 'หน่วย'), detail: 'ราคาต่ำสุด: ' + x.lowSrc, amount: purR2_(x.extra) }); });
+  // 6.2 เลือกผู้ขายที่ไม่ใช่ราคาต่ำสุด (ใบเปรียบเทียบที่ตัดสินในช่วงนี้)
+  rfqs.filter(function (r) { return r.status === 'decided' && r.winnerId && inRange(String(r.decidedAt)); }).forEach(function (r) {
+    var qs = quotes.filter(function (q) { return q.rfqId === r.id; }), win = qs.filter(function (q) { return q.id === r.winnerId; })[0];
+    if (!win || qs.length < 2) return;
+    var min = Math.min.apply(null, qs.map(function (q) { return Number(q.total) || 0; }));
+    if (win.total > min + 0.005) opps.push({ kind: 'rfq', title: r.title + ': เลือก ' + win.vendorName + ' แพงกว่าราคาต่ำสุด', detail: 'เหตุผล: ' + (r.reason || '-'), amount: purR2_(win.total - min) });
+  });
+  // 6.3 ราคาขึ้น → เจรจา/หาราคาเทียบ (ไม่มีตัวเลข)
+  priceChanges.filter(function (x) { return x.pct >= 5; }).slice(0, 5).forEach(function (x) { opps.push({ kind: 'up', title: x.name + ' ราคาขึ้น ' + x.pct + '%', detail: 'ควรขอใบเสนอราคาเทียบ / เจรจากับ ' + (x.vendor || 'ผู้ขาย'), amount: '' }); });
+  // 6.4 ซื้อจากผู้ขายรายเดียว ยอดสูง → หาผู้ขายสำรองเพื่อเทียบราคา
+  singleSource.slice(0, 3).filter(function (x) { return x.spend > 0; }).forEach(function (x) { opps.push({ kind: 'single', title: x.name + ' ซื้อจาก ' + x.vendor + ' รายเดียว (12 เดือน ' + String(purR2_(x.spend)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' บาท)', detail: 'หาผู้ขายสำรองและขอใบเสนอราคาเทียบ', amount: '' }); });
+  opps.sort(function (a, c) { return (Number(c.amount) || 0) - (Number(a.amount) || 0); });
+  var saveTotal = purR2_(opps.reduce(function (a, x) { return a + (Number(x.amount) || 0); }, 0));
+
+  return { spend: spend, vendorShare: vendorShare.slice(0, 12), singleSource: singleSource, priceChanges: priceChanges.slice(0, 30),
+    priceUp: priceChanges.filter(function (x) { return x.pct > 0; }).length, priceDown: priceChanges.filter(function (x) { return x.pct < 0; }).length,
+    delivery: delivery, overdue: overdue.slice(0, 20), openPOs: openPOs.slice(0, 40), opportunities: opps.slice(0, 20), saveTotal: saveTotal,
+    missingVendor: cur.filter(function (d) { return !d.vendorId; }).length, missingDelivery: cur.filter(function (d) { return !d.deliveryDate; }).length };
+}

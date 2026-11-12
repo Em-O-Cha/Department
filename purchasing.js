@@ -412,9 +412,9 @@
       + '<div class="pform">'
       + hl(F('dNo', 'เลขที่ ' + d.type + ' (จาก PEAK) *', d.docNo, 'text', ' placeholder="เลขที่ตามใบใน PEAK"'))
       + (isPO ? S('dRef', 'อ้างอิง PR', [['', '— ไม่อ้างอิง —']].concat(prs.map(function (x) { return [x.id, x.docNo + ' · ' + (x.vendorName || '')]; })), d.refId) : '')
-      + S('dVendor', 'ผู้ขาย (เลือกจากรายชื่อ)', vendorOptions('— เลือก / พิมพ์เองด้านล่าง —'), d.vendorId)
+      + (isPO ? hl(S('dVendor', 'ผู้ขาย (เลือกจากรายชื่อ) *', vendorOptions('— เลือกผู้ขาย —'), d.vendorId)) : S('dVendor', 'ผู้ขาย (เลือกจากรายชื่อ)', vendorOptions('— เลือก / พิมพ์เองด้านล่าง —'), d.vendorId))
       + F('dVName', 'ชื่อผู้ขาย', d.vendorName) + F('dVPhone', 'เบอร์โทรผู้ขาย', d.vendorPhone, 'tel')
-      + F('dOrder', 'วันที่สั่ง', d.orderDate, 'date') + F('dDeliver', 'วันที่ส่งของ', d.deliveryDate, 'date')
+      + F('dOrder', 'วันที่สั่ง', d.orderDate, 'date') + (isPO ? hl(F('dDeliver', 'วันที่ส่งของ (กำหนดส่ง) *', d.deliveryDate, 'date')) : F('dDeliver', 'วันที่ส่งของ', d.deliveryDate, 'date'))
       + S('dStatus', 'สถานะ', Object.keys(DOC_ST).filter(function (k) { return isPO || !/ordered|partial|received/.test(k); }).map(function (k) { return [k, DOC_ST[k]]; }), d.status)
       + F('dAppBy', 'ผู้อนุมัติ', d.approvedBy) + F('dAppDate', 'วันที่อนุมัติ', d.approvedDate, 'date')
       + '</div>'
@@ -503,6 +503,8 @@
       check: function () {
         var filled = items.filter(function (it) { return it.materialName.trim() && it.qty !== ''; });
         if (!v('dNo')) return 'กรอกเลขที่ ' + d.type + ' ตามใบใน PEAK';
+        if (isPO && !v('dVendor')) return 'เลือกผู้ขายจากรายชื่อ (ใช้ทำรายงานผู้บริหาร) — ถ้ายังไม่มี เพิ่มที่เมนูผู้ขายก่อน';
+        if (isPO && !v('dDeliver')) return 'ใส่วันที่ส่งของ (ใช้วัดว่าผู้ขายส่งตรงเวลาหรือไม่)';
         if (!filled.length) return 'เพิ่มรายการวัตถุดิบ (ชื่อ + จำนวน) อย่างน้อย 1 รายการ';
         if (items.some(function (it) { return it.materialName.trim() && it.qty === ''; })) return 'กรอกจำนวนให้ครบทุกรายการ';
         return '';
