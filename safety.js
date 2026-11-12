@@ -242,10 +242,39 @@
         var dots = ''; for (var r = 1; r <= a.rounds; r++) dots += '<i class="' + (done.some(function (c) { return Number(c.round) === r; }) ? 'ok' : '') + '">' + r + '</i>';
         return '<button class="sareabtn" data-a="' + a.id + '"><span class="sic">' + icon('shield', 26) + '</span><b>' + esc(a.name) + '</b><small>' + a.items.filter(function (it) { return it.active !== 'ปิด'; }).length + ' หัวข้อ · ' + a.rounds + ' รอบ/วัน</small>'
           + '<span class="srounds">' + dots + '</span>' + (fails ? '<em class="neg">ไม่ผ่าน ' + fails + ' ข้อ</em>' : '') + '</button>';
-      }).join('') + '</div>';
+      }).join('') + '</div>'
+      + histHtml();
     $('wDate').addEventListener('change', function () { if (v('wDate')) { w.date = v('wDate'); walkAreas(); } });
+    on('[data-ck]', 'click', function (el) {
+      var c = H.data.checks.filter(function (x) { return x.id === el.getAttribute('data-ck'); })[0]; if (!c) return;
+      w.date = c.date; w.areaId = c.areaId; w.round = Number(c.round); w.draft = null; walk(); window.scrollTo(0, 0);
+    }, $('main'));
+    var hq = $('hDate'); if (hq) hq.addEventListener('change', function () { H.q.hDate = hq.value; walkAreas(); });
+    // วันที่เก่ากว่าข้อมูลที่โหลดไว้ (70 วัน) → ดึงผลตรวจของวันนั้นมาเพิ่ม จะได้เห็น/แก้รอบที่ตรวจแล้ว
+    [t, H.q.hDate].forEach(function (d) {
+      if (!d || d >= addDays(H.data.today, -69) || (H.loadedDays = H.loadedDays || {})[d]) return;
+      H.loadedDays[d] = 1;
+      call('sheChecks', state.token, d, d).then(function (r) {
+        if (!r.ok) return;
+        var have = {}; H.data.checks.forEach(function (c) { have[c.id] = 1; });
+        r.checks.forEach(function (c) { if (!have[c.id]) H.data.checks.push(c); });
+        if (state.page === 's_check' && !H.walk.areaId) walkAreas();
+      }).catch(onServerError);
+    });
     $('wInsp').addEventListener('change', function () { w.inspector = v('wInsp'); store('inspector', w.inspector); });
     on('[data-a]', 'click', function (el) { w.inspector = v('wInsp'); store('inspector', w.inspector); w.areaId = el.getAttribute('data-a'); w.round = 0; walk(); }, $('main'));
+  }
+  // ผลตรวจที่บันทึกแล้ว (แตะเพื่อเปิดดู / แก้ไข) — เลือกวันที่ดูได้ · ไม่เลือก = ล่าสุด 30 รายการ
+  function histHtml() {
+    var q = H.q, rows = H.data.checks.filter(function (c) { return !q.hDate || c.date === q.hDate; })
+      .sort(function (a, b) { return String(b.date + pad(b.round)).localeCompare(String(a.date + pad(a.round))) || String(b.updatedAt).localeCompare(String(a.updatedAt)); }).slice(0, q.hDate ? 50 : 30);
+    return '<div class="panel" style="margin-top:16px"><div class="psec-h" style="flex-wrap:wrap"><b>' + icon('edit', 16) + ' ผลตรวจที่บันทึกแล้ว · แตะเพื่อดู / แก้ไข</b>'
+      + '<label class="pchk">วันที่ <input type="date" id="hDate" value="' + esc(q.hDate || '') + '" max="' + H.data.today + '"></label></div>'
+      + '<div class="plist">' + (rows.map(function (c) {
+        var a = area(c.areaId) || { name: '-' };
+        return '<button class="prow click" data-ck="' + c.id + '"><div class="pinfo"><b>' + thDate(c.date) + ' · ' + esc(a.name) + ' · รอบที่ ' + c.round + '</b><small>ผ่าน ' + (c.passCount || 0) + ' · <span class="' + (c.failCount ? 'neg' : '') + '">ไม่ผ่าน ' + (c.failCount || 0) + '</span>'
+          + (c.inspector ? ' · ' + esc(c.inspector) : '') + (c.updatedAt && c.updatedAt !== c.createdAt ? ' · แก้ไขล่าสุด ' + esc(String(c.updatedAt).slice(0, 16)) : '') + '</small></div><span class="sedit">' + icon('edit', 16) + ' แก้ไข</span></button>';
+      }).join('') || '<div class="muted">' + (q.hDate ? 'ไม่มีผลตรวจในวันที่เลือก' : 'ยังไม่มีผลตรวจ') + '</div>') + '</div></div>';
   }
   function walkRounds(a) {
     var w = H.walk, next = 0, html = '';
@@ -297,7 +326,7 @@
       }).join('') + '</div>'
       + '<div class="panel"><div class="pform" style="margin:0">' + T('wProb', 'ปัญหาที่พบ (ภาพรวมรอบนี้ · ไม่บังคับ)', D.problem) + T('wFix', 'แนวทางการแก้ไข (ไม่บังคับ)', D.fix) + inspectorField('wInsp2') + '</div></div>'
       + datalist('sDepts', depts)
-      + '<div class="ssave"><button class="btn btn-primary" id="wSave">' + icon('check', 18) + ' บันทึกผลตรวจรอบที่ ' + w.round + '</button>' + (ex ? '<button class="btn btn-line" id="wDel">' + icon('trash', 16) + ' ลบผลรอบนี้</button>' : '') + '</div>';
+      + '<div class="ssave"><button class="btn btn-primary" id="wSave">' + icon('check', 18) + (ex ? ' บันทึกการแก้ไข รอบที่ ' : ' บันทึกผลตรวจรอบที่ ') + w.round + '</button>' + (ex ? '<button class="btn btn-line" id="wDel">' + icon('trash', 16) + ' ลบผลรอบนี้</button>' : '') + '</div>';
     $('main').innerHTML = html;
     var keep = function () { var c = Object.assign({}, D); delete c.photos; store(draftKey(), JSON.stringify(c)); };
     $('wBack').addEventListener('click', function () { w.round = 0; w.draft = null; walk(); });
@@ -371,7 +400,7 @@
       + '<div class="sfinds">' + (rows.map(function (f) {
         var b = f.beforeFiles[0], a2 = f.afterFiles[0];
         return '<button class="sfind" data-fd="' + f.id + '"><div class="sfimg">' + (b ? '<img src="' + img(b.id, 300) + '" alt="" loading="lazy">' : '<div class="snoimg">ไม่มีรูปก่อน</div>') + (a2 ? '<img class="aft" src="' + img(a2.id, 300) + '" alt="" loading="lazy">' : '') + '</div>'
-          + '<div class="sfinfo"><div><b>' + esc(f.code) + '</b> · ' + dd(f.date) + ' · ' + esc(f.location) + ' ' + stTag(f) + ' ' + riskTag(f.risk) + '</div><div class="sfp">' + esc(f.problem) + '</div>'
+          + '<div class="sfinfo"><div><span class="sedit" style="float:right">' + icon('edit', 15) + ' แก้ไข</span><b>' + esc(f.code) + '</b> · ' + dd(f.date) + ' · ' + esc(f.location) + ' ' + stTag(f) + ' ' + riskTag(f.risk) + '</div><div class="sfp">' + esc(f.problem) + '</div>'
           + '<small>' + esc([f.dept, f.responsible ? 'ผู้รับผิดชอบ ' + f.responsible : '', f.status === 'done' ? 'เสร็จ ' + dd(f.doneDate) : f.dueDate ? 'กำหนด ' + dd(f.dueDate) : ''].filter(String).join(' · ')) + '</small></div></button>';
       }).join('') || '<div class="panel muted">ไม่มีรายการ</div>') + '</div>';
     on('[data-fst]', 'click', function (el) { q.fst = el.getAttribute('data-fst'); findings(); }, $('main'));
@@ -465,7 +494,7 @@
       + '<div class="pbar"><b style="flex:1">รายการทั้งหมด (' + rows.length + ')</b><button class="btn btn-sm btn-primary" id="iNew">' + icon('plus', 16) + ' บันทึกเหตุการณ์</button></div>'
       + '<div class="plist">' + (rows.map(function (x) {
         return '<button class="prow click" data-inc="' + x.id + '"><div class="pinfo"><b>' + dd(x.date) + (x.time ? ' ' + esc(x.time) + ' น.' : '') + ' · <span class="' + (ACC[x.type] ? 'neg' : 'warn') + '">' + esc(INC[x.type] || x.type) + '</span></b>'
-          + '<small>' + esc([x.location, x.person, x.injury, x.lostDays ? 'หยุดงาน ' + x.lostDays + ' วัน' : ''].filter(String).join(' · ')) + '</small></div>' + (x.files.length ? '<img class="sinc-img" src="' + img(x.files[0].id, 200) + '" alt="">' : '') + '</button>';
+          + '<small>' + esc([x.location, x.person, x.injury, x.lostDays ? 'หยุดงาน ' + x.lostDays + ' วัน' : ''].filter(String).join(' · ')) + '</small></div>' + (x.files.length ? '<img class="sinc-img" src="' + img(x.files[0].id, 200) + '" alt="">' : '') + '<span class="sedit">' + icon('edit', 16) + ' แก้ไข</span></button>';
       }).join('') || '<div class="panel muted">ยังไม่มีบันทึก</div>') + '</div>';
     $('iNew').addEventListener('click', function () { incidentModal(null); });
     on('[data-inc]', 'click', function (el) { incidentModal(rows.filter(function (x) { return x.id === el.getAttribute('data-inc'); })[0]); }, $('main'));
@@ -689,7 +718,7 @@
     '.sseg{display:flex;gap:6px}.sseg button{flex:1;border:1.5px solid var(--line);background:#fff;border-radius:9px;padding:9px 4px;font-weight:600}.sseg .rL.on{background:#16a34a;color:#fff;border-color:#16a34a}.sseg .rM.on{background:#d97706;color:#fff;border-color:#d97706}.sseg .rH.on{background:#dc2626;color:#fff;border-color:#dc2626}',
     '.sphotos{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.sth{position:relative;display:inline-block}.sth img{width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid var(--line);display:block;background:#f1f5f9}',
     '.sth-x{position:absolute;top:-8px;right:-8px;width:26px;height:26px;border-radius:50%;border:0;background:#dc2626;color:#fff;display:grid;place-items:center;padding:0}.sth-x svg{width:14px;height:14px}',
-    '.sshot.lib{border-style:solid;background:#fff}.sshot{width:96px;height:96px;border:2px dashed var(--c);border-radius:10px;background:color-mix(in srgb,var(--c) 7%,white);color:var(--c);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px;font-weight:600;line-height:1.2}',
+    '.sedit{display:inline-flex;align-items:center;gap:3px;font-size:12.5px;font-weight:600;color:var(--c);white-space:nowrap}.sedit svg{width:15px;height:15px}.sshot.lib{border-style:solid;background:#fff}.sshot{width:96px;height:96px;border:2px dashed var(--c);border-radius:10px;background:color-mix(in srgb,var(--c) 7%,white);color:var(--c);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px;font-weight:600;line-height:1.2}',
     '.ssave{position:sticky;bottom:0;display:flex;gap:10px;padding:12px 0;background:linear-gradient(transparent,var(--bg,#f1f5f9) 30%);z-index:5}.ssave .btn-primary{flex:1;font-size:18px;padding:16px}',
     '.stag{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:99px;vertical-align:1px}.stag.sopen{background:#fee2e2;color:#b91c1c}.stag.sprogress{background:#fef3c7;color:#b45309}.stag.sdone{background:#dcfce7;color:#15803d}.stag.late{background:#b91c1c;color:#fff}',
     '.stag.rL{background:#f0fdf4;color:#15803d}.stag.rM{background:#fffbeb;color:#b45309}.stag.rH{background:#fef2f2;color:#b91c1c;border:1px solid #fca5a5}',

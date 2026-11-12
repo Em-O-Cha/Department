@@ -176,6 +176,14 @@ function sheSaveCheck(token, c, newFindings) {
     return { ok: true, check: sheCheckOut_(purRead_(ss, 'she_checks').filter(function (x) { return x.id === rec.id; })[0]), findings: created };
   });
 }
+// ผลตรวจในช่วงวันที่ (ใช้ตอนเปิดดู/แก้ผลตรวจที่เก่ากว่า 70 วัน) — ไม่เกิน 92 วันต่อครั้ง
+function sheChecks(token, from, to) {
+  var dept = requireShe_(token);
+  if (!purDate_(from) || !purDate_(to) || from > to) return { ok: false, error: 'เลือกช่วงวันที่ให้ถูกต้อง' };
+  if (sheDays_(from, to) > 92) return { ok: false, error: 'เลือกช่วงไม่เกิน 3 เดือน' };
+  var ss = sheBook_(dept);
+  return { ok: true, checks: purRead_(ss, 'she_checks').filter(function (c) { return c.date >= from && c.date <= to; }).map(sheCheckOut_) };
+}
 function sheDeleteCheck(token, id) {
   var dept = requireShe_(token);
   return purLocked_(function () {
