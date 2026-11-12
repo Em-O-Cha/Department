@@ -10,6 +10,7 @@
     camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
     alert: '<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5h.01"/>',
     x: '<path d="M18 6L6 18M6 6l12 12"/>',
+    image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>',
     back: '<path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/>'
   });
 
@@ -62,10 +63,11 @@
   function datalist(id, arr) { return '<datalist id="' + id + '">' + arr.map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist>'; }
 
   // ---------- รูปถ่าย: กล้อง iPad → ย่อ (ด้านยาว 1600px) → base64 ----------
-  function pickPhotos(cb, multiple) {
+  // cam = true → เปิดกล้องถ่ายเลย · false → เลือกรูปที่มีในเครื่อง (คลังรูป / ไฟล์) ได้หลายรูป
+  function pickPhotos(cb, cam) {
     var inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = 'image/*'; if (multiple !== false) inp.multiple = true;
-    inp.setAttribute('capture', 'environment');
+    inp.type = 'file'; inp.accept = 'image/*';
+    if (cam) inp.setAttribute('capture', 'environment'); else inp.multiple = true;
     inp.style.display = 'none'; document.body.appendChild(inp);
     inp.addEventListener('change', function () {
       var files = Array.prototype.slice.call(inp.files || []);
@@ -88,6 +90,11 @@
       im.onerror = function () { URL.revokeObjectURL(url); res(null); };
       im.src = url;
     });
+  }
+  // ปุ่ม 2 ปุ่ม: ถ่ายรูป / เลือกจากเครื่อง (attr = ชื่อ data-* ของจุดนั้น, val = ค่า)
+  function shotBtns(attr, val, label) {
+    return '<button type="button" class="sshot" data-' + attr + '="' + esc(val) + '" data-src="cam">' + icon('camera', 22) + '<span>ถ่ายรูป' + (label ? '<br>' + label : '') + '</span></button>'
+      + '<button type="button" class="sshot lib" data-' + attr + '="' + esc(val) + '" data-src="lib">' + icon('image', 22) + '<span>เลือกรูป<br>จากเครื่อง</span></button>';
   }
   function uploadPhoto(type, id, slot, p) {
     return call('sheUploadFile', state.token, type, id, slot, p.name, 'image/jpeg', p.b64).then(function (r) { if (!r.ok) throw new Error(r.error); return r; });
@@ -284,7 +291,7 @@
             + '<div class="pf"><label>กำหนดแก้ไขเสร็จ</label><input type="date" data-ff="dueDate" data-it="' + it.id + '" value="' + esc(fl.dueDate || addDays(w.date, 7)) + '"></div>'
             + '<div class="pf full"><label>ข้อเสนอแนะ / การปรับปรุงแก้ไข</label><input data-ff="recommendation" data-it="' + it.id + '" value="' + esc(fl.recommendation || '') + '" placeholder="เช่น เปลี่ยนสายไฟใหม่ ติดป้ายเตือน"></div>'
             + '</div><div class="sphotos">' + thumbs(ph.map(function (p, k) { return { dataUrl: p.dataUrl, tmp: it.id + ':' + k }; }), 'tmp')
-            + '<button type="button" class="sshot" data-shot="' + it.id + '">' + icon('camera', 22) + '<span>ถ่ายรูป<br>ก่อนปรับปรุง</span></button></div></div>';
+            + shotBtns('shot', it.id, 'ก่อนปรับปรุง') + '</div></div>';
         }
         return h + '</div>';
       }).join('') + '</div>'
@@ -306,7 +313,7 @@
     on('[data-risk]', 'click', function (el) { var id = el.getAttribute('data-it'); D.fails[id] = D.fails[id] || {}; D.fails[id].risk = el.getAttribute('data-risk'); keep(); var y = window.scrollY; walkForm(a); window.scrollTo(0, y); }, $('main'));
     on('[data-shot]', 'click', function (el) {
       var id = el.getAttribute('data-shot');
-      pickPhotos(function (arr) { D.photos[id] = (D.photos[id] || []).concat(arr).slice(0, 6); var y = window.scrollY; walkForm(a); window.scrollTo(0, y); });
+      pickPhotos(function (arr) { D.photos[id] = (D.photos[id] || []).concat(arr).slice(0, 6); var y = window.scrollY; walkForm(a); window.scrollTo(0, y); }, el.getAttribute('data-src') === 'cam');
     }, $('main'));
     on('[data-del="tmp"]', 'click', function (el) { var p = el.getAttribute('data-fid').split(':'); (D.photos[p[0]] || []).splice(+p[1], 1); var y = window.scrollY; walkForm(a); window.scrollTo(0, y); }, $('main'));
     on('[data-fd]', 'click', function (el) { var f = H.data.findings.filter(function (x) { return x.id === el.getAttribute('data-fd'); })[0]; if (f) findingModal(f); }, $('main'));
@@ -383,9 +390,9 @@
         var box = $('g_' + slot); if (!box) return;
         var saved = (slot === 'before' ? f.beforeFiles : f.afterFiles) || [];
         box.innerHTML = thumbs(saved, isNew ? '' : slot) + thumbs(pend[slot].map(function (p, k) { return { dataUrl: p.dataUrl, tmp: slot + ':' + k }; }), 'tmp')
-          + '<button type="button" class="sshot" data-pick="' + slot + '">' + icon('camera', 22) + '<span>' + (slot === 'before' ? 'รูปก่อน<br>ปรับปรุง' : 'รูปหลัง<br>ปรับปรุง') + '</span></button>';
+          + shotBtns('pick', slot, slot === 'before' ? 'ก่อนปรับปรุง' : 'หลังปรับปรุง');
       });
-      on('[data-pick]', 'click', function (el) { var slot = el.getAttribute('data-pick'); pickPhotos(function (arr) { pend[slot] = pend[slot].concat(arr).slice(0, 6); gallery(); }); }, $('mBody'));
+      on('[data-pick]', 'click', function (el) { var slot = el.getAttribute('data-pick'); pickPhotos(function (arr) { pend[slot] = pend[slot].concat(arr).slice(0, 6); gallery(); }, el.getAttribute('data-src') === 'cam'); }, $('mBody'));
       on('[data-del="tmp"]', 'click', function (el) { var p = el.getAttribute('data-fid').split(':'); pend[p[0]].splice(+p[1], 1); gallery(); }, $('mBody'));
       on('[data-del="before"],[data-del="after"]', 'click', function (el) {
         var slot = el.getAttribute('data-del'), fid = el.getAttribute('data-fid');
@@ -468,8 +475,8 @@
     x = x || { date: H.data.today, type: 'near', files: [] };
     function gallery() {
       $('g_inc').innerHTML = thumbs(x.files, isNew ? '' : 'files') + thumbs(pend.map(function (p, k) { return { dataUrl: p.dataUrl, tmp: 'i:' + k }; }), 'tmp')
-        + '<button type="button" class="sshot" data-pick="1">' + icon('camera', 22) + '<span>ถ่ายรูป</span></button>';
-      on('[data-pick]', 'click', function () { pickPhotos(function (arr) { pend = pend.concat(arr).slice(0, 6); gallery(); }); }, $('mBody'));
+        + shotBtns('pick', '1', '');
+      on('[data-pick]', 'click', function (el) { pickPhotos(function (arr) { pend = pend.concat(arr).slice(0, 6); gallery(); }, el.getAttribute('data-src') === 'cam'); }, $('mBody'));
       on('[data-del="tmp"]', 'click', function (el) { pend.splice(+el.getAttribute('data-fid').split(':')[1], 1); gallery(); }, $('mBody'));
       on('[data-del="files"]', 'click', function (el) {
         if (!window.confirm('ลบรูปนี้?')) return;
@@ -682,7 +689,7 @@
     '.sseg{display:flex;gap:6px}.sseg button{flex:1;border:1.5px solid var(--line);background:#fff;border-radius:9px;padding:9px 4px;font-weight:600}.sseg .rL.on{background:#16a34a;color:#fff;border-color:#16a34a}.sseg .rM.on{background:#d97706;color:#fff;border-color:#d97706}.sseg .rH.on{background:#dc2626;color:#fff;border-color:#dc2626}',
     '.sphotos{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.sth{position:relative;display:inline-block}.sth img{width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid var(--line);display:block;background:#f1f5f9}',
     '.sth-x{position:absolute;top:-8px;right:-8px;width:26px;height:26px;border-radius:50%;border:0;background:#dc2626;color:#fff;display:grid;place-items:center;padding:0}.sth-x svg{width:14px;height:14px}',
-    '.sshot{width:96px;height:96px;border:2px dashed var(--c);border-radius:10px;background:color-mix(in srgb,var(--c) 7%,white);color:var(--c);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px;font-weight:600;line-height:1.2}',
+    '.sshot.lib{border-style:solid;background:#fff}.sshot{width:96px;height:96px;border:2px dashed var(--c);border-radius:10px;background:color-mix(in srgb,var(--c) 7%,white);color:var(--c);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px;font-weight:600;line-height:1.2}',
     '.ssave{position:sticky;bottom:0;display:flex;gap:10px;padding:12px 0;background:linear-gradient(transparent,var(--bg,#f1f5f9) 30%);z-index:5}.ssave .btn-primary{flex:1;font-size:18px;padding:16px}',
     '.stag{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:99px;vertical-align:1px}.stag.sopen{background:#fee2e2;color:#b91c1c}.stag.sprogress{background:#fef3c7;color:#b45309}.stag.sdone{background:#dcfce7;color:#15803d}.stag.late{background:#b91c1c;color:#fff}',
     '.stag.rL{background:#f0fdf4;color:#15803d}.stag.rM{background:#fffbeb;color:#b45309}.stag.rH{background:#fef2f2;color:#b91c1c;border:1px solid #fca5a5}',
