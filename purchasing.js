@@ -27,7 +27,7 @@
     { id: 'p_dash', label: 'ภาพรวม', ic: 'home' },
     { id: 'p_stock', label: 'รับเข้า / จ่ายออก', ic: 'box' },
     { id: 'p_mat', label: 'วัตถุดิบ & ราคา', ic: 'tag' },
-    { id: 'p_doc', label: 'ใบ PR / PO (PEAK)', ic: 'doc' },
+    { id: 'p_doc', label: 'ใบ PR / PO', ic: 'doc' },
     { id: 'p_rfq', label: 'เปรียบเทียบราคา', ic: 'list' },
     { id: 'p_ven', label: 'ผู้ขาย (Vendor)', ic: 'phone' },
     { id: 'p_rep', label: 'รายงาน / พิมพ์', ic: 'chart' },
@@ -46,7 +46,7 @@
     if (value && STAFF.indexOf(value) < 0) opts.push([value, value]);   // ชื่อเดิมในข้อมูลเก่า
     return S(id, label, opts, value || '');
   }
-  var FILE_LABELS = ['ไฟล์ PR/PO จาก PEAK', 'ใบแจ้งหนี้ / ใบกำกับภาษี', 'PR ที่อนุมัติ', 'PO ที่อนุมัติ', 'ภาพอนุมัติทาง LINE', 'ใบเสนอราคา', 'ใบส่งของ / ใบกำกับ', 'COA / ผลตรวจ', 'หลักฐานการชำระเงิน', 'อื่น ๆ'];
+  var FILE_LABELS = ['ไฟล์ PR / PO', 'ใบแจ้งหนี้ / ใบกำกับภาษี', 'PR ที่อนุมัติ', 'PO ที่อนุมัติ', 'ภาพอนุมัติทาง LINE', 'ใบเสนอราคา', 'ใบส่งของ / ใบกำกับ', 'COA / ผลตรวจ', 'หลักฐานการชำระเงิน', 'อื่น ๆ'];
 
   // ---------- ตัวช่วย ----------
   function pad(n) { return ('0' + n).slice(-2); }
@@ -374,7 +374,7 @@
   // ==================== ใบ PR / PO ====================
   function docs() {
     var f = P.q.docType || '';
-    $('main').innerHTML = '<h3>ใบ PR / PO (จาก PEAK)</h3><p class="lead">PR / PO ออกจากระบบ PEAK แล้วนำมาลงที่นี่: ใส่เลขที่ + แนบไฟล์ + รายการ · ใช้รับของตาม PO และตรวจ 3 ทางกับใบแจ้งหนี้ · ใบขอซื้อ (PR) และใบสั่งซื้อ (PO) หลายรายการต่อใบ · แนบไฟล์ใบที่อนุมัติ / ภาพอนุมัติทาง LINE · ติดตามการชำระเงิน</p>'
+    $('main').innerHTML = '<h3>ใบ PR / PO</h3><p class="lead">ลง PR / PO: ใส่เลขที่ + แนบไฟล์ + รายการ · ใช้รับของตาม PO และตรวจ 3 ทางกับใบแจ้งหนี้ · ใบขอซื้อ (PR) และใบสั่งซื้อ (PO) หลายรายการต่อใบ · แนบไฟล์ใบที่อนุมัติ / ภาพอนุมัติทาง LINE · ติดตามการชำระเงิน</p>'
       + searchBar('doc', 'ค้นหาเลขที่ / ผู้ขาย / วัตถุดิบ', '<button class="btn btn-sm btn-primary" data-new="PR">' + icon('plus', 16) + 'PR</button><button class="btn btn-sm btn-primary" data-new="PO">' + icon('plus', 16) + 'PO</button>')
       + '<div class="pchips">' + [['', 'ทั้งหมด'], ['PR', 'PR'], ['PO', 'PO'], ['open', 'PO รอรับของ'], ['unpaid', 'ค้างชำระ']].map(function (c) { return '<button class="chip' + (f === c[0] ? ' on' : '') + '" data-f="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>'
       + '<div id="pList" class="plist"></div>';
@@ -410,7 +410,7 @@
     var prs = P.data.docs.filter(function (x) { return x.type === 'PR' && x.status !== 'cancelled'; });
     var body = '<datalist id="matList">' + materialList().filter(function (m) { return m.active !== 'ปิด'; }).map(function (m) { return '<option value="' + esc(m.name) + '">'; }).join('') + '</datalist>'
       + '<div class="pform">'
-      + hl(F('dNo', 'เลขที่ ' + d.type + ' (จาก PEAK) *', d.docNo, 'text', ' placeholder="เลขที่ตามใบใน PEAK"'))
+      + hl(F('dNo', 'เลขที่ ' + d.type + ' *', d.docNo, 'text', ' placeholder="เลขที่ตามใบ ' + d.type + '"'))
       + (isPO ? S('dRef', 'อ้างอิง PR', [['', '— ไม่อ้างอิง —']].concat(prs.map(function (x) { return [x.id, x.docNo + ' · ' + (x.vendorName || '')]; })), d.refId) : '')
       + (isPO ? hl(S('dVendor', 'ผู้ขาย (เลือกจากรายชื่อ) *', vendorOptions('— เลือกผู้ขาย —'), d.vendorId)) : S('dVendor', 'ผู้ขาย (เลือกจากรายชื่อ)', vendorOptions('— เลือก / พิมพ์เองด้านล่าง —'), d.vendorId))
       + F('dVName', 'ชื่อผู้ขาย', d.vendorName) + F('dVPhone', 'เบอร์โทรผู้ขาย', d.vendorPhone, 'tel')
@@ -426,7 +426,7 @@
         + (edit ? '<div class="psec"><div class="psec-h"><b>ตรวจ 3 ทาง: PO ↔ รับของ ↔ ใบแจ้งหนี้</b><button type="button" class="btn btn-sm btn-line" id="dInv">' + icon('plus', 16) + 'เพิ่มใบแจ้งหนี้</button></div><div id="dMatch"></div></div>' : '') : '')
       + '<div class="pform">' + T('dNote', 'หมายเหตุ', d.note) + '</div>'
       + '<div class="psec"><div class="psec-h"><b>' + icon('clip', 16) + ' ไฟล์แนบ</b></div>' + (edit
-        ? '<div id="dFiles"></div><div class="pupload">' + S('dFileLabel', 'ประเภทไฟล์', FILE_LABELS.map(function (x) { return [x, x]; }), 'ไฟล์ PR/PO จาก PEAK') + '<div class="pf"><label>เลือกรูป / PDF (อัปโหลดทันที)</label><input id="dFile" type="file" accept="image/*,application/pdf" multiple></div></div>'
+        ? '<div id="dFiles"></div><div class="pupload">' + S('dFileLabel', 'ประเภทไฟล์', FILE_LABELS.map(function (x) { return [x, x]; }), 'ไฟล์ PR / PO') + '<div class="pf"><label>เลือกรูป / PDF (อัปโหลดทันที)</label><input id="dFile" type="file" accept="image/*,application/pdf" multiple></div></div>'
         : '<div class="note">กดบันทึกก่อน แล้วจึงแนบไฟล์ PR/PO ที่อนุมัติ หรือภาพอนุมัติทาง LINE ได้</div>') + '</div>';
     var items = d.items.map(function (i) { return { materialId: i.materialId, materialName: i.materialName, qty: i.qty, unit: i.unit, price: i.price }; });
     if (!items.length) items.push({ materialId: '', materialName: '', qty: '', unit: '', price: '' });
@@ -467,7 +467,7 @@
     wide({
       icon: 'doc', title: (edit ? d.type + ' ' + d.docNo : 'สร้าง ' + d.type) + (from ? ' จาก ' + from.docNo : ''), sub: edit ? (DOC_ST[d.status] || '') + ' · ' + baht(d.total) : (isPO ? 'ใบสั่งซื้อ' : 'ใบขอซื้อ'),
       body: body, ok: 'บันทึก',
-      foot: '<div class="pfoot">' + (edit && !isPO ? '<button type="button" class="btn btn-sm btn-line" id="dToPO">' + icon('doc', 16) + 'ลง PO (จาก PEAK) ที่อ้างอิง PR นี้</button>' : '')
+      foot: '<div class="pfoot">' + (edit && !isPO ? '<button type="button" class="btn btn-sm btn-line" id="dToPO">' + icon('doc', 16) + 'ลง PO ที่อ้างอิง PR นี้</button>' : '')
         + (edit && isPO && /approved|ordered|partial/.test(d.status) ? '<button type="button" class="btn btn-sm btn-line" id="dRecv">' + icon('plus', 16) + 'รับของตาม PO</button>' : '') + '</div>',
       onOpen: function () {
         drawItems();
@@ -502,7 +502,7 @@
       },
       check: function () {
         var filled = items.filter(function (it) { return it.materialName.trim() && it.qty !== ''; });
-        if (!v('dNo')) return 'กรอกเลขที่ ' + d.type + ' ตามใบใน PEAK';
+        if (!v('dNo')) return 'กรอกเลขที่ ' + d.type;
         if (isPO && !v('dVendor')) return 'เลือกผู้ขายจากรายชื่อ (ใช้ทำรายงานผู้บริหาร) — ถ้ายังไม่มี เพิ่มที่เมนูผู้ขายก่อน';
         if (isPO && !v('dDeliver')) return 'ใส่วันที่ส่งของ (ใช้วัดว่าผู้ขายส่งตรงเวลาหรือไม่)';
         if (!filled.length) return 'เพิ่มรายการวัตถุดิบ (ชื่อ + จำนวน) อย่างน้อย 1 รายการ';
@@ -754,7 +754,7 @@
     wide({ icon: 'list', title: r.title, sub: r.items.length + ' รายการ · ' + qs.length + ' ผู้ขาย', noOk: true, cancel: 'ปิด',
       body: (win ? '<div class="note"><b>เลือก: ' + esc(win.vendorName) + '</b> (' + baht(win.total) + ') · ' + dd(r.decidedAt) + (r.reason ? '<br>เหตุผล: ' + esc(r.reason) : '') + (po ? '<br>PO: ' + esc(po.docNo) : '') + '</div>' : '') + table,
       foot: '<div class="pfoot"><button type="button" class="btn btn-sm btn-primary" id="qAdd">' + icon('plus', 16) + 'เพิ่มใบเสนอราคา</button><button type="button" class="btn btn-sm btn-line" id="rqEdit">' + icon('edit', 16) + 'แก้ไขรายการ</button>'
-        + (win && !po ? '<button type="button" class="btn btn-sm btn-line" id="rqPo">' + icon('doc', 16) + 'ลง PO จาก PEAK (ผู้ขายที่เลือก)</button>' : '') + (win ? '<button type="button" class="btn btn-sm btn-line" id="rqUndo">ยกเลิกการเลือก</button>' : '') + '</div>',
+        + (win && !po ? '<button type="button" class="btn btn-sm btn-line" id="rqPo">' + icon('doc', 16) + 'ลง PO (ผู้ขายที่เลือก)</button>' : '') + (win ? '<button type="button" class="btn btn-sm btn-line" id="rqUndo">ยกเลิกการเลือก</button>' : '') + '</div>',
       onOpen: function () {
         $('qAdd').addEventListener('click', function () { quoteModal(r, null); });
         $('rqEdit').addEventListener('click', function () { rfqModal(r); });
