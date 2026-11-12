@@ -73,6 +73,10 @@
   .card .icon svg.ic { width: 28px; height: 28px; }
   .card .name { font-size: 18px; font-weight: 600; margin: 0; }
   .card .en { color: var(--muted); font-size: 13px; margin-top: -6px; }
+  /* การ์ดแผนก: พื้นสีอ่อนของแต่ละแผนก · แถบล่าง (เข้าสู่ระบบ) คงพื้นขาว */
+  .grid .card { background: color-mix(in srgb, var(--c) 9%, white); }
+  .grid .card .icon { background: #fff; }
+  .grid .card .foot { background: #fff; margin: auto -22px -18px; padding: 12px 22px 16px; border-radius: 0 0 var(--radius) var(--radius); }
   .card .foot { display: flex; align-items: center; justify-content: space-between; border-top: 1px dashed var(--line); padding-top: 12px; color: var(--muted); font-size: 13px; }
   .card .foot .go { color: var(--c); font-weight: 600; display: flex; align-items: center; gap: 4px; }
   .card .foot svg.ic { width: 16px; height: 16px; }
