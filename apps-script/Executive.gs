@@ -24,11 +24,14 @@ function execRange_(from, to) {
 // หน้านั้นตรวจตั๋วผู้บริหารกับ execVerify (ไม่ต้องใส่รหัส Meeting Dashboard ซ้ำ)
 var EXEC_SALES_ = { key: 'SALES', name: 'ฝ่ายขาย', en: 'Sales (Meeting Dashboard)', color: '#e11d48', ready: true,
   embed: 'https://em-o-cha.github.io/Dashboard-Meeting/?embed=exec' };
+// ฝ่ายการตลาด = Marketing Command Center (apps-script/marketing-dashboard) เปิดในกรอบเหมือนฝ่ายขาย · ตรวจตั๋วผู้บริหารกับ execVerify (ดูอย่างเดียว)
+var EXEC_MARKETING_ = { key: 'MKT', name: 'ฝ่ายการตลาด', en: 'Marketing Command Center', color: '#f97316', ready: true,
+  embed: 'https://script.google.com/macros/s/AKfycbwD2aku-huwQA87WJlW3fIWUH4ghcQ2veJYTNmjuOcPS6BI-MkhyMlOdzadfS0EYOV46w/exec?embed=exec' };
 
 // รายชื่อฝ่าย + ฝ่ายไหนมี Dashboard แล้ว
 function execOverview(token) {
   requireExec_(token);
-  return { ok: true, depts: [EXEC_SALES_].concat(activeDepartments_().filter(function (d) { return !d.exec; }).map(function (d) {
+  return { ok: true, depts: [EXEC_SALES_, EXEC_MARKETING_].concat(activeDepartments_().filter(function (d) { return !d.exec; }).map(function (d) {
     return { key: d.key, name: d.name, en: d.en, color: d.color, ready: !!EXEC_DASHBOARDS_[d.key] && !!deptConfig_(d.key).sheetId };
   })) };
 }

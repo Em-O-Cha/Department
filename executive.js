@@ -118,13 +118,26 @@
   var EMBED_ORIGIN = 'https://em-o-cha.github.io';
   function embed(d) {
     $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + esc(d.en) + '</span></div>'
-      + '<div class="xframe"><iframe id="xFrame" title="Meeting Dashboard" src="' + esc(d.embed) + '"></iframe></div>';
+      + '<div class="xframe"><iframe id="xFrame" title="' + esc(d.en || d.name) + '" src="' + esc(d.embed) + '"></iframe></div>';
+  }
+  // ฝ่ายการตลาด: Marketing Command Center เป็นเว็บแอป Apps Script (หน้าเว็บอยู่ในกรอบย่อยของ googleusercontent)
+  // ไม่มีรหัสผ่าน เปิดในกรอบ = ดูอย่างเดียว · รับเฉพาะข้อความความสูงจากกรอบที่อยู่ใต้ xFrame ของเรา (ไม่ส่งตั๋วผู้บริหารให้)
+  var GAS_ORIGIN = /^https:\/\/[a-z0-9-]+-script\.googleusercontent\.com$/;
+  function fromFrame(src, f) {
+    for (var w = src, i = 0; w && i < 4; i++) { if (w === f.contentWindow) return true; try { if (w === w.parent) break; w = w.parent; } catch (e) { break; } }
+    return false;
   }
   window.addEventListener('message', function (ev) {
     var f = $('xFrame');
-    if (!f || ev.source !== f.contentWindow || ev.origin !== EMBED_ORIGIN || !ev.data) return;
-    if (ev.data.type === 'meeting-ready' && state.token) f.contentWindow.postMessage({ type: 'exec-token', token: state.token }, EMBED_ORIGIN);
-    if (ev.data.type === 'meeting-height') f.style.height = Math.max(600, Number(ev.data.h) || 0) + 'px';
+    if (!f || !ev.data) return;
+    if (ev.origin === EMBED_ORIGIN && ev.source === f.contentWindow) {
+      if (ev.data.type === 'meeting-ready' && state.token) f.contentWindow.postMessage({ type: 'exec-token', token: state.token }, EMBED_ORIGIN);
+      if (ev.data.type === 'meeting-height') f.style.height = Math.max(600, Number(ev.data.h) || 0) + 'px';
+      return;
+    }
+    if (GAS_ORIGIN.test(ev.origin) && fromFrame(ev.source, f)) {
+      if (ev.data.type === 'mkt-height') f.style.height = Math.max(700, Number(ev.data.h) || 0) + 'px';
+    }
   });
 
   // คำถามผู้บริหาร 6 ข้อ (ข้อมูลจาก purInsights_ ใน PurchasingPlus.gs)
