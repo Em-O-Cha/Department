@@ -395,13 +395,7 @@ function accDotRange_(list) { return !list.length ? '-' : list.length === 1 ? ac
 function accDeliveryText_(list) { return !list.length ? '-' : list.length === 1 ? 'วัน' + accDayName_(list[0]) + ' ที่ ' + accDot_(list[0]) : accDotRange_(list); }
 // ส่ง 2 ข้อความ: (1) การ์ดสรุป หัวสีเขียวเข้ม · รอบวันที่ / ลูกค้า / วันส่ง · ยอดรวมลัง · ปุ่ม PDF
 // (2) ภาพตารางสี (ข้อความรูป กดขยายในไลน์ได้) · img = { url } ภาพที่หน้าเว็บสร้างให้ · ไม่มีภาพ = ส่งการ์ดอย่างเดียว
-// การ์ดมนทั้งหัวและท้าย: bubble โปร่งใส ห่อด้วยกล่องมุมโค้ง 24px (หัวสีเขียว / เนื้อหา / ปุ่มทรงมน อยู่ในกล่องเดียว)
-var ACC_CARD_RADIUS_ = '24px';
-function accRoundBubble_(inner) {
-  return { type: 'bubble', size: 'giga', styles: { body: { backgroundColor: '#00000000' } },
-    body: { type: 'box', layout: 'vertical', paddingAll: '0px', backgroundColor: '#00000000',
-      contents: [{ type: 'box', layout: 'vertical', cornerRadius: ACC_CARD_RADIUS_, backgroundColor: '#FFFFFF', paddingAll: '0px', contents: inner }] } };
-}
+// การ์ดสรุป: การ์ดขาว · แถบหัวสีเขียวมุมมน · กล่องยอดรวม · ปุ่ม PDF ทรงมน
 function accFlex_(m, pdfUrl, img) {
   var T = function (text, o) { var x = { type: 'text', text: String(text), wrap: true }; Object.keys(o || {}).forEach(function (k) { x[k] = o[k]; }); return x; };
   var row = function (label, value) {
@@ -420,13 +414,15 @@ function accFlex_(m, pdfUrl, img) {
   // ปุ่มทรงมน (กล่องมุมโค้งที่กดได้)
   if (pdfUrl) body.push({ type: 'box', layout: 'vertical', margin: 'xl', backgroundColor: '#0F5132', cornerRadius: '24px', paddingAll: '12px',
     action: { type: 'uri', label: 'เปิดรายงาน PDF', uri: pdfUrl }, contents: [T('เปิดรายงาน PDF', { size: 'md', weight: 'bold', color: '#FFFFFF', align: 'center' })] });
+  // หัวสีเขียวเป็นกล่องมนอยู่ในการ์ดขาว (ไม่ใช้พื้นโปร่งใส — LINE บนคอมไม่รองรับ จะเห็นมุมขาวโผล่)
   var inner = [
-    { type: 'box', layout: 'vertical', backgroundColor: '#0F5132', paddingAll: '20px', contents: [
+    { type: 'box', layout: 'vertical', backgroundColor: '#0F5132', cornerRadius: '18px', paddingAll: '18px', contents: [
       T('ORDER CONFIRMATION · 7-ELEVEN', { size: 'xxs', color: '#A7F3D0', weight: 'bold' }),
       T('ใบแจ้งออเดอร์ CP ALL', { size: 'xl', color: '#FFFFFF', weight: 'bold', margin: 'sm' }),
       T('บริษัท สปังกี้ ฟู้ด จำกัด · ฝ่ายบัญชี', { size: 'xs', color: '#D1FAE5', margin: 'xs' })] },
-    { type: 'box', layout: 'vertical', paddingAll: '20px', contents: body }];
-  return { type: 'flex', altText: 'ออเดอร์ รอบวันที่ ' + accDotRange_(m.poDates) + ' · CP ALL ส่ง' + accDeliveryText_(m.deliveryDates) + ' · สินค้าจำนวน ' + m.cases.toLocaleString() + ' ลัง', contents: accRoundBubble_(inner) };
+    { type: 'box', layout: 'vertical', paddingStart: '6px', paddingEnd: '6px', paddingTop: '6px', paddingBottom: '4px', contents: body }];
+  return { type: 'flex', altText: 'ออเดอร์ รอบวันที่ ' + accDotRange_(m.poDates) + ' · CP ALL ส่ง' + accDeliveryText_(m.deliveryDates) + ' · สินค้าจำนวน ' + m.cases.toLocaleString() + ' ลัง',
+    contents: { type: 'bubble', size: 'giga', body: { type: 'box', layout: 'vertical', paddingAll: '14px', backgroundColor: '#FFFFFF', contents: inner } } };
 }
 // การ์ดภาพตาราง (ขนาด giga แบบปกติ ไม่ทำมุมมน) · กดภาพ = เปิดภาพเต็มความละเอียด
 function accImageFlex_(m, url, ratio) {
