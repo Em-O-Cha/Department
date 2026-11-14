@@ -38,7 +38,7 @@ function apiFunctions_() {
     hrFormInit: hrFormInit, hrFormPhotos: hrFormPhotos, hrFormBalance: hrFormBalance, hrFormSubmit: hrFormSubmit, hrFormUpload: hrFormUpload,
     // ฝ่ายบัญชี — รายงานรับออเดอร์ 7-11 (Acc.gs)
     accLoad: accLoad, acc711Preview: acc711Preview, acc711Save: acc711Save, acc711DeleteImport: acc711DeleteImport, acc711Report: acc711Report,
-    acc711Pdf: acc711Pdf, acc711SendLine: acc711SendLine, accLineTest: accLineTest, accSaveMap: accSaveMap, accDashboard: accDashboard,
+    acc711Pdf: acc711Pdf, acc711SendLine: acc711SendLine, accLineTest: accLineTest, accLineDiag: accLineDiag, accSaveMap: accSaveMap, accDashboard: accDashboard,
     // ผู้บริหาร (Executive.gs)
     execOverview: execOverview, execDashboard: execDashboard, execVerify: execVerify
   };
@@ -49,7 +49,9 @@ function doPost(e) {
   try {
     var req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     if (Array.isArray(req.events)) {   // Webhook ของ LINE OA: ฝ่ายบัญชี (Acc.gs) แยกด้วย destination ไม่ใช่ = ฝ่ายบุคคล (HrPublic.gs)
-      if (accIsMyBot_(req.destination)) accLineWebhook_(req.events);
+      var isAcc = accIsMyBot_(req.destination);
+      if (req.events.length) accDiagLog_({ ev: 'webhook', acc: isAcc, types: req.events.map(function (x) { return x.type + (x.source ? '/' + x.source.type : ''); }).join(',') });
+      if (isAcc) accLineWebhook_(req.events);
       else hrLineWebhook_(req.events);
       return ContentService.createTextOutput('OK');
     }

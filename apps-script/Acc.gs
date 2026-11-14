@@ -454,6 +454,9 @@ function acc711SendLine(token, importId, png, ratio) {
 // (รหัสดูได้ที่ระบบฝ่ายบัญชี → ตั้งค่า) → ระบบบันทึก ACC_LINE_GROUP ให้เอง · รหัสใช้ได้ครั้งเดียว
 // doPost (Api.gs) แยก OA จากช่อง destination ของ webhook: ตรงกับบอทของ ACC_LINE_TOKEN → ฝ่ายบัญชี, ไม่ตรง → ฝ่ายบุคคล
 function accIsMyBot_(destination) {
+  try { return accIsMyBot2_(destination); } catch (e) { accDiagLog_({ ev: 'error', result: String(e.message || e).slice(0, 150) }); return false; }
+}
+function accIsMyBot2_(destination) {
   var token = props_().getProperty('ACC_LINE_TOKEN');
   if (!token || !destination) return false;
   var c = CacheService.getScriptCache(), id = c.get('acc_bot_id');
@@ -464,6 +467,32 @@ function accIsMyBot_(destination) {
     if (id) c.put('acc_bot_id', id, 21600);
   }
   return id === destination;
+}
+// กดรันฟังก์ชันนี้ครั้งเดียวในหน้าแก้ไข Apps Script เพื่ออนุญาตสิทธิ์ (เชื่อมต่อ LINE / สร้างไฟล์ PDF / Drive) ให้ระบบ
+function authorizeOnce() {
+  UrlFetchApp.fetch('https://api.line.me/v2/bot/info', { muteHttpExceptions: true });
+  DriveApp.getRootFolder();
+  SpreadsheetApp.getActiveSpreadsheet();
+  Logger.log('อนุญาตสิทธิ์เรียบร้อย');
+}
+// บันทึกการทำงานของ webhook 10 ครั้งล่าสุด (เวลา / ผล เท่านั้น ไม่เก็บข้อความหรือ token) — ไว้ตรวจปัญหาบอทไม่ตอบ
+function accDiagLog_(o) {
+  try {
+    var p = props_(), log = JSON.parse(p.getProperty('ACC_WEBHOOK_LOG') || '[]');
+    o.at = purNow_(); log.unshift(o);
+    p.setProperty('ACC_WEBHOOK_LOG', JSON.stringify(log.slice(0, 10)));
+  } catch (e) {}
+}
+// ตรวจสถานะ LINE ฝ่ายบัญชี (ไม่มีข้อมูลลับ: ใส่ token แล้วหรือยัง / LINE ยอมรับ token ไหม / ผูกกลุ่มแล้วหรือยัง / webhook ล่าสุด)
+function accLineDiag() {
+  var p = props_(), token = p.getProperty('ACC_LINE_TOKEN'), info = 0, name = '';
+  if (token) {
+    var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/info', { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
+    info = res.getResponseCode();
+    if (info === 200) name = JSON.parse(res.getContentText()).displayName || '';
+  }
+  return { ok: true, token: !!token, tokenAccepted: info === 200, lineStatus: info, botName: name, group: !!p.getProperty('ACC_LINE_GROUP'),
+    log: JSON.parse(p.getProperty('ACC_WEBHOOK_LOG') || '[]') };
 }
 function accLineReply_(replyToken, text) {
   var token = props_().getProperty('ACC_LINE_TOKEN');
@@ -476,17 +505,25 @@ function accLineWebhook_(events) {
     try {
       var gid = (ev.source || {}).groupId || '';
       if (ev.type === 'join' && gid) {
+        accDiagLog_({ ev: 'join', group: true, result: 'บอทเข้ากลุ่ม' });
         accLineReply_(ev.replyToken, 'สวัสดีค่ะ 🙏 ถ้าต้องการให้กลุ่มนี้รับรายงานออเดอร์ 7-11 ให้พิมพ์\nตั้งค่ากลุ่ม บัญชี <รหัสตั้งค่า>\n(ดูรหัสได้ที่ระบบฝ่ายบัญชี → ตั้งค่าศูนย์ / สินค้า / LINE)');
         return;
       }
       if (ev.type !== 'message' || !ev.message || ev.message.type !== 'text') return;
-      var m = String(ev.message.text).trim().match(/^ตั้งค่ากลุ่ม\s*(?:บัญชี|ACC)\s+([A-Z0-9]{8})$/i);
-      if (!m) return;
-      if (!gid) { accLineReply_(ev.replyToken, 'พิมพ์คำสั่งนี้ในกลุ่ม LINE ที่ต้องการให้รับรายงาน (ไม่ใช่ในแชทส่วนตัว)'); return; }
+      var text = String(ev.message.text).trim();
+      var m = text.match(/^ตั้งค่ากลุ่ม\s*(?:บัญชี|ACC)\s+([A-Z0-9]{8})$/i);
+      if (!m) {
+        accDiagLog_({ ev: 'text', group: !!gid, result: 'ไม่ใช่คำสั่ง' });
+        // พิมพ์ใกล้เคียงแต่ไม่ถูกรูปแบบ → บอกวิธีพิมพ์
+        if (/^ตั้ง(ค่า)?\s*กลุ่ม/.test(text) && /บัญชี|acc/i.test(text)) accLineReply_(ev.replyToken, 'พิมพ์ให้ตรงรูปแบบนี้ค่ะ\nตั้งค่ากลุ่ม บัญชี <รหัส 8 ตัว>\n(คัดลอกได้จากระบบฝ่ายบัญชี → ตั้งค่าศูนย์ / สินค้า / LINE)');
+        return;
+      }
+      if (!gid) { accDiagLog_({ ev: 'command', group: false, result: 'พิมพ์ในแชทส่วนตัว' }); accLineReply_(ev.replyToken, 'พิมพ์คำสั่งนี้ในกลุ่ม LINE ที่ต้องการให้รับรายงาน (ไม่ใช่ในแชทส่วนตัว)'); return; }
       hrRate_('accbind', 10, 3600);
-      if (m[1].toUpperCase() !== hrProp_('ACC_LINE_SETUP', hrSetupCode_)) { accLineReply_(ev.replyToken, 'รหัสตั้งค่าไม่ถูกต้อง'); return; }
+      if (m[1].toUpperCase() !== hrProp_('ACC_LINE_SETUP', hrSetupCode_)) { accDiagLog_({ ev: 'command', group: true, result: 'รหัสไม่ถูกต้อง' }); accLineReply_(ev.replyToken, 'รหัสตั้งค่าไม่ถูกต้อง (รหัสใช้ได้ครั้งเดียว — คัดลอกรหัสล่าสุดจากหน้าตั้งค่าอีกครั้ง)'); return; }
       props_().setProperty('ACC_LINE_GROUP', gid);
       props_().setProperty('ACC_LINE_SETUP', hrSetupCode_());   // ใช้ครั้งเดียว
+      accDiagLog_({ ev: 'command', group: true, result: 'ผูกกลุ่มแล้ว' });
       accLineReply_(ev.replyToken, '✅ ตั้งกลุ่มนี้เป็นกลุ่มรับรายงานออเดอร์ 7-11 ของฝ่ายบัญชีแล้ว\nกด "ส่ง LINE เข้ากลุ่ม" ในระบบ รายงานจะขึ้นในกลุ่มนี้');
     } catch (err) { Logger.log('accLineWebhook_ ' + err); }
   });
