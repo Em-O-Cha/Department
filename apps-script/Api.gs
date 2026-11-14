@@ -36,6 +36,9 @@ function apiFunctions_() {
     hrFormInfo: hrFormInfo, hrFormNewKey: hrFormNewKey, hrLineTest: hrLineTest,
     // แบบฟอร์มขอลาของพนักงาน (HrPublic.gs) — ใช้รหัสแบบฟอร์มแทนตั๋ว
     hrFormInit: hrFormInit, hrFormPhotos: hrFormPhotos, hrFormBalance: hrFormBalance, hrFormSubmit: hrFormSubmit, hrFormUpload: hrFormUpload,
+    // ฝ่ายบัญชี — รายงานรับออเดอร์ 7-11 (Acc.gs)
+    accLoad: accLoad, acc711Preview: acc711Preview, acc711Save: acc711Save, acc711DeleteImport: acc711DeleteImport, acc711Report: acc711Report,
+    acc711Pdf: acc711Pdf, acc711SendLine: acc711SendLine, accLineTest: accLineTest, accSaveMap: accSaveMap, accDashboard: accDashboard,
     // ผู้บริหาร (Executive.gs)
     execOverview: execOverview, execDashboard: execDashboard, execVerify: execVerify
   };

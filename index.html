@@ -127,7 +127,7 @@
   .nav button:hover { background: #f1f5f9; }
   .nav button.active { background: color-mix(in srgb, var(--c) 12%, white); color: var(--c); font-weight: 600; }
   .nav button.active svg.ic { color: var(--c); }
-  .main { padding: 28px; max-width: 1000px; width: 100%; }
+  .main { padding: 28px; max-width: 1000px; width: 100%; min-width: 0; }
   .main h3 { margin: 0 0 4px; font-size: 22px; }
   .main .lead { color: var(--muted); margin: 0 0 22px; }
   .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
@@ -443,7 +443,7 @@
   }
   function go(page) { state.page = page; renderNav(); renderPage(); window.scrollTo(0, 0); }
   // แผนกที่มีระบบงานแล้ว (โมดูล) — เช่น PUR = purchasing.js
-  function deptModule() { var m = state.dept && state.dept.module; return (m === 'purchasing' && window.PUR) || (m === 'safety' && window.SHE) || (m === 'hr' && window.HRM) || (m === 'executive' && window.EXEC) || null; }
+  function deptModule() { var m = state.dept && state.dept.module; return (m === 'purchasing' && window.PUR) || (m === 'safety' && window.SHE) || (m === 'hr' && window.HRM) || (m === 'accounting' && window.ACC) || (m === 'executive' && window.EXEC) || null; }
 
   function renderPage() {
     if (state.admin) { renderAdminPage(); return; }
@@ -476,6 +476,7 @@
   function backToHome(msg) {
     state.token = null; state.dept = null; state.admin = false; state.adminData = null;
     if (window.PUR) window.PUR.reset();
+    if (window.ACC) window.ACC.reset();
     if (window.EXEC) window.EXEC.reset();
     closeModal();
     $('app').classList.add('hidden'); $('home').classList.remove('hidden');
@@ -769,6 +770,7 @@
 <script src="purchasing.js?v=20"></script>
 <script src="safety.js?v=7"></script>
 <script src="hr.js?v=4"></script>
-<script src="executive.js?v=12"></script>
+<script src="accounting.js?v=1"></script>
+<script src="executive.js?v=13"></script>
 </body>
 </html>

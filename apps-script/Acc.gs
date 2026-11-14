@@ -1,0 +1,483 @@
+// ==================== ฝ่ายบัญชี (ACC) — รายงานรับออเดอร์ 7-Eleven ====================
+//
+// ฝ่ายบัญชีดาวน์โหลดไฟล์ Excel ใบสั่งซื้อจากระบบ 7-11 (po_export: 1 แถว = 1 สินค้าในใบสั่ง) แล้วนำเข้าในหน้าเว็บ
+// หน้าเว็บอ่านไฟล์เอง (SheetJS) ส่งเฉพาะคอลัมน์ที่ใช้มา → acc711Preview จัดเป็นตาราง "ต้นแบบรับออเดอร์ 7-11"
+//   แถว = ศูนย์กระจายสินค้า (จับคำสำคัญจาก Delivery Location กับชื่อศูนย์ในคอลัมน์ B ของต้นแบบ)
+//   คอลัมน์ = สินค้า (จับจากรหัสสินค้า 7-11 / คำสำคัญในชื่อ) สีตามต้นแบบ · ช่อง = จำนวนลังที่สั่ง
+// ตรวจแล้วกดบันทึก (acc711Save) → แท็บ "ออเดอร์ 7-11" (1 แถว = 1 รายการ) + "นำเข้าไฟล์ 7-11" (1 แถว = 1 ไฟล์)
+// ใบสั่งที่เคยบันทึกแล้ว (เลขใบสั่ง + ลำดับรายการ) ไม่บันทึกซ้ำ
+// รายงาน PDF: สร้าง Google Sheet หน้าตาเหมือนต้นแบบในโฟลเดอร์ของฝ่าย แล้ว export เป็น PDF (แนวนอน A4)
+// ส่ง LINE: LINE OA ของฝ่ายบัญชี — Script Properties ACC_LINE_TOKEN (Channel access token) และ ACC_LINE_GROUP (Group ID)
+// ทุกฟังก์ชันต้องมีตั๋วของฝ่ายบัญชี (requireAcc_) · การบันทึก/ลบ/ส่ง บันทึกในแท็บประวัติแก้ไข
+
+var ACC_TABLES_ = {
+  acc_711: { tab: 'ออเดอร์ 7-11', cols: [
+    ['id', 'รหัส'], ['importId', 'รหัสการนำเข้า'], ['poNo', 'เลขที่ใบสั่งซื้อ'], ['lineNo', 'ลำดับรายการ'], ['poDate', 'วันที่สั่ง'],
+    ['deliveryDate', 'วันที่ส่ง'], ['deliveryTime', 'เวลาส่ง'], ['locCode', 'รหัสคลัง 7-11'], ['location', 'Delivery Location'], ['dc', 'ศูนย์กระจายสินค้า'],
+    ['itemCode', 'รหัสสินค้า 7-11'], ['barcode', 'บาร์โค้ด'], ['itemName', 'ชื่อสินค้า (7-11)'], ['product', 'สินค้าในรายงาน'], ['cases', 'จำนวนลัง'],
+    ['packSize', 'ชิ้นต่อลัง'], ['casePrice', 'ราคาต่อลัง (สุทธิ)'], ['amount', 'มูลค่า (ไม่รวม VAT)'], ['vatRate', 'VAT %'],
+    ['termDays', 'เครดิต (วัน)'], ['dueDate', 'ครบกำหนดรับเงิน'], ['createdAt', 'บันทึกเมื่อ']] },
+  acc_imports: { tab: 'นำเข้าไฟล์ 7-11', cols: [
+    ['id', 'รหัส'], ['fileName', 'ชื่อไฟล์'], ['poDate', 'วันที่สั่ง'], ['deliveryDate', 'วันที่ส่ง'], ['poCount', 'จำนวนใบสั่ง'],
+    ['lineCount', 'จำนวนรายการ'], ['cases', 'รวมลัง'], ['amount', 'มูลค่ารวม (ไม่รวม VAT)'], ['vat', 'VAT'], ['skipped', 'ข้าม (เคยบันทึกแล้ว)'],
+    ['pdfUrl', 'ไฟล์ PDF'], ['sheetUrl', 'ไฟล์รายงาน (Google Sheet)'], ['sentAt', 'ส่ง LINE เมื่อ'], ['createdAt', 'นำเข้าเมื่อ']] },
+  acc_settings: { tab: 'ตั้งค่า', cols: [['id', 'รายการ'], ['value', 'ค่า']] }
+};
+
+// ---------- ต้นแบบรับออเดอร์ 7-11 (ลำดับ ชื่อ สี ตามไฟล์ต้นแบบ) — แก้การจับคู่ได้ในหน้าตั้งค่า ----------
+// ศูนย์: name = ชื่อในคอลัมน์ B ของต้นแบบ · keywords = คำที่ต้องพบใน Delivery Location · codes = รหัสคลัง (Delivery Location Number) สำรอง
+var ACC_DC_DEFAULT_ = [
+  { name: 'มหาชัย', keywords: ['มหาชัย'], codes: ['W901'] },
+  { name: 'ขอนแก่น', keywords: ['ขอนแก่น'], codes: ['W801'] },
+  { name: 'สุวรรณภูมิ', keywords: ['สุวรรณภูมิ'], codes: ['W501'] },
+  { name: 'สุราษฎร์', keywords: ['สุราษฎร์'], codes: ['W401'] },
+  { name: 'ลำพูน', keywords: ['ลำพูน'], codes: ['W301'] },
+  { name: 'นครสวรรค์', keywords: ['นครสวรรค์'], codes: ['W151'] },
+  { name: 'หาดใหญ่', keywords: ['หาดใหญ่'], codes: ['W141'] },
+  { name: 'บุรีรัมย์', keywords: ['บุรีรัมย์'], codes: ['W131'] },
+  { name: 'ชลบุรี', keywords: ['ชลบุรี'], codes: ['W121'] },
+  { name: 'บางบัวทอง', keywords: ['บางบัวทอง'], codes: ['W101'] }
+];
+// สินค้า: key = รหัสคอลัมน์ · l1/l2 = หัวคอลัมน์ 2 บรรทัด · color = สีตามต้นแบบ · codes = รหัสสินค้า 7-11 (Buyer's internal Product Code)
+var ACC_PRODUCT_DEFAULT_ = [
+  { key: 'P01', l1: 'น้ำพริก', l2: 'ปลาดุกฟูผัดพริกขิง', color: '#B3CEFB', codes: ['3202403'], keywords: ['ปลาดุกฟู'] },
+  { key: 'P02', l1: 'น้ำพริก', l2: 'ปลาแซลมอน (35 กรัม)', color: '#FFA766', codes: ['3203072'], keywords: [] },
+  { key: 'P03', l1: 'น้ำพริก', l2: 'หมึกย่างสามรส', color: '#FDD768', codes: ['3203391'], keywords: ['หมึกย่าง'] },
+  { key: 'P04', l1: 'น้ำพริก 80g', l2: 'ปลาแซลมอน', color: '#FF7053', codes: ['3203892'], keywords: [] },
+  { key: 'P05', l1: 'น้ำพริก', l2: 'น้ำย้อย', color: '#FF9999', codes: ['3203912'], keywords: ['น้ำย้อย'] },
+  { key: 'P06', l1: 'น้ำพริก', l2: 'ลงเรือกรอบ', color: '#CC9900', codes: ['3203914'], keywords: ['ลงเรือ'] },
+  { key: 'P07', l1: 'น้ำพริก', l2: 'ตะไคร้หอม', color: '#A6E4B7', codes: ['3203916'], keywords: ['ตะไคร้'] },
+  { key: 'P08', l1: 'น้ำพริกแซลมอน', l2: 'รสต้มยำ', color: '#FFC000', codes: ['3203976'], keywords: [] },
+  { key: 'P09', l1: 'น้ำพริกแซลมอน', l2: 'รสผัดฉ่า', color: '#92D050', codes: ['3203978'], keywords: ['ผัดฉ่า'] },
+  { key: 'P10', l1: 'น้ำพริกแซลมอน', l2: 'รสคั่วกลิ้ง', color: '#FFFF00', codes: ['3203980'], keywords: ['คั่วกลิ้ง'] },
+  { key: 'P11', l1: 'น้ำพริก 70g', l2: 'หนังปลาแซลม่อน', color: '#F7B4AE', codes: ['3204254'], keywords: [] },
+  { key: 'P12', l1: 'น้ำพริก 70g', l2: 'ปูอัดกรอบ', color: '#F7CFED', codes: ['3204267'], keywords: ['ปูอัด'] },
+  { key: 'P13', l1: 'พริกผัด', l2: 'น้ำมันมะกอก', color: '#D3F1DB', codes: ['3204430'], keywords: ['มะกอก'] },
+  { key: 'P14', l1: 'ก๋วยเตี๋ยวเรือ', l2: '', color: '#FF7C80', codes: ['3301919'], keywords: ['ก๋วยเตี๋ยวเรือ'] },
+  { key: 'P15', l1: 'ก๋วยเตี๋ยวแห้ง', l2: '', color: '#FDE49B', codes: [], keywords: ['ก๋วยเตี๋ยวแห้ง'] },
+  { key: 'P16', l1: 'หมี่คลุก', l2: '', color: '#DAF2F4', codes: ['3302174'], keywords: ['หมี่คลุก'] },
+  { key: 'P17', l1: 'หมี่ชมพู', l2: '', color: '#FBD9D7', codes: ['3302176'], keywords: ['หมี่ชมพู'] }
+];
+var ACC_REPORT_TITLE_ = 'แบบฟอร์มบันทึกออเดอร์ 7-11';
+var ACC_TOTAL_COLOR_ = '#FEF2CB';
+
+// ---------- พื้นฐาน ----------
+function requireAcc_(token) {
+  var dept = requireDept_(token);
+  if (DEPT_MODULES_[dept.key] !== 'accounting') throw new Error('แผนกนี้ไม่มีระบบบัญชี');
+  return dept;
+}
+function accRegister_() {
+  Object.keys(ACC_TABLES_).forEach(function (k) { PUR_TABLES_[k] = ACC_TABLES_[k]; });
+  ['poDate', 'deliveryDate', 'dueDate'].forEach(function (k) { PUR_DATE_KEYS_[k] = 1; });
+  ['lineNo', 'cases', 'packSize', 'casePrice', 'amount', 'vatRate', 'termDays', 'poCount', 'lineCount', 'vat', 'skipped'].forEach(function (k) { PUR_NUM_KEYS_[k] = 1; });
+}
+function accBook_(dept) { accRegister_(); return purBook_(dept); }
+function accClean_(v, max) { return purClean_(v, max); }
+// "12/11/2026" / "2026-11-12" / Date → "2026-11-12" (ปี พ.ศ. แปลงให้)
+function accDate_(v) {
+  if (v instanceof Date && !isNaN(v)) return Utilities.formatDate(v, PUR_TZ_, 'yyyy-MM-dd');
+  var s = String(v == null ? '' : v).trim(), m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/), y, mo, d;
+  if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+  else { m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/); if (!m) return ''; d = +m[1]; mo = +m[2]; y = +m[3]; }
+  if (y > 2400) y -= 543;
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return '';
+  return y + '-' + ('0' + mo).slice(-2) + '-' + ('0' + d).slice(-2);
+}
+function accAddDays_(iso, n) {
+  var p = iso.split('-'), dt = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n));
+  return Utilities.formatDate(dt, 'UTC', 'yyyy-MM-dd');
+}
+function accKey_(l) { return String(l.poNo).replace(/^'/, '') + '|' + Number(l.lineNo); }
+function accNorm_(s) { return String(s == null ? '' : s).replace(/\s+/g, '').toLowerCase(); }
+
+// ---------- การจับคู่ (ตั้งค่า) ----------
+function accMap_(ss) {
+  var row = purRead_(ss, 'acc_settings').filter(function (x) { return x.id === 'map711'; })[0];
+  var saved = {};
+  try { saved = row ? JSON.parse(row.value || '{}') : {}; } catch (e) { saved = {}; }
+  var dcs = Array.isArray(saved.dcs) && saved.dcs.length ? saved.dcs : ACC_DC_DEFAULT_;
+  var products = Array.isArray(saved.products) && saved.products.length ? saved.products : ACC_PRODUCT_DEFAULT_;
+  return { dcs: dcs.map(accCleanDc_), products: products.map(accCleanProduct_) };
+}
+function accList_(a, max) {
+  return (Array.isArray(a) ? a : String(a || '').split(/[,\n]/)).map(function (x) { return accClean_(x, 80); }).filter(String).slice(0, max || 30);
+}
+function accCleanDc_(d) { return { name: accClean_(d.name, 40), keywords: accList_(d.keywords), codes: accList_(d.codes) }; }
+function accCleanProduct_(p) {
+  return { key: accClean_(p.key, 10), l1: accClean_(p.l1, 40), l2: accClean_(p.l2, 40), color: /^#[0-9a-f]{6}$/i.test(p.color) ? p.color.toUpperCase() : '#FFFFFF',
+    codes: accList_(p.codes, 60), keywords: accList_(p.keywords) };
+}
+function accMatchDc_(map, location, code) {
+  var n = accNorm_(location), c = String(code || '').trim().toUpperCase();
+  for (var i = 0; i < map.dcs.length; i++) {
+    var d = map.dcs[i];
+    if (d.keywords.some(function (k) { return k && n.indexOf(accNorm_(k)) >= 0; })) return d.name;
+  }
+  for (var j = 0; j < map.dcs.length; j++) if (c && map.dcs[j].codes.some(function (x) { return x.toUpperCase() === c; })) return map.dcs[j].name;
+  return '';
+}
+function accMatchProduct_(map, itemCode, itemName) {
+  var code = String(itemCode || '').trim(), n = accNorm_(itemName);
+  for (var i = 0; i < map.products.length; i++) if (code && map.products[i].codes.indexOf(code) >= 0) return map.products[i].key;
+  for (var j = 0; j < map.products.length; j++) {
+    if (map.products[j].keywords.some(function (k) { return k && n.indexOf(accNorm_(k)) >= 0; })) return map.products[j].key;
+  }
+  return '';
+}
+
+// ---------- แปลงแถวจากไฟล์ (หน้าเว็บส่งมาเฉพาะคอลัมน์ที่ใช้) ----------
+function accCleanLines_(lines) {
+  if (!Array.isArray(lines) || !lines.length) throw new Error('ไม่พบรายการในไฟล์ — ตรวจว่าเป็นไฟล์ po_export จากระบบ 7-11');
+  if (lines.length > 3000) throw new Error('ไฟล์ใหญ่เกินไป (เกิน 3,000 รายการ) — แบ่งไฟล์ก่อนนำเข้า');
+  return lines.map(function (r, i) {
+    var poNo = accClean_(r.poNo, 30);
+    if (!/^\d{4,20}$/.test(poNo)) throw new Error('แถวที่ ' + (i + 2) + ': ไม่มีเลขที่ใบสั่งซื้อ (Purchase Order Number)');
+    var cases = purNum_(r.cases);
+    return {
+      poNo: poNo, lineNo: purNum_(r.lineNo) === '' ? i + 1 : purNum_(r.lineNo), poDate: accDate_(r.poDate), deliveryDate: accDate_(r.deliveryDate),
+      deliveryTime: accClean_(r.deliveryTime, 10), locCode: accClean_(r.locCode, 20), location: accClean_(r.location, 120),
+      itemCode: accClean_(r.itemCode, 30), barcode: accClean_(r.barcode, 30), itemName: accClean_(r.itemName, 150),
+      cases: cases === '' ? 0 : cases, unit: accClean_(r.unit, 10), freeQty: purNum_(r.freeQty) || 0, packSize: purNum_(r.packSize),
+      casePrice: purNum_(r.casePrice), amount: purNum_(r.amount), vatRate: purNum_(r.vatRate), termDays: purNum_(r.termDays)
+    };
+  });
+}
+
+// ตาราง ศูนย์ × สินค้า (+ ยอดเงิน) จากรายการที่จับคู่แล้ว
+function accMatrix_(map, lines) {
+  var dcs = map.dcs.map(function (d) { return { name: d.name, cells: {}, cases: 0, amount: 0, pos: {} }; });
+  var byName = {}; dcs.forEach(function (d) { byName[d.name] = d; });
+  var byProduct = {}, cases = 0, amount = 0, vat = 0, pos = {}, poDates = {}, delDates = {};
+  lines.forEach(function (l) {
+    var d = byName[l.dc];
+    if (!d || !l.product) return;
+    d.cells[l.product] = (d.cells[l.product] || 0) + l.cases;
+    d.cases += l.cases; d.amount += Number(l.amount) || 0; d.pos[l.poNo] = 1;
+    byProduct[l.product] = (byProduct[l.product] || 0) + l.cases;
+    cases += l.cases; amount += Number(l.amount) || 0; vat += (Number(l.amount) || 0) * (Number(l.vatRate) || 0) / 100;
+    pos[l.poNo] = 1; if (l.poDate) poDates[l.poDate] = 1; if (l.deliveryDate) delDates[l.deliveryDate] = 1;
+  });
+  dcs.forEach(function (d) { d.poCount = Object.keys(d.pos).length; delete d.pos; d.amount = Math.round(d.amount * 100) / 100; });
+  return { dcs: dcs, byProduct: byProduct, cases: cases, amount: Math.round(amount * 100) / 100, vat: Math.round(vat * 100) / 100,
+    poCount: Object.keys(pos).length, poDates: Object.keys(poDates).sort(), deliveryDates: Object.keys(delDates).sort() };
+}
+
+// ---------- API: โหลดหน้า ----------
+function accLoad(token) {
+  var dept = requireAcc_(token), ss = accBook_(dept);
+  var imports = purRead_(ss, 'acc_imports').sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); });
+  var p = props_();
+  return { ok: true, today: purToday_(), map: accMap_(ss), imports: imports.slice(0, 200),
+    hasFolder: !!deptConfig_(dept.key).folderId, sheetUrl: ss.getUrl(),
+    line: { token: !!p.getProperty('ACC_LINE_TOKEN'), group: !!p.getProperty('ACC_LINE_GROUP') } };
+}
+
+// ---------- API: ตรวจไฟล์ก่อนบันทึก ----------
+function acc711Preview(token, lines, fileName) {
+  var dept = requireAcc_(token), ss = accBook_(dept), map = accMap_(ss);
+  var rows = accCleanLines_(lines);
+  var saved = {};
+  purRead_(ss, 'acc_711').forEach(function (x) { saved[accKey_(x)] = x.importId; });
+  var unLoc = {}, unItem = {}, dupPo = {}, warn = [];
+  rows.forEach(function (l) {
+    l.dc = accMatchDc_(map, l.location, l.locCode);
+    l.product = accMatchProduct_(map, l.itemCode, l.itemName);
+    if (!l.dc) { var k = l.locCode + '|' + l.location; unLoc[k] = unLoc[k] || { locCode: l.locCode, location: l.location, cases: 0 }; unLoc[k].cases += l.cases; }
+    if (!l.product) { var k2 = l.itemCode || l.itemName; unItem[k2] = unItem[k2] || { itemCode: l.itemCode, itemName: l.itemName, cases: 0 }; unItem[k2].cases += l.cases; }
+    if (saved[accKey_(l)]) dupPo[l.poNo] = 1;
+  });
+  var units = {}; rows.forEach(function (l) { if (l.unit && l.unit !== 'CT') units[l.unit] = 1; });
+  if (Object.keys(units).length) warn.push('มีรายการที่หน่วยไม่ใช่ลัง (' + Object.keys(units).join(', ') + ') — ตรวจจำนวนให้ถูกก่อนบันทึก');
+  var free = rows.filter(function (l) { return l.freeQty > 0; });
+  if (free.length) warn.push('มีของแถม (Free Quantity) ' + free.length + ' รายการ — รายงานนับเฉพาะจำนวนที่สั่ง');
+  var m = accMatrix_(map, rows);
+  var newLines = rows.filter(function (l) { return !saved[accKey_(l)]; }).length;
+  return { ok: true, fileName: accClean_(fileName, 120), map: map, matrix: m, lineCount: rows.length, newLines: newLines,
+    unmatchedLocations: Object.keys(unLoc).map(function (k) { return unLoc[k]; }),
+    unmatchedItems: Object.keys(unItem).map(function (k) { return unItem[k]; }),
+    assign: rows.map(function (l) { return [l.dc, l.product, saved[accKey_(l)] ? 1 : 0]; }),
+    duplicatePos: Object.keys(dupPo), warnings: warn };
+}
+
+// ---------- API: บันทึก ----------
+function acc711Save(token, lines, fileName) {
+  var dept = requireAcc_(token);
+  var rows = accCleanLines_(lines);
+  return purLocked_(function () {
+    var ss = accBook_(dept), map = accMap_(ss);
+    var saved = {};
+    purRead_(ss, 'acc_711').forEach(function (x) { saved[accKey_(x)] = 1; });
+    var bad = [];
+    rows.forEach(function (l) {
+      l.dc = accMatchDc_(map, l.location, l.locCode);
+      l.product = accMatchProduct_(map, l.itemCode, l.itemName);
+      if (!l.dc || !l.product) bad.push(l);
+    });
+    if (bad.length) return { ok: false, error: 'ยังมี ' + bad.length + ' รายการที่จับคู่ศูนย์/สินค้าไม่ได้ — จับคู่ให้ครบก่อนบันทึก' };
+    var fresh = rows.filter(function (l) { return !saved[accKey_(l)]; });
+    if (!fresh.length) return { ok: false, error: 'ไฟล์นี้บันทึกไปแล้ว (ใบสั่งซื้อทุกใบมีในระบบแล้ว)' };
+    var importId = purId_('IMP'), now = purNow_();
+    var sh = purSheet_(ss, 'acc_711'), head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+    var values = fresh.map(function (l) {
+      var o = Object.assign({}, l, { id: purId_('O'), importId: importId, createdAt: now,
+        dueDate: l.deliveryDate && l.termDays !== '' ? accAddDays_(l.deliveryDate, Number(l.termDays)) : '' });
+      return purRowValues_(sh, 'acc_711', o, head);
+    });
+    sh.getRange(sh.getLastRow() + 1, 1, values.length, values[0].length).setValues(values);
+    var m = accMatrix_(map, fresh);
+    purWrite_(ss, 'acc_imports', { id: importId, fileName: accClean_(fileName, 120), poDate: m.poDates[0] || '', deliveryDate: m.deliveryDates[0] || '',
+      poCount: m.poCount, lineCount: fresh.length, cases: m.cases, amount: m.amount, vat: m.vat, skipped: rows.length - fresh.length, createdAt: now });
+    purLogWrite_(ss, 'นำเข้าไฟล์ 7-11', 'acc_imports', importId, (fileName || '') + ' · ' + m.poCount + ' ใบสั่ง · ' + m.cases + ' ลัง');
+    return { ok: true, importId: importId, saved: fresh.length, skipped: rows.length - fresh.length, cases: m.cases };
+  });
+}
+
+// ---------- API: ลบการนำเข้า (นำเข้าผิดไฟล์) ----------
+function acc711DeleteImport(token, importId) {
+  var dept = requireAcc_(token);
+  return purLocked_(function () {
+    var ss = accBook_(dept), imp = purRead_(ss, 'acc_imports').filter(function (x) { return x.id === importId; })[0];
+    if (!imp) return { ok: false, error: 'ไม่พบการนำเข้านี้' };
+    var sh = purSheet_(ss, 'acc_711');
+    var rows = purRead_(ss, 'acc_711').filter(function (x) { return x.importId === importId; }).map(function (x) { return x._row; }).sort(function (a, b) { return b - a; });
+    rows.forEach(function (r) { sh.deleteRow(r); });
+    purSheet_(ss, 'acc_imports').deleteRow(imp._row);
+    purLogWrite_(ss, 'ลบการนำเข้า 7-11', 'acc_imports', importId, (imp.fileName || '') + ' · ' + rows.length + ' รายการ');
+    return { ok: true, deleted: rows.length };
+  });
+}
+
+// ---------- รายงาน (ตารางเหมือนต้นแบบ) จากข้อมูลที่บันทึกแล้ว ----------
+// q = { importId } หรือ { from, to, basis: 'po'|'delivery', dc }
+function accReportLines_(ss, q) {
+  var lines = purRead_(ss, 'acc_711');
+  if (q.importId) return lines.filter(function (l) { return l.importId === q.importId; });
+  var key = q.basis === 'po' ? 'poDate' : 'deliveryDate';
+  return lines.filter(function (l) {
+    var d = l[key];
+    return (!q.from || d >= q.from) && (!q.to || d <= q.to) && (!q.dc || l.dc === q.dc);
+  });
+}
+function acc711Report(token, q) {
+  var dept = requireAcc_(token), ss = accBook_(dept), map = accMap_(ss);
+  q = q || {};
+  var lines = accReportLines_(ss, q), m = accMatrix_(map, lines);
+  var imp = q.importId ? purRead_(ss, 'acc_imports').filter(function (x) { return x.id === q.importId; })[0] : null;
+  var slim = lines.length <= 3000 ? lines.map(function (l) {
+    return { poNo: l.poNo, deliveryDate: l.deliveryDate, location: l.location, itemName: l.itemName, cases: l.cases, amount: l.amount, dc: l.dc, product: l.product };
+  }) : [];
+  return { ok: true, map: map, matrix: m, importRec: imp || null, lineCount: lines.length, lines: slim };
+}
+
+// ---------- PDF: Google Sheet หน้าตาเหมือนต้นแบบ → export PDF ----------
+function accReportFolder_(dept) {
+  var folderId = deptConfig_(dept.key).folderId;
+  if (!folderId) throw new Error('ผู้ดูแลระบบยังไม่ได้ตั้งโฟลเดอร์ของฝ่ายบัญชี (หน้าผู้ดูแล → ลิงก์ Sheet / โฟลเดอร์)');
+  var parent = DriveApp.getFolderById(folderId), it = parent.getFoldersByName('รายงานออเดอร์ 7-11');
+  return it.hasNext() ? it.next() : parent.createFolder('รายงานออเดอร์ 7-11');
+}
+function accThaiDate_(iso) {
+  if (!iso) return '-';
+  var p = iso.split('-');
+  return +p[2] + '/' + +p[1] + '/' + (+p[0] + 543);
+}
+function accRangeText_(list) {
+  if (!list.length) return '-';
+  return list.length === 1 ? accThaiDate_(list[0]) : accThaiDate_(list[0]) + ' – ' + accThaiDate_(list[list.length - 1]);
+}
+function accBuildReportSheet_(dept, map, m, title) {
+  var folder = accReportFolder_(dept);
+  var ss = SpreadsheetApp.create(title);
+  var file = DriveApp.getFileById(ss.getId());
+  file.moveTo(folder);
+  var sh = ss.getSheets()[0];
+  sh.setName('ออเดอร์ 7-11');
+  var P = map.products, nP = P.length, firstCol = 4, lastCol = firstCol + nP - 1, totCol = lastCol + 1;
+  var rows = 9 + m.dcs.length * 3 + 2;
+  if (sh.getMaxColumns() < totCol) sh.insertColumnsAfter(sh.getMaxColumns(), totCol - sh.getMaxColumns());
+  if (sh.getMaxRows() < rows + 3) sh.insertRowsAfter(sh.getMaxRows(), rows + 3 - sh.getMaxRows());
+  sh.getRange(1, 1, rows + 3, totCol).setFontFamily('Sarabun').setFontSize(11).setVerticalAlignment('middle').setHorizontalAlignment('center');
+  // หัวรายงาน
+  sh.getRange(1, 1, 1, totCol).merge().setValue(ACC_REPORT_TITLE_).setFontSize(16).setFontWeight('bold');
+  sh.getRange(2, 1, 1, totCol).merge().setValue('วันที่สั่ง ' + accRangeText_(m.poDates) + '     วันที่ส่ง ' + accRangeText_(m.deliveryDates)).setFontWeight('bold');
+  sh.getRange(3, 1, 1, totCol).merge().setValue('ใบสั่งซื้อ ' + m.poCount + ' ใบ · รวม ' + m.cases.toLocaleString() + ' ลัง').setFontSize(10);
+  // หัวตาราง (แถว 5–7)
+  sh.getRange(5, 1, 3, 1).merge().setValue('ที่');
+  sh.getRange(5, 2, 3, 2).merge().setValue('ศูนย์กระจายสินค้า\nDC').setWrap(true);
+  sh.getRange(5, firstCol, 1, nP).merge().setValue('รายการสินค้า').setBackground(ACC_TOTAL_COLOR_);
+  sh.getRange(5, totCol, 3, 1).merge().setValue('รวม (ลัง)');
+  sh.getRange(6, firstCol, 1, nP).setValues([P.map(function (p) { return p.l1; })]).setBackgrounds([P.map(function (p) { return p.color; })]);
+  sh.getRange(7, firstCol, 1, nP).setValues([P.map(function (p) { return p.l2; })]).setBackgrounds([P.map(function (p) { return p.color; })]);
+  sh.getRange(5, 1, 3, totCol).setFontWeight('bold').setWrap(true);
+  // ศูนย์ละ 3 แถว: แถวแรก = จำนวนลัง (ระบายสีเฉพาะช่องที่มีตัวเลข) · อีก 2 แถวเว้นไว้
+  var r = 8;
+  m.dcs.forEach(function (d, i) {
+    sh.getRange(r, 1, 3, 1).merge().setValue(i + 1).setFontWeight('bold');
+    sh.getRange(r, 2, 3, 1).merge().setValue(d.name).setFontWeight('bold').setHorizontalAlignment('left');
+    sh.getRange(r, 3, 3, 1).merge().setValue('Lot./จำนวนลัง').setFontSize(8);
+    var vals = P.map(function (p) { return d.cells[p.key] || ''; });
+    sh.getRange(r, firstCol, 1, nP).setValues([vals]).setFontWeight('bold').setFontSize(12)
+      .setBackgrounds([P.map(function (p) { return d.cells[p.key] ? p.color : '#FFFFFF'; })]);
+    sh.getRange(r, totCol, 1, 1).setValue(d.cases || '').setFontWeight('bold');
+    r += 3;
+  });
+  // รวม
+  sh.getRange(r, 1, 1, 3).merge().setValue('รวม').setBackground(ACC_TOTAL_COLOR_).setFontWeight('bold');
+  sh.getRange(r, firstCol, 1, nP).setValues([P.map(function (p) { return m.byProduct[p.key] || 0; })])
+    .setBackgrounds([P.map(function (p) { return p.color; })]).setFontWeight('bold').setFontSize(12);
+  sh.getRange(r, totCol).setValue(m.cases).setFontWeight('bold').setBackground(ACC_TOTAL_COLOR_);
+  sh.getRange(r + 1, 1, 1, 3).merge().setValue('รวมทั้งหมด').setFontWeight('bold').setBackground(ACC_TOTAL_COLOR_);
+  sh.getRange(r + 1, firstCol, 1, nP + 1).merge().setValue(m.cases.toLocaleString() + ' ลัง').setFontWeight('bold').setBackground(ACC_TOTAL_COLOR_).setHorizontalAlignment('right');
+  sh.getRange(5, 1, r - 4 + 1, totCol).setBorder(true, true, true, true, true, true, '#000000', SpreadsheetApp.BorderStyle.SOLID);
+  sh.getRange(r + 3, 2).setValue('ผู้จัดทำ ________________').setHorizontalAlignment('left');
+  sh.getRange(r + 3, firstCol + Math.floor(nP / 2)).setValue('ผู้ตรวจสอบ ________________').setHorizontalAlignment('left');
+  // ขนาด
+  sh.setColumnWidth(1, 28); sh.setColumnWidth(2, 90); sh.setColumnWidth(3, 46);
+  for (var c = firstCol; c <= lastCol; c++) sh.setColumnWidth(c, 62);
+  sh.setColumnWidth(totCol, 56);
+  sh.setRowHeights(5, 3, 26); sh.setRowHeight(6, 34); sh.setRowHeight(7, 34);
+  sh.setRowHeights(8, m.dcs.length * 3, 18);
+  SpreadsheetApp.flush();
+  return { ss: ss, file: file, folder: folder };
+}
+function accExportPdf_(ss, folder, name) {
+  var url = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=pdf&size=A4&portrait=false&fitw=true&gridlines=false'
+    + '&printtitle=false&sheetnames=false&pagenumbers=false&fzr=false&top_margin=0.3&bottom_margin=0.3&left_margin=0.3&right_margin=0.3'
+    + '&horizontal_alignment=CENTER&gid=' + ss.getSheets()[0].getSheetId();
+  var res = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) throw new Error('สร้าง PDF ไม่สำเร็จ (HTTP ' + res.getResponseCode() + ')');
+  var pdf = folder.createFile(res.getBlob().setName(name + '.pdf'));
+  try { pdf.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
+  return pdf;
+}
+// สร้าง/สร้างใหม่ PDF ของการนำเข้าหนึ่งครั้ง → เก็บลิงก์ในแท็บนำเข้า
+function acc711Pdf(token, importId) {
+  var dept = requireAcc_(token);
+  return purLocked_(function () { return accMakePdf_(dept, importId); });
+}
+function accMakePdf_(dept, importId) {
+  var ss = accBook_(dept), map = accMap_(ss);
+  var imp = purRead_(ss, 'acc_imports').filter(function (x) { return x.id === importId; })[0];
+  if (!imp) return { ok: false, error: 'ไม่พบการนำเข้านี้' };
+  var m = accMatrix_(map, accReportLines_(ss, { importId: importId }));
+  var name = 'ออเดอร์ 7-11 สั่ง ' + accThaiDate_(m.poDates[0] || '').replace(/\//g, '-') + ' ส่ง ' + accThaiDate_(m.deliveryDates[0] || '').replace(/\//g, '-') + ' (' + importId.slice(-4) + ')';
+  // สร้างใหม่ → ย้ายไฟล์รายงานเดิมของการนำเข้านี้ลงถังขยะ
+  [imp.pdfUrl, imp.sheetUrl].forEach(function (u) {
+    var id = String(u || '').match(/[-\w]{25,}/);
+    if (id) try { DriveApp.getFileById(id[0]).setTrashed(true); } catch (e) {}
+  });
+  var built = accBuildReportSheet_(dept, map, m, name);
+  var pdf = accExportPdf_(built.ss, built.folder, name);
+  imp.pdfUrl = pdf.getUrl(); imp.sheetUrl = built.ss.getUrl();
+  purWrite_(ss, 'acc_imports', imp);
+  return { ok: true, pdfUrl: imp.pdfUrl, sheetUrl: imp.sheetUrl };
+}
+
+// ---------- ส่ง LINE เข้ากลุ่มของฝ่ายบัญชี ----------
+function accLinePush_(messages) {
+  var p = props_(), token = p.getProperty('ACC_LINE_TOKEN'), group = p.getProperty('ACC_LINE_GROUP');
+  if (!token || !group) return { ok: false, error: !token ? 'ยังไม่ได้ใส่ ACC_LINE_TOKEN ใน Script Properties' : 'ยังไม่ได้ใส่ ACC_LINE_GROUP (Group ID) ใน Script Properties' };
+  var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
+    method: 'post', contentType: 'application/json', headers: { Authorization: 'Bearer ' + token },
+    payload: JSON.stringify({ to: group, messages: messages }), muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) return { ok: false, error: 'LINE ตอบกลับ ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 200) };
+  return { ok: true };
+}
+function accFlex_(m, pdfUrl, fileLabel) {
+  var T = function (text, o) { var x = { type: 'text', text: String(text), wrap: true }; Object.keys(o || {}).forEach(function (k) { x[k] = o[k]; }); return x; };
+  var rows = m.dcs.filter(function (d) { return d.cases; }).map(function (d) {
+    return { type: 'box', layout: 'horizontal', margin: 'sm', contents: [T(d.name, { size: 'sm', color: '#334155', flex: 5 }),
+      T(d.cases.toLocaleString() + ' ลัง', { size: 'sm', weight: 'bold', align: 'end', flex: 3, color: '#0f172a' })] };
+  });
+  var body = [
+    T('รายงานออเดอร์ 7-Eleven', { weight: 'bold', size: 'lg', color: '#059669' }),
+    T('สั่ง ' + accRangeText_(m.poDates) + ' · ส่ง ' + accRangeText_(m.deliveryDates), { size: 'xs', color: '#64748b', margin: 'xs' }),
+    { type: 'separator', margin: 'md' }
+  ].concat(rows).concat([
+    { type: 'separator', margin: 'md' },
+    { type: 'box', layout: 'horizontal', margin: 'md', contents: [T('รวมทั้งหมด', { weight: 'bold', size: 'md', flex: 5 }),
+      T(m.cases.toLocaleString() + ' ลัง', { weight: 'bold', size: 'md', align: 'end', flex: 3, color: '#059669' })] },
+    T(m.poCount + ' ใบสั่งซื้อ · มูลค่า ' + Math.round(m.amount).toLocaleString() + ' บาท (ไม่รวม VAT)', { size: 'xs', color: '#64748b', margin: 'sm' })
+  ]);
+  var bubble = { type: 'bubble', size: 'mega', body: { type: 'box', layout: 'vertical', contents: body } };
+  if (pdfUrl) bubble.footer = { type: 'box', layout: 'vertical', contents: [{ type: 'button', style: 'primary', color: '#059669', height: 'sm',
+    action: { type: 'uri', label: 'เปิดรายงาน PDF', uri: pdfUrl } }] };
+  return { type: 'flex', altText: 'รายงานออเดอร์ 7-11 ' + (fileLabel || '') + ' รวม ' + m.cases + ' ลัง', contents: bubble };
+}
+function acc711SendLine(token, importId) {
+  var dept = requireAcc_(token);
+  return purLocked_(function () {
+    var ss = accBook_(dept), map = accMap_(ss);
+    var imp = purRead_(ss, 'acc_imports').filter(function (x) { return x.id === importId; })[0];
+    if (!imp) return { ok: false, error: 'ไม่พบการนำเข้านี้' };
+    var pdfUrl = imp.pdfUrl;
+    if (!pdfUrl) { var made = accMakePdf_(dept, importId); if (!made.ok) return made; pdfUrl = made.pdfUrl; imp = purRead_(ss, 'acc_imports').filter(function (x) { return x.id === importId; })[0]; }
+    var m = accMatrix_(map, accReportLines_(ss, { importId: importId }));
+    var r = accLinePush_([accFlex_(m, pdfUrl, accRangeText_(m.deliveryDates))]);
+    if (!r.ok) return r;
+    imp.sentAt = purNow_();
+    purWrite_(ss, 'acc_imports', imp);
+    purLogWrite_(ss, 'ส่ง LINE รายงาน 7-11', 'acc_imports', importId, m.cases + ' ลัง');
+    return { ok: true, sentAt: imp.sentAt, pdfUrl: pdfUrl };
+  });
+}
+function accLineTest(token) {
+  requireAcc_(token);
+  return accLinePush_([{ type: 'text', text: '✅ ทดสอบการเชื่อมต่อ: ระบบงานองค์กร ฝ่ายบัญชี ส่งข้อความเข้ากลุ่มนี้ได้แล้ว' }]);
+}
+
+// ---------- ตั้งค่าการจับคู่ ----------
+function accSaveMap(token, json) {
+  var dept = requireAcc_(token);
+  var cfg; try { cfg = JSON.parse(json || '{}'); } catch (e) { return { ok: false, error: 'ข้อมูลไม่ถูกต้อง' }; }
+  var dcs = (cfg.dcs || []).map(accCleanDc_).filter(function (d) { return d.name; });
+  var products = (cfg.products || []).map(accCleanProduct_).filter(function (p) { return p.key && (p.l1 || p.l2); });
+  if (!dcs.length || !products.length) return { ok: false, error: 'ต้องมีศูนย์และสินค้าอย่างน้อยอย่างละ 1 รายการ' };
+  var names = {}, keys = {};
+  if (dcs.some(function (d) { return names[d.name] ? true : (names[d.name] = 1, false); })) return { ok: false, error: 'ชื่อศูนย์ซ้ำกัน' };
+  if (products.some(function (p) { return keys[p.key] ? true : (keys[p.key] = 1, false); })) return { ok: false, error: 'รหัสคอลัมน์สินค้าซ้ำกัน' };
+  return purLocked_(function () {
+    var ss = accBook_(dept), row = purRead_(ss, 'acc_settings').filter(function (x) { return x.id === 'map711'; })[0] || { id: 'map711' };
+    row.value = JSON.stringify({ dcs: dcs, products: products });
+    purWrite_(ss, 'acc_settings', row);
+    purLogWrite_(ss, 'แก้การจับคู่ 7-11', 'acc_settings', 'map711', dcs.length + ' ศูนย์ · ' + products.length + ' สินค้า');
+    return { ok: true, map: { dcs: dcs, products: products } };
+  });
+}
+
+// ---------- Dashboard (ฝ่ายบัญชี + ผู้บริหาร) ----------
+function accDashboard(token, q) {
+  var dept = requireAcc_(token);
+  return accDashboard_(dept, q && q.from, q && q.to, q && q.basis, q && q.dc);
+}
+function accDashboard_(dept, from, to, basis, dc) {
+  var ss = accBook_(dept), map = accMap_(ss);
+  basis = basis === 'po' ? 'po' : 'delivery';
+  var all = purRead_(ss, 'acc_711');
+  var key = basis === 'po' ? 'poDate' : 'deliveryDate';
+  var lines = all.filter(function (l) { var d = l[key]; return d >= from && d <= to && (!dc || l.dc === dc); });
+  var m = accMatrix_(map, lines);
+  // แนวโน้มรายวัน
+  var days = {};
+  lines.forEach(function (l) { var d = l[key]; days[d] = days[d] || { date: d, cases: 0, amount: 0 }; days[d].cases += l.cases; days[d].amount += Number(l.amount) || 0; });
+  // ช่วงก่อนหน้า (ยาวเท่ากัน) ไว้เทียบ
+  var len = Math.round((Date.UTC(+to.slice(0, 4), +to.slice(5, 7) - 1, +to.slice(8)) - Date.UTC(+from.slice(0, 4), +from.slice(5, 7) - 1, +from.slice(8))) / 864e5) + 1;
+  var pFrom = accAddDays_(from, -len), pTo = accAddDays_(from, -1);
+  var prev = accMatrix_(map, all.filter(function (l) { var d = l[key]; return d >= pFrom && d <= pTo && (!dc || l.dc === dc); }));
+  // เงินที่จะได้รับ (ตามวันครบกำหนด) — ทุกออเดอร์ที่ครบกำหนดตั้งแต่วันนี้ไป 60 วัน
+  var today = purToday_(), until = accAddDays_(today, 60), due = {};
+  all.forEach(function (l) {
+    if (!l.dueDate || l.dueDate < today || l.dueDate > until || (dc && l.dc !== dc)) return;
+    var amt = (Number(l.amount) || 0) * (1 + (Number(l.vatRate) || 0) / 100);
+    due[l.dueDate] = (due[l.dueDate] || 0) + amt;
+  });
+  var amountByProduct = {};
+  lines.forEach(function (l) { amountByProduct[l.product] = (amountByProduct[l.product] || 0) + (Number(l.amount) || 0); });
+  return { ok: true, kind: 'accounting', from: from, to: to, basis: basis, dc: dc || '', map: map, matrix: m,
+    prev: { cases: prev.cases, amount: prev.amount, poCount: prev.poCount, from: pFrom, to: pTo },
+    days: Object.keys(days).sort().map(function (k) { var x = days[k]; x.amount = Math.round(x.amount); return x; }),
+    amountByProduct: amountByProduct,
+    due: Object.keys(due).sort().map(function (k) { return { date: k, amount: Math.round(due[k]) }; }),
+    lastImport: (purRead_(ss, 'acc_imports').sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); })[0] || {}).createdAt || '' };
+}
