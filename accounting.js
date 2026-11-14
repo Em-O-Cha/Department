@@ -365,24 +365,71 @@
       toast('สร้าง PDF แล้ว — กดเปิด PDF ได้เลย'); reportPage(x.id);
     }).catch(function (e) { b.disabled = false; b.textContent = 'สร้าง PDF'; onServerError(e); });
   }
-  // ยืนยันก่อนส่ง: แสดงหน้าตาข้อความที่จะเข้ากลุ่ม
+  // ---------- ภาพตารางสีสำหรับ LINE (สร้างในเบราว์เซอร์ด้วย html2canvas) ----------
+  var H2C_URL = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+  var DAYS = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+  function dot(iso) { if (!iso) return '-'; var p = iso.split('-'); return p[2] + '.' + p[1] + '.' + p[0].slice(2); }
+  function dotRange(l) { return !l || !l.length ? '-' : l.length === 1 ? dot(l[0]) : dot(l[0]) + ' – ' + dot(l[l.length - 1]); }
+  function delivText(l) { if (!l || !l.length) return '-'; if (l.length > 1) return dotRange(l); var p = l[0].split('-'); return 'วัน' + DAYS[new Date(+p[0], +p[1] - 1, +p[2]).getDay()] + ' ที่ ' + dot(l[0]); }
+  // ตารางสำหรับภาพ: กว้าง 1080px ศูนย์ละ 1 แถว ตัวเลขใหญ่ อ่านบนมือถือได้
+  H.lineImageHtml = function (map, m) {
+    var P = map.products;
+    var hc = function (p) { return 'background:' + p.color + ';color:' + ink(p.color); };
+    var dcN = m.dcs.filter(function (d) { return d.cases; }).length;
+    return '<div class="a7img"><div class="a7ih"><div><b>ออเดอร์ 7-Eleven · CP ALL</b><span>บริษัท สปังกี้ ฟู้ด จำกัด</span></div>'
+      + '<div class="a7ir"><span>รอบวันที่ <b>' + dotRange(m.poDates) + '</b></span><span>ส่ง <b>' + delivText(m.deliveryDates) + '</b></span></div></div>'
+      + '<table><thead><tr><th class="dc" rowspan="2">ศูนย์กระจายสินค้า</th>' + P.map(function (p) { return '<th' + (p.l2 ? '' : ' rowspan="2"') + ' style="' + hc(p) + '">' + esc(p.l1) + '</th>'; }).join('') + '<th class="tt" rowspan="2">รวม<br>(ลัง)</th></tr>'
+      + '<tr>' + P.filter(function (p) { return p.l2; }).map(function (p) { return '<th style="' + hc(p) + '">' + esc(p.l2) + '</th>'; }).join('') + '</tr></thead><tbody>'
+      + m.dcs.map(function (d) {
+        return '<tr' + (d.cases ? '' : ' class="no"') + '><td class="dc">' + esc(d.name) + '</td>' + P.map(function (p) { var v = d.cells[p.key]; return '<td' + (v ? ' style="' + hc(p) + '"' : '') + '>' + (v ? n0(v) : '') + '</td>'; }).join('') + '<td class="tt">' + (d.cases ? n0(d.cases) : '') + '</td></tr>';
+      }).join('')
+      + '</tbody><tfoot><tr><td class="dc">รวม</td>' + P.map(function (p) { return '<td style="' + hc(p) + '">' + n0(m.byProduct[p.key] || 0) + '</td>'; }).join('') + '<td class="tt">' + n0(m.cases) + '</td></tr></tfoot></table>'
+      + '<div class="a7if"><span>' + m.poCount + ' ใบสั่งซื้อ · ' + dcN + ' ศูนย์</span><b>สินค้าจำนวน ' + n0(m.cases) + ' ลัง</b></div></div>';
+  };
+  function loadScript(url, ok) { if (ok()) return Promise.resolve(); return new Promise(function (res, rej) { var s = document.createElement('script'); s.src = url; s.onload = res; s.onerror = function () { rej(new Error('โหลดตัวสร้างภาพไม่ได้')); }; document.head.appendChild(s); }); }
+  function makeLineImage(map, m) {
+    return loadScript(H2C_URL, function () { return !!window.html2canvas; }).then(function () { return document.fonts ? document.fonts.ready : null; }).then(function () {
+      var box = document.createElement('div'); box.className = 'a7imgbox'; box.innerHTML = H.lineImageHtml(map, m); document.body.appendChild(box);
+      var el = box.firstChild;
+      return window.html2canvas(el, { scale: 2, backgroundColor: '#ffffff', logging: false }).then(function (cv) {
+        document.body.removeChild(box);
+        var url = cv.toDataURL('image/png');
+        return { url: url, png: url.split(',')[1], ratio: cv.width + ':' + cv.height };
+      }, function (e) { document.body.removeChild(box); throw e; });
+    });
+  }
+  // หน้าตาการ์ด LINE (ตรงกับ accFlex_ ใน Acc.gs)
+  function cardHtml(m, img, hasPdf) {
+    var dcN = m.dcs.filter(function (d) { return d.cases; }).length;
+    var row = function (a, b) { return '<div class="a7lr"><span>' + a + '</span><b>' + b + '</b></div>'; };
+    return '<div class="a7lc"><div class="a7lh"><small>ORDER CONFIRMATION · 7-ELEVEN</small><b>ใบแจ้งออเดอร์ CP ALL</b><span>บริษัท สปังกี้ ฟู้ด จำกัด · ฝ่ายบัญชี</span></div>'
+      + '<div class="a7lb">' + row('ออเดอร์ รอบวันที่', dotRange(m.poDates)) + row('ลูกค้า', 'CP ALL (7-Eleven)') + row('วันที่ส่งสินค้า', delivText(m.deliveryDates)) + row('ใบสั่งซื้อ', m.poCount + ' ใบ · ' + dcN + ' ศูนย์')
+      + '<div class="a7ltot"><span>สินค้าจำนวนรวม</span><b>' + n0(m.cases) + ' ลัง</b></div><small class="a7lnote">📊 ตารางออเดอร์แยกศูนย์ / สินค้า ส่งเป็นภาพในข้อความถัดไป (กดที่ภาพเพื่อขยาย)</small></div>'
+      + '<div class="a7lf"><div class="p">เปิดรายงาน PDF</div></div></div>'
+      + '<div class="a7limg">' + (img ? '<img src="' + img + '" alt="ตารางออเดอร์">' : '<div class="a7lwait"><span class="spinner dark"></span> กำลังสร้างภาพตาราง…</div>') + '</div>';
+  }
+  H.cardHtml = cardHtml;
+  // ยืนยันก่อนส่ง: แสดงหน้าตาข้อความที่จะเข้ากลุ่ม (พร้อมภาพตารางจริง)
   function lineConfirm(x) {
     var L = H.data.line;
     if (!L.token || !L.group) {
       wide({ icon: 'send', title: 'ยังส่ง LINE ไม่ได้', noCancel: true, ok: 'เข้าใจแล้ว',
-        body: '<p>ต้องใส่ค่าของ LINE OA ฝ่ายบัญชีใน Apps Script ก่อน (Project Settings → Script Properties)</p><ul class="a7ul">'
-          + '<li><code>ACC_LINE_TOKEN</code> = Channel access token ' + (L.token ? '✅ ใส่แล้ว' : '❌ ยังไม่มี') + '</li>'
-          + '<li><code>ACC_LINE_GROUP</code> = Group ID ของกลุ่มที่จะส่ง ' + (L.group ? '✅ ใส่แล้ว' : '❌ ยังไม่มี') + '</li></ul>' });
+        body: '<p>ตั้งค่า LINE OA ฝ่ายบัญชีให้ครบก่อน (เมนู "ตั้งค่าศูนย์ / สินค้า / LINE")</p><ul class="a7ul">'
+          + '<li>Channel access token (<code>ACC_LINE_TOKEN</code>) ' + (L.token ? '✅ ใส่แล้ว' : '❌ ยังไม่มี') + '</li>'
+          + '<li>กลุ่ม LINE ที่รับรายงาน ' + (L.group ? '✅ ผูกแล้ว' : '❌ ยังไม่ได้ผูก') + '</li></ul>' });
       return;
     }
-    var m = H.rep && H.rep.matrix;
-    var card = m ? '<div class="a7card"><b class="a7ct">รายงานออเดอร์ 7-Eleven</b><small>สั่ง ' + thRange(m.poDates) + ' · ส่ง ' + thRange(m.deliveryDates) + '</small><hr>'
-      + m.dcs.filter(function (d) { return d.cases; }).map(function (d) { return '<div class="a7cr"><span>' + esc(d.name) + '</span><b>' + n0(d.cases) + ' ลัง</b></div>'; }).join('')
-      + '<hr><div class="a7cr big"><span>รวมทั้งหมด</span><b>' + n0(m.cases) + ' ลัง</b></div><small>' + m.poCount + ' ใบสั่งซื้อ · มูลค่า ' + baht(m.amount) + ' (ไม่รวม VAT)</small><div class="a7cbtn">เปิดรายงาน PDF</div></div>' : '';
+    var m = H.rep && H.rep.matrix; if (!m) return;
+    var img = null;
     wide({ icon: 'send', title: x.sentAt ? 'ส่ง LINE อีกครั้ง?' : 'ส่งรายงานเข้ากลุ่ม LINE', sub: 'ข้อความนี้จะส่งเข้ากลุ่มทันที' + (x.sentAt ? ' (เคยส่งแล้วเมื่อ ' + x.sentAt + ')' : ''),
-      ok: 'ส่งเข้ากลุ่มเลย', body: '<div class="a7prev">' + card + '</div><p class="muted">ปุ่ม "เปิดรายงาน PDF" จะเปิดไฟล์ที่หน้าตาเหมือนต้นแบบรับออเดอร์' + (x.pdfUrl ? '' : ' (ระบบจะสร้าง PDF ให้ก่อนส่ง)') + '</p>',
+      ok: 'ส่งเข้ากลุ่มเลย', body: '<div class="a7prev" id="aCard">' + cardHtml(m, null) + '</div><p class="muted">ส่ง 2 ข้อความ: การ์ดสรุป + ภาพตาราง (กดภาพในไลน์เพื่อขยาย)' + (x.pdfUrl ? '' : ' · ระบบจะสร้าง PDF ให้ก่อนส่ง') + '</p>',
+      onOpen: function () {
+        $('mOk').disabled = true;
+        makeLineImage(H.rep.map, m).then(function (r) { img = r; var c = $('aCard'); if (c) c.innerHTML = cardHtml(m, r.url); $('mOk').disabled = false; },
+          function (e) { var c = $('aCard'); if (c) c.innerHTML = cardHtml(m, null).replace(/<div class="a7lwait">[\s\S]*?<\/div>/, '<div class="a7lwait">สร้างภาพไม่ได้ (' + esc(e.message) + ') — ส่งได้แบบไม่มีภาพ</div>'); $('mOk').disabled = false; });
+      },
       submit: function () {
-        return call('acc711SendLine', state.token, x.id).then(function (r) {
+        return call('acc711SendLine', state.token, x.id, img ? img.png : '', img ? img.ratio : '').then(function (r) {
           if (!r.ok) return r.error;
           closeModal(); x.sentAt = r.sentAt; x.pdfUrl = r.pdfUrl;
           toast('ส่ง LINE เข้ากลุ่มแล้ว ✅');
@@ -568,6 +615,17 @@
     '.a7prev{background:#8da7cf;border-radius:12px;padding:14px;display:flex;justify-content:center}.a7card{background:#fff;border-radius:14px;padding:14px 16px;width:100%;max-width:330px;font-size:13.5px}.a7ct{color:#059669;font-size:16px;display:block}.a7card small{color:#64748b;font-size:11.5px}',
     '.a7card hr{border:0;border-top:1px solid #e2e8f0;margin:8px 0}.a7cr{display:flex;justify-content:space-between;padding:2px 0}.a7cr.big{font-weight:700;font-size:15px}.a7cr.big b{color:#059669}.a7cbtn{background:#059669;color:#fff;text-align:center;border-radius:8px;padding:8px;margin-top:10px;font-weight:600}',
     '.a7ol{margin:10px 0;padding-left:20px;font-size:14px}.a7ol li{margin:8px 0}.a7ol code{background:#f1f5f9;padding:1px 6px;border-radius:5px}.a7copy{display:flex;gap:6px;margin-top:6px}.a7copy input{flex:1;min-width:0;padding:7px 10px;border:1.5px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px;background:#f8fafc}',
+    '.a7imgbox{position:fixed;left:-20000px;top:0}.a7img{width:1080px;background:#fff;padding:22px;font-family:"IBM Plex Sans Thai",sans-serif;color:#0f172a}',
+    '.a7ih{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;background:#0F5132;color:#fff;border-radius:12px;padding:16px 20px;margin-bottom:14px}.a7ih b{display:block;font-size:26px}.a7ih span{font-size:15px;color:#D1FAE5}',
+    '.a7ir{text-align:right;display:flex;flex-direction:column;gap:2px}.a7ir span{font-size:17px!important;color:#fff!important}.a7ir b{display:inline;font-size:19px}',
+    '.a7img table{width:100%;border-collapse:collapse;table-layout:fixed}.a7img th,.a7img td{border:1.5px solid #334155;text-align:center;padding:4px 1px}.a7img th{font-size:12.5px;font-weight:600;line-height:1.25;height:38px}',
+    '.a7img td{font-size:20px;font-weight:700;height:40px}.a7img .dc{width:118px;text-align:left;padding-left:8px;font-size:17px;background:#f8fafc}.a7img th.dc{font-size:14px}.a7img .tt{width:70px;background:#FEF2CB;font-size:20px}',
+    '.a7img tr.no td.dc{color:#94a3b8}.a7img tfoot td{background:#FEF2CB;height:44px}.a7img tfoot td[style]{font-size:20px}',
+    '.a7if{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:16px;color:#475569}.a7if b{font-size:26px;color:#0F5132}',
+    '.a7lc{background:#fff;border-radius:16px;overflow:hidden;width:100%;max-width:420px;box-shadow:0 2px 8px rgba(0,0,0,.15)}.a7lh{background:#0F5132;color:#fff;padding:16px 18px}.a7lh small{display:block;font-size:10px;color:#A7F3D0;font-weight:700;letter-spacing:.04em}.a7lh b{display:block;font-size:20px;margin-top:4px}.a7lh span{font-size:12px;color:#D1FAE5}',
+    '.a7prev{flex-direction:column;align-items:center;gap:10px}.a7limg{width:100%;max-width:420px}.a7limg img{display:block;width:100%;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.15)}.a7lnote{display:block;text-align:center;color:#64748b;font-size:11px;margin-top:10px}.a7limg .a7lwait{border-radius:14px}.a7lwait{padding:30px;text-align:center;color:#64748b;font-size:13px;background:#f8fafc}.a7lb{padding:14px 18px}.a7lr{display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:13.5px}.a7lr span{color:#64748b}.a7lr b{text-align:right}',
+    '.a7ltot{margin-top:12px;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:12px;padding:10px;text-align:center;color:#047857}.a7ltot span{display:block;font-size:13px}.a7ltot b{font-size:30px}',
+    '.a7lf{padding:0 14px 14px;display:flex;flex-direction:column;gap:8px}.a7lf div{text-align:center;border-radius:8px;padding:9px;font-weight:600;font-size:14px}.a7lf .p{background:#0F5132;color:#fff}.a7lf .s{background:#475569;color:#fff}',
     '.a7ul{margin:6px 0 0 18px;padding:0}.a7ul li{margin:4px 0}.a7ul code{background:#f1f5f9;padding:1px 6px;border-radius:5px}',
     '.a7bar1{cursor:default}.a7bar1[data-dcf]{cursor:pointer}.a7bar1[data-dcf]:hover span{color:var(--c)}.a7bar1 b small{font-weight:400;color:var(--muted)}.a7bar1 span i.a7sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:0;border:1px solid rgba(0,0,0,.2);overflow:visible}',
     '.a7days{display:flex;gap:4px;align-items:flex-end;height:150px;overflow-x:auto;padding-top:4px}.a7day{flex:1;min-width:30px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;font-size:11px}',

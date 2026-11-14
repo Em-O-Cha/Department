@@ -20,7 +20,7 @@ var ACC_TABLES_ = {
   acc_imports: { tab: 'นำเข้าไฟล์ 7-11', cols: [
     ['id', 'รหัส'], ['fileName', 'ชื่อไฟล์'], ['poDate', 'วันที่สั่ง'], ['deliveryDate', 'วันที่ส่ง'], ['poCount', 'จำนวนใบสั่ง'],
     ['lineCount', 'จำนวนรายการ'], ['cases', 'รวมลัง'], ['amount', 'มูลค่ารวม (ไม่รวม VAT)'], ['vat', 'VAT'], ['skipped', 'ข้าม (เคยบันทึกแล้ว)'],
-    ['pdfUrl', 'ไฟล์ PDF'], ['sheetUrl', 'ไฟล์รายงาน (Google Sheet)'], ['sentAt', 'ส่ง LINE เมื่อ'], ['createdAt', 'นำเข้าเมื่อ']] },
+    ['pdfUrl', 'ไฟล์ PDF'], ['sheetUrl', 'ไฟล์รายงาน (Google Sheet)'], ['imgUrl', 'ภาพตาราง (LINE)'], ['imgRatio', 'สัดส่วนภาพ'], ['sentAt', 'ส่ง LINE เมื่อ'], ['createdAt', 'นำเข้าเมื่อ']] },
   acc_settings: { tab: 'ตั้งค่า', cols: [['id', 'รายการ'], ['value', 'ค่า']] }
 };
 
@@ -387,28 +387,49 @@ function accLinePush_(messages) {
   if (res.getResponseCode() !== 200) return { ok: false, error: 'LINE ตอบกลับ ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 200) };
   return { ok: true };
 }
-function accFlex_(m, pdfUrl, fileLabel) {
+// วันที่แบบที่ฝ่ายบัญชีใช้: 12.11.26 (ค.ศ. 2 หลัก) · วันในสัปดาห์ภาษาไทย
+var ACC_DAYS_ = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+function accDot_(iso) { if (!iso) return '-'; var p = iso.split('-'); return p[2] + '.' + p[1] + '.' + p[0].slice(2); }
+function accDayName_(iso) { var p = iso.split('-'); return ACC_DAYS_[new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay()]; }
+function accDotRange_(list) { return !list.length ? '-' : list.length === 1 ? accDot_(list[0]) : accDot_(list[0]) + ' – ' + accDot_(list[list.length - 1]); }
+function accDeliveryText_(list) { return !list.length ? '-' : list.length === 1 ? 'วัน' + accDayName_(list[0]) + ' ที่ ' + accDot_(list[0]) : accDotRange_(list); }
+// ส่ง 2 ข้อความ: (1) การ์ดสรุป หัวสีเขียวเข้ม · รอบวันที่ / ลูกค้า / วันส่ง · ยอดรวมลัง · ปุ่ม PDF
+// (2) ภาพตารางสี (ข้อความรูป กดขยายในไลน์ได้) · img = { url } ภาพที่หน้าเว็บสร้างให้ · ไม่มีภาพ = ส่งการ์ดอย่างเดียว
+function accFlex_(m, pdfUrl, img) {
   var T = function (text, o) { var x = { type: 'text', text: String(text), wrap: true }; Object.keys(o || {}).forEach(function (k) { x[k] = o[k]; }); return x; };
-  var rows = m.dcs.filter(function (d) { return d.cases; }).map(function (d) {
-    return { type: 'box', layout: 'horizontal', margin: 'sm', contents: [T(d.name, { size: 'sm', color: '#334155', flex: 5 }),
-      T(d.cases.toLocaleString() + ' ลัง', { size: 'sm', weight: 'bold', align: 'end', flex: 3, color: '#0f172a' })] };
-  });
-  var body = [
-    T('รายงานออเดอร์ 7-Eleven', { weight: 'bold', size: 'lg', color: '#059669' }),
-    T('สั่ง ' + accRangeText_(m.poDates) + ' · ส่ง ' + accRangeText_(m.deliveryDates), { size: 'xs', color: '#64748b', margin: 'xs' }),
-    { type: 'separator', margin: 'md' }
-  ].concat(rows).concat([
-    { type: 'separator', margin: 'md' },
-    { type: 'box', layout: 'horizontal', margin: 'md', contents: [T('รวมทั้งหมด', { weight: 'bold', size: 'md', flex: 5 }),
-      T(m.cases.toLocaleString() + ' ลัง', { weight: 'bold', size: 'md', align: 'end', flex: 3, color: '#059669' })] },
-    T(m.poCount + ' ใบสั่งซื้อ · มูลค่า ' + Math.round(m.amount).toLocaleString() + ' บาท (ไม่รวม VAT)', { size: 'xs', color: '#64748b', margin: 'sm' })
-  ]);
-  var bubble = { type: 'bubble', size: 'mega', body: { type: 'box', layout: 'vertical', contents: body } };
-  if (pdfUrl) bubble.footer = { type: 'box', layout: 'vertical', contents: [{ type: 'button', style: 'primary', color: '#059669', height: 'sm',
-    action: { type: 'uri', label: 'เปิดรายงาน PDF', uri: pdfUrl } }] };
-  return { type: 'flex', altText: 'รายงานออเดอร์ 7-11 ' + (fileLabel || '') + ' รวม ' + m.cases + ' ลัง', contents: bubble };
+  var row = function (label, value) {
+    return { type: 'box', layout: 'horizontal', margin: 'md', contents: [T(label, { size: 'sm', color: '#64748B', flex: 5 }), T(value, { size: 'sm', weight: 'bold', color: '#0F172A', flex: 6, align: 'end' })] };
+  };
+  var dcN = m.dcs.filter(function (d) { return d.cases; }).length;
+  var bubble = { type: 'bubble', size: 'giga',
+    header: { type: 'box', layout: 'vertical', backgroundColor: '#0F5132', paddingAll: '18px', contents: [
+      T('ORDER CONFIRMATION · 7-ELEVEN', { size: 'xxs', color: '#A7F3D0', weight: 'bold' }),
+      T('ใบแจ้งออเดอร์ CP ALL', { size: 'xl', color: '#FFFFFF', weight: 'bold', margin: 'sm' }),
+      T('บริษัท สปังกี้ ฟู้ด จำกัด · ฝ่ายบัญชี', { size: 'xs', color: '#D1FAE5', margin: 'xs' })] },
+    body: { type: 'box', layout: 'vertical', paddingAll: '18px', contents: [
+      row('ออเดอร์ รอบวันที่', accDotRange_(m.poDates)),
+      row('ลูกค้า', 'CP ALL (7-Eleven)'),
+      row('วันที่ส่งสินค้า', accDeliveryText_(m.deliveryDates)),
+      row('ใบสั่งซื้อ', m.poCount + ' ใบ · ' + dcN + ' ศูนย์'),
+      { type: 'box', layout: 'vertical', margin: 'xl', backgroundColor: '#ECFDF5', cornerRadius: '12px', paddingAll: '14px', borderColor: '#A7F3D0', borderWidth: '1px', contents: [
+        T('สินค้าจำนวนรวม', { size: 'sm', color: '#047857', align: 'center' }),
+        T(m.cases.toLocaleString() + ' ลัง', { size: '3xl', weight: 'bold', color: '#047857', align: 'center' })] }] } };
+  if (img && img.url) bubble.body.contents.push(T('📊 ตารางออเดอร์แยกศูนย์ / สินค้า ส่งเป็นภาพในข้อความถัดไป (กดที่ภาพเพื่อขยาย)', { size: 'xxs', color: '#64748B', margin: 'md', align: 'center' }));
+  var btns = [];
+  if (pdfUrl) btns.push({ type: 'button', style: 'primary', color: '#0F5132', height: 'sm', action: { type: 'uri', label: 'เปิดรายงาน PDF', uri: pdfUrl } });
+  if (btns.length) bubble.footer = { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '14px', contents: btns };
+  return { type: 'flex', altText: 'ออเดอร์ รอบวันที่ ' + accDotRange_(m.poDates) + ' · CP ALL ส่ง' + accDeliveryText_(m.deliveryDates) + ' · สินค้าจำนวน ' + m.cases.toLocaleString() + ' ลัง', contents: bubble };
 }
-function acc711SendLine(token, importId) {
+// ภาพตาราง (PNG base64 จากหน้าเว็บ) → ไฟล์ในโฟลเดอร์รายงาน (ทุกคนที่มีลิงก์ดูได้) → URL ภาพตรงสำหรับ LINE
+function accSaveLineImage_(dept, imp, png) {
+  if (!png || typeof png !== 'string' || png.length > 6000000 || !/^[A-Za-z0-9+\/=]+$/.test(png)) return '';
+  var old = String(imp.imgUrl || '').match(/[-\w]{25,}/);
+  if (old) try { DriveApp.getFileById(old[0]).setTrashed(true); } catch (e) {}
+  var f = accReportFolder_(dept).createFile(Utilities.newBlob(Utilities.base64Decode(png), 'image/png', 'ตารางออเดอร์ 7-11 ' + imp.id + '.png'));
+  f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return 'https://lh3.googleusercontent.com/d/' + f.getId();
+}
+function acc711SendLine(token, importId, png, ratio) {
   var dept = requireAcc_(token);
   return purLocked_(function () {
     var ss = accBook_(dept), map = accMap_(ss);
@@ -416,13 +437,16 @@ function acc711SendLine(token, importId) {
     if (!imp) return { ok: false, error: 'ไม่พบการนำเข้านี้' };
     var pdfUrl = imp.pdfUrl;
     if (!pdfUrl) { var made = accMakePdf_(dept, importId); if (!made.ok) return made; pdfUrl = made.pdfUrl; imp = purRead_(ss, 'acc_imports').filter(function (x) { return x.id === importId; })[0]; }
+    if (png) { imp.imgUrl = accSaveLineImage_(dept, imp, png); imp.imgRatio = /^\d{2,5}:\d{2,5}$/.test(String(ratio)) ? String(ratio) : '20:13'; }
     var m = accMatrix_(map, accReportLines_(ss, { importId: importId }));
-    var r = accLinePush_([accFlex_(m, pdfUrl, accRangeText_(m.deliveryDates))]);
-    if (!r.ok) return r;
+    var msgs = [accFlex_(m, pdfUrl, imp.imgUrl ? { url: imp.imgUrl } : null)];
+    if (imp.imgUrl) msgs.push({ type: 'image', originalContentUrl: imp.imgUrl, previewImageUrl: imp.imgUrl + '=w1000' });
+    var r = accLinePush_(msgs);
+    if (!r.ok) { purWrite_(ss, 'acc_imports', imp); return r; }
     imp.sentAt = purNow_();
     purWrite_(ss, 'acc_imports', imp);
     purLogWrite_(ss, 'ส่ง LINE รายงาน 7-11', 'acc_imports', importId, m.cases + ' ลัง');
-    return { ok: true, sentAt: imp.sentAt, pdfUrl: pdfUrl };
+    return { ok: true, sentAt: imp.sentAt, pdfUrl: pdfUrl, imgUrl: imp.imgUrl };
   });
 }
 // ---------- Webhook ของ LINE OA ฝ่ายบัญชี: ผูกกลุ่มอัตโนมัติ (ไม่ต้องหา Group ID เอง) ----------
