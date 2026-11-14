@@ -479,8 +479,14 @@
     $('main').innerHTML = '<h3>ตั้งค่าศูนย์ / สินค้า / LINE</h3><p class="lead">ระบบจับคู่ Delivery Location กับ "คำค้น" ของศูนย์ (ถ้าไม่พบใช้รหัสคลัง) และจับคู่สินค้าจากรหัสสินค้า 7-11 (ถ้าไม่พบใช้คำค้นในชื่อ) · ลำดับในตาราง = ลำดับในรายงาน</p>'
       + '<div class="panel pbox"><h4>' + icon('send', 18) + ' LINE กลุ่มฝ่ายบัญชี</h4>'
       + '<div class="a7chk ' + (L.token ? 'ok' : 'bad') + '"><i>' + (L.token ? '✓' : '✕') + '</i><span>ACC_LINE_TOKEN (Channel access token) ' + (L.token ? 'ใส่แล้ว' : 'ยังไม่ได้ใส่') + '</span></div>'
-      + '<div class="a7chk ' + (L.group ? 'ok' : 'bad') + '"><i>' + (L.group ? '✓' : '✕') + '</i><span>ACC_LINE_GROUP (Group ID) ' + (L.group ? 'ใส่แล้ว' : 'ยังไม่ได้ใส่') + '</span></div>'
-      + '<p class="muted">ใส่ค่าที่ Apps Script → Project Settings → Script Properties</p>'
+      + '<div class="a7chk ' + (L.group ? 'ok' : 'bad') + '"><i>' + (L.group ? '✓' : '✕') + '</i><span>กลุ่ม LINE ที่รับรายงาน ' + (L.group ? 'ผูกแล้ว' : 'ยังไม่ได้ผูก') + '</span></div>'
+      + '<ol class="a7ol">'
+      + '<li>ใส่ Channel access token ของ OA ฝ่ายบัญชีใน Apps Script → Project Settings → Script Properties ชื่อ <code>ACC_LINE_TOKEN</code></li>'
+      + '<li>ใน LINE Developers → Messaging API ของ OA ฝ่ายบัญชี: ใส่ Webhook URL ด้านล่าง แล้วเปิด Use webhook และ Allow bot to join group chats'
+      + (L.webhook ? '<div class="a7copy"><input readonly value="' + esc(L.webhook) + '" aria-label="Webhook URL"><button class="btn btn-line btn-sm" data-copy="' + esc(L.webhook) + '">คัดลอก</button></div>' : '') + '</li>'
+      + '<li>เชิญ OA เข้ากลุ่ม แล้วพิมพ์ข้อความนี้ในกลุ่ม ระบบจะจำกลุ่มให้เอง (ไม่ต้องหา Group ID)'
+      + '<div class="a7copy"><input readonly value="ตั้งค่ากลุ่ม บัญชี ' + esc(L.setupCode || '') + '" aria-label="คำสั่งผูกกลุ่ม"><button class="btn btn-line btn-sm" data-copy="ตั้งค่ากลุ่ม บัญชี ' + esc(L.setupCode || '') + '">คัดลอก</button></div>'
+      + '<small class="muted">รหัสใช้ได้ครั้งเดียว · เปลี่ยนกลุ่มภายหลังได้ด้วยรหัสใหม่ในหน้านี้</small></li></ol>'
       + '<button class="btn btn-line btn-sm" id="sTest"' + (L.token && L.group ? '' : ' disabled') + '>' + icon('send', 16) + ' ส่งข้อความทดสอบเข้ากลุ่ม</button></div>'
       + '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('table', 18) + ' ศูนย์กระจายสินค้า</h4><div class="ptable-wrap"><table class="ptable a7set"><thead><tr><th></th><th>ชื่อศูนย์ (ในรายงาน)</th><th>คำค้นใน Delivery Location</th><th>รหัสคลัง</th><th></th></tr></thead><tbody>'
       + cfg.dcs.map(function (d, i) {
@@ -514,6 +520,11 @@
         H.data.map = r.map; H.setDraft = null; toast('บันทึกการตั้งค่าแล้ว'); settings();
       }).catch(function (e) { b.disabled = false; onServerError(e); });
     });
+    on('[data-copy]', 'click', function (el) {
+      var t = el.getAttribute('data-copy'), done = function () { toast('คัดลอกแล้ว'); };
+      if (navigator.clipboard) navigator.clipboard.writeText(t).then(done, function () { el.previousSibling.select(); });
+      else { el.previousSibling.select(); document.execCommand('copy'); done(); }
+    }, $('main'));
     $('sTest').addEventListener('click', function () {
       var b = this; b.disabled = true;
       call('accLineTest', state.token).then(function (r) { b.disabled = false; toast(r.ok ? 'ส่งข้อความทดสอบแล้ว — ดูในกลุ่ม LINE' : r.error); }).catch(function (e) { b.disabled = false; onServerError(e); });
@@ -556,6 +567,7 @@
     '.a7poi{display:grid;grid-template-columns:14px 1fr auto;gap:8px;align-items:center;padding:3px 0;font-size:13.5px;border-top:1px dashed var(--line)}.a7poi i{width:14px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,.15)}.a7poi small{display:block;color:var(--muted);font-size:11.5px}',
     '.a7prev{background:#8da7cf;border-radius:12px;padding:14px;display:flex;justify-content:center}.a7card{background:#fff;border-radius:14px;padding:14px 16px;width:100%;max-width:330px;font-size:13.5px}.a7ct{color:#059669;font-size:16px;display:block}.a7card small{color:#64748b;font-size:11.5px}',
     '.a7card hr{border:0;border-top:1px solid #e2e8f0;margin:8px 0}.a7cr{display:flex;justify-content:space-between;padding:2px 0}.a7cr.big{font-weight:700;font-size:15px}.a7cr.big b{color:#059669}.a7cbtn{background:#059669;color:#fff;text-align:center;border-radius:8px;padding:8px;margin-top:10px;font-weight:600}',
+    '.a7ol{margin:10px 0;padding-left:20px;font-size:14px}.a7ol li{margin:8px 0}.a7ol code{background:#f1f5f9;padding:1px 6px;border-radius:5px}.a7copy{display:flex;gap:6px;margin-top:6px}.a7copy input{flex:1;min-width:0;padding:7px 10px;border:1.5px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px;background:#f8fafc}',
     '.a7ul{margin:6px 0 0 18px;padding:0}.a7ul li{margin:4px 0}.a7ul code{background:#f1f5f9;padding:1px 6px;border-radius:5px}',
     '.a7bar1{cursor:default}.a7bar1[data-dcf]{cursor:pointer}.a7bar1[data-dcf]:hover span{color:var(--c)}.a7bar1 b small{font-weight:400;color:var(--muted)}.a7bar1 span i.a7sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:0;border:1px solid rgba(0,0,0,.2);overflow:visible}',
     '.a7days{display:flex;gap:4px;align-items:flex-end;height:150px;overflow-x:auto;padding-top:4px}.a7day{flex:1;min-width:30px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;font-size:11px}',

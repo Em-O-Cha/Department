@@ -48,8 +48,9 @@ function doPost(e) {
   var out;
   try {
     var req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-    if (Array.isArray(req.events)) {   // Webhook ของ LINE OA ฝ่ายบุคคล (HrPublic.gs)
-      hrLineWebhook_(req.events);
+    if (Array.isArray(req.events)) {   // Webhook ของ LINE OA: ฝ่ายบัญชี (Acc.gs) แยกด้วย destination ไม่ใช่ = ฝ่ายบุคคล (HrPublic.gs)
+      if (accIsMyBot_(req.destination)) accLineWebhook_(req.events);
+      else hrLineWebhook_(req.events);
       return ContentService.createTextOutput('OK');
     }
     var fns = apiFunctions_(), fn = String(req.fn || '');

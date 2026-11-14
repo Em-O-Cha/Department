@@ -58,6 +58,8 @@ var ACC_PRODUCT_DEFAULT_ = [
   { key: 'P16', l1: 'หมี่คลุก', l2: '', color: '#DAF2F4', codes: ['3302174'], keywords: ['หมี่คลุก'] },
   { key: 'P17', l1: 'หมี่ชมพู', l2: '', color: '#FBD9D7', codes: ['3302176'], keywords: ['หมี่ชมพู'] }
 ];
+// URL /exec ของเว็บแอประบบงานองค์กร (deployment เดิมเสมอ) = Webhook URL ของ LINE OA ฝ่ายบัญชี
+var ACC_WEBHOOK_URL_ = 'https://script.google.com/macros/s/AKfycbyWj0ra2zC_T-qOE6kAr0cHHzIV944lk_5n4Nk54md9WkHcslA_Pwx7UBNF5Uc0LXTc/exec';
 var ACC_REPORT_TITLE_ = 'แบบฟอร์มบันทึกออเดอร์ 7-11';
 var ACC_TOTAL_COLOR_ = '#FEF2CB';
 
@@ -170,7 +172,8 @@ function accLoad(token) {
   var p = props_();
   return { ok: true, today: purToday_(), map: accMap_(ss), imports: imports.slice(0, 200),
     hasFolder: !!deptConfig_(dept.key).folderId, sheetUrl: ss.getUrl(),
-    line: { token: !!p.getProperty('ACC_LINE_TOKEN'), group: !!p.getProperty('ACC_LINE_GROUP') } };
+    line: { token: !!p.getProperty('ACC_LINE_TOKEN'), group: !!p.getProperty('ACC_LINE_GROUP'), setupCode: hrProp_('ACC_LINE_SETUP', hrSetupCode_),
+      webhook: ACC_WEBHOOK_URL_ } };
 }
 
 // ---------- API: ตรวจไฟล์ก่อนบันทึก ----------
@@ -420,6 +423,48 @@ function acc711SendLine(token, importId) {
     purWrite_(ss, 'acc_imports', imp);
     purLogWrite_(ss, 'ส่ง LINE รายงาน 7-11', 'acc_imports', importId, m.cases + ' ลัง');
     return { ok: true, sentAt: imp.sentAt, pdfUrl: pdfUrl };
+  });
+}
+// ---------- Webhook ของ LINE OA ฝ่ายบัญชี: ผูกกลุ่มอัตโนมัติ (ไม่ต้องหา Group ID เอง) ----------
+// ตั้ง Webhook URL ของ OA ฝ่ายบัญชี = URL /exec ของระบบนี้ · เชิญบอทเข้ากลุ่ม แล้วพิมพ์ "ตั้งค่ากลุ่ม บัญชี <รหัสตั้งค่า>"
+// (รหัสดูได้ที่ระบบฝ่ายบัญชี → ตั้งค่า) → ระบบบันทึก ACC_LINE_GROUP ให้เอง · รหัสใช้ได้ครั้งเดียว
+// doPost (Api.gs) แยก OA จากช่อง destination ของ webhook: ตรงกับบอทของ ACC_LINE_TOKEN → ฝ่ายบัญชี, ไม่ตรง → ฝ่ายบุคคล
+function accIsMyBot_(destination) {
+  var token = props_().getProperty('ACC_LINE_TOKEN');
+  if (!token || !destination) return false;
+  var c = CacheService.getScriptCache(), id = c.get('acc_bot_id');
+  if (!id) {
+    var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/info', { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return false;
+    id = JSON.parse(res.getContentText()).userId || '';
+    if (id) c.put('acc_bot_id', id, 21600);
+  }
+  return id === destination;
+}
+function accLineReply_(replyToken, text) {
+  var token = props_().getProperty('ACC_LINE_TOKEN');
+  if (!token || !replyToken) return;
+  UrlFetchApp.fetch('https://api.line.me/v2/bot/message/reply', { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    headers: { Authorization: 'Bearer ' + token }, payload: JSON.stringify({ replyToken: replyToken, messages: [{ type: 'text', text: text }] }) });
+}
+function accLineWebhook_(events) {
+  (events || []).forEach(function (ev) {
+    try {
+      var gid = (ev.source || {}).groupId || '';
+      if (ev.type === 'join' && gid) {
+        accLineReply_(ev.replyToken, 'สวัสดีค่ะ 🙏 ถ้าต้องการให้กลุ่มนี้รับรายงานออเดอร์ 7-11 ให้พิมพ์\nตั้งค่ากลุ่ม บัญชี <รหัสตั้งค่า>\n(ดูรหัสได้ที่ระบบฝ่ายบัญชี → ตั้งค่าศูนย์ / สินค้า / LINE)');
+        return;
+      }
+      if (ev.type !== 'message' || !ev.message || ev.message.type !== 'text') return;
+      var m = String(ev.message.text).trim().match(/^ตั้งค่ากลุ่ม\s*(?:บัญชี|ACC)\s+([A-Z0-9]{8})$/i);
+      if (!m) return;
+      if (!gid) { accLineReply_(ev.replyToken, 'พิมพ์คำสั่งนี้ในกลุ่ม LINE ที่ต้องการให้รับรายงาน (ไม่ใช่ในแชทส่วนตัว)'); return; }
+      hrRate_('accbind', 10, 3600);
+      if (m[1].toUpperCase() !== hrProp_('ACC_LINE_SETUP', hrSetupCode_)) { accLineReply_(ev.replyToken, 'รหัสตั้งค่าไม่ถูกต้อง'); return; }
+      props_().setProperty('ACC_LINE_GROUP', gid);
+      props_().setProperty('ACC_LINE_SETUP', hrSetupCode_());   // ใช้ครั้งเดียว
+      accLineReply_(ev.replyToken, '✅ ตั้งกลุ่มนี้เป็นกลุ่มรับรายงานออเดอร์ 7-11 ของฝ่ายบัญชีแล้ว\nกด "ส่ง LINE เข้ากลุ่ม" ในระบบ รายงานจะขึ้นในกลุ่มนี้');
+    } catch (err) { Logger.log('accLineWebhook_ ' + err); }
   });
 }
 function accLineTest(token) {
