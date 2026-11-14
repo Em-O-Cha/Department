@@ -428,10 +428,10 @@ function accFlex_(m, pdfUrl, img) {
     { type: 'box', layout: 'vertical', paddingAll: '20px', contents: body }];
   return { type: 'flex', altText: 'ออเดอร์ รอบวันที่ ' + accDotRange_(m.poDates) + ' · CP ALL ส่ง' + accDeliveryText_(m.deliveryDates) + ' · สินค้าจำนวน ' + m.cases.toLocaleString() + ' ลัง', contents: accRoundBubble_(inner) };
 }
-// การ์ดภาพตาราง (มุมโค้งเหมือนการ์ดสรุป) · กดภาพ = เปิดภาพเต็มความละเอียด
+// การ์ดภาพตาราง (ขนาด giga แบบปกติ ไม่ทำมุมมน) · กดภาพ = เปิดภาพเต็มความละเอียด
 function accImageFlex_(m, url, ratio) {
   return { type: 'flex', altText: 'ตารางออเดอร์ 7-11 แยกศูนย์ / สินค้า (' + m.cases.toLocaleString() + ' ลัง)',
-    contents: accRoundBubble_([{ type: 'image', url: url, size: 'full', aspectRatio: ratio || '20:13', aspectMode: 'fit', backgroundColor: '#FFFFFF', action: { type: 'uri', uri: url } }]) };
+    contents: { type: 'bubble', size: 'giga', hero: { type: 'image', url: url, size: 'full', aspectRatio: ratio || '20:13', aspectMode: 'fit', backgroundColor: '#FFFFFF', action: { type: 'uri', uri: url } } } };
 }
 // ภาพตาราง (PNG base64 จากหน้าเว็บ) → ไฟล์ในโฟลเดอร์รายงาน (ทุกคนที่มีลิงก์ดูได้) → URL ภาพตรงสำหรับ LINE
 function accSaveLineImage_(dept, imp, png) {
