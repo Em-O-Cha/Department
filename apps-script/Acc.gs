@@ -395,30 +395,43 @@ function accDotRange_(list) { return !list.length ? '-' : list.length === 1 ? ac
 function accDeliveryText_(list) { return !list.length ? '-' : list.length === 1 ? 'วัน' + accDayName_(list[0]) + ' ที่ ' + accDot_(list[0]) : accDotRange_(list); }
 // ส่ง 2 ข้อความ: (1) การ์ดสรุป หัวสีเขียวเข้ม · รอบวันที่ / ลูกค้า / วันส่ง · ยอดรวมลัง · ปุ่ม PDF
 // (2) ภาพตารางสี (ข้อความรูป กดขยายในไลน์ได้) · img = { url } ภาพที่หน้าเว็บสร้างให้ · ไม่มีภาพ = ส่งการ์ดอย่างเดียว
+// การ์ดมนทั้งหัวและท้าย: bubble โปร่งใส ห่อด้วยกล่องมุมโค้ง 24px (หัวสีเขียว / เนื้อหา / ปุ่มทรงมน อยู่ในกล่องเดียว)
+var ACC_CARD_RADIUS_ = '24px';
+function accRoundBubble_(inner) {
+  return { type: 'bubble', size: 'giga', styles: { body: { backgroundColor: '#00000000' } },
+    body: { type: 'box', layout: 'vertical', paddingAll: '0px', backgroundColor: '#00000000',
+      contents: [{ type: 'box', layout: 'vertical', cornerRadius: ACC_CARD_RADIUS_, backgroundColor: '#FFFFFF', paddingAll: '0px', contents: inner }] } };
+}
 function accFlex_(m, pdfUrl, img) {
   var T = function (text, o) { var x = { type: 'text', text: String(text), wrap: true }; Object.keys(o || {}).forEach(function (k) { x[k] = o[k]; }); return x; };
   var row = function (label, value) {
     return { type: 'box', layout: 'horizontal', margin: 'md', contents: [T(label, { size: 'sm', color: '#64748B', flex: 5 }), T(value, { size: 'sm', weight: 'bold', color: '#0F172A', flex: 6, align: 'end' })] };
   };
   var dcN = m.dcs.filter(function (d) { return d.cases; }).length;
-  var bubble = { type: 'bubble', size: 'giga',
-    header: { type: 'box', layout: 'vertical', backgroundColor: '#0F5132', paddingAll: '18px', contents: [
+  var body = [
+    row('ออเดอร์ รอบวันที่', accDotRange_(m.poDates)),
+    row('ลูกค้า', 'CP ALL (7-Eleven)'),
+    row('วันที่ส่งสินค้า', accDeliveryText_(m.deliveryDates)),
+    row('ใบสั่งซื้อ', m.poCount + ' ใบ · ' + dcN + ' ศูนย์'),
+    { type: 'box', layout: 'vertical', margin: 'xl', backgroundColor: '#ECFDF5', cornerRadius: '16px', paddingAll: '14px', borderColor: '#A7F3D0', borderWidth: '1px', contents: [
+      T('สินค้าจำนวนรวม', { size: 'sm', color: '#047857', align: 'center' }),
+      T(m.cases.toLocaleString() + ' ลัง', { size: '3xl', weight: 'bold', color: '#047857', align: 'center' })] }];
+  if (img && img.url) body.push(T('📊 ตารางออเดอร์แยกศูนย์ / สินค้า อยู่ในข้อความถัดไป (กดที่ภาพเพื่อเปิดภาพเต็ม)', { size: 'xxs', color: '#64748B', margin: 'md', align: 'center' }));
+  // ปุ่มทรงมน (กล่องมุมโค้งที่กดได้)
+  if (pdfUrl) body.push({ type: 'box', layout: 'vertical', margin: 'xl', backgroundColor: '#0F5132', cornerRadius: '24px', paddingAll: '12px',
+    action: { type: 'uri', label: 'เปิดรายงาน PDF', uri: pdfUrl }, contents: [T('เปิดรายงาน PDF', { size: 'md', weight: 'bold', color: '#FFFFFF', align: 'center' })] });
+  var inner = [
+    { type: 'box', layout: 'vertical', backgroundColor: '#0F5132', paddingAll: '20px', contents: [
       T('ORDER CONFIRMATION · 7-ELEVEN', { size: 'xxs', color: '#A7F3D0', weight: 'bold' }),
       T('ใบแจ้งออเดอร์ CP ALL', { size: 'xl', color: '#FFFFFF', weight: 'bold', margin: 'sm' }),
       T('บริษัท สปังกี้ ฟู้ด จำกัด · ฝ่ายบัญชี', { size: 'xs', color: '#D1FAE5', margin: 'xs' })] },
-    body: { type: 'box', layout: 'vertical', paddingAll: '18px', contents: [
-      row('ออเดอร์ รอบวันที่', accDotRange_(m.poDates)),
-      row('ลูกค้า', 'CP ALL (7-Eleven)'),
-      row('วันที่ส่งสินค้า', accDeliveryText_(m.deliveryDates)),
-      row('ใบสั่งซื้อ', m.poCount + ' ใบ · ' + dcN + ' ศูนย์'),
-      { type: 'box', layout: 'vertical', margin: 'xl', backgroundColor: '#ECFDF5', cornerRadius: '12px', paddingAll: '14px', borderColor: '#A7F3D0', borderWidth: '1px', contents: [
-        T('สินค้าจำนวนรวม', { size: 'sm', color: '#047857', align: 'center' }),
-        T(m.cases.toLocaleString() + ' ลัง', { size: '3xl', weight: 'bold', color: '#047857', align: 'center' })] }] } };
-  if (img && img.url) bubble.body.contents.push(T('📊 ตารางออเดอร์แยกศูนย์ / สินค้า ส่งเป็นภาพในข้อความถัดไป (กดที่ภาพเพื่อขยาย)', { size: 'xxs', color: '#64748B', margin: 'md', align: 'center' }));
-  var btns = [];
-  if (pdfUrl) btns.push({ type: 'button', style: 'primary', color: '#0F5132', height: 'sm', action: { type: 'uri', label: 'เปิดรายงาน PDF', uri: pdfUrl } });
-  if (btns.length) bubble.footer = { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '14px', contents: btns };
-  return { type: 'flex', altText: 'ออเดอร์ รอบวันที่ ' + accDotRange_(m.poDates) + ' · CP ALL ส่ง' + accDeliveryText_(m.deliveryDates) + ' · สินค้าจำนวน ' + m.cases.toLocaleString() + ' ลัง', contents: bubble };
+    { type: 'box', layout: 'vertical', paddingAll: '20px', contents: body }];
+  return { type: 'flex', altText: 'ออเดอร์ รอบวันที่ ' + accDotRange_(m.poDates) + ' · CP ALL ส่ง' + accDeliveryText_(m.deliveryDates) + ' · สินค้าจำนวน ' + m.cases.toLocaleString() + ' ลัง', contents: accRoundBubble_(inner) };
+}
+// การ์ดภาพตาราง (มุมโค้งเหมือนการ์ดสรุป) · กดภาพ = เปิดภาพเต็มความละเอียด
+function accImageFlex_(m, url, ratio) {
+  return { type: 'flex', altText: 'ตารางออเดอร์ 7-11 แยกศูนย์ / สินค้า (' + m.cases.toLocaleString() + ' ลัง)',
+    contents: accRoundBubble_([{ type: 'image', url: url, size: 'full', aspectRatio: ratio || '20:13', aspectMode: 'fit', backgroundColor: '#FFFFFF', action: { type: 'uri', uri: url } }]) };
 }
 // ภาพตาราง (PNG base64 จากหน้าเว็บ) → ไฟล์ในโฟลเดอร์รายงาน (ทุกคนที่มีลิงก์ดูได้) → URL ภาพตรงสำหรับ LINE
 function accSaveLineImage_(dept, imp, png) {
@@ -440,7 +453,8 @@ function acc711SendLine(token, importId, png, ratio) {
     if (png) { imp.imgUrl = accSaveLineImage_(dept, imp, png); imp.imgRatio = /^\d{2,5}:\d{2,5}$/.test(String(ratio)) ? String(ratio) : '20:13'; }
     var m = accMatrix_(map, accReportLines_(ss, { importId: importId }));
     var msgs = [accFlex_(m, pdfUrl, imp.imgUrl ? { url: imp.imgUrl } : null)];
-    if (imp.imgUrl) msgs.push({ type: 'image', originalContentUrl: imp.imgUrl, previewImageUrl: imp.imgUrl + '=w1000' });
+    // ภาพตารางเป็นการ์ด Flex ขนาด giga (กว้างเท่าการ์ดสรุป = ใหญ่สุดที่ LINE แสดงได้)
+    if (imp.imgUrl) msgs.push(accImageFlex_(m, imp.imgUrl, imp.imgRatio));
     var r = accLinePush_(msgs);
     if (!r.ok) { purWrite_(ss, 'acc_imports', imp); return r; }
     imp.sentAt = purNow_();
