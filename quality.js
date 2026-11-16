@@ -48,14 +48,26 @@
   function ageOf(c) { return days(c.recvDate, closed(c) ? c.closeDate : H.data.today); }
   function late(c) { return !done(c) && ageOf(c) > (Number(S_().closeDays) || 15); }
   function on(sel, ev, fn, root) { Array.prototype.forEach.call((root || document).querySelectorAll(sel), function (el) { el.addEventListener(ev, function (e) { fn(el, e); }); }); }
-  function v(id) { var el = $(id); return el ? el.value.trim() : ''; }
+  // select ที่มี "อื่น ๆ (ระบุ)" → อ่านค่าจากช่องพิมพ์ข้าง ๆ
+  function v(id) { var el = $(id); if (!el) return ''; if (el.value === '__other') { var o = $(id + '_o'); return o ? o.value.trim() : ''; } return el.value.trim(); }
   function F(id, label, value, type, attrs, req) { return '<div class="pf"><label for="' + id + '">' + label + (req ? ' <b class="qreq">*</b>' : '') + '</label><input id="' + id + '" type="' + (type || 'text') + '" value="' + esc(value == null ? '' : value) + '"' + (attrs || '') + '></div>'; }
-  function S(id, label, opts, value, req, ph) {
+  // other = มีตัวเลือก "อื่น ๆ (ระบุ)" + ช่องพิมพ์เอง (ค่าที่ไม่อยู่ในรายการจะขึ้นในช่องพิมพ์)
+  function S(id, label, opts, value, req, ph, other) {
     var o = opts.map(function (x) { return Array.isArray(x) ? x : [x, x]; });
-    if (value && !o.some(function (x) { return x[0] === value; })) o.push([value, value]);
-    return '<div class="pf"><label for="' + id + '">' + label + (req ? ' <b class="qreq">*</b>' : '') + '</label><select id="' + id + '"><option value="">' + (ph || '— เลือก —') + '</option>'
-      + o.map(function (x) { return '<option value="' + esc(x[0]) + '"' + (String(x[0]) === String(value || '') ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></div>';
+    if (other) o = o.filter(function (x) { return !/^อื่น ?ๆ$/.test(String(x[0]).trim()); });
+    var known = !value || o.some(function (x) { return String(x[0]) === String(value); });
+    if (!known && !other) o.push([value, value]);
+    var isO = other && !known;
+    return '<div class="pf"><label for="' + id + '">' + label + (req ? ' <b class="qreq">*</b>' : '') + '</label><select id="' + id + '"' + (other ? ' data-other="1"' : '') + '><option value="">' + (ph || '— เลือก —') + '</option>'
+      + o.map(function (x) { return '<option value="' + esc(x[0]) + '"' + (String(x[0]) === String(value || '') ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('')
+      + (other ? '<option value="__other"' + (isO ? ' selected' : '') + '>อื่น ๆ (ระบุ)</option>' : '') + '</select>'
+      + (other ? '<input id="' + id + '_o" class="qother" maxlength="80" placeholder="พิมพ์ระบุ…" aria-label="' + esc(label) + ' (ระบุเอง)" value="' + esc(isO ? value : '') + '"' + (isO ? '' : ' hidden') + '>' : '') + '</div>';
   }
+  document.addEventListener('change', function (e) {
+    var el = e.target; if (!el || !el.matches || !el.matches('select[data-other]')) return;
+    var box = document.getElementById(el.id + '_o'); if (!box) return;
+    box.hidden = el.value !== '__other'; if (!box.hidden) box.focus();
+  });
   function T(id, label, value, ph, req, rows) { return '<div class="pf full"><label for="' + id + '">' + label + (req ? ' <b class="qreq">*</b>' : '') + '</label><textarea id="' + id + '" rows="' + (rows || 2) + '" placeholder="' + esc(ph || '') + '">' + esc(value || '') + '</textarea></div>'; }
   function DL(id, label, value, opts, attrs, req) { return F(id, label, value, 'text', ' list="' + id + 'L"' + (attrs || ''), req) + '<datalist id="' + id + 'L">' + opts.map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist>'; }
   function stTag(c) { var l = late(c); return '<span class="qtag q' + c.status + (l ? ' late' : '') + '">' + (l ? 'เกินกำหนด · ' : '') + (ST[c.status] || c.status) + '</span>'; }
@@ -223,21 +235,27 @@
         // ---- 1 รับเรื่อง
         + sec(1, 'รับเรื่อง', 'ข้อมูลลูกค้า สินค้า และปัญหาที่พบ',
           '<div class="pform">' + F('fRecv', 'วันที่รับเรื่อง', x.recvDate, 'date', ' max="' + t + '"', true) + F('fTime', 'เวลา', x.recvTime, 'time')
-          + S('fChannel', 'ช่องทาง', list(s.channels), x.channel) + DL('fReceiver', 'ผู้รับเรื่อง', x.receiver, people) + '</div>'
+          + S('fChannel', 'ช่องทาง', list(s.channels), x.channel, false, '', true) + DL('fReceiver', 'ผู้รับเรื่อง', x.receiver, people) + '</div>'
           + '<h5 class="qsub">ลูกค้า</h5><div class="pform">' + F('fCust', 'ชื่อลูกค้า / ร้านค้า', x.custName) + F('fCustPhone', 'เบอร์โทร', x.custPhone, 'tel')
-          + S('fCustType', 'ประเภทลูกค้า', list(s.custTypes), x.custType) + F('fCustPlace', 'ที่อยู่ / สาขา', x.custPlace) + '</div>'
+          + S('fCustType', 'ประเภทลูกค้า', list(s.custTypes), x.custType, false, '', true) + F('fCustPlace', 'ที่อยู่ / สาขา', x.custPlace) + '</div>'
           + '<h5 class="qsub">สินค้า</h5><div class="pform">' + DL('fProduct', 'สินค้า', x.product, list(s.products), ' placeholder="พิมพ์หรือเลือกจากรายการ"', true) + F('fLot', 'LOT / รหัสการผลิต', x.lot)
           + F('fMfg', 'วันผลิต', x.mfgDate, 'date') + F('fExp', 'วันหมดอายุ', x.expDate, 'date') + F('fQty', 'จำนวนที่มีปัญหา', x.qty, 'text', ' placeholder="เช่น 2 ซอง"') + F('fBuy', 'ซื้อจาก (ร้าน / สาขา / แพลตฟอร์ม)', x.buyFrom) + '</div>'
-          + '<h5 class="qsub">ปัญหา</h5><div class="pform">' + S('fIssue', 'ประเภทปัญหา', list(s.issueTypes), x.issueType, true) + S('fSample', 'ตัวอย่างสินค้า', SAMPLE, x.sample)
+          + '<h5 class="qsub">ปัญหา</h5><div class="pform">' + S('fIssue', 'ประเภทปัญหา', list(s.issueTypes), x.issueType, true, '', true) + S('fSample', 'ตัวอย่างสินค้า', SAMPLE, x.sample, false, '', true)
           + '<div class="pf full"><label>ความรุนแรง</label><div class="qseg" id="fSev">' + ['L', 'M', 'H', 'C'].map(function (k) { return '<button type="button" class="s' + k + (x.severity === k ? ' on' : '') + '" data-sev="' + k + '" aria-pressed="' + (x.severity === k) + '"><b>' + SEV[k] + '</b><small>' + SEV_HINT[k] + '</small></button>'; }).join('') + '</div></div>'
           + T('fDetail', 'รายละเอียดปัญหา', x.detail, 'ลูกค้าพบอะไร เมื่อไร อย่างไร (ตามคำบอกเล่าของลูกค้า)', true, 3) + '</div>'
           + photoBox('files', 'รูปปัญหา / รูปจากลูกค้า'))
         // ---- 2–4 แสดงหลังบันทึกรับเรื่องแล้ว (เรื่องใหม่กรอกแค่ขั้นที่ 1 — ไม่ให้ฟอร์มยาวเกิน)
         + (isNew ? '<div class="qnext">' + icon('info', 18) + ' หลังบันทึกรับเรื่อง จะมีส่วน <b>ตรวจสอบสาเหตุ · การแก้ไขรอบ 1, 2 … · ปิดเรื่อง</b> ให้กรอกต่อ</div>' : sec(2, 'ตรวจสอบสาเหตุ & ชดเชยลูกค้า', 'ผลตรวจตัวอย่าง / ย้อนดูบันทึกการผลิต LOT นี้',
-          '<div class="pform">' + S('fValid', 'ผลพิสูจน์ข้อร้องเรียน', VALID, x.valid) + S('fCause', 'หมวดสาเหตุ (4M1E)', list(s.causeCats), x.causeCat)
+          '<div class="pform">' + S('fValid', 'ผลพิสูจน์ข้อร้องเรียน', VALID, x.valid, false, '', true) + S('fCause', 'หมวดสาเหตุ (4M1E)', list(s.causeCats), x.causeCat, false, '', true)
           + T('fInv', 'ผลการตรวจสอบ', x.investigation, 'เช่น ตรวจตัวอย่างคืน / ตรวจ LOT เดียวกันในคลัง / ดูบันทึกการผลิต', false, 3)
-          + T('fRoot', 'สาเหตุที่แท้จริง (Root cause)', x.rootCause, 'ทำไมจึงเกิด (ถามทำไม 5 ครั้ง)') + '</div>'
-          + '<h5 class="qsub">การชดเชยลูกค้า</h5><div class="pform">' + S('fRemedy', 'วิธีชดเชย', list(s.remedies), x.remedy) + F('fCost', 'มูลค่าชดเชย (บาท)', x.remedyCost, 'number', ' min="0" inputmode="decimal"')
+          + T('fRoot', 'สาเหตุที่แท้จริง (Root cause)', x.rootCause, 'ต้นเหตุจริง ๆ ที่ถ้าแก้แล้วจะไม่เกิดซ้ำ (ไม่ใช่แค่อาการที่เห็น)')
+          + '<div class="pf full qwhy"><details><summary>💡 หาต้นเหตุยังไง? ใช้วิธีไล่ถาม "ทำไม" ทีละขั้น (5 Why)</summary>'
+          + '<p>เริ่มจากปัญหาที่ลูกค้าพบ แล้วถามว่า "ทำไมจึงเกิด" เอาคำตอบมาถาม "ทำไม" ต่ออีก ทำซ้ำประมาณ 5 ขั้น จนเจอเหตุที่อยู่ลึกสุด ซึ่งถ้าแก้ตรงนั้นแล้วปัญหาจะไม่กลับมาอีก ตัวอย่าง:</p>'
+          + '<ol><li>ทำไมลูกค้าพบเส้นผม? → ผมหลุดลงระหว่างบรรจุ</li><li>ทำไมผมหลุดลง? → พนักงานสวมหมวกคลุมผมไม่มิด</li><li>ทำไมสวมไม่มิด? → หมวกมีไซซ์เดียว เล็กเกินสำหรับบางคน</li>'
+          + '<li>ทำไมไม่มีใครเห็น? → ไม่มีการตรวจการแต่งกายก่อนเข้าไลน์ผลิต</li><li>ทำไมไม่มีการตรวจ? → ยังไม่มีขั้นตอนและผู้รับผิดชอบ <b>← ต้นเหตุ</b></li></ol>'
+          + '<p>วิธีแก้จึงเป็น "กำหนดจุดตรวจการแต่งกายก่อนเข้าไลน์ + หมวกหลายไซซ์" ไม่ใช่แค่ "ตักเตือนพนักงาน"</p>'
+          + '<button type="button" class="btn btn-line btn-sm" id="fWhy">ใส่แบบฟอร์ม ทำไม 1–5 ลงในช่อง</button></details></div></div>'
+          + '<h5 class="qsub">การชดเชยลูกค้า</h5><div class="pform">' + S('fRemedy', 'วิธีชดเชย', list(s.remedies), x.remedy, false, '', true) + F('fCost', 'มูลค่าชดเชย (บาท)', x.remedyCost, 'number', ' min="0" inputmode="decimal"')
           + T('fRemedyD', 'รายละเอียดการชดเชย', x.remedyDetail) + F('fReply', 'วันที่ตอบลูกค้าครั้งแรก', x.replyDate, 'date', ' max="' + t + '"') + '</div>')
         // ---- 3 แก้ไขเป็นรอบ
         + sec(3, 'การแก้ไข (Corrective action)', 'แก้ไขเป็นรอบ ทวนสอบผลทุกรอบ · ถ้ารอบไหน "แก้ไขไม่ได้" เพิ่มรอบถัดไป',
@@ -249,7 +267,7 @@
           + photoBox('fix', 'รูปหลังแก้ไข'))
         // ---- 4 ปิดเรื่อง
         + sec(4, 'แจ้งผลลูกค้า & ปิดเรื่อง', '',
-          '<div class="pform">' + F('fInform', 'วันที่แจ้งผลลูกค้า', x.informDate, 'date', ' max="' + t + '"') + S('fSatis', 'ความพึงพอใจของลูกค้า', SATIS, x.satisfaction) + '</div>'
+          '<div class="pform">' + F('fInform', 'วันที่แจ้งผลลูกค้า', x.informDate, 'date', ' max="' + t + '"') + S('fSatis', 'ความพึงพอใจของลูกค้า', SATIS, x.satisfaction, false, '', true) + '</div>'
           + '<div class="pf full"><label>สถานะเรื่อง</label><div class="qseg qst" id="fStatus">'
           + [['', 'ยังไม่ปิด', 'สถานะตามขั้นตอนอัตโนมัติ'], ['record', 'บันทึกย้อนหลัง', 'เรื่องเก่า เก็บเป็นสถิติ ไม่นับว่าค้าง'], ['closed_ok', 'ปิด · แก้ไขได้', last && last.result === 'ok' ? 'รอบล่าสุดแก้ไขได้' : 'ต้องมีรอบที่ผล "แก้ไขได้"'], ['closed_fail', 'ปิด · แก้ไขไม่ได้', last && last.result === 'fail' ? 'ต้องเขียนสรุปเหตุผล' : 'ต้องมีรอบล่าสุดที่ "แก้ไขไม่ได้"']].map(function (o) {
             var dis = (o[0] === 'closed_ok' && !(last && last.result === 'ok')) || (o[0] === 'closed_fail' && !(last && last.result === 'fail'));
@@ -338,6 +356,13 @@
           call('qaRemoveFile', state.token, x.id, p[0], p[1]).then(function (r) { if (!r.ok) return toast(r.error); collect(); if (p[0] === 'fix') x.fixFiles = r.files; else x.files = r.files; draw(); H.data = null; }).catch(onServerError); });
       }, $('main'));
       $('cSave').addEventListener('click', save);
+      if ($('fWhy')) $('fWhy').addEventListener('click', function () {
+        var ta = $('fRoot'), prob = ($('fDetail') ? $('fDetail').value : x.detail || '').split('\n')[0].trim();
+        var head = 'ปัญหา: ' + prob + '\nทำไมจึงเกิด (1): ', tpl = head + '\nทำไม (2): \nทำไม (3): \nทำไม (4): \nทำไม (5): \n→ ต้นเหตุ: ';
+        var base = ta.value.trim() ? ta.value.replace(/\s+$/, '') + '\n' : '';
+        ta.value = base + tpl; ta.rows = 8; dirty = true;
+        ta.focus(); ta.setSelectionRange(base.length + head.length, base.length + head.length);
+      });
     }
     function autoStatus() { return x.rounds.length ? 'fixing' : (x.investigation || x.rootCause || x.causeCat) ? 'investigating' : 'open'; }
     function leave() {
@@ -523,10 +548,10 @@
     var body = '<div class="pform">'
       + S('tYear', 'ปี', yearsOf(H.data.tests).concat([curYear() + 1]).filter(function (v, i, a) { return a.indexOf(v) === i; }).map(function (v) { return [String(v), (v + 543) + ' (' + v + ')']; }), String(t.year), true)
       + (isO ? F('tSample', 'รายการค่าใช้จ่าย', t.sample, 'text', ' placeholder="เช่น ค่าขอเลข อย. / ค่าสอบเทียบอุปกรณ์"', true)
-        : DL('tSample', 'ตัวอย่าง (ชื่อสินค้า)', t.sample, Object.keys(samples), ' placeholder="พิมพ์หรือเลือก"', true) + S('tType', 'รายการตรวจ', types, t.testType, true, 'เลือกรายการตรวจ'))
+        : DL('tSample', 'ตัวอย่าง (ชื่อสินค้า)', t.sample, Object.keys(samples), ' placeholder="พิมพ์หรือเลือก"', true) + S('tType', 'รายการตรวจ', types, t.testType, true, 'เลือกรายการตรวจ', true))
       + F('tPrice', 'ราคา (บาท)', t.price, 'number', ' min="0" step="any" inputmode="decimal"') + DL('tLab', isO ? 'ผู้ให้บริการ / หน่วยงาน' : 'ห้องแล็บ', t.lab, labs)
       + '<div class="pf full"><label>สถานะ</label><div class="qseg qtseg" id="tSt">' + ['plan', 'sent', 'done', 'cancel'].map(function (k) { return '<button type="button" class="' + k + (t.status === k ? ' on' : '') + '" data-tst="' + k + '" aria-pressed="' + (t.status === k) + '"><b>' + stl[k] + '</b></button>'; }).join('') + '</div></div>'
-      + F('tSent', isO ? 'วันที่จ่าย / ดำเนินการ' : 'วันที่ส่งตรวจ', t.sentDate, 'date') + (isO ? '' : F('tRes', 'วันที่ได้ผล', t.resultDate, 'date') + S('tResult', 'ผลตรวจ', RESULTS, t.result, false, '— ยังไม่มีผล —'))
+      + F('tSent', isO ? 'วันที่จ่าย / ดำเนินการ' : 'วันที่ส่งตรวจ', t.sentDate, 'date') + (isO ? '' : F('tRes', 'วันที่ได้ผล', t.resultDate, 'date') + S('tResult', 'ผลตรวจ', RESULTS, t.result, false, '— ยังไม่มีผล —', true))
       + T('tNote', 'หมายเหตุ', t.note, isO ? '' : 'เช่น เลขที่ใบผล / ค่าที่ไม่ผ่าน')
       + (isNew ? '' : '<div class="pf full"><label>ใบผล / เอกสาร</label><div class="qfiles" id="tFiles">' + filesHtml() + '</div></div>') + '</div>'
       + (isNew ? '<p class="muted" style="font-size:12.5px">แนบใบผลได้หลังบันทึก</p>' : '<button type="button" class="link-btn danger" id="tDel">' + icon('trash', 14) + ' ลบรายการนี้</button>');
@@ -663,6 +688,7 @@
     '.qtop{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}.qbig{flex:none;font-size:16px;padding:13px 20px}.qtop .btn-line b{background:#f1f5f9;border-radius:99px;padding:0 8px;margin-left:4px}',
     '.qreq{color:#dc2626}.qsub{margin:14px 0 6px;font-size:14px;color:#475569}',
     '.qtag{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:99px;white-space:nowrap}.qtag.qopen{background:#e0e7ff;color:#3730a3}.qtag.qinvestigating{background:#fef3c7;color:#92400e}.qtag.qfixing{background:#ffedd5;color:#9a3412}',
+    '.qother{margin-top:6px;width:100%}.qwhy details{background:#faf5ff;border:1px solid #e9d5ff;border-radius:12px;padding:10px 14px}.qwhy summary{cursor:pointer;font-weight:600;color:#6d28d9;font-size:14px;min-height:28px}.qwhy p{margin:8px 0;font-size:13.5px;color:var(--muted)}.qwhy ol{margin:6px 0 8px;padding-left:20px;font-size:13.5px;line-height:1.7}',
     '.qtag.qrecord{background:#e0e7ff;color:#3730a3}.qst .record.on{border-color:#4f46e5;background:#4f46e5;color:#fff}.qst .record.on small{color:#e0e7ff}',
     '.qtg{padding:0;overflow:hidden;margin-bottom:12px}.qtgh{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:11px 14px;background:#f8fafc;border-bottom:1px solid var(--line)}.qtgh b{font-size:15px}.qtgh em{margin-left:auto;font-style:normal;font-weight:700;color:#5b21b6}',
     '.qmk{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:99px;background:#ede9fe;color:#5b21b6}',
