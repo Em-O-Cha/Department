@@ -64,7 +64,8 @@ var ACC_WEBHOOK_URL_ = 'https://script.google.com/macros/s/AKfycbyWj0ra2zC_T-qOE
 var ACC_PRODUCT_IMG_DEFAULT_ = { P01: '1vrBBdaiORa4WZFO7_gaE3q_6AINvhkhS', P02: '1cABt98Kw7BgQFrs88ONWrovXDpAdKRnq', P03: '1DPPjPyRgVoYcT69F_ttgBJK0ABM4UuFE', P04: '1vN0dOAc5r9QP98b2nYnxjfl2k8nSTSf5', P05: '1TFhvL48ctMIyll2Wt5rEl3GP8FPOhWFe', P06: '1GU8kJgnA2w9F1AwjxD2OIyZOVL_iH-cJ', P07: '1m5L1tbfLm1LlFCuEWcNofNb1wytiIhHl', P08: '13zpspqxHmKVqgoBDBliHTjuPEk6wh0RP', P09: '1jJAEGBrdY0De9vEKemjfBVJuvig7sJxV', P10: '1bPdH-9lkXGCGSSJDUCscMbHEMuAeodu7', P14: '1qDOu6Dj3NajYOIoveVZtS2TPOLkek0ZX', P15: '1LjyEpSbld34J-NeaC9DXAt0mwBVYz1pJ' };
 function accImgUrl_(id) { return id ? 'https://lh3.googleusercontent.com/d/' + id : ''; }
 var ACC_REPORT_TITLE_ = 'แบบฟอร์มบันทึกออเดอร์ 7-11';
-var ACC_TOTAL_COLOR_ = '#FEF2CB';
+// สีตามไฟล์ต้นแบบ "แบบฟอร์มบันทึกออเดอร์" (คำนวณจากสีธีมของไฟล์ให้ตรงทุกจุด): หัว "รายการสินค้า" D7 · แถว "รวม" A40 · แถว "รวมทั้งหมด" A41/D41
+var ACC_HEAD_COLOR_ = '#FFF2CC', ACC_TOTAL_COLOR_ = '#FEF2CB', ACC_GRAND_COLOR_ = '#FEF2CD';
 
 // ---------- พื้นฐาน ----------
 function requireAcc_(token) {
@@ -391,7 +392,7 @@ function accBuildReportSheet_(dept, map, m, title) {
   // หัวตาราง (แถว 5 ถึง 4+H): รายการสินค้า · รูปสินค้า (ถ้ามี) · ชื่อบรรทัด 1 · ชื่อบรรทัด 2
   sh.getRange(5, 1, H, 1).merge().setValue('ที่');
   sh.getRange(5, 2, H, 2).merge().setValue('ศูนย์กระจายสินค้า\nDC').setWrap(true);
-  sh.getRange(5, firstCol, 1, nP).merge().setValue('รายการสินค้า').setBackground(ACC_TOTAL_COLOR_);
+  sh.getRange(5, firstCol, 1, nP).merge().setValue('รายการสินค้า').setBackground(ACC_HEAD_COLOR_);
   sh.getRange(5, totCol, H, 1).merge().setValue('รวม (ลัง)');
   if (hasImg) sh.getRange(6, firstCol, 1, nP).setBackgrounds([P.map(function (p) { return p.color; })]);
   sh.getRange(rName, firstCol, 1, nP).setValues([P.map(function (p) { return p.l1; })]).setBackgrounds([P.map(function (p) { return p.color; })]);
@@ -413,9 +414,9 @@ function accBuildReportSheet_(dept, map, m, title) {
   sh.getRange(r, 1, 1, 3).merge().setValue('รวม').setBackground(ACC_TOTAL_COLOR_).setFontWeight('bold');
   sh.getRange(r, firstCol, 1, nP).setValues([P.map(function (p) { return m.byProduct[p.key] || 0; })])
     .setBackgrounds([P.map(function (p) { return p.color; })]).setFontWeight('bold').setFontSize(12);
-  sh.getRange(r, totCol).setValue(m.cases).setFontWeight('bold').setBackground(ACC_TOTAL_COLOR_);
-  sh.getRange(r + 1, 1, 1, 3).merge().setValue('รวมทั้งหมด').setFontWeight('bold').setBackground(ACC_TOTAL_COLOR_);
-  sh.getRange(r + 1, firstCol, 1, nP + 1).merge().setValue(m.cases.toLocaleString() + ' ลัง').setFontWeight('bold').setBackground(ACC_TOTAL_COLOR_).setHorizontalAlignment('right');
+  sh.getRange(r, totCol).setValue(m.cases).setFontWeight('bold');   // ต้นแบบไม่ระบายสีช่องนี้
+  sh.getRange(r + 1, 1, 1, 3).merge().setValue('รวมทั้งหมด').setFontWeight('bold').setBackground(ACC_GRAND_COLOR_);
+  sh.getRange(r + 1, firstCol, 1, nP + 1).merge().setValue(m.cases.toLocaleString() + ' ลัง').setFontWeight('bold').setBackground(ACC_GRAND_COLOR_).setHorizontalAlignment('right');
   sh.getRange(5, 1, r - 4 + 1, totCol).setBorder(true, true, true, true, true, true, '#000000', SpreadsheetApp.BorderStyle.SOLID);
   sh.getRange(r + 3, 2).setValue('ผู้จัดทำ ________________').setHorizontalAlignment('left');
   sh.getRange(r + 3, firstCol + Math.floor(nP / 2)).setValue('ผู้ตรวจสอบ ________________').setHorizontalAlignment('left');

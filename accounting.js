@@ -22,7 +22,7 @@
     { id: 'a_set', label: 'ตั้งค่าศูนย์ / สินค้า / LINE', ic: 'gear' }
   ];
   var MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-  var TOTAL_BG = '#FEF2CB';
+  var TOTAL_BG = '#FEF2CB', HEAD_BG = '#FFF2CC', GRAND_BG = '#FEF2CD';   // สีตามไฟล์ต้นแบบ (เหมือน Acc.gs)
 
   // ---------- ตัวช่วย ----------
   function pad(n) { return ('0' + n).slice(-2); }
@@ -80,7 +80,7 @@
     var hc = function (p) { return ' style="background:' + p.color + ';color:' + ink(p.color) + '"'; };
     var hasImg = P.some(function (p) { return p.img; }), RS = hasImg ? 4 : 3;
     var h = '<div class="a7wrap"><table class="a7t' + (full ? ' full' : '') + '"><thead>'
-      + '<tr><th rowspan="' + RS + '" class="a7no">ที่</th><th rowspan="' + RS + '" class="a7dc">ศูนย์กระจายสินค้า<br>DC</th><th colspan="' + P.length + '" style="background:' + TOTAL_BG + '">รายการสินค้า (จำนวนลัง)</th><th rowspan="' + RS + '" class="a7sum">รวม<br>(ลัง)</th></tr>'
+      + '<tr><th rowspan="' + RS + '" class="a7no">ที่</th><th rowspan="' + RS + '" class="a7dc">ศูนย์กระจายสินค้า<br>DC</th><th colspan="' + P.length + '" style="background:' + HEAD_BG + '">รายการสินค้า (จำนวนลัง)</th><th rowspan="' + RS + '" class="a7sum">รวม<br>(ลัง)</th></tr>'
       // แถวรูปสินค้า (ตั้งรูปได้ในหน้าตั้งค่า) · crossorigin เพื่อให้ html2canvas ใส่รูปลงภาพ LINE ได้
       + (hasImg ? '<tr>' + P.map(function (p) { return '<th class="a7pi"' + hc(p) + '>' + (p.img ? '<img src="' + esc(p.img) + '=w160" crossorigin="anonymous" alt="" loading="eager">' : '') + '</th>'; }).join('') + '</tr>' : '')
       + '<tr>' + P.map(function (p) { return '<th class="a7p"' + (p.l2 ? '' : ' rowspan="2"') + hc(p) + '>' + esc(p.l1) + '</th>'; }).join('') + '</tr>'
@@ -95,8 +95,8 @@
     });
     h += '</tbody><tfoot><tr><td colspan="2" style="background:' + TOTAL_BG + '">รวม</td>'
       + P.map(function (p) { var v = m.byProduct[p.key] || 0; return '<td class="a7v"' + hc(p) + '>' + n0(v) + '</td>'; }).join('')
-      + '<td class="a7sum" style="background:' + TOTAL_BG + '">' + n0(m.cases) + '</td></tr>'
-      + '<tr class="a7grand"><td colspan="2" style="background:' + TOTAL_BG + '">รวมทั้งหมด</td><td colspan="' + (P.length + 1) + '" style="background:' + TOTAL_BG + '">' + n0(m.cases) + ' ลัง</td></tr></tfoot></table></div>';
+      + '<td class="a7sum">' + n0(m.cases) + '</td></tr>'
+      + '<tr class="a7grand"><td colspan="2" style="background:' + GRAND_BG + '">รวมทั้งหมด</td><td colspan="' + (P.length + 1) + '" style="background:' + GRAND_BG + '">' + n0(m.cases) + ' ลัง</td></tr></tfoot></table></div>';
     return h;
   };
   // หัวรายงาน + ตาราง + ช่องเซ็น (ใช้ทั้งหน้าจอและพิมพ์)
