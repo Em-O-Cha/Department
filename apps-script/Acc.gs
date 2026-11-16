@@ -427,8 +427,13 @@ function accBuildReportSheet_(dept, map, m, title) {
   sh.setRowHeights(5 + H, m.dcs.length * 3, 18);
   // รูปสินค้า = รูปลอยวางในช่อง (ติดไปทั้ง PDF และไฟล์ Excel · สูตร IMAGE() ไม่ติดไปตอน export)
   if (hasImg) P.forEach(function (p, i) { if (p.img) accPlaceImage_(sh, p.img, 6, firstCol + i, 62, 56); });
+  // PDF: พยายามให้จบในหน้าเดียว (ย่อทั้งหน้า) · ถ้าศูนย์เยอะจนต้องย่อเล็กเกินไป → พอดีความกว้าง หลายหน้า และพิมพ์หัวตารางซ้ำทุกหน้า (แช่แข็งแถวหัว)
+  var wPx = 28 + 90 + 46 + 62 * nP + 56;
+  var hPx = 30 + 21 + 21 + 21 + 26 + (hasImg ? 56 : 0) + 68 + m.dcs.length * 54 + 42 + 21 + 21;
+  var onePage = Math.min(1065 / wPx, 736 / hPx) >= 0.6;
+  if (!onePage) sh.setFrozenRows(4 + H);
   SpreadsheetApp.flush();
-  return { ss: ss, file: file, folder: folder };
+  return { ss: ss, file: file, folder: folder, onePage: onePage };
 }
 function accPlaceImage_(sh, url, row, col, cellW, cellH) {
   try {
@@ -452,9 +457,10 @@ function accXlsxDownload_(url) {
   var id = String(url || '').match(/[-\w]{25,}/);
   return id ? 'https://drive.google.com/uc?export=download&id=' + id[0] : '';
 }
-function accExportPdf_(ss, folder, name) {
-  var url = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=pdf&size=A4&portrait=false&fitw=true&gridlines=false'
-    + '&printtitle=false&sheetnames=false&pagenumbers=false&fzr=false&top_margin=0.3&bottom_margin=0.3&left_margin=0.3&right_margin=0.3'
+function accExportPdf_(ss, folder, name, onePage) {
+  // scale=4 = ย่อให้พอดี 1 หน้า · scale=2 = พอดีความกว้าง (หลายหน้า) + fzr=true พิมพ์แถวหัวที่แช่แข็งซ้ำทุกหน้า
+  var url = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=pdf&size=A4&portrait=false&scale=' + (onePage === false ? 2 : 4) + '&gridlines=false'
+    + '&printtitle=false&sheetnames=false&pagenumbers=' + (onePage === false ? 'true' : 'false') + '&fzr=' + (onePage === false ? 'true' : 'false') + '&top_margin=0.3&bottom_margin=0.3&left_margin=0.3&right_margin=0.3'
     + '&horizontal_alignment=CENTER&gid=' + ss.getSheets()[0].getSheetId();
   var res = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) throw new Error('สร้าง PDF ไม่สำเร็จ (HTTP ' + res.getResponseCode() + ')');
@@ -479,7 +485,7 @@ function accMakePdf_(dept, importId) {
     if (id) try { DriveApp.getFileById(id[0]).setTrashed(true); } catch (e) {}
   });
   var built = accBuildReportSheet_(dept, map, m, name);
-  var pdf = accExportPdf_(built.ss, built.folder, name), xlsx = accExportXlsx_(built.ss, built.folder, name);
+  var pdf = accExportPdf_(built.ss, built.folder, name, built.onePage), xlsx = accExportXlsx_(built.ss, built.folder, name);
   imp.pdfUrl = pdf.getUrl(); imp.sheetUrl = built.ss.getUrl(); imp.xlsxUrl = xlsx.getUrl();
   purWrite_(ss, 'acc_imports', imp);
   return { ok: true, pdfUrl: imp.pdfUrl, sheetUrl: imp.sheetUrl, xlsxUrl: imp.xlsxUrl };
