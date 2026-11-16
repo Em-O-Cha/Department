@@ -60,6 +60,9 @@ var ACC_PRODUCT_DEFAULT_ = [
 ];
 // URL /exec ของเว็บแอประบบงานองค์กร (deployment เดิมเสมอ) = Webhook URL ของ LINE OA ฝ่ายบัญชี
 var ACC_WEBHOOK_URL_ = 'https://script.google.com/macros/s/AKfycbyWj0ra2zC_T-qOE6kAr0cHHzIV944lk_5n4Nk54md9WkHcslA_Pwx7UBNF5Uc0LXTc/exec';
+// รูปสินค้าตั้งต้น (ดึงจากไฟล์ต้นแบบรับออเดอร์ · ไฟล์ในโฟลเดอร์ "รูปสินค้า (รายงาน 7-11)" แชร์แบบทุกคนที่มีลิงก์ดูได้) — เปลี่ยน/เพิ่มได้ในหน้าตั้งค่า
+var ACC_PRODUCT_IMG_DEFAULT_ = { P01: '1vrBBdaiORa4WZFO7_gaE3q_6AINvhkhS', P02: '1cABt98Kw7BgQFrs88ONWrovXDpAdKRnq', P03: '1DPPjPyRgVoYcT69F_ttgBJK0ABM4UuFE', P04: '1vN0dOAc5r9QP98b2nYnxjfl2k8nSTSf5', P05: '1TFhvL48ctMIyll2Wt5rEl3GP8FPOhWFe', P06: '1GU8kJgnA2w9F1AwjxD2OIyZOVL_iH-cJ', P07: '1m5L1tbfLm1LlFCuEWcNofNb1wytiIhHl', P08: '13zpspqxHmKVqgoBDBliHTjuPEk6wh0RP', P09: '1jJAEGBrdY0De9vEKemjfBVJuvig7sJxV', P10: '1bPdH-9lkXGCGSSJDUCscMbHEMuAeodu7', P14: '1qDOu6Dj3NajYOIoveVZtS2TPOLkek0ZX', P15: '1LjyEpSbld34J-NeaC9DXAt0mwBVYz1pJ' };
+function accImgUrl_(id) { return id ? 'https://lh3.googleusercontent.com/d/' + id : ''; }
 var ACC_REPORT_TITLE_ = 'แบบฟอร์มบันทึกออเดอร์ 7-11';
 var ACC_TOTAL_COLOR_ = '#FEF2CB';
 
@@ -100,7 +103,10 @@ function accMap_(ss) {
   try { saved = row ? JSON.parse(row.value || '{}') : {}; } catch (e) { saved = {}; }
   var dcs = Array.isArray(saved.dcs) && saved.dcs.length ? saved.dcs : ACC_DC_DEFAULT_;
   var products = Array.isArray(saved.products) && saved.products.length ? saved.products : ACC_PRODUCT_DEFAULT_;
-  return { dcs: dcs.map(accCleanDc_), products: products.map(accCleanProduct_) };
+  products = products.map(accCleanProduct_);
+  // ยังไม่เคยตั้งรูป (img ไม่มีค่าเลย) → ใช้รูปตั้งต้นของคอลัมน์นั้น · ตั้งเป็น "none" = ไม่ใช้รูป
+  products.forEach(function (p) { if (!p.img && ACC_PRODUCT_IMG_DEFAULT_[p.key]) p.img = accImgUrl_(ACC_PRODUCT_IMG_DEFAULT_[p.key]); if (p.img === 'none') { p.img = ''; p.noImg = true; } });
+  return { dcs: dcs.map(accCleanDc_), products: products };
 }
 function accList_(a, max) {
   return (Array.isArray(a) ? a : String(a || '').split(/[,\n]/)).map(function (x) { return accClean_(x, 80); }).filter(String).slice(0, max || 30);
@@ -108,7 +114,22 @@ function accList_(a, max) {
 function accCleanDc_(d) { return { name: accClean_(d.name, 40), keywords: accList_(d.keywords), codes: accList_(d.codes) }; }
 function accCleanProduct_(p) {
   return { key: accClean_(p.key, 10), l1: accClean_(p.l1, 40), l2: accClean_(p.l2, 40), color: /^#[0-9a-f]{6}$/i.test(p.color) ? p.color.toUpperCase() : '#FFFFFF',
-    codes: accList_(p.codes, 60), keywords: accList_(p.keywords) };
+    codes: accList_(p.codes, 60), keywords: accList_(p.keywords),
+    img: p.img === 'none' || p.noImg ? 'none' : /^https:\/\/lh3\.googleusercontent\.com\/d\/[-\w]{20,}$/.test(String(p.img || '')) ? String(p.img) : '' };
+}
+// อัปโหลดรูปสินค้า (หน้าตั้งค่า) → โฟลเดอร์ "รูปสินค้า (รายงาน 7-11)" ในโฟลเดอร์ของฝ่าย แชร์ทุกคนที่มีลิงก์ดูได้ (LINE / PDF ต้องเปิดรูปได้)
+function accUploadProductImage(token, fileName, mimeType, base64) {
+  var dept = requireAcc_(token);
+  if (!/^image\/(jpeg|png|webp)$/.test(mimeType)) return { ok: false, error: 'แนบได้เฉพาะรูป JPG / PNG' };
+  var bytes = Utilities.base64Decode(String(base64 || ''));
+  if (!bytes.length || bytes.length > 3 * 1024 * 1024) return { ok: false, error: 'รูปว่างหรือใหญ่เกิน 3 MB' };
+  var folderId = deptConfig_(dept.key).folderId;
+  if (!folderId) return { ok: false, error: 'ผู้ดูแลระบบยังไม่ได้ตั้งโฟลเดอร์ของฝ่าย' };
+  var parent = DriveApp.getFolderById(folderId), it = parent.getFoldersByName('รูปสินค้า (รายงาน 7-11)');
+  var folder = it.hasNext() ? it.next() : parent.createFolder('รูปสินค้า (รายงาน 7-11)');
+  var f = folder.createFile(Utilities.newBlob(bytes, mimeType, accClean_(fileName, 80).replace(/[\\/:*?"<>|]/g, '_') || 'product.jpg'));
+  f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return { ok: true, url: accImgUrl_(f.getId()) };
 }
 function accMatchDc_(map, location, code) {
   var n = accNorm_(location), c = String(code || '').trim().toUpperCase();
@@ -297,7 +318,8 @@ function accBuildReportSheet_(dept, map, m, title) {
   var sh = ss.getSheets()[0];
   sh.setName('ออเดอร์ 7-11');
   var P = map.products, nP = P.length, firstCol = 4, lastCol = firstCol + nP - 1, totCol = lastCol + 1;
-  var rows = 9 + m.dcs.length * 3 + 2;
+  var hasImg = P.some(function (p) { return p.img; }), H = hasImg ? 4 : 3, rName = hasImg ? 7 : 6;   // มีรูป = แถวรูปแทรกเหนือชื่อสินค้า
+  var rows = 9 + (H - 3) + m.dcs.length * 3 + 2;
   if (sh.getMaxColumns() < totCol) sh.insertColumnsAfter(sh.getMaxColumns(), totCol - sh.getMaxColumns());
   if (sh.getMaxRows() < rows + 3) sh.insertRowsAfter(sh.getMaxRows(), rows + 3 - sh.getMaxRows());
   sh.getRange(1, 1, rows + 3, totCol).setFontFamily('Sarabun').setFontSize(11).setVerticalAlignment('middle').setHorizontalAlignment('center');
@@ -305,16 +327,17 @@ function accBuildReportSheet_(dept, map, m, title) {
   sh.getRange(1, 1, 1, totCol).merge().setValue(ACC_REPORT_TITLE_).setFontSize(16).setFontWeight('bold');
   sh.getRange(2, 1, 1, totCol).merge().setValue('วันที่สั่ง ' + accRangeText_(m.poDates) + '     วันที่ส่ง ' + accRangeText_(m.deliveryDates)).setFontWeight('bold');
   sh.getRange(3, 1, 1, totCol).merge().setValue('ใบสั่งซื้อ ' + m.poCount + ' ใบ · รวม ' + m.cases.toLocaleString() + ' ลัง').setFontSize(10);
-  // หัวตาราง (แถว 5–7)
-  sh.getRange(5, 1, 3, 1).merge().setValue('ที่');
-  sh.getRange(5, 2, 3, 2).merge().setValue('ศูนย์กระจายสินค้า\nDC').setWrap(true);
+  // หัวตาราง (แถว 5 ถึง 4+H): รายการสินค้า · รูปสินค้า (ถ้ามี) · ชื่อบรรทัด 1 · ชื่อบรรทัด 2
+  sh.getRange(5, 1, H, 1).merge().setValue('ที่');
+  sh.getRange(5, 2, H, 2).merge().setValue('ศูนย์กระจายสินค้า\nDC').setWrap(true);
   sh.getRange(5, firstCol, 1, nP).merge().setValue('รายการสินค้า').setBackground(ACC_TOTAL_COLOR_);
-  sh.getRange(5, totCol, 3, 1).merge().setValue('รวม (ลัง)');
-  sh.getRange(6, firstCol, 1, nP).setValues([P.map(function (p) { return p.l1; })]).setBackgrounds([P.map(function (p) { return p.color; })]);
-  sh.getRange(7, firstCol, 1, nP).setValues([P.map(function (p) { return p.l2; })]).setBackgrounds([P.map(function (p) { return p.color; })]);
-  sh.getRange(5, 1, 3, totCol).setFontWeight('bold').setWrap(true);
+  sh.getRange(5, totCol, H, 1).merge().setValue('รวม (ลัง)');
+  if (hasImg) sh.getRange(6, firstCol, 1, nP).setFormulas([P.map(function (p) { return p.img ? '=IMAGE("' + p.img + '=w200", 1)' : ''; })]).setBackgrounds([P.map(function (p) { return p.color; })]);
+  sh.getRange(rName, firstCol, 1, nP).setValues([P.map(function (p) { return p.l1; })]).setBackgrounds([P.map(function (p) { return p.color; })]);
+  sh.getRange(rName + 1, firstCol, 1, nP).setValues([P.map(function (p) { return p.l2; })]).setBackgrounds([P.map(function (p) { return p.color; })]);
+  sh.getRange(5, 1, H, totCol).setFontWeight('bold').setWrap(true);
   // ศูนย์ละ 3 แถว: แถวแรก = จำนวนลัง (ระบายสีเฉพาะช่องที่มีตัวเลข) · อีก 2 แถวเว้นไว้
-  var r = 8;
+  var r = 5 + H;
   m.dcs.forEach(function (d, i) {
     sh.getRange(r, 1, 3, 1).merge().setValue(i + 1).setFontWeight('bold');
     sh.getRange(r, 2, 3, 1).merge().setValue(d.name).setFontWeight('bold').setHorizontalAlignment('left');
@@ -339,9 +362,10 @@ function accBuildReportSheet_(dept, map, m, title) {
   sh.setColumnWidth(1, 28); sh.setColumnWidth(2, 90); sh.setColumnWidth(3, 46);
   for (var c = firstCol; c <= lastCol; c++) sh.setColumnWidth(c, 62);
   sh.setColumnWidth(totCol, 56);
-  sh.setRowHeights(5, 3, 26); sh.setRowHeight(6, 34); sh.setRowHeight(7, 34);
-  sh.setRowHeights(8, m.dcs.length * 3, 18);
+  sh.setRowHeight(5, 26); if (hasImg) sh.setRowHeight(6, 56); sh.setRowHeight(rName, 34); sh.setRowHeight(rName + 1, 34);
+  sh.setRowHeights(5 + H, m.dcs.length * 3, 18);
   SpreadsheetApp.flush();
+  if (hasImg) Utilities.sleep(4000);   // ให้สูตร IMAGE() โหลดรูปก่อน export PDF
   return { ss: ss, file: file, folder: folder };
 }
 function accExportPdf_(ss, folder, name) {
