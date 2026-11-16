@@ -97,10 +97,11 @@
     if (msg) toast(msg);
     return P.load().then(function () { if (String(state.page).indexOf('p_') === 0) P.render(state.page); }).catch(onServerError);
   }
-  P.reset = function () { P.data = null; P.report = null; P.q = {}; };
+  P.reset = function () { P.data = null; P.report = null; P.q = {}; avlPage(false); };
   P.menus = function () { return MENUS; };
 
   P.render = function (page) {
+    if (page !== 'p_rep') avlPage(false);
     if (!P.data) {
       $('main').innerHTML = '<h3>' + esc(state.dept.name) + '</h3><p class="lead">กำลังโหลดข้อมูลจาก Google Sheet…</p><div class="panel"><span class="spinner dark"></span> กำลังโหลด</div>';
       P.load().then(function () { if (state.page === page) P.render(page); }).catch(function (e) {
@@ -555,13 +556,16 @@
   // ==================== ผู้ขาย ====================
   function vendors() {
     $('main').innerHTML = '<h3>ผู้ขาย (Vendor)</h3><p class="lead">กดเบอร์เพื่อโทรได้ทันที · เก็บข้อมูลติดต่อ เครดิต บัญชีธนาคาร สินค้าที่ขาย</p>'
-      + searchBar('ven', 'ค้นหาชื่อ / ผู้ติดต่อ / สินค้า', '<button class="btn btn-sm btn-primary" id="pAddVen">' + icon('plus', 16) + 'เพิ่มผู้ขาย</button>') + '<div id="pList" class="pcards"></div>';
+      + searchBar('ven', 'ค้นหาชื่อ / ผู้ติดต่อ / สินค้า', '<button class="btn btn-sm btn-line" id="pImpAvl">' + icon('list', 16) + 'นำเข้าไฟล์ AVL (Excel)</button><button class="btn btn-sm btn-primary" id="pAddVen">' + icon('plus', 16) + 'เพิ่มผู้ขาย</button>')
+      + '<div class="pchips">' + [['', 'ทั้งหมด']].concat(AVL_CATS.map(function (c) { return [c, c]; })).map(function (c) { return '<button class="chip' + ((P.q.venCat || '') === c[0] ? ' on' : '') + '" data-vc="' + esc(c[0]) + '">' + esc(c[1]) + '</button>'; }).join('') + '</div>'
+      + '<div id="pList" class="pcards"></div>';
     var draw = function () {
-      var list = P.data.vendors.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'th'); }).filter(function (x) { return match(P.q.ven, [x.name, x.contact, x.items, x.phone, x.note].join(' ')); });
+      var list = P.data.vendors.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'th'); }).filter(function (x) { return (!P.q.venCat || avlCats(x).indexOf(P.q.venCat) >= 0) && match(P.q.ven, [x.name, x.contact, x.items, x.phone, x.note, x.maker, x.agent].join(' ')); });
       $('pList').innerHTML = list.map(function (x) {
         var mats = P.data.materials.filter(function (m) { return m.vendorId === x.id; });
         var phones = [x.phone, x.phone2].filter(String);
         return '<div class="vcard' + (x.active === 'ปิด' ? ' off' : '') + '"><div class="vhead"><b>' + esc(x.name) + '</b><button type="button" class="icon-btn" data-ven="' + x.id + '" title="แก้ไข">' + icon('edit', 16) + '</button></div>'
+          + (avlCats(x).length ? '<div>' + avlCats(x).map(function (c) { return '<span class="tag avltag">' + esc(c) + '</span>'; }).join('') + '</div>' : '')
           + (x.contact ? '<div class="muted">ผู้ติดต่อ: ' + esc(x.contact) + '</div>' : '')
           + (function () { var c = contractInfo(x), e = latestEval(x.id); return c || e ? '<div>' + (c ? '<span class="tag ' + c.cls + '">' + c.text + '</span>' : '') + (e ? '<span class="tag code">' + qLabel(e.period) + ' ' + stars(e.score) + ' ' + e.score + '</span>' : '') + '</div>' : ''; })()
           + '<div class="vacts">' + phones.map(function (p) { return '<a class="btn btn-sm vcall" href="' + telHref(p) + '">' + icon('phone', 16) + esc(p) + '</a>'; }).join('')
@@ -574,6 +578,8 @@
     };
     bindSearch('ven', draw);
     $('pAddVen').addEventListener('click', function () { vendorModal(null); });
+    $('pImpAvl').addEventListener('click', importAvl);
+    on('[data-vc]', 'click', function (el) { P.q.venCat = el.getAttribute('data-vc'); vendors(); }, $('main'));
     draw();
   }
   function vendorModal(x) {
@@ -583,6 +589,8 @@
         + F('vnLine', 'LINE ID', x.line) + F('vnEmail', 'อีเมล', x.email, 'email') + F('vnTax', 'เลขผู้เสียภาษี', x.taxId, 'text', ' inputmode="numeric"') + F('vnCredit', 'เครดิต (วัน)', x.creditDays, 'number', ' inputmode="numeric"')
         + F('vnBank', 'ธนาคาร', x.bank) + F('vnAcc', 'เลขบัญชี', x.bankAccount, 'text', ' inputmode="numeric"') + T('vnAddr', 'ที่อยู่', x.address) + T('vnItems', 'สินค้าที่ขาย', x.items) + T('vnNote', 'หมายเหตุ', x.note)
         + S('vnActive', 'สถานะ', [['ใช้งาน', 'ใช้งาน'], ['ปิด', 'เลิกใช้']], x.active) + '</div>'
+        + '<div class="psec"><div class="psec-h"><b>ทะเบียนผู้ขายที่ได้รับการอนุมัติ (AVL · FM-PU-01)</b></div><div class="avlchk">' + AVL_CATS.map(function (c) { return '<label class="pchk"><input type="checkbox" data-avl="' + esc(c) + '"' + (avlCats(x).indexOf(c) >= 0 ? ' checked' : '') + '> ' + esc(c) + '</label>'; }).join('') + '</div>'
+        + '<div class="pform">' + F('vnAgent', 'Agent/Broker', x.agent) + F('vnMaker', 'ชื่อผู้ผลิต / ผู้ให้บริการ', x.maker, 'text', ' placeholder="ว่าง = ชื่อเดียวกับผู้ขาย"') + '</div></div>'
         + '<div class="psec"><div class="psec-h"><b>สัญญา / ข้อตกลง</b></div><div class="pform">' + F('vnCs', 'สัญญาเริ่ม', x.contractStart, 'date') + F('vnCe', 'สัญญาสิ้นสุด', x.contractEnd, 'date') + T('vnCn', 'รายละเอียดสัญญา (ราคาตกลง, เงื่อนไข)', x.contractNote) + '</div>'
         + (edit ? '<div id="vnFiles"></div><div class="pupload">' + S('vnFileLabel', 'ประเภทไฟล์', [['สัญญา / ข้อตกลง', 'สัญญา / ข้อตกลง'], ['เอกสารบริษัท (ภพ.20 / หนังสือรับรอง)', 'เอกสารบริษัท (ภพ.20 / หนังสือรับรอง)'], ['ใบรับรองมาตรฐาน (GMP / HACCP / อย.)', 'ใบรับรองมาตรฐาน (GMP / HACCP / อย.)'], ['อื่น ๆ', 'อื่น ๆ']], 'สัญญา / ข้อตกลง') + '<div class="pf"><label>เลือกรูป / PDF (อัปโหลดทันที)</label><input id="vnFile" type="file" accept="image/*,application/pdf" multiple></div></div>' : '<div class="note">บันทึกก่อนแล้วจึงแนบไฟล์สัญญาได้</div>') + '</div>'
         + (edit ? '<div class="psec"><div class="psec-h"><b>ผลประเมินผู้ขาย (รายไตรมาส)</b><button type="button" class="btn btn-sm btn-primary" id="vnEval">' + icon('check', 16) + 'ประเมิน</button></div><div id="vnEvals"></div></div>' : ''),
@@ -610,7 +618,8 @@
       submit: function () {
         return call('purSaveVendor', state.token, { id: edit ? x.id : '', name: v('vnName'), contact: v('vnContact'), phone: v('vnPhone'), phone2: v('vnPhone2'), line: v('vnLine'), email: v('vnEmail'), taxId: v('vnTax'),
           creditDays: v('vnCredit'), bank: v('vnBank'), bankAccount: v('vnAcc'), address: v('vnAddr'), items: v('vnItems'), note: v('vnNote'), active: v('vnActive'),
-          contractStart: v('vnCs'), contractEnd: v('vnCe'), contractNote: v('vnCn') }).then(function (r) { if (!r.ok) return r.error; closeModal(); reload('บันทึกผู้ขายแล้ว'); });
+          contractStart: v('vnCs'), contractEnd: v('vnCe'), contractNote: v('vnCn'), agent: v('vnAgent'), maker: v('vnMaker'),
+          category: Array.prototype.filter.call(document.querySelectorAll('[data-avl]'), function (c) { return c.checked; }).map(function (c) { return c.getAttribute('data-avl'); }).join(',') }).then(function (r) { if (!r.ok) return r.error; closeModal(); reload('บันทึกผู้ขายแล้ว'); });
       } });
   }
 
@@ -919,11 +928,13 @@
   // ==================== รายงาน ====================
   function monthStart(iso) { return iso.slice(0, 8) + '01'; }
   function report() {
+    avlPage(false);
     var t = todayIso(), from = P.q.repFrom || monthStart(t), to = P.q.repTo || t;
     var lastM = addDays(monthStart(t), -1);
     $('main').innerHTML = '<h3>รายงาน / พิมพ์</h3><p class="lead">เลือกช่วงวันที่ → แสดงรายงาน → พิมพ์ หรือบันทึกเป็น PDF (เลือก "บันทึกเป็น PDF" ในหน้าพิมพ์)</p>'
-      + '<div class="panel noprint"><div class="pform">' + S('rType', 'ประเภทรายงาน', [['stock', 'รายงานเบิกจ่ายสินค้า (รับเข้า-จ่ายออก)'], ['reorder', 'รายงานสินค้าที่ต้องจัดซื้อ (ต่ำกว่า Minimum)'], ['balance', 'รายงานสต๊อกคงเหลือ + มูลค่า (ณ วันที่)'], ['price', 'รายงานประวัติราคา (ตามผู้ขาย / วัตถุดิบ)'], ['match', 'รายงานตรวจ 3 ทาง (PO / รับของ / ใบแจ้งหนี้)'], ['veval', 'รายงานประเมินผู้ขาย (จัดอันดับ)'], ['PO', 'รายงานใบสั่งซื้อ (PO)'], ['PR', 'รายงานใบขอซื้อ (PR)']], P.q.repType || 'stock') + '<div class="pf"></div>'
+      + '<div class="panel noprint"><div class="pform">' + S('rType', 'ประเภทรายงาน', [['stock', 'รายงานเบิกจ่ายสินค้า (รับเข้า-จ่ายออก)'], ['reorder', 'รายงานสินค้าที่ต้องจัดซื้อ (ต่ำกว่า Minimum)'], ['balance', 'รายงานสต๊อกคงเหลือ + มูลค่า (ณ วันที่)'], ['price', 'รายงานประวัติราคา (ตามผู้ขาย / วัตถุดิบ)'], ['match', 'รายงานตรวจ 3 ทาง (PO / รับของ / ใบแจ้งหนี้)'], ['veval', 'รายงานประเมินผู้ขาย (จัดอันดับ)'], ['avl', 'ทะเบียนผู้ขายที่ได้รับการอนุมัติ (AVL · FM-PU-01-01)'], ['PO', 'รายงานใบสั่งซื้อ (PO)'], ['PR', 'รายงานใบขอซื้อ (PR)']], P.q.repType || 'stock') + '<div class="pf"></div>'
       + F('rFrom', 'ตั้งแต่วันที่', from, 'date') + F('rTo', 'ถึงวันที่', to, 'date')
+      + S('rAvlCat', 'ประเภทผู้ขาย', [['', 'ทุกประเภท (แยกหน้า)']].concat(AVL_CATS.map(function (c) { return [c, c]; })), P.q.repAvlCat || '')
       + S('rPeriod', 'รอบประเมิน', quarterList(8).map(function (p) { return [p, qLabel(p)]; }), P.q.repPeriod || quarterList(1)[0])
       + S('rVen', 'ผู้ขาย', [['', 'ทุกผู้ขาย']].concat(P.data.vendors.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'th'); }).map(function (x) { return [x.id, x.name]; })), P.q.repVen || '')
       + S('rMat', 'วัตถุดิบ', [['', 'ทุกรายการ']].concat(materialList().map(function (m) { return [m.id, m.name]; })), P.q.repMat || '')
@@ -934,6 +945,7 @@
     var stockOpts = function () {
       var ty = v('rType'), st = ty === 'stock', bal = ty === 'balance', pr = ty === 'price', ro = ty === 'reorder' || ty === 'veval';
       $('rPeriod').closest('.pf').style.display = ty === 'veval' ? '' : 'none';
+      $('rAvlCat').closest('.pf').style.display = ty === 'avl' ? '' : 'none';
       $('rMat').closest('.pf').style.display = st || pr ? '' : 'none';
       $('rDetail').closest('.pf').style.display = st ? '' : 'none';
       $('rVen').closest('.pf').style.display = pr ? '' : 'none';
@@ -941,11 +953,19 @@
       $('rTo').closest('.pf').style.display = ro ? 'none' : '';
       $('rTo').closest('.pf').querySelector('label').textContent = bal ? 'ยอดคงเหลือ ณ วันที่' : 'ถึงวันที่';
       $('main').querySelector('.pchips').style.display = bal || ro ? 'none' : '';
+      if (ty === 'avl') { $('rFrom').closest('.pf').style.display = 'none'; $('rTo').closest('.pf').style.display = 'none'; $('main').querySelector('.pchips').style.display = 'none'; }
     };
     stockOpts();
     $('rType').addEventListener('change', function () { P.q.repType = this.value; stockOpts(); $('rOut').innerHTML = ''; });
     var run = function (print) {
       P.q.repFrom = v('rFrom'); P.q.repTo = v('rTo'); P.q.repMat = v('rMat'); P.q.repDetail = $('rDetail').checked; P.q.repType = v('rType');
+      avlPage(false);
+      if (P.q.repType === 'avl') {
+        P.q.repAvlCat = v('rAvlCat');
+        $('rOut').innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังสร้างรายงาน…</div>';
+        P.data = null;
+        return P.load().then(function () { if (state.page !== 'p_rep') return; drawAvlReport(P.q.repAvlCat); if (print) setTimeout(function () { window.print(); }, 300); }).catch(onServerError);
+      }
       if (P.q.repType === 'veval') {
         P.q.repPeriod = v('rPeriod');
         $('rOut').innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังสร้างรายงาน…</div>';
@@ -1051,6 +1071,107 @@
     var head = html.slice('<div class="preport">'.length, headEnd), body = html.slice(headEnd, html.length - '</div>'.length);
     $('rOut').innerHTML = '<div class="preport"><table class="rwrap"><thead><tr><td>' + head + '</td></tr></thead><tbody><tr><td>' + body + '</td></tr></tbody></table></div>';
   }
+  // ==================== ทะเบียนผู้ขายที่ได้รับการอนุมัติ (AVL) — หน้าตาตามไฟล์ FM-PU-01 ====================
+  var AVL_CATS = ['S-RM วัตถุดิบ', 'S-PAC บรรจุภัณฑ์', 'S-SER บริการ', 'S-HYG วัสดุสิ้นเปลือง'];
+  var AVL_FORM = 'FM-PU-01-01 Rev.00 วันที่ประกาศใช้ 01/10/2024';
+  function avlCats(x) { return String(x.category || '').split(',').map(function (c) { return c.trim(); }).filter(String); }
+  function avlPage(on) {   // พิมพ์ AVL = A4 แนวนอน
+    var el = document.getElementById('avlPage');
+    if (on && !el) { el = document.createElement('style'); el.id = 'avlPage'; el.textContent = '@page{size:A4 landscape;margin:9mm 9mm 11mm 9mm}'; document.head.appendChild(el); }
+    if (!on && el) el.parentNode.removeChild(el);
+  }
+  function drawAvlReport(cat) {
+    avlPage(true);
+    var logo = document.querySelector('.brand-logo'), cats = cat ? [cat] : AVL_CATS;
+    var html = cats.map(function (c, ci) {
+      var svc = c.indexOf('S-SER') === 0, hyg = c.indexOf('S-HYG') === 0;
+      var rows = P.data.vendors.filter(function (x) { return x.active !== 'ปิด' && avlCats(x).indexOf(c) >= 0; })
+        .sort(function (a, b) { return (Number(a.avlNo) || 9999) - (Number(b.avlNo) || 9999) || a.name.localeCompare(b.name, 'th'); });
+      var cols = hyg ? ['ลำดับที่', 'ชื่อบริษัทผู้ขาย', 'ชื่อผู้ติดต่อ', 'เบอร์โทร และ Email', 'ที่อยู่', 'รายการที่ซื้อ', 'หมายเหตุ']
+        : ['ลำดับที่', svc ? 'ชื่อบริษัทผู้ให้บริการ' : 'ชื่อบริษัทผู้ขาย', 'Agent/Broker', svc ? 'ชื่อผู้ให้บริการ' : 'ชื่อผู้ผลิต', 'ชื่อผู้ติดต่อ', 'เบอร์โทร และ Email', 'ที่อยู่', 'รายการที่ซื้อ', 'หมายเหตุ'];
+      var br = function (t) { return esc(t || '').replace(/\s*,\s*/g, '<br>'); };
+      var head = '<div class="avlh">' + (logo ? '<img class="avllogo" src="' + logo.src + '" alt="">' : '<span></span>')
+        + '<div class="avlt"><b>ทะเบียนรายชื่อผู้ขายและผู้ให้บริการที่ได้รับการอนุมัติ</b><span>Approved Vendor List - AVL</span><em>' + esc(c) + '</em></div><span></span></div>';
+      var body = rows.map(function (x, i) {
+        var tel = [x.phone, x.phone2].filter(String).map(esc).join('<br>') + (x.email ? '<br>' + esc(x.email) : '');
+        var cells = hyg ? [i + 1, esc(x.name), esc(x.contact), tel, esc(x.address), br(x.items), esc(x.note)]
+          : [i + 1, esc(x.name), esc(x.agent || '-'), esc(x.maker || x.name), esc(x.contact), tel, esc(x.address), br(x.items), esc(x.note)];
+        return '<tr>' + cells.map(function (v, k) { return '<td' + (k === 0 ? ' class="c"' : '') + '>' + v + '</td>'; }).join('') + '</tr>';
+      }).join('') || '<tr><td colspan="' + cols.length + '" class="c muted">ยังไม่มีผู้ขายในประเภทนี้ (กำหนดประเภทได้ที่เมนูผู้ขาย)</td></tr>';
+      var widths = hyg ? [5, 22, 10, 13, 24, 16, 10] : [5, 15, 8, 14, 8, 10, 19, 12, 9];   // % ตามสัดส่วนคอลัมน์ในไฟล์ต้นฉบับ
+      return '<section class="avlsec' + (ci ? ' brk' : '') + '"><table class="avl' + (hyg ? ' hyg' : '') + '"><colgroup>' + widths.map(function (w) { return '<col style="width:' + w + '%">'; }).join('') + '</colgroup><thead><tr><td colspan="' + cols.length + '" class="avlhd">' + head + '</td></tr>'
+        + '<tr>' + cols.map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr></thead><tbody>' + body + '</tbody></table>'
+        + '<div class="avlform">' + AVL_FORM + '</div>'
+        + '<div class="avlsign"><div><p>ผู้จัดทำ<span></span></p><p>วันที่จัดทำ<span></span></p></div><div><p>ผู้ทวนสอบ<span></span></p><p>วันที่ทวนสอบ<span></span></p></div></div></section>';
+    }).join('');
+    $('rOut').innerHTML = '<div class="preport avlrep">' + html + '</div>';
+  }
+  // อ่านไฟล์ Excel FM-PU-01 (1 ชีต = 1 ประเภท · 1 ผู้ขายอาจกินหลายแถว: แถวที่มี "ลำดับที่" = เริ่มรายใหม่)
+  function parseAvl(sheets) {
+    var out = [], seq = 0;
+    sheets.forEach(function (sh) {
+      var code = String(sh.name).trim().split(/\s+/)[0].toUpperCase(), cat = AVL_CATS.filter(function (c) { return c.split(' ')[0] === code; })[0];
+      if (!cat) return;
+      var a = sh.aoa, hr = -1;
+      for (var i = 0; i < Math.min(a.length, 10); i++) if (a[i].some(function (x) { return /ลำดับ/.test(String(x)); })) { hr = i; break; }
+      if (hr < 0) return;
+      var idx = {};
+      a[hr].forEach(function (h, j) {
+        h = String(h).replace(/\s+/g, '');
+        var k = /ลำดับ/.test(h) ? 'seq' : /ชื่อบริษัท/.test(h) ? 'name' : /agent|boker|broker/i.test(h) ? 'agent' : /ผู้ผลิต|ชื่อผู้ให้บริการ/.test(h) ? 'maker'
+          : /ผู้ติดต่อ/.test(h) ? 'contact' : /เบอร์|email/i.test(h) ? 'phone' : /ที่อยู่/.test(h) ? 'address' : /รายการ/.test(h) ? 'items' : /หมายเหตุ/.test(h) ? 'note' : '';
+        if (k && idx[k] == null) idx[k] = j;
+      });
+      var cur = null;
+      for (var r = hr + 1; r < a.length; r++) {
+        var row = a[r], cell = function (k) { return idx[k] == null ? '' : String(row[idx[k]] == null ? '' : row[idx[k]]).replace(/\s+/g, ' ').trim(); };
+        var line = row.map(String).join(' ');
+        if (/FM-PU|ผู้จัดทำ|ผู้ทวนสอบ|วันที่จัดทำ/.test(line)) break;
+        if (/^\d+$/.test(cell('seq'))) {
+          cur = { category: cat, seq: ++seq, name: cell('name'), agent: cell('agent'), maker: cell('maker'), contact: cell('contact'), phone: cell('phone'), address: cell('address'), items: cell('items') ? [cell('items')] : [], note: cell('note') };
+          out.push(cur); continue;
+        }
+        if (!cur) continue;
+        ['name', 'maker', 'contact', 'phone', 'address', 'note'].forEach(function (k) { var t = cell(k); if (t) cur[k] = (cur[k] ? cur[k] + ' ' : '') + t; });
+        if (cell('items')) cur.items.push(cell('items'));
+      }
+    });
+    return out.map(function (x) {
+      var em = (x.phone.match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g) || []);
+      x.email = em.join(', '); x.phone = x.phone.replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '').replace(/\s{2,}/g, ' ').trim();
+      x.items = x.items.join(', '); if (x.agent === '-') x.agent = '';
+      if (x.maker === x.name) x.maker = '';
+      return x;
+    }).filter(function (x) { return x.name; });
+  }
+  function loadXlsx() {
+    if (window.XLSX) return Promise.resolve();
+    return new Promise(function (ok, fail) { var s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload = ok; s.onerror = function () { fail(new Error('โหลดตัวอ่านไฟล์ Excel ไม่ได้')); }; document.head.appendChild(s); });
+  }
+  function importAvl() {
+    var inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.xlsx,.xls'; inp.style.display = 'none'; document.body.appendChild(inp);
+    inp.addEventListener('change', function () {
+      var f = inp.files[0]; document.body.removeChild(inp); if (!f) return;
+      toast('กำลังอ่านไฟล์…');
+      loadXlsx().then(function () { return f.arrayBuffer(); }).then(function (buf) {
+        var wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+        var rows = parseAvl(wb.SheetNames.map(function (n) { return { name: n, aoa: XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: false, defval: '' }) }; }));
+        if (!rows.length) return toast('ไม่พบรายชื่อผู้ขาย — ต้องเป็นไฟล์ FM-PU-01 ที่ชื่อชีตขึ้นต้นด้วย S-RM / S-PAC / S-SER / S-HYG');
+        var keyOf = function (n) { return String(n || '').replace(/\s+/g, '').replace(/^(บริษัท|บจก\.?|ห้างหุ้นส่วนจำกัด|หจก\.?)/, '').replace(/(จำกัด\(มหาชน\)|จำกัด|\(มหาชน\))$/, '').toLowerCase(); };
+        var have = {}; P.data.vendors.forEach(function (x) { have[keyOf(x.name)] = 1; });
+        var byCat = AVL_CATS.map(function (c) { var l = rows.filter(function (r) { return r.category === c; }); return '<tr><td>' + esc(c) + '</td><td class="r">' + l.length + '</td><td class="r">' + l.filter(function (r) { return have[keyOf(r.name)]; }).length + '</td></tr>'; }).join('');
+        wide({ icon: 'list', title: 'นำเข้าทะเบียนผู้ขาย (AVL)', sub: f.name + ' · ' + rows.length + ' รายการ',
+          body: '<table class="ptable"><thead><tr><th>ประเภท</th><th class="r">ในไฟล์</th><th class="r">มีในระบบแล้ว</th></tr></thead><tbody>' + byCat + '</tbody></table>'
+            + '<p class="muted" style="margin-top:10px">ผู้ขายที่มีอยู่แล้ว (ชื่อตรงกัน): เพิ่มประเภท / Agent / ผู้ผลิต และเติมเฉพาะช่องที่ยังว่าง ไม่ทับข้อมูลเดิม · ผู้ขายใหม่: เพิ่มเข้ารายชื่อ</p>'
+            + '<div class="ptable-wrap" style="max-height:260px;overflow:auto;margin-top:8px"><table class="ptable"><thead><tr><th>#</th><th>ชื่อ</th><th>ผู้ติดต่อ</th><th>โทร</th><th>รายการที่ซื้อ</th></tr></thead><tbody>'
+            + rows.map(function (r) { return '<tr><td>' + esc(r.category.split(' ')[0]) + '</td><td>' + esc(r.name) + (have[keyOf(r.name)] ? ' <small class="muted">(มีแล้ว)</small>' : '') + '</td><td>' + esc(r.contact) + '</td><td>' + esc(r.phone) + '</td><td>' + esc(r.items) + '</td></tr>'; }).join('') + '</tbody></table></div>',
+          ok: 'นำเข้า ' + rows.length + ' รายการ',
+          submit: function () { return call('purImportVendors', state.token, rows).then(function (r) { if (!r.ok) return r.error; closeModal(); reload('นำเข้าแล้ว: เพิ่มใหม่ ' + r.added + ' · อัปเดต ' + r.updated + ' ราย'); }); } });
+      }).catch(function (e) { toast('อ่านไฟล์ไม่ได้: ' + e.message); });
+    });
+    inp.click();
+  }
+
   // หัวรายงาน (ขึ้นซ้ำทุกหน้าเวลาพิมพ์) + เนื้อหา
   function reportWrap(title, info, body) {
     var now = new Date(), logo = document.querySelector('.brand-logo');
@@ -1242,6 +1363,12 @@
     '.mt{font-weight:600}.mt.IN{color:#15803d}.mt.OUT,.mt.RETURN{color:#dc2626}.mt.ADJ{color:#7c3aed}',
     '.pcards{display:grid;grid-template-columns:1fr 1fr;gap:12px}.vcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:8px}.vcard.off{opacity:.55}',
     '.vhead{display:flex;justify-content:space-between;gap:8px}.vacts{display:flex;gap:6px;flex-wrap:wrap}.vcall{background:#16a34a;color:#fff;text-decoration:none;font-size:15px}.vacts .btn-line{text-decoration:none}.vmeta{display:flex;flex-direction:column;gap:2px;font-size:12.5px;color:var(--muted)}',
+    '.avltag{background:#ecfdf5;color:#047857;margin-right:4px}.avlchk{display:flex;gap:6px 16px;flex-wrap:wrap;margin-bottom:10px}',
+    '.avlrep{padding:16px}.avlsec.brk{margin-top:28px}.avl{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed;color:#0f172a}.avl td.avlhd{border:0;padding:0 0 8px}',
+    '.avlh{display:grid;grid-template-columns:70px 1fr 70px;align-items:center}.avllogo{height:52px}.avlt{text-align:center}.avlt b{display:block;font-size:17px}.avlt span{display:block;font-size:15px;font-weight:700}.avlt em{display:inline-block;font-style:normal;font-size:12.5px;margin-top:4px;padding:1px 10px;border:1px solid #94a3b8;border-radius:99px}',
+    '.avl th{background:#E2EFDA;border:1px solid #0f172a;padding:5px 4px;font-size:12px;text-align:center}.avl td{border:1px solid #0f172a;padding:5px 6px;vertical-align:top;word-wrap:break-word}.avl td.c{text-align:center}',
+    '.avlform{text-align:right;font-size:11.5px;margin-top:8px;color:#0f172a}.avlsign{display:flex;justify-content:space-around;margin-top:22px;font-size:13px;break-inside:avoid}.avlsign p{margin:0 0 12px}.avlsign span{display:inline-block;width:190px;border-bottom:1px dotted #0f172a;margin-left:6px}',
+    '@media print{.avlrep{padding:0}.avlsec.brk{break-before:page;margin-top:0}.avl{font-size:8.5pt}.avl th{font-size:8pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}.avl tr{break-inside:avoid}.avlt b{font-size:13pt}.avlt span{font-size:11pt}.avllogo{height:40px}.avlform{font-size:8pt}.avlsign{font-size:9.5pt}}',
     '.preport{background:#fff;border-radius:14px;padding:22px;margin-top:14px;box-shadow:var(--shadow);color:#0f172a}',
     '.rhead{display:flex;align-items:center;gap:12px;padding-bottom:10px;border-bottom:2px solid #0f172a}.rlogo{height:46px;width:auto}.rco{flex:1}.rco b{display:block;font-size:16px}.rco span{font-size:12.5px;color:#475569}',
     '.rform{font-size:11px;color:#334155;text-align:right;line-height:1.5;border:1px solid #cbd5e1;border-radius:6px;padding:4px 8px;white-space:nowrap}',

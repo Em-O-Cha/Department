@@ -13,7 +13,8 @@ var PUR_TABLES_ = {
     ['line', 'LINE'], ['email', 'อีเมล'], ['address', 'ที่อยู่'], ['taxId', 'เลขผู้เสียภาษี'], ['creditDays', 'เครดิต (วัน)'],
     ['bank', 'ธนาคาร'], ['bankAccount', 'เลขบัญชี'], ['items', 'สินค้าที่ขาย'], ['note', 'หมายเหตุ'], ['active', 'ใช้งาน'],
     ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด'],
-    ['contractStart', 'สัญญาเริ่ม'], ['contractEnd', 'สัญญาสิ้นสุด'], ['contractNote', 'รายละเอียดสัญญา'], ['files', 'ไฟล์แนบ']] },
+    ['contractStart', 'สัญญาเริ่ม'], ['contractEnd', 'สัญญาสิ้นสุด'], ['contractNote', 'รายละเอียดสัญญา'], ['files', 'ไฟล์แนบ'],
+    ['category', 'ประเภทผู้ขาย (AVL)'], ['agent', 'Agent/Broker'], ['maker', 'ชื่อผู้ผลิต / ผู้ให้บริการ'], ['avlNo', 'ลำดับใน AVL']] },
   materials: { tab: 'วัตถุดิบ', cols: [
     ['id', 'รหัส'], ['name', 'ชื่อวัตถุดิบ'], ['unit', 'หน่วย'], ['category', 'หมวด'], ['vendorId', 'รหัสผู้ขาย'],
     ['minStock', 'จุดสั่งซื้อขั้นต่ำ'], ['price', 'ราคาปัจจุบัน'], ['priceDate', 'ราคา ณ วันที่'], ['note', 'หมายเหตุ'],
@@ -55,7 +56,7 @@ var PUR_TABLES_ = {
   log: { tab: 'ประวัติแก้ไข', cols: [['time', 'เวลา'], ['action', 'การทำงาน'], ['table', 'ข้อมูล'], ['id', 'รหัส'], ['detail', 'รายละเอียด']] }
 };
 var PUR_DATE_KEYS_ = { contractStart: 1, contractEnd: 1, invoiceDate: 1, quoteDate: 1, validUntil: 1, decidedAt: 1, mfgDate: 1, priceDate: 1, effectiveDate: 1, orderDate: 1, deliveryDate: 1, approvedDate: 1, dueDate: 1, paidDate: 1, date: 1, expDate: 1 };
-var PUR_NUM_KEYS_ = { leadDays: 1, quality: 1, delivery: 1, service: 1, score: 1, creditDays: 1, minStock: 1, price: 1, total: 1, paidAmount: 1, line: 1, qty: 1, amount: 1 };
+var PUR_NUM_KEYS_ = { avlNo: 1, leadDays: 1, quality: 1, delivery: 1, service: 1, score: 1, creditDays: 1, minStock: 1, price: 1, total: 1, paidAmount: 1, line: 1, qty: 1, amount: 1 };
 var PUR_MOVE_IN_ = { IN: 1 };                 // รับเข้า
 var PUR_MOVE_OUT_ = { OUT: 1, RETURN: 1 };   // จ่ายออก / ส่งคืนผู้ขาย · ADJ = ปรับยอด (+/-)
 var PUR_TZ_ = 'Asia/Bangkok';
@@ -282,10 +283,11 @@ function purSaveVendor(token, v) {
     ['contact', 'phone', 'phone2', 'line', 'email', 'taxId', 'bank', 'bankAccount'].forEach(function (k) { o[k] = purClean_(v[k], 150); });
     ['address', 'items', 'note'].forEach(function (k) { o[k] = purClean_(v[k], 1000); });
     o.contractStart = purDate_(v.contractStart); o.contractEnd = purDate_(v.contractEnd); o.contractNote = purClean_(v.contractNote, 1000);
+    o.category = purAvlCats_(v.category); o.agent = purClean_(v.agent, 200); o.maker = purClean_(v.maker, 200);
     if (typeof o.files !== 'string') o.files = JSON.stringify(o.files || []);
     o.name = name; o.creditDays = purNum_(v.creditDays); o.active = v.active === false || v.active === 'ปิด' ? 'ปิด' : 'ใช้งาน'; o.updatedAt = purNow_();
     purWrite_(ss, 'vendors', o);
-    purLogWrite_(ss, old ? 'แก้ไข' : 'เพิ่ม', 'vendors', o.id, old ? purDiff_(old, o, ['name', 'contact', 'phone', 'phone2', 'line', 'email', 'address', 'taxId', 'creditDays', 'bank', 'bankAccount', 'items', 'note', 'active', 'contractStart', 'contractEnd', 'contractNote']) : name);
+    purLogWrite_(ss, old ? 'แก้ไข' : 'เพิ่ม', 'vendors', o.id, old ? purDiff_(old, o, ['name', 'contact', 'phone', 'phone2', 'line', 'email', 'address', 'taxId', 'creditDays', 'bank', 'bankAccount', 'items', 'note', 'active', 'contractStart', 'contractEnd', 'contractNote', 'category', 'agent', 'maker']) : name);
     delete o._row; o.files = purParseFiles_(o.files);
     return { ok: true, vendor: o };
   });
@@ -461,6 +463,63 @@ function purUpdateDocReceipt_(ss, docId) {
 }
 
 // ---------- ไฟล์แนบ (PR/PO ที่อนุมัติ, ภาพอนุมัติทาง LINE, COA, ใบส่งของ) ----------
+// ---------- ทะเบียนผู้ขายที่ได้รับการอนุมัติ (AVL · FM-PU-01) ----------
+// ประเภทผู้ขายตามไฟล์ FM-PU-01 (1 ชีตต่อประเภท) · ผู้ขายรายเดียวอยู่ได้หลายประเภท (เก็บคั่นด้วย , )
+var PUR_AVL_CATS_ = ['S-RM วัตถุดิบ', 'S-PAC บรรจุภัณฑ์', 'S-SER บริการ', 'S-HYG วัสดุสิ้นเปลือง'];
+function purAvlCats_(v) {
+  var list = Array.isArray(v) ? v : String(v || '').split(',');
+  var out = [];
+  list.forEach(function (x) {
+    x = String(x).trim(); if (!x) return;
+    var c = PUR_AVL_CATS_.filter(function (k) { return k === x || k.split(' ')[0] === x.split(' ')[0].toUpperCase(); })[0];
+    if (c && out.indexOf(c) < 0) out.push(c);
+  });
+  return out.join(', ');
+}
+function purVendorKey_(name) {
+  return String(name || '').replace(/\s+/g, '').replace(/^(บริษัท|บจก\.?|ห้างหุ้นส่วนจำกัด|หจก\.?)/, '').replace(/(จำกัด\(มหาชน\)|จำกัด|\(มหาชน\))$/, '').toLowerCase();
+}
+// นำเข้ารายชื่อจากไฟล์ AVL: ชื่อตรงกับผู้ขายเดิม → เพิ่มประเภท / Agent / ผู้ผลิต และเติมช่องที่ยังว่าง (ไม่ทับข้อมูลเดิม) · ไม่พบ → เพิ่มใหม่
+function purImportVendors_(dept, rows) {
+  if (!Array.isArray(rows) || !rows.length) return { ok: false, error: 'ไม่พบรายชื่อในไฟล์' };
+  if (rows.length > 1000) return { ok: false, error: 'รายชื่อมากเกินไป' };
+  return purLocked_(function () {
+    var ss = purBook_(dept), list = purRead_(ss, 'vendors'), byKey = {}, added = 0, updated = 0, now = purNow_();
+    list.forEach(function (v) { byKey[purVendorKey_(v.name)] = v; });
+    var touched = {};
+    rows.forEach(function (r) {
+      var name = purClean_(r.name, 200); if (!name) return;
+      var key = purVendorKey_(name), o = byKey[key], isNew = !o;
+      if (isNew) { o = { id: purId_('V'), name: name, createdAt: now, active: 'ใช้งาน', files: '[]' }; byKey[key] = o; list.push(o); }
+      o.category = purAvlCats_([].concat(String(o.category || '').split(','), [r.category]));
+      if (r.agent && r.agent !== '-') o.agent = o.agent || purClean_(r.agent, 200);
+      if (r.maker) o.maker = o.maker || purClean_(r.maker, 200);
+      ['contact', 'phone', 'email'].forEach(function (k) { if (r[k] && !o[k]) o[k] = purClean_(r[k], 150); });
+      if (r.address && !o.address) o.address = purClean_(r.address, 1000);
+      if (r.items) {
+        var have = String(o.items || '').split(/\s*,\s*/).filter(String);
+        String(r.items).split(/\s*,\s*/).forEach(function (it) { if (it && have.indexOf(it) < 0) have.push(it); });
+        o.items = have.join(', ').slice(0, 1000);
+      }
+      if (r.note && !o.note) o.note = purClean_(r.note, 1000);
+      if (!o.avlNo && r.seq) o.avlNo = Number(r.seq) || '';
+      o.updatedAt = now;
+      if (!touched[o.id]) { touched[o.id] = 1; if (isNew) added++; else updated++; }
+    });
+    // ผู้ขายเดิม: เขียนทับแถวเดิม · ผู้ขายใหม่: ต่อท้ายทีเดียว
+    var sh = purSheet_(ss, 'vendors'), head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+    var fresh = [];
+    list.forEach(function (o) {
+      if (!touched[o.id]) return;
+      var row = purRowValues_(sh, 'vendors', o, head);
+      if (o._row) sh.getRange(o._row, 1, 1, row.length).setValues([row]); else fresh.push(row);
+    });
+    if (fresh.length) sh.getRange(sh.getLastRow() + 1, 1, fresh.length, head.length).setValues(fresh);
+    purLogWrite_(ss, 'นำเข้าไฟล์ AVL', 'vendors', '', 'เพิ่ม ' + added + ' · อัปเดต ' + updated + ' ราย');
+    return { ok: true, added: added, updated: updated };
+  });
+}
+function purImportVendors(token, rows) { return purImportVendors_(requirePur_(token), rows); }
 function purParseFiles_(v) { try { var a = typeof v === 'string' ? JSON.parse(v || '[]') : v; return Array.isArray(a) ? a : []; } catch (e) { return []; } }
 var PUR_FILE_OWNERS_ = { move: 'moves', doc: 'docs', vendor: 'vendors', invoice: 'invoices', quote: 'quotes' };
 var PUR_FILE_TYPES_ = { 'image/jpeg': 1, 'image/png': 1, 'image/webp': 1, 'image/heic': 1, 'application/pdf': 1 };

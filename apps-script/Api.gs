@@ -17,7 +17,7 @@ function apiFunctions_() {
     adminSetDeptLinks: adminSetDeptLinks,
     // จัดซื้อ & สต๊อก (Purchasing.gs)
     purLoad: purLoad, purMoves: purMoves, purReport: purReport, purStockReport: purStockReport, purPriceReport: purPriceReport,
-    purSaveVendor: purSaveVendor, purSaveMaterial: purSaveMaterial, purSavePrice: purSavePrice, purDeletePrice: purDeletePrice, purPriceHistory: purPriceHistory,
+    purSaveVendor: purSaveVendor, purImportVendors: purImportVendors, purSaveMaterial: purSaveMaterial, purSavePrice: purSavePrice, purDeletePrice: purDeletePrice, purPriceHistory: purPriceHistory,
     purSaveDoc: purSaveDoc, purSaveMove: purSaveMove, purDeleteMove: purDeleteMove,
     purUploadFile: purUploadFile, purRemoveFile: purRemoveFile, purLog: purLog,
     // ตรวจ 3 ทาง / เปรียบเทียบราคา / บริหารคู่ค้า (PurchasingPlus.gs)
