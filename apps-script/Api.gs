@@ -39,6 +39,9 @@ function apiFunctions_() {
     // ฝ่ายบัญชี — รายงานรับออเดอร์ 7-11 (Acc.gs)
     accLoad: accLoad, acc711Preview: acc711Preview, acc711Save: acc711Save, acc711DeleteImport: acc711DeleteImport, acc711Report: acc711Report,
     acc711Pdf: acc711Pdf, acc711SendLine: acc711SendLine, accLineTest: accLineTest, accLineDiag: accLineDiag, accSaveMap: accSaveMap, accDashboard: accDashboard,
+    // ฝ่ายประกันคุณภาพ — ข้อร้องเรียนลูกค้า (Qa.gs)
+    qaLoad: qaLoad, qaSave: qaSave, qaDelete: qaDelete, qaUploadFile: qaUploadFile, qaRemoveFile: qaRemoveFile, qaSaveSettings: qaSaveSettings,
+    qaLog: qaLog, qaDashboard: qaDashboard,
     // ผู้บริหาร (Executive.gs)
     execOverview: execOverview, execDashboard: execDashboard, execVerify: execVerify
   };
