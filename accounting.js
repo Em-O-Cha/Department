@@ -29,6 +29,7 @@
   function isoOf(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
   function addDays(iso, n) { var p = iso.split('-'); return isoOf(new Date(+p[0], +p[1] - 1, +p[2] + n)); }
   function monthEnd(iso) { var p = iso.split('-'); return isoOf(new Date(+p[0], +p[1], 0)); }
+  function dayName(iso) { var p = String(iso).split('-'); return 'วัน' + ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสฯ', 'ศุกร์', 'เสาร์'][new Date(+p[0], +p[1] - 1, +p[2]).getDay()]; }
   function thDate(iso) { if (!iso) return '-'; var p = String(iso).slice(0, 10).split('-'); return +p[2] + ' ' + MONTHS[+p[1] - 1] + ' ' + String(+p[0] + 543).slice(2); }
   function thRange(list) { return !list || !list.length ? '-' : list.length === 1 ? thDate(list[0]) : thDate(list[0]) + ' – ' + thDate(list[list.length - 1]); }
   function n0(v) { return Number(v || 0).toLocaleString('th-TH', { maximumFractionDigits: 0 }); }
@@ -502,7 +503,7 @@
       + tile(n0(m.cases), 'รวมจำนวนลัง', '#059669', delta(m.cases, pv.cases))
       + tile(baht(m.amount), 'มูลค่าสั่งซื้อ (ไม่รวม VAT)', '#7c3aed', delta(Math.round(m.amount), Math.round(pv.amount)))
       + tile(n0(m.poCount), 'ใบสั่งซื้อ', '#2563eb', 'เฉลี่ย ' + n0(m.poCount ? m.cases / m.poCount : 0) + ' ลัง/ใบ')
-      + tile(baht(dueSum), 'เงินที่จะได้รับ 60 วันข้างหน้า', '#d97706', 'รวม VAT · ประมาณการ')
+      + tile(baht(dueSum), 'เงินที่จะได้รับ (รอบชำระที่จะถึง)', '#d97706', 'รวม VAT · ' + (r.due.length ? 'ภายใน ' + thDate(r.due[r.due.length - 1].date) : 'ประมาณการ'))
       + '</div>';
     var maxDc = Math.max.apply(null, m.dcs.map(function (d) { return d.cases; }).concat([1]));
     var prods = map.products.map(function (p) { return { p: p, n: m.byProduct[p.key] || 0, amt: (r.amountByProduct || {})[p.key] || 0 }; }).filter(function (x) { return x.n; }).sort(function (a, b) { return b.n - a.n; });
@@ -522,8 +523,9 @@
         return '<div class="a7day" title="' + thDate(d.date) + ': ' + n0(d.cases) + ' ลัง · ' + baht(d.amount) + '"><b>' + n0(d.cases) + '</b><em style="height:' + Math.max(3, Math.round(d.cases / maxDay * 100)) + '%"></em><span>' + thDate(d.date).replace(/ \d+$/, '') + '</span></div>';
       }).join('') + '</div></div>'
       + '<div class="panel pbox"><h4>' + icon('clock', 18) + ' กำหนดรับเงิน (ประมาณการ)</h4>' + (r.due.length ? r.due.slice(0, 10).map(function (d) {
-        return '<div class="li"><span>' + thDate(d.date) + '</span><b>' + baht(d.amount) + '</b></div>';
-      }).join('') + '<small class="muted">คิดจากวันที่ส่ง + เครดิต (Term of Payment) ในไฟล์ · รวม VAT</small>' : '<div class="muted">ไม่มียอดครบกำหนดใน 60 วันข้างหน้า</div>') + '</div>'
+        return '<div class="a7due"><div><b>' + dayName(d.date) + ' ' + thDate(d.date) + '</b><small>สินค้าส่ง ' + (d.from === d.to ? thDate(d.from) : thDate(d.from).replace(/ \S+ \d+$/, '') + '–' + thDate(d.to)) + ' · ' + d.poCount + ' ใบสั่ง'
+          + (d.base && d.base !== d.date ? '<br><em>เลื่อนจาก ' + thDate(d.base) + (d.why ? ' (' + esc(d.why) + ')' : '') + '</em>' : '') + '</small></div><b>' + baht(d.amount) + '</b></div>';
+      }).join('') + '<small class="muted">ส่งวันที่ 1–15 รับเงินวันที่ 10 เดือนถัดไป · ส่งวันที่ 16–31 รับเงินวันที่ 25 เดือนถัดไป · ตรงวันเสาร์-อาทิตย์หรือวันหยุดราชการ เลื่อนไปวันทำการถัดไป · รวม VAT</small>' : '<div class="muted">ไม่มียอดที่รอรับเงิน</div>') + '</div>'
       + '</div>';
     html += '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('table', 18) + ' ตารางสรุปแบบต้นแบบรับออเดอร์ <small class="muted">' + thDate(r.from) + ' – ' + thDate(r.to) + '</small></h4>' + H.tplHtml(map, m, { full: false }) + '</div>';
     return html;
@@ -577,6 +579,12 @@
           + (p.img ? '<button class="a7rmimg" data-pnoimg="' + i + '" type="button">เอารูปออก</button>' : '') + '</td><td><input data-p="' + i + '" data-k="l1" value="' + esc(p.l1) + '"></td><td><input data-p="' + i + '" data-k="l2" value="' + esc(p.l2) + '"></td>'
           + '<td><input data-p="' + i + '" data-k="codes" value="' + list(p.codes) + '"></td><td><input data-p="' + i + '" data-k="keywords" value="' + list(p.keywords) + '"></td><td><button class="icon-btn" data-rm="p' + i + '" aria-label="ลบ">' + icon('x', 16) + '</button></td></tr>';
       }).join('') + '</tbody></table></div><button class="btn btn-line btn-sm" id="sAddP" style="margin-top:8px">+ เพิ่มสินค้า</button></div>'
+      + '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('clock', 18) + ' วันหยุด (ใช้คิดกำหนดรับเงิน)</h4>'
+      + '<p class="muted" style="margin:0 0 8px;font-size:13px">ส่งวันที่ 1–15 รับเงินวันที่ 10 เดือนถัดไป · ส่งวันที่ 16–31 รับเงินวันที่ 25 เดือนถัดไป · ถ้าตรงวันเสาร์-อาทิตย์หรือวันหยุด เลื่อนไปวันทำการถัดไป · วันหยุดราชการดึงจากปฏิทินวันหยุดไทยของ Google อัตโนมัติ</p>'
+      + '<details class="a7hol"><summary>วันหยุดราชการที่จะถึง (' + (H.data.holidays || []).length + ' วัน)</summary>' + ((H.data.holidays || []).map(function (h) { return '<div><b>' + dayName(h[0]) + ' ' + thDate(h[0]) + '</b> ' + esc(h[1]) + '</div>'; }).join('') || '<div class="muted">ดึงรายการวันหยุดไม่ได้ในตอนนี้</div>') + '</details>'
+      + '<div style="margin-top:10px"><b style="font-size:13.5px">วันหยุดเพิ่มเติม</b> <small class="muted">เช่น วันหยุดพิเศษที่ประกาศภายหลัง</small></div><div class="a7hx">'
+      + (cfg.holidays || []).map(function (d, i) { return '<span class="a7tag">' + dayName(d) + ' ' + thDate(d) + ' <button type="button" data-rmh="' + i + '" aria-label="ลบวันหยุด">✕</button></span>'; }).join('')
+      + '<input type="date" id="sHol" aria-label="เพิ่มวันหยุด"><button class="btn btn-line btn-sm" id="sAddH" type="button">+ เพิ่มวันหยุด</button></div></div>'
       + '<div class="a7bar"><button class="btn btn-line" id="sUndo">ยกเลิกการแก้ไข</button><button class="btn btn-primary" id="sSave">' + icon('check', 18) + ' บันทึกการตั้งค่า</button></div>';
     var split = function (s) { return String(s).split(',').map(function (x) { return x.trim(); }).filter(String); };
     on('input[data-d]', 'input', function (el) { var d = cfg.dcs[+el.getAttribute('data-d')], k = el.getAttribute('data-k'); d[k] = k === 'name' ? el.value : split(el.value); }, $('main'));
@@ -601,6 +609,11 @@
       cfg.products.push({ key: 'P' + pad(n), l1: '', l2: '', color: '#E2E8F0', codes: [], keywords: [] }); settings();
     });
     $('sUndo').addEventListener('click', function () { H.setDraft = null; settings(); });
+    $('sAddH').addEventListener('click', function () {
+      var v = $('sHol').value; if (!v) return toast('เลือกวันที่ก่อน');
+      cfg.holidays = cfg.holidays || []; if (cfg.holidays.indexOf(v) < 0) cfg.holidays.push(v); cfg.holidays.sort(); settings();
+    });
+    on('[data-rmh]', 'click', function (el) { cfg.holidays.splice(+el.getAttribute('data-rmh'), 1); settings(); }, $('main'));
     $('sSave').addEventListener('click', function () {
       var b = this; b.disabled = true;
       call('accSaveMap', state.token, JSON.stringify(cfg)).then(function (r) {
@@ -671,6 +684,8 @@
     '.a7t tfoot td{font-weight:700;font-size:14px;height:30px}.a7t tr.a7grand td{text-align:right;padding-right:10px;font-size:15px}.a7t tr.a7grand td:first-child{text-align:center}',
     '.a7sign{display:flex;justify-content:space-around;margin-top:22px;font-size:13px;gap:16px;flex-wrap:wrap}.a7sign span{display:inline-block;width:180px;border-bottom:1px dotted #475569;margin-left:6px}',
     '.a7hint{margin:8px 2px 0}.a7bar{position:sticky;bottom:0;display:flex;gap:10px;padding:12px 0;margin-top:8px;background:linear-gradient(transparent,rgba(244,246,250,.95) 30%);z-index:5}.a7bar .btn-line{flex:none}.a7bar .btn-primary{font-size:16px;padding:14px}',
+    '.a7due{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line)}.a7due>div{flex:1}.a7due small{display:block;color:var(--muted);font-size:12px;margin-top:2px}.a7due em{font-style:normal;color:#b45309}.a7due>b{white-space:nowrap}',
+    '.a7hol summary{cursor:pointer;font-weight:600;font-size:13.5px}.a7hol div{font-size:13px;padding:3px 0;border-bottom:1px dashed var(--line)}.a7hx{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}.a7hx .a7tag button{border:0;background:none;cursor:pointer;color:#b91c1c;padding:0 0 0 4px}.a7hx input[type=date]{padding:5px 8px;border:1px solid var(--line);border-radius:8px}',
     '.a7acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}.a7sp{flex:1}.a7acts .btn-primary{flex:none}.a7line{background:#06c755!important}.a7status{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.a7status .a7tag,.a7status .flink{display:inline-flex;align-items:center;gap:5px;font-size:13.5px;font-weight:600;padding:6px 13px;border-radius:99px;background:#fff;color:#334155;border:1.5px solid #cbd5e1;box-shadow:0 1px 3px rgba(15,23,42,.12);text-decoration:none;line-height:1.2}.a7status .a7tag{color:#b45309;border-color:#f59e0b;background:#fffbeb}.a7status .a7tag.ok{color:#15803d;border-color:#22c55e;background:#f0fdf4}.a7status .flink{color:#1d4ed8;border-color:#93c5fd}.a7status .flink:hover{background:#eff6ff}.a7status .flink svg{flex:none}',
     '.a7del{margin-top:18px;text-align:right}.link-btn{border:0;background:none;padding:4px;display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--muted)}.link-btn svg{width:14px;height:14px}',
     '.a7po{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px}.a7poh{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:4px}.a7poh span{flex:1;color:var(--muted);font-size:12.5px}.a7poh em{font-style:normal;font-weight:600;font-size:13px}',

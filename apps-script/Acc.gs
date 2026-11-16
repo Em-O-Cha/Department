@@ -93,6 +93,65 @@ function accAddDays_(iso, n) {
   var p = iso.split('-'), dt = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n));
   return Utilities.formatDate(dt, 'UTC', 'yyyy-MM-dd');
 }
+// ---------- กำหนดรับเงิน 7-11 (CP ALL) ----------
+// ส่งสินค้าวันที่ 1–15 → ชำระวันที่ 10 ของเดือนถัดไป · ส่งวันที่ 16–31 → ชำระวันที่ 25 ของเดือนถัดไป
+// ถ้าวันชำระตรงกับเสาร์-อาทิตย์ หรือวันหยุดราชการ → เลื่อนออกไปวันทำการถัดไป
+function accDueBase_(deliveryIso) {
+  var p = String(deliveryIso).split('-'), y = +p[0], mo = +p[1] + 1;
+  if (mo > 12) { mo = 1; y++; }
+  return y + '-' + ('0' + mo).slice(-2) + '-' + (+p[2] <= 15 ? '10' : '25');
+}
+function accDueDate_(deliveryIso, hol) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(deliveryIso || ''))) return '';
+  var d = accDueBase_(deliveryIso);
+  for (var i = 0; i < 15; i++) {
+    var p = d.split('-'), wd = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay();
+    if (wd !== 0 && wd !== 6 && !(hol && hol[d])) break;
+    d = accAddDays_(d, 1);
+  }
+  return d;
+}
+// วันหยุดราชการไทยจากปฏิทินวันหยุดของ Google (เฉพาะ "วันหยุดนักขัตฤกษ์" ไม่นับวันสำคัญอย่างวาเลนไทน์/ตรุษจีน)
+// แคช 6 ชม. + เก็บชุดล่าสุดใน Script Properties ไว้ใช้ถ้าดึงไม่ได้ · วันหยุดเพิ่มเติมตั้งในหน้าตั้งค่า (map.holidays)
+var ACC_HOLIDAY_ICS_ = 'https://calendar.google.com/calendar/ical/th.th%23holiday%40group.v.calendar.google.com/public/basic.ics';
+function accHolidays_() {
+  var set = {};
+  accHolidayList_().forEach(function (h) { set[h[0]] = h[1] || 1; });
+  return set;
+}
+// [[yyyy-mm-dd, ชื่อวันหยุด], ...]
+function accHolidayList_() {
+  var cache = CacheService.getScriptCache(), hit = cache.get('ACC_HOL2');
+  var list = hit ? JSON.parse(hit) : null;
+  if (!list) {
+    try {
+      var res = UrlFetchApp.fetch(ACC_HOLIDAY_ICS_, { muteHttpExceptions: true });
+      if (res.getResponseCode() === 200) {
+        list = [];
+        res.getContentText().split('BEGIN:VEVENT').forEach(function (ev) {
+          var d = ev.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/), ds = ev.match(/DESCRIPTION:([^\r\n]*)/), nm = ev.match(/SUMMARY:([^\r\n]*)/);
+          if (d && ds && /^(วันหยุดนักขัตฤกษ์|Public holiday)/.test(ds[1])) list.push([d[1] + '-' + d[2] + '-' + d[3], accClean_(nm ? nm[1].replace(/\u200b/g, '') : '', 60)]);
+        });
+        list.sort(function (a, b) { return a[0] < b[0] ? -1 : 1; });
+        if (list.length) PropertiesService.getScriptProperties().setProperty('ACC_HOLIDAYS', JSON.stringify(list));
+      }
+    } catch (e) { list = null; }
+    if (!list || !list.length) list = JSON.parse(PropertiesService.getScriptProperties().getProperty('ACC_HOLIDAYS') || '[]');
+    cache.put('ACC_HOL2', JSON.stringify(list), 21600);
+  }
+  return list;
+}
+// เหตุที่วันชำระถูกเลื่อน (แสดงใน Dashboard)
+function accDueWhy_(iso, hol) {
+  var p = iso.split('-'), wd = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay();
+  if (wd === 0 || wd === 6) return 'ตรงวัน' + (wd ? 'เสาร์' : 'อาทิตย์');
+  return hol[iso] ? (hol[iso] === 1 ? 'วันหยุดราชการ' : String(hol[iso])) : '';
+}
+function accHolidaySet_(map) {
+  var set = accHolidays_();
+  ((map && map.holidays) || []).forEach(function (d) { set[d] = set[d] || 'วันหยุดที่ตั้งเพิ่ม'; });
+  return set;
+}
 function accKey_(l) { return String(l.poNo).replace(/^'/, '') + '|' + Number(l.lineNo); }
 function accNorm_(s) { return String(s == null ? '' : s).replace(/\s+/g, '').toLowerCase(); }
 
@@ -106,8 +165,9 @@ function accMap_(ss) {
   products = products.map(accCleanProduct_);
   // ยังไม่เคยตั้งรูป (img ไม่มีค่าเลย) → ใช้รูปตั้งต้นของคอลัมน์นั้น · ตั้งเป็น "none" = ไม่ใช้รูป
   products.forEach(function (p) { if (!p.img && ACC_PRODUCT_IMG_DEFAULT_[p.key]) p.img = accImgUrl_(ACC_PRODUCT_IMG_DEFAULT_[p.key]); if (p.img === 'none') { p.img = ''; p.noImg = true; } });
-  return { dcs: dcs.map(accCleanDc_), products: products };
+  return { dcs: dcs.map(accCleanDc_), products: products, holidays: accDates_(saved.holidays) };
 }
+function accDates_(a) { return (Array.isArray(a) ? a : []).map(String).filter(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); }).sort().slice(0, 100); }
 function accList_(a, max) {
   return (Array.isArray(a) ? a : String(a || '').split(/[,\n]/)).map(function (x) { return accClean_(x, 80); }).filter(String).slice(0, max || 30);
 }
@@ -193,6 +253,7 @@ function accLoad(token) {
   var p = props_();
   return { ok: true, today: purToday_(), map: accMap_(ss), imports: imports.slice(0, 200),
     hasFolder: !!deptConfig_(dept.key).folderId, sheetUrl: ss.getUrl(),
+    holidays: accHolidayList_().filter(function (h) { return h[0] >= purToday_(); }).slice(0, 30),
     line: { token: !!p.getProperty('ACC_LINE_TOKEN'), group: !!p.getProperty('ACC_LINE_GROUP'), setupCode: hrProp_('ACC_LINE_SETUP', hrSetupCode_),
       webhook: ACC_WEBHOOK_URL_ } };
 }
@@ -241,11 +302,11 @@ function acc711Save(token, lines, fileName) {
     if (bad.length) return { ok: false, error: 'ยังมี ' + bad.length + ' รายการที่จับคู่ศูนย์/สินค้าไม่ได้ — จับคู่ให้ครบก่อนบันทึก' };
     var fresh = rows.filter(function (l) { return !saved[accKey_(l)]; });
     if (!fresh.length) return { ok: false, error: 'ไฟล์นี้บันทึกไปแล้ว (ใบสั่งซื้อทุกใบมีในระบบแล้ว)' };
-    var importId = purId_('IMP'), now = purNow_();
+    var importId = purId_('IMP'), now = purNow_(), hol = accHolidaySet_(map);
     var sh = purSheet_(ss, 'acc_711'), head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
     var values = fresh.map(function (l) {
       var o = Object.assign({}, l, { id: purId_('O'), importId: importId, createdAt: now,
-        dueDate: l.deliveryDate && l.termDays !== '' ? accAddDays_(l.deliveryDate, Number(l.termDays)) : '' });
+        dueDate: accDueDate_(l.deliveryDate, hol) });
       return purRowValues_(sh, 'acc_711', o, head);
     });
     sh.getRange(sh.getLastRow() + 1, 1, values.length, values[0].length).setValues(values);
@@ -579,10 +640,10 @@ function accSaveMap(token, json) {
   if (products.some(function (p) { return keys[p.key] ? true : (keys[p.key] = 1, false); })) return { ok: false, error: 'รหัสคอลัมน์สินค้าซ้ำกัน' };
   return purLocked_(function () {
     var ss = accBook_(dept), row = purRead_(ss, 'acc_settings').filter(function (x) { return x.id === 'map711'; })[0] || { id: 'map711' };
-    row.value = JSON.stringify({ dcs: dcs, products: products });
+    row.value = JSON.stringify({ dcs: dcs, products: products, holidays: accDates_(cfg.holidays) });
     purWrite_(ss, 'acc_settings', row);
     purLogWrite_(ss, 'แก้การจับคู่ 7-11', 'acc_settings', 'map711', dcs.length + ' ศูนย์ · ' + products.length + ' สินค้า');
-    return { ok: true, map: { dcs: dcs, products: products } };
+    return { ok: true, map: accMap_(ss) };
   });
 }
 
@@ -606,11 +667,17 @@ function accDashboard_(dept, from, to, basis, dc) {
   var pFrom = accAddDays_(from, -len), pTo = accAddDays_(from, -1);
   var prev = accMatrix_(map, all.filter(function (l) { var d = l[key]; return d >= pFrom && d <= pTo && (!dc || l.dc === dc); }));
   // เงินที่จะได้รับ (ตามวันครบกำหนด) — ทุกออเดอร์ที่ครบกำหนดตั้งแต่วันนี้ไป 60 วัน
-  var today = purToday_(), until = accAddDays_(today, 60), due = {};
+  // คิดใหม่จากวันที่ส่งทุกครั้ง (ใช้เงื่อนไขล่าสุด + วันหยุดล่าสุด)
+  var today = purToday_(), until = accAddDays_(today, 75), due = {}, hol = accHolidaySet_(map);
   all.forEach(function (l) {
-    if (!l.dueDate || l.dueDate < today || l.dueDate > until || (dc && l.dc !== dc)) return;
+    var dd = accDueDate_(l.deliveryDate, hol);
+    if (!dd || dd < today || dd > until || (dc && l.dc !== dc)) return;
     var amt = (Number(l.amount) || 0) * (1 + (Number(l.vatRate) || 0) / 100);
-    due[l.dueDate] = (due[l.dueDate] || 0) + amt;
+    var x = due[dd] = due[dd] || { amount: 0, base: accDueBase_(l.deliveryDate), from: l.deliveryDate, to: l.deliveryDate, po: {} };
+    if (x.why === undefined) x.why = accDueWhy_(x.base, hol);
+    x.amount += amt; x.po[l.poNo] = 1;
+    if (l.deliveryDate < x.from) x.from = l.deliveryDate;
+    if (l.deliveryDate > x.to) x.to = l.deliveryDate;
   });
   var amountByProduct = {};
   lines.forEach(function (l) { amountByProduct[l.product] = (amountByProduct[l.product] || 0) + (Number(l.amount) || 0); });
@@ -618,6 +685,6 @@ function accDashboard_(dept, from, to, basis, dc) {
     prev: { cases: prev.cases, amount: prev.amount, poCount: prev.poCount, from: pFrom, to: pTo },
     days: Object.keys(days).sort().map(function (k) { var x = days[k]; x.amount = Math.round(x.amount); return x; }),
     amountByProduct: amountByProduct,
-    due: Object.keys(due).sort().map(function (k) { return { date: k, amount: Math.round(due[k]) }; }),
+    due: Object.keys(due).sort().map(function (k) { var x = due[k]; return { date: k, amount: Math.round(x.amount), base: x.base, from: x.from, to: x.to, poCount: Object.keys(x.po).length, why: x.why || '' }; }),
     lastImport: (purRead_(ss, 'acc_imports').sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); })[0] || {}).createdAt || '' };
 }
