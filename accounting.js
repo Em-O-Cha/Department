@@ -339,16 +339,17 @@
       + '<div class="a7acts noprint"><button class="btn btn-line btn-sm" id="aList">' + icon('back', 16) + ' รายการทั้งหมด</button>'
       + '<span class="a7sp"></span>'
       + '<button class="btn btn-line btn-sm" id="aPrint">' + icon('print', 16) + ' พิมพ์</button>'
-      + '<button class="btn btn-line btn-sm" id="aPdf">' + icon('pdf', 16) + (x.pdfUrl ? ' เปิด PDF' : ' สร้าง PDF') + '</button>'
+      + '<button class="btn btn-line btn-sm" id="aPdf">' + icon('pdf', 16) + (x.pdfUrl && x.xlsxUrl ? ' เปิด PDF' : x.pdfUrl ? ' สร้าง PDF / Excel ใหม่ (ใส่รูปสินค้า)' : ' สร้าง PDF / Excel') + '</button>'
       + '<button class="btn btn-primary btn-sm a7line" id="aLine">' + icon('send', 16) + (x.sentAt ? ' ส่ง LINE อีกครั้ง' : ' ส่ง LINE เข้ากลุ่ม') + '</button></div>'
       + '<div class="a7status noprint">' + (x.sentAt ? '<span class="a7tag ok">ส่ง LINE แล้ว ' + esc(x.sentAt) + '</span>' : '<span class="a7tag">ยังไม่ได้ส่ง LINE</span>')
       + (x.pdfUrl ? ' <a class="flink" href="' + esc(x.pdfUrl) + '" target="_blank" rel="noopener">' + icon('pdf', 14) + ' ไฟล์ PDF</a>' : '')
+      + (x.xlsxUrl ? ' <a class="flink" href="' + esc(x.xlsxUrl) + '" target="_blank" rel="noopener">' + icon('sheet', 14) + ' ไฟล์ Excel</a>' : '')
       + (x.sheetUrl ? ' <a class="flink" href="' + esc(x.sheetUrl) + '" target="_blank" rel="noopener">' + icon('sheet', 14) + ' Google Sheet</a>' : '') + '</div>'
       + '<div id="aRep"><div class="panel"><span class="spinner dark"></span> กำลังโหลดรายงาน…</div></div>'
       + '<div class="noprint a7del"><button class="link-btn danger" id="aDel">' + icon('trash', 14) + ' ลบการนำเข้านี้ (นำเข้าผิดไฟล์)</button></div>';
     $('aList').addEventListener('click', function () { landscape(false); histPage(); });
     $('aPrint').addEventListener('click', function () { window.print(); });
-    $('aPdf').addEventListener('click', function () { x.pdfUrl ? window.open(x.pdfUrl, '_blank', 'noopener') : makePdf(x); });
+    $('aPdf').addEventListener('click', function () { x.pdfUrl && x.xlsxUrl ? window.open(x.pdfUrl, '_blank', 'noopener') : makePdf(x); });
     $('aLine').addEventListener('click', function () { lineConfirm(x); });
     $('aDel').addEventListener('click', function () { delImport(x); });
     var my = H.rseq = (H.rseq || 0) + 1;
@@ -362,11 +363,11 @@
     }).catch(onServerError);
   }
   function makePdf(x) {
-    var b = $('aPdf'); b.disabled = true; b.innerHTML = '<span class="spinner dark"></span> กำลังสร้าง PDF…';
+    var b = $('aPdf'); b.disabled = true; b.innerHTML = '<span class="spinner dark"></span> กำลังสร้าง PDF / Excel…';
     call('acc711Pdf', state.token, x.id).then(function (r) {
       if (!r.ok) { toast(r.error); b.disabled = false; b.textContent = 'สร้าง PDF'; return; }
-      x.pdfUrl = r.pdfUrl; x.sheetUrl = r.sheetUrl;
-      toast('สร้าง PDF แล้ว — กดเปิด PDF ได้เลย'); reportPage(x.id);
+      x.pdfUrl = r.pdfUrl; x.sheetUrl = r.sheetUrl; x.xlsxUrl = r.xlsxUrl;
+      toast('สร้าง PDF / Excel แล้ว — กดเปิดได้เลย'); reportPage(x.id);
     }).catch(function (e) { b.disabled = false; b.textContent = 'สร้าง PDF'; onServerError(e); });
   }
   // ---------- ภาพตารางสีสำหรับ LINE (สร้างในเบราว์เซอร์ด้วย html2canvas) ----------
@@ -416,7 +417,7 @@
     return '<div class="a7lc"><div class="a7lh"><small>ORDER CONFIRMATION · 7-ELEVEN</small><b>ใบแจ้งออเดอร์ CP ALL</b><span>บริษัท สปังกี้ ฟู้ด จำกัด · ฝ่ายบัญชี</span></div>'
       + '<div class="a7lb">' + row('ออเดอร์ รอบวันที่', dotRange(m.poDates)) + row('ลูกค้า', 'CP ALL (7-Eleven)') + row('วันที่ส่งสินค้า', delivText(m.deliveryDates)) + row('ใบสั่งซื้อ', m.poCount + ' ใบ · ' + dcN + ' ศูนย์')
       + '<div class="a7ltot"><span>สินค้าจำนวนรวม</span><b>' + n0(m.cases) + ' ลัง</b></div><small class="a7lnote">📊 ตารางออเดอร์แยกศูนย์ / สินค้า อยู่ในข้อความถัดไป (กดที่ภาพเพื่อเปิดภาพเต็ม)</small></div>'
-      + '<div class="a7lf"><div class="p">เปิดรายงาน PDF</div></div></div>'
+      + '<div class="a7lf"><div class="p">เปิดรายงาน PDF</div><div class="x">ดาวน์โหลดไฟล์ Excel</div></div></div>'
       + '<div class="a7limg">' + (img ? '<img src="' + img + '" alt="ตารางออเดอร์">' : '<div class="a7lwait"><span class="spinner dark"></span> กำลังสร้างภาพตาราง…</div>') + '</div>';
   }
   H.cardHtml = cardHtml;
@@ -433,7 +434,7 @@
     var m = H.rep && H.rep.matrix; if (!m) return;
     var img = null;
     wide({ icon: 'send', title: x.sentAt ? 'ส่ง LINE อีกครั้ง?' : 'ส่งรายงานเข้ากลุ่ม LINE', sub: 'ข้อความนี้จะส่งเข้ากลุ่มทันที' + (x.sentAt ? ' (เคยส่งแล้วเมื่อ ' + x.sentAt + ')' : ''),
-      ok: 'ส่งเข้ากลุ่มเลย', body: '<div class="a7prev" id="aCard">' + cardHtml(m, null) + '</div><p class="muted">ส่ง 2 ข้อความ: การ์ดสรุป + การ์ดภาพตาราง (กว้างเท่าการ์ดสรุป กดภาพเพื่อเปิดภาพเต็ม)' + (x.pdfUrl ? '' : ' · ระบบจะสร้าง PDF ให้ก่อนส่ง') + '</p>',
+      ok: 'ส่งเข้ากลุ่มเลย', body: '<div class="a7prev" id="aCard">' + cardHtml(m, null) + '</div><p class="muted">ส่ง 2 ข้อความ: การ์ดสรุป + การ์ดภาพตาราง (กว้างเท่าการ์ดสรุป กดภาพเพื่อเปิดภาพเต็ม)' + (x.pdfUrl && x.xlsxUrl ? '' : ' · ระบบจะสร้าง PDF / Excel ให้ก่อนส่ง (ใช้เวลาสักครู่)') + '</p>',
       onOpen: function () {
         $('mOk').disabled = true;
         makeLineImage(H.rep.map, m).then(function (r) { img = r; var c = $('aCard'); if (c) c.innerHTML = cardHtml(m, r.url); $('mOk').disabled = false; },
@@ -442,7 +443,7 @@
       submit: function () {
         return call('acc711SendLine', state.token, x.id, img ? img.png : '', img ? img.ratio : '').then(function (r) {
           if (!r.ok) return r.error;
-          closeModal(); x.sentAt = r.sentAt; x.pdfUrl = r.pdfUrl;
+          closeModal(); x.sentAt = r.sentAt; x.pdfUrl = r.pdfUrl; x.sheetUrl = r.sheetUrl; x.xlsxUrl = r.xlsxUrl;
           toast('ส่ง LINE เข้ากลุ่มแล้ว ✅');
           H.load().then(function () { if (state.page === 'a_hist' && H.cur === x.id) reportPage(x.id); }).catch(onServerError);
         });
@@ -704,7 +705,7 @@
     '.a7lc{background:#fff;border-radius:12px;padding:14px;overflow:hidden;width:100%;max-width:420px;box-shadow:0 2px 8px rgba(0,0,0,.15)}.a7lh{background:#0F5132;color:#fff;padding:16px 18px;border-radius:18px}.a7lh small{display:block;font-size:10px;color:#A7F3D0;font-weight:700;letter-spacing:.04em}.a7lh b{display:block;font-size:20px;margin-top:4px}.a7lh span{font-size:12px;color:#D1FAE5}',
     '.a7prev{flex-direction:column;align-items:center;gap:10px}.a7limg{width:100%;max-width:420px}.a7limg img{display:block;width:100%;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.15)}.a7lnote{display:block;text-align:center;color:#64748b;font-size:11px;margin-top:10px}.a7limg .a7lwait{border-radius:14px}.a7lwait{padding:30px;text-align:center;color:#64748b;font-size:13px;background:#f8fafc}.a7lb{padding:10px 6px 4px}.a7lr{display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:13.5px}.a7lr span{color:#64748b}.a7lr b{text-align:right}',
     '.a7ltot{margin-top:12px;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:12px;padding:10px;text-align:center;color:#047857}.a7ltot span{display:block;font-size:13px}.a7ltot b{font-size:30px}',
-    '.a7lf{padding:10px 6px 0;display:flex;flex-direction:column;gap:8px}.a7lf div{text-align:center;border-radius:24px;padding:9px;font-weight:600;font-size:14px}.a7lf .p{background:#0F5132;color:#fff}.a7lf .s{background:#475569;color:#fff}',
+    '.a7lf{padding:10px 6px 0;display:flex;flex-direction:column;gap:8px}.a7lf div{text-align:center;border-radius:24px;padding:9px;font-weight:600;font-size:14px}.a7lf .p{background:#0F5132;color:#fff}.a7lf .s{background:#475569;color:#fff}.a7lf .x{background:#fff;color:#0F5132;border:2px solid #0F5132}',
     '.a7ul{margin:6px 0 0 18px;padding:0}.a7ul li{margin:4px 0}.a7ul code{background:#f1f5f9;padding:1px 6px;border-radius:5px}',
     '.a7bar1{cursor:default}.a7bar1[data-dcf]{cursor:pointer}.a7bar1[data-dcf]:hover span{color:var(--c)}.a7bar1 b small{font-weight:400;color:var(--muted)}.a7bar1 span i.a7sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:0;border:1px solid rgba(0,0,0,.2);overflow:visible}',
     '.a7days{display:flex;gap:4px;align-items:flex-end;height:150px;overflow-x:auto;padding-top:4px}.a7day{flex:1;min-width:30px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;font-size:11px}',

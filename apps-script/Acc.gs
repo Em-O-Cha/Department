@@ -20,7 +20,7 @@ var ACC_TABLES_ = {
   acc_imports: { tab: 'นำเข้าไฟล์ 7-11', cols: [
     ['id', 'รหัส'], ['fileName', 'ชื่อไฟล์'], ['poDate', 'วันที่สั่ง'], ['deliveryDate', 'วันที่ส่ง'], ['poCount', 'จำนวนใบสั่ง'],
     ['lineCount', 'จำนวนรายการ'], ['cases', 'รวมลัง'], ['amount', 'มูลค่ารวม (ไม่รวม VAT)'], ['vat', 'VAT'], ['skipped', 'ข้าม (เคยบันทึกแล้ว)'],
-    ['pdfUrl', 'ไฟล์ PDF'], ['sheetUrl', 'ไฟล์รายงาน (Google Sheet)'], ['imgUrl', 'ภาพตาราง (LINE)'], ['imgRatio', 'สัดส่วนภาพ'], ['sentAt', 'ส่ง LINE เมื่อ'], ['createdAt', 'นำเข้าเมื่อ']] },
+    ['pdfUrl', 'ไฟล์ PDF'], ['sheetUrl', 'ไฟล์รายงาน (Google Sheet)'], ['xlsxUrl', 'ไฟล์ Excel'], ['imgUrl', 'ภาพตาราง (LINE)'], ['imgRatio', 'สัดส่วนภาพ'], ['sentAt', 'ส่ง LINE เมื่อ'], ['createdAt', 'นำเข้าเมื่อ']] },
   acc_settings: { tab: 'ตั้งค่า', cols: [['id', 'รายการ'], ['value', 'ค่า']] }
 };
 
@@ -393,7 +393,7 @@ function accBuildReportSheet_(dept, map, m, title) {
   sh.getRange(5, 2, H, 2).merge().setValue('ศูนย์กระจายสินค้า\nDC').setWrap(true);
   sh.getRange(5, firstCol, 1, nP).merge().setValue('รายการสินค้า').setBackground(ACC_TOTAL_COLOR_);
   sh.getRange(5, totCol, H, 1).merge().setValue('รวม (ลัง)');
-  if (hasImg) sh.getRange(6, firstCol, 1, nP).setFormulas([P.map(function (p) { return p.img ? '=IMAGE("' + p.img + '=w200", 1)' : ''; })]).setBackgrounds([P.map(function (p) { return p.color; })]);
+  if (hasImg) sh.getRange(6, firstCol, 1, nP).setBackgrounds([P.map(function (p) { return p.color; })]);
   sh.getRange(rName, firstCol, 1, nP).setValues([P.map(function (p) { return p.l1; })]).setBackgrounds([P.map(function (p) { return p.color; })]);
   sh.getRange(rName + 1, firstCol, 1, nP).setValues([P.map(function (p) { return p.l2; })]).setBackgrounds([P.map(function (p) { return p.color; })]);
   sh.getRange(5, 1, H, totCol).setFontWeight('bold').setWrap(true);
@@ -425,9 +425,32 @@ function accBuildReportSheet_(dept, map, m, title) {
   sh.setColumnWidth(totCol, 56);
   sh.setRowHeight(5, 26); if (hasImg) sh.setRowHeight(6, 56); sh.setRowHeight(rName, 34); sh.setRowHeight(rName + 1, 34);
   sh.setRowHeights(5 + H, m.dcs.length * 3, 18);
+  // รูปสินค้า = รูปลอยวางในช่อง (ติดไปทั้ง PDF และไฟล์ Excel · สูตร IMAGE() ไม่ติดไปตอน export)
+  if (hasImg) P.forEach(function (p, i) { if (p.img) accPlaceImage_(sh, p.img, 6, firstCol + i, 62, 56); });
   SpreadsheetApp.flush();
-  if (hasImg) Utilities.sleep(4000);   // ให้สูตร IMAGE() โหลดรูปก่อน export PDF
   return { ss: ss, file: file, folder: folder };
+}
+function accPlaceImage_(sh, url, row, col, cellW, cellH) {
+  try {
+    var res = UrlFetchApp.fetch(url + '=w240', { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return;
+    var im = sh.insertImage(res.getBlob(), col, row);
+    var w = im.getWidth(), h = im.getHeight(), k = Math.min((cellW - 6) / w, (cellH - 6) / h);
+    w = Math.max(1, Math.round(w * k)); h = Math.max(1, Math.round(h * k));
+    im.setWidth(w).setHeight(h).setAnchorCellXOffset(Math.round((cellW - w) / 2)).setAnchorCellYOffset(Math.round((cellH - h) / 2));
+  } catch (e) {}   // รูปเสีย/ลบไปแล้ว → เว้นว่าง ไม่ทำให้สร้างรายงานไม่ได้
+}
+// ไฟล์ Excel (.xlsx) ของรายงาน → โฟลเดอร์รายงาน · ทุกคนที่มีลิงก์ดาวน์โหลดได้ (ปุ่มใน LINE)
+function accExportXlsx_(ss, folder, name) {
+  var res = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=xlsx', { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) throw new Error('สร้างไฟล์ Excel ไม่สำเร็จ (HTTP ' + res.getResponseCode() + ')');
+  var f = folder.createFile(res.getBlob().setName(name + '.xlsx'));
+  try { f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
+  return f;
+}
+function accXlsxDownload_(url) {
+  var id = String(url || '').match(/[-\w]{25,}/);
+  return id ? 'https://drive.google.com/uc?export=download&id=' + id[0] : '';
 }
 function accExportPdf_(ss, folder, name) {
   var url = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=pdf&size=A4&portrait=false&fitw=true&gridlines=false'
@@ -451,15 +474,15 @@ function accMakePdf_(dept, importId) {
   var m = accMatrix_(map, accReportLines_(ss, { importId: importId }));
   var name = 'ออเดอร์ 7-11 สั่ง ' + accThaiDate_(m.poDates[0] || '').replace(/\//g, '-') + ' ส่ง ' + accThaiDate_(m.deliveryDates[0] || '').replace(/\//g, '-') + ' (' + importId.slice(-4) + ')';
   // สร้างใหม่ → ย้ายไฟล์รายงานเดิมของการนำเข้านี้ลงถังขยะ
-  [imp.pdfUrl, imp.sheetUrl].forEach(function (u) {
+  [imp.pdfUrl, imp.sheetUrl, imp.xlsxUrl].forEach(function (u) {
     var id = String(u || '').match(/[-\w]{25,}/);
     if (id) try { DriveApp.getFileById(id[0]).setTrashed(true); } catch (e) {}
   });
   var built = accBuildReportSheet_(dept, map, m, name);
-  var pdf = accExportPdf_(built.ss, built.folder, name);
-  imp.pdfUrl = pdf.getUrl(); imp.sheetUrl = built.ss.getUrl();
+  var pdf = accExportPdf_(built.ss, built.folder, name), xlsx = accExportXlsx_(built.ss, built.folder, name);
+  imp.pdfUrl = pdf.getUrl(); imp.sheetUrl = built.ss.getUrl(); imp.xlsxUrl = xlsx.getUrl();
   purWrite_(ss, 'acc_imports', imp);
-  return { ok: true, pdfUrl: imp.pdfUrl, sheetUrl: imp.sheetUrl };
+  return { ok: true, pdfUrl: imp.pdfUrl, sheetUrl: imp.sheetUrl, xlsxUrl: imp.xlsxUrl };
 }
 
 // ---------- ส่ง LINE เข้ากลุ่มของฝ่ายบัญชี ----------
@@ -481,7 +504,7 @@ function accDeliveryText_(list) { return !list.length ? '-' : list.length === 1 
 // ส่ง 2 ข้อความ: (1) การ์ดสรุป หัวสีเขียวเข้ม · รอบวันที่ / ลูกค้า / วันส่ง · ยอดรวมลัง · ปุ่ม PDF
 // (2) ภาพตารางสี (ข้อความรูป กดขยายในไลน์ได้) · img = { url } ภาพที่หน้าเว็บสร้างให้ · ไม่มีภาพ = ส่งการ์ดอย่างเดียว
 // การ์ดสรุป: การ์ดขาว · แถบหัวสีเขียวมุมมน · กล่องยอดรวม · ปุ่ม PDF ทรงมน
-function accFlex_(m, pdfUrl, img) {
+function accFlex_(m, pdfUrl, img, xlsxUrl) {
   var T = function (text, o) { var x = { type: 'text', text: String(text), wrap: true }; Object.keys(o || {}).forEach(function (k) { x[k] = o[k]; }); return x; };
   var row = function (label, value) {
     return { type: 'box', layout: 'horizontal', margin: 'md', contents: [T(label, { size: 'sm', color: '#64748B', flex: 5 }), T(value, { size: 'sm', weight: 'bold', color: '#0F172A', flex: 6, align: 'end' })] };
@@ -499,6 +522,8 @@ function accFlex_(m, pdfUrl, img) {
   // ปุ่มทรงมน (กล่องมุมโค้งที่กดได้)
   if (pdfUrl) body.push({ type: 'box', layout: 'vertical', margin: 'xl', backgroundColor: '#0F5132', cornerRadius: '24px', paddingAll: '12px',
     action: { type: 'uri', label: 'เปิดรายงาน PDF', uri: pdfUrl }, contents: [T('เปิดรายงาน PDF', { size: 'md', weight: 'bold', color: '#FFFFFF', align: 'center' })] });
+  if (xlsxUrl) body.push({ type: 'box', layout: 'vertical', margin: 'md', backgroundColor: '#FFFFFF', borderColor: '#0F5132', borderWidth: '2px', cornerRadius: '24px', paddingAll: '11px',
+    action: { type: 'uri', label: 'ดาวน์โหลด Excel', uri: xlsxUrl }, contents: [T('ดาวน์โหลดไฟล์ Excel', { size: 'md', weight: 'bold', color: '#0F5132', align: 'center' })] });
   // หัวสีเขียวเป็นกล่องมนอยู่ในการ์ดขาว (ไม่ใช้พื้นโปร่งใส — LINE บนคอมไม่รองรับ จะเห็นมุมขาวโผล่)
   var inner = [
     { type: 'box', layout: 'vertical', backgroundColor: '#0F5132', cornerRadius: '18px', paddingAll: '18px', contents: [
@@ -530,10 +555,11 @@ function acc711SendLine(token, importId, png, ratio) {
     var imp = purRead_(ss, 'acc_imports').filter(function (x) { return x.id === importId; })[0];
     if (!imp) return { ok: false, error: 'ไม่พบการนำเข้านี้' };
     var pdfUrl = imp.pdfUrl;
-    if (!pdfUrl) { var made = accMakePdf_(dept, importId); if (!made.ok) return made; pdfUrl = made.pdfUrl; imp = purRead_(ss, 'acc_imports').filter(function (x) { return x.id === importId; })[0]; }
+    // ยังไม่มีไฟล์ หรือไฟล์รุ่นเก่า (ไม่มี Excel / ไม่มีรูปสินค้า) → สร้างใหม่
+    if (!pdfUrl || !imp.xlsxUrl) { var made = accMakePdf_(dept, importId); if (!made.ok) return made; pdfUrl = made.pdfUrl; imp = purRead_(ss, 'acc_imports').filter(function (x) { return x.id === importId; })[0]; }
     if (png) { imp.imgUrl = accSaveLineImage_(dept, imp, png); imp.imgRatio = /^\d{2,5}:\d{2,5}$/.test(String(ratio)) ? String(ratio) : '20:13'; }
     var m = accMatrix_(map, accReportLines_(ss, { importId: importId }));
-    var msgs = [accFlex_(m, pdfUrl, imp.imgUrl ? { url: imp.imgUrl } : null)];
+    var msgs = [accFlex_(m, pdfUrl, imp.imgUrl ? { url: imp.imgUrl } : null, accXlsxDownload_(imp.xlsxUrl))];
     // ภาพตารางเป็นการ์ด Flex ขนาด giga (กว้างเท่าการ์ดสรุป = ใหญ่สุดที่ LINE แสดงได้)
     if (imp.imgUrl) msgs.push(accImageFlex_(m, imp.imgUrl, imp.imgRatio));
     var r = accLinePush_(msgs);
@@ -541,7 +567,7 @@ function acc711SendLine(token, importId, png, ratio) {
     imp.sentAt = purNow_();
     purWrite_(ss, 'acc_imports', imp);
     purLogWrite_(ss, 'ส่ง LINE รายงาน 7-11', 'acc_imports', importId, m.cases + ' ลัง');
-    return { ok: true, sentAt: imp.sentAt, pdfUrl: pdfUrl, imgUrl: imp.imgUrl };
+    return { ok: true, sentAt: imp.sentAt, pdfUrl: pdfUrl, sheetUrl: imp.sheetUrl, xlsxUrl: imp.xlsxUrl, imgUrl: imp.imgUrl };
   });
 }
 // ---------- Webhook ของ LINE OA ฝ่ายบัญชี: ผูกกลุ่มอัตโนมัติ (ไม่ต้องหา Group ID เอง) ----------
