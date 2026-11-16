@@ -41,7 +41,7 @@ function apiFunctions_() {
     acc711Pdf: acc711Pdf, acc711SendLine: acc711SendLine, accLineTest: accLineTest, accLineDiag: accLineDiag, accSaveMap: accSaveMap, accUploadProductImage: accUploadProductImage, accDashboard: accDashboard,
     // ฝ่ายประกันคุณภาพ — ข้อร้องเรียนลูกค้า (Qa.gs)
     qaLoad: qaLoad, qaSave: qaSave, qaDelete: qaDelete, qaUploadFile: qaUploadFile, qaRemoveFile: qaRemoveFile, qaSaveSettings: qaSaveSettings,
-    qaLog: qaLog, qaDashboard: qaDashboard,
+    qaLog: qaLog, qaDashboard: qaDashboard, qaSaveTest: qaSaveTest, qaDeleteTest: qaDeleteTest, qaSaveNewProd: qaSaveNewProd, qaDeleteNewProd: qaDeleteNewProd,
     // ผู้บริหาร (Executive.gs)
     execOverview: execOverview, execDashboard: execDashboard, execVerify: execVerify
   };

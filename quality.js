@@ -10,16 +10,20 @@
     camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
     image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>',
     x: '<path d="M18 6L6 18M6 6l12 12"/>', info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>', back: '<path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/>',
+    flask: '<path d="M9 3h6M10 3v6L4.5 18.5A2 2 0 0 0 6.2 21.5h11.6a2 2 0 0 0 1.7-3L14 9V3"/><path d="M7 15h10"/>',
+    box: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
     trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>'
   });
   var MENUS = [
     { id: 'q_dash', label: 'ภาพรวม / Dashboard', ic: 'home' },
     { id: 'q_list', label: 'ข้อร้องเรียนลูกค้า', ic: 'msg' },
+    { id: 'q_test', label: 'ตรวจวิเคราะห์ / ค่าใช้จ่าย', ic: 'flask' },
+    { id: 'q_np', label: 'ผลิตภัณฑ์ใหม่', ic: 'box' },
     { id: 'q_rep', label: 'รายงาน / พิมพ์', ic: 'print' },
     { id: 'q_set', label: 'ตั้งค่า', ic: 'gear' },
     { id: 'q_log', label: 'ประวัติการแก้ไข', ic: 'clock' }
   ];
-  var ST = { open: 'รับเรื่อง', investigating: 'ตรวจสอบสาเหตุ', fixing: 'กำลังแก้ไข', closed_ok: 'ปิด · แก้ไขได้', closed_fail: 'ปิด · แก้ไขไม่ได้' };
+  var ST = { open: 'รับเรื่อง', investigating: 'ตรวจสอบสาเหตุ', fixing: 'กำลังแก้ไข', closed_ok: 'ปิด · แก้ไขได้', closed_fail: 'ปิด · แก้ไขไม่ได้', record: 'บันทึกย้อนหลัง' };
   var SEV = { C: 'วิกฤต', H: 'สูง', M: 'ปานกลาง', L: 'ต่ำ' };
   var SEV_HINT = { C: 'กระทบความปลอดภัยผู้บริโภค เช่น สิ่งแปลกปลอมมีคม เชื้อรา', H: 'สินค้าใช้ไม่ได้ / ลูกค้าหลายราย', M: 'คุณภาพไม่ตรงมาตรฐาน', L: 'ไม่กระทบการบริโภค' };
   var RES = { wait: 'รอทวนสอบ', ok: 'แก้ไขได้', fail: 'แก้ไขไม่ได้' };
@@ -39,8 +43,10 @@
   function list(s) { return String(s || '').split(/[,\n]/).map(function (x) { return x.trim(); }).filter(String); }
   function S_() { return H.data.settings; }
   function closed(c) { return String(c.status).indexOf('closed') === 0; }
+  function rec(c) { return c.status === 'record'; }   // บันทึกย้อนหลัง: ไม่นับว่าค้าง / เกินกำหนด
+  function done(c) { return closed(c) || rec(c); }
   function ageOf(c) { return days(c.recvDate, closed(c) ? c.closeDate : H.data.today); }
-  function late(c) { return !closed(c) && ageOf(c) > (Number(S_().closeDays) || 15); }
+  function late(c) { return !done(c) && ageOf(c) > (Number(S_().closeDays) || 15); }
   function on(sel, ev, fn, root) { Array.prototype.forEach.call((root || document).querySelectorAll(sel), function (el) { el.addEventListener(ev, function (e) { fn(el, e); }); }); }
   function v(id) { var el = $(id); return el ? el.value.trim() : ''; }
   function F(id, label, value, type, attrs, req) { return '<div class="pf"><label for="' + id + '">' + label + (req ? ' <b class="qreq">*</b>' : '') + '</label><input id="' + id + '" type="' + (type || 'text') + '" value="' + esc(value == null ? '' : value) + '"' + (attrs || '') + '></div>'; }
@@ -101,7 +107,7 @@
       return;
     }
     if (page === 'q_list' && H.open) { var id = H.open; H.open = null; return caseForm(id === 'new' ? null : H.data.complaints.filter(function (c) { return c.id === id; })[0]); }
-    ({ q_dash: dash, q_list: listPage, q_rep: report, q_set: settings, q_log: logPage }[page] || dash)();
+    ({ q_dash: dash, q_list: listPage, q_test: testPage, q_np: npPage, q_rep: report, q_set: settings, q_log: logPage }[page] || dash)();
   };
   function openCase(id) { H.open = id || 'new'; go('q_list'); }
 
@@ -111,7 +117,7 @@
     if (!q.from) { q.from = t.slice(0, 8) + '01'; q.to = t; }
     var lm = addDays(t.slice(0, 8) + '01', -1);
     var quick = [['เดือนนี้', t.slice(0, 8) + '01', t], ['เดือนก่อน', lm.slice(0, 8) + '01', lm], ['3 เดือน', addDays(t, -89), t], ['ปีนี้', t.slice(0, 4) + '-01-01', t]];
-    var open = H.data.complaints.filter(function (c) { return !closed(c); });
+    var open = H.data.complaints.filter(function (c) { return !done(c); });
     $('main').innerHTML = '<h3>ภาพรวม ข้อร้องเรียนลูกค้า</h3><p class="lead">ข้อมูล ณ ' + dd(t) + ' · <a href="' + esc(H.data.sheetUrl) + '" target="_blank" rel="noopener">เปิด Google Sheet</a></p>'
       + '<div class="qtop"><button class="btn btn-primary qbig" id="dNew">' + icon('plus', 20) + ' รับเรื่องร้องเรียนใหม่</button>'
       + '<button class="btn btn-line" id="dOpen">' + icon('msg', 18) + ' เรื่องที่ยังไม่ปิด <b>' + open.length + '</b></button></div>'
@@ -140,7 +146,7 @@
     var box = function (title, rows, empty) { return '<div class="panel pbox"><h4>' + title + '</h4>' + (rows.length ? rows.join('') : '<div class="muted">' + empty + '</div>') + '</div>'; };
     var bars = function (arr, color) { var mx = arr.length ? arr[0].n : 1; return arr.map(function (x) { return bar(x.name, x.n, mx, color); }); };
     var html = '<div class="kpis">'
-      + tile(k.total, 'เรื่องร้องเรียน (ช่วงนี้)', '#7c3aed', 'สูง/วิกฤต ' + k.severe + ' เรื่อง')
+      + tile(k.total, 'เรื่องร้องเรียน (ช่วงนี้)', '#7c3aed', 'สูง/วิกฤต ' + k.severe + ' เรื่อง' + (k.record ? ' · บันทึกย้อนหลัง ' + k.record : ''))
       + tile(k.open, 'ยังไม่ปิด (ทั้งหมด)', k.overdue ? '#dc2626' : k.open ? '#d97706' : '#16a34a', 'เกินกำหนด ' + tg.closeDays + ' วัน: ' + k.overdue + ' เรื่อง')
       + tile(k.firstRoundPct == null ? '–' : k.firstRoundPct + '%', 'แก้ไขได้ในรอบแรก', '#2563eb', 'ปิดแล้ว ' + k.closed + ' · แก้ได้ ' + k.closedOk + ' · ไม่ได้ ' + k.closedFail)
       + tile(k.avgClose == null ? '–' : k.avgClose + ' วัน', 'เวลาปิดเรื่องเฉลี่ย', k.avgClose != null && k.avgClose > tg.closeDays ? '#dc2626' : '#16a34a', 'เป้าหมาย ≤ ' + tg.closeDays + ' วัน')
@@ -167,23 +173,23 @@
   // ==================== รายการข้อร้องเรียน ====================
   function listPage() {
     var all = H.data.complaints, f = H.q.lst || 'open';
-    var cnt = { all: all.length, open: all.filter(function (c) { return !closed(c); }).length, late: all.filter(late).length, closed: all.filter(closed).length };
+    var cnt = { all: all.length, open: all.filter(function (c) { return !done(c); }).length, late: all.filter(late).length, closed: all.filter(closed).length, record: all.filter(rec).length };
     $('main').innerHTML = '<h3>ข้อร้องเรียนลูกค้า</h3><p class="lead">แตะรายการเพื่อดู / บันทึกการตรวจสอบ การแก้ไขแต่ละรอบ และปิดเรื่อง</p>'
       + '<div class="pbar"><div class="psearch">' + icon('search', 18) + '<input id="qSearch" placeholder="ค้นหาเลขที่ / สินค้า / LOT / ลูกค้า / ปัญหา" value="' + esc(H.q.search || '') + '"></div>'
       + '<button class="btn btn-sm btn-primary" id="qNew">' + icon('plus', 16) + 'รับเรื่องใหม่</button></div>'
-      + '<div class="pchips">' + [['open', 'ยังไม่ปิด'], ['late', 'เกินกำหนด'], ['closed', 'ปิดแล้ว'], ['all', 'ทั้งหมด']].map(function (x) {
+      + '<div class="pchips">' + [['open', 'ยังไม่ปิด'], ['late', 'เกินกำหนด'], ['closed', 'ปิดแล้ว']].concat(cnt.record ? [['record', 'บันทึกย้อนหลัง']] : []).concat([['all', 'ทั้งหมด']]).map(function (x) {
         return '<button class="chip' + (f === x[0] ? ' on' : '') + (x[0] === 'late' && cnt.late ? ' qlatechip' : '') + '" data-f="' + x[0] + '">' + x[1] + ' (' + cnt[x[0]] + ')</button>';
       }).join('') + '</div><div id="qList" class="qlist"></div>';
     var draw = function () {
       var s = (H.q.search || '').toLowerCase();
-      var rows = all.filter(function (c) { return f === 'all' || (f === 'open' && !closed(c)) || (f === 'late' && late(c)) || (f === 'closed' && closed(c)); })
+      var rows = all.filter(function (c) { return f === 'all' || (f === 'open' && !done(c)) || (f === 'late' && late(c)) || (f === 'closed' && closed(c)) || (f === 'record' && rec(c)); })
         .filter(function (c) { return !s || [c.code, c.product, c.lot, c.custName, c.custPhone, c.issueType, c.detail].join(' ').toLowerCase().indexOf(s) >= 0; });
       $('qList').innerHTML = rows.map(function (c) {
         var age = ageOf(c);
         return '<button class="qcard s' + (c.severity || 'M') + '" data-id="' + esc(c.id) + '"><div class="qc1"><b>' + esc(c.code) + '</b><span>' + dd(c.recvDate) + (c.channel ? ' · ' + esc(c.channel) : '') + '</span>' + stTag(c) + sevTag(c.severity) + '</div>'
           + '<div class="qc2"><b>' + esc(c.product) + '</b>' + (c.lot ? ' <small>LOT ' + esc(c.lot) + '</small>' : '') + ' · ' + esc(c.issueType) + '</div>'
           + '<div class="qc3">' + esc(c.detail).slice(0, 140) + '</div>'
-          + '<div class="qc4">' + (roundChips(c) || '<span class="qrc none">ยังไม่เริ่มแก้ไข</span>') + '<span class="qage' + (late(c) ? ' late' : '') + '">' + (closed(c) ? 'ปิดเรื่องใน ' + age + ' วัน' : 'เปิดมา ' + age + ' วัน') + '</span></div></button>';
+          + '<div class="qc4">' + (roundChips(c) || '<span class="qrc none">ยังไม่เริ่มแก้ไข</span>') + '<span class="qage' + (late(c) ? ' late' : '') + '">' + (rec(c) ? 'บันทึกย้อนหลัง' : closed(c) ? 'ปิดเรื่องใน ' + age + ' วัน' : 'เปิดมา ' + age + ' วัน') + '</span></div></button>';
       }).join('') || '<div class="empty"><div class="icon">' + icon('msg', 28) + '</div><h4>ไม่มีรายการ</h4><div>' + (all.length ? 'ลองเปลี่ยนตัวกรองหรือคำค้นหา' : 'กด "รับเรื่องใหม่" เพื่อบันทึกข้อร้องเรียนแรก') + '</div></div>';
       on('[data-id]', 'click', function (el) { caseForm(H.data.complaints.filter(function (c) { return c.id === el.getAttribute('data-id'); })[0]); window.scrollTo(0, 0); }, $('qList'));
     };
@@ -211,7 +217,8 @@
         + '<ol class="qsteps">' + ['รับเรื่อง', 'ตรวจสอบสาเหตุ', 'แก้ไข' + (rounds.length ? ' (' + rounds.length + ' รอบ)' : ''), 'แจ้งผล & ปิดเรื่อง'].map(function (n, i) {
           return '<li class="' + (i + 1 < step ? 'done' : i + 1 === step ? 'on' : '') + '"><i>' + (i + 1 < step ? '✓' : i + 1) + '</i>' + n + '</li>'; }).join('') + '</ol>'
         + (isNew ? '' : '<div class="qtimes"><div><span>ตอบลูกค้าครั้งแรก</span><b class="' + (reply != null && reply > (+s.replyDays || 1) ? 'neg' : '') + '">' + (reply == null ? 'ยังไม่ได้ตอบ' : reply + ' วัน') + '</b><small>เป้า ≤ ' + s.replyDays + ' วัน</small></div>'
-          + '<div><span>' + (closed(x) ? 'ใช้เวลาทั้งเรื่อง' : 'เปิดเรื่องมาแล้ว') + '</span><b class="' + (age > (+s.closeDays || 15) ? 'neg' : '') + '">' + age + ' วัน</b><small>เป้า ≤ ' + s.closeDays + ' วัน</small></div>'
+          + (rec(x) ? '<div><span>สถานะ</span><b>บันทึกย้อนหลัง</b><small>ไม่นับว่าค้าง / เกินกำหนด</small></div>'
+            : '<div><span>' + (closed(x) ? 'ใช้เวลาทั้งเรื่อง' : 'เปิดเรื่องมาแล้ว') + '</span><b class="' + (age > (+s.closeDays || 15) ? 'neg' : '') + '">' + age + ' วัน</b><small>เป้า ≤ ' + s.closeDays + ' วัน</small></div>')
           + rounds.map(function (r) { var dur = days(r.startDate, r.verifyDate || (r.result === 'wait' ? t : '')); return '<div><span>รอบที่ ' + r.no + ' · ' + RES[r.result] + '</span><b class="' + (r.result === 'fail' ? 'neg' : r.result === 'ok' ? 'pos' : '') + '">' + (dur == null ? '–' : dur + ' วัน') + '</b><small>' + (r.startDate ? dd(r.startDate) + ' → ' + (r.verifyDate ? dd(r.verifyDate) : 'ยังไม่ทวนสอบ') : 'ยังไม่ระบุวันเริ่ม') + '</small></div>'; }).join('') + '</div>')
         // ---- 1 รับเรื่อง
         + sec(1, 'รับเรื่อง', 'ข้อมูลลูกค้า สินค้า และปัญหาที่พบ',
@@ -244,9 +251,9 @@
         + sec(4, 'แจ้งผลลูกค้า & ปิดเรื่อง', '',
           '<div class="pform">' + F('fInform', 'วันที่แจ้งผลลูกค้า', x.informDate, 'date', ' max="' + t + '"') + S('fSatis', 'ความพึงพอใจของลูกค้า', SATIS, x.satisfaction) + '</div>'
           + '<div class="pf full"><label>สถานะเรื่อง</label><div class="qseg qst" id="fStatus">'
-          + [['', 'ยังไม่ปิด', 'สถานะตามขั้นตอนอัตโนมัติ'], ['closed_ok', 'ปิด · แก้ไขได้', last && last.result === 'ok' ? 'รอบล่าสุดแก้ไขได้' : 'ต้องมีรอบที่ผล "แก้ไขได้"'], ['closed_fail', 'ปิด · แก้ไขไม่ได้', last && last.result === 'fail' ? 'ต้องเขียนสรุปเหตุผล' : 'ต้องมีรอบล่าสุดที่ "แก้ไขไม่ได้"']].map(function (o) {
+          + [['', 'ยังไม่ปิด', 'สถานะตามขั้นตอนอัตโนมัติ'], ['record', 'บันทึกย้อนหลัง', 'เรื่องเก่า เก็บเป็นสถิติ ไม่นับว่าค้าง'], ['closed_ok', 'ปิด · แก้ไขได้', last && last.result === 'ok' ? 'รอบล่าสุดแก้ไขได้' : 'ต้องมีรอบที่ผล "แก้ไขได้"'], ['closed_fail', 'ปิด · แก้ไขไม่ได้', last && last.result === 'fail' ? 'ต้องเขียนสรุปเหตุผล' : 'ต้องมีรอบล่าสุดที่ "แก้ไขไม่ได้"']].map(function (o) {
             var dis = (o[0] === 'closed_ok' && !(last && last.result === 'ok')) || (o[0] === 'closed_fail' && !(last && last.result === 'fail'));
-            var cur = o[0] ? x.status === o[0] : !closed(x);
+            var cur = o[0] ? x.status === o[0] : !done(x);
             return '<button type="button" class="' + (o[0] || 'none') + (cur ? ' on' : '') + '" data-st="' + o[0] + '"' + (dis ? ' disabled' : '') + ' aria-pressed="' + cur + '"><b>' + o[1] + '</b><small>' + o[2] + '</small></button>';
           }).join('') + '</div></div>'
           + '<div class="pform" id="cCloseBox"' + (closed(x) ? '' : ' style="display:none"') + '>' + F('fClose', 'วันที่ปิดเรื่อง', x.closeDate || t, 'date', ' max="' + t + '"') + DL('fClosedBy', 'ผู้ปิดเรื่อง', x.closedBy, people)
@@ -346,7 +353,7 @@
     }
     function save() {
       collect();
-      if (!closed(x)) x.status = autoStatus();
+      if (!done(x)) x.status = autoStatus();
       var err = firstError();
       if (err) {
         toast(err[1]);
@@ -423,7 +430,7 @@
       + (c.rounds.map(function (r) { var dur = days(r.startDate, r.verifyDate); return '<tr><td class="c">' + r.no + '</td><td>' + esc(r.action).replace(/\n/g, '<br>') + (r.resultNote ? '<br><small>ผลทวนสอบ: ' + esc(r.resultNote) + '</small>' : '') + '</td><td>' + esc(r.responsible) + '</td><td class="nw">' + dd(r.startDate) + '<br>' + dd(r.dueDate) + '</td><td class="nw">' + dd(r.verifyDate) + (r.verifier ? '<br>' + esc(r.verifier) : '') + '</td><td class="nw"><b class="' + (r.result === 'ok' ? 'pos' : r.result === 'fail' ? 'neg' : '') + '">' + RES[r.result] + '</b></td><td class="r nw">' + (dur == null ? '-' : dur + ' วัน') + '</td></tr>'; }).join('') || '<tr><td colspan="7" class="c muted">ยังไม่มีการแก้ไข</td></tr>')
       + '</tbody></table><table class="qrt" style="margin-top:6px">' + row('การป้องกันไม่ให้เกิดซ้ำ', esc(c.preventive).replace(/\n/g, '<br>')) + '</table>'
       + '<h5>4. แจ้งผลลูกค้า & ปิดเรื่อง</h5><table class="qrt">' + row('แจ้งผลลูกค้า', dd(c.informDate) + (c.satisfaction ? ' · ' + esc(c.satisfaction) : ''))
-      + row('ปิดเรื่อง', closed(c) ? (ST[c.status] + ' · ' + dd(c.closeDate) + (c.closedBy ? ' · โดย ' + esc(c.closedBy) : '')) : 'ยังไม่ปิด') + row('สรุป', esc(c.closeNote).replace(/\n/g, '<br>')) + '</table>'
+      + row('ปิดเรื่อง', closed(c) ? (ST[c.status] + ' · ' + dd(c.closeDate) + (c.closedBy ? ' · โดย ' + esc(c.closedBy) : '')) : rec(c) ? 'บันทึกย้อนหลัง' : 'ยังไม่ปิด') + row('สรุป', esc(c.closeNote).replace(/\n/g, '<br>')) + '</table>'
       + signs() + '</div>';
   }
   function sumReport(from, to) {
@@ -440,6 +447,183 @@
   }
 
   // ==================== ตั้งค่า ====================
+  // ==================== ตรวจวิเคราะห์ / ค่าใช้จ่าย ====================
+  var TST = { plan: 'ยังไม่ส่ง', sent: 'รอผล', done: 'ได้ผลแล้ว', cancel: 'ยกเลิก' };
+  var TST_OTHER = { plan: 'ยังไม่จ่าย', sent: 'กำลังดำเนินการ', done: 'จ่ายแล้ว', cancel: 'ยกเลิก' };
+  var RESULTS = ['ผ่านเกณฑ์', 'ไม่ผ่านเกณฑ์', 'ดูรายละเอียดในใบผล'];
+  function baht(n) { return '฿' + Math.round(Number(n) || 0).toLocaleString('th-TH'); }
+  function stLabel(t) { return (t.kind === 'other' ? TST_OTHER : TST)[t.status] || t.status; }
+  function curYear() { return H.q.ty || +H.data.today.slice(0, 4); }
+  function yearsOf(arr) { var y = {}; y[+H.data.today.slice(0, 4)] = 1; arr.forEach(function (x) { if (x.year) y[+x.year] = 1; }); return Object.keys(y).map(Number).sort(); }
+  function yearChips(arr, key) {
+    return '<div class="pchips" style="margin:0">' + yearsOf(arr).map(function (y) { return '<button class="chip' + (y === curYear() ? ' on' : '') + '" data-yr="' + y + '">ปี ' + (y + 543) + ' (' + y + ')</button>'; }).join('') + '</div>';
+  }
+  function testPage() {
+    var y = curYear(), f = H.q.tf || 'all', all = H.data.tests.filter(function (t) { return +t.year === y; });
+    var live = all.filter(function (t) { return t.status !== 'cancel'; }), sum = function (a) { return a.reduce(function (s, t) { return s + (Number(t.price) || 0); }, 0); };
+    var tests = live.filter(function (t) { return t.kind !== 'other'; }), other = live.filter(function (t) { return t.kind === 'other'; });
+    var byType = {}; tests.forEach(function (t) { byType[t.testType] = (byType[t.testType] || 0) + (Number(t.price) || 0); });
+    var types = Object.keys(byType).sort(function (a, b) { return byType[b] - byType[a]; }), mx = types.length ? byType[types[0]] : 1;
+    var cnt = { all: all.length, plan: 0, sent: 0, done: 0, cancel: 0 }; all.forEach(function (t) { cnt[t.status] = (cnt[t.status] || 0) + 1; });
+    var tile = function (val, label, color, sub) { return '<div class="kpi" style="--k:' + color + '"><b>' + val + '</b><span>' + label + '</span>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>'; };
+    $('main').innerHTML = '<h3>ตรวจวิเคราะห์ / ค่าใช้จ่าย</h3><p class="lead">ตัวอย่างที่ต้องส่งตรวจ ราคา สถานะ และใบผล · ค่าใช้จ่ายอื่นของฝ่าย (เช่น ขอเลข อย. สอบเทียบเครื่องมือ)</p>'
+      + '<div class="qtop"><button class="btn btn-primary" id="tAdd">' + icon('plus', 18) + ' เพิ่มรายการตรวจ</button><button class="btn btn-line" id="tAddO">' + icon('plus', 18) + ' ค่าใช้จ่ายอื่น</button></div>'
+      + '<div class="pbar noprint">' + yearChips(H.data.tests) + '<button class="btn btn-sm btn-line" id="tPrint">' + icon('print', 16) + ' พิมพ์</button></div>'
+      + '<div class="kpis">' + tile(baht(sum(live)), 'ค่าใช้จ่ายรวมปี ' + (y + 543), '#7c3aed', 'ตรวจวิเคราะห์ ' + baht(sum(tests)) + ' · อื่น ๆ ' + baht(sum(other)))
+      + tile(cnt.plan, 'ยังไม่ส่ง / ยังไม่จ่าย', cnt.plan ? '#d97706' : '#16a34a', baht(sum(all.filter(function (t) { return t.status === 'plan'; }))))
+      + tile(cnt.sent, 'ส่งตรวจแล้ว รอผล', '#2563eb', baht(sum(all.filter(function (t) { return t.status === 'sent'; }))))
+      + tile(cnt.done, 'ได้ผลแล้ว / จ่ายแล้ว', '#16a34a', baht(sum(all.filter(function (t) { return t.status === 'done'; })))) + '</div>'
+      + (types.length ? '<div class="panel pbox" style="margin-bottom:14px"><h4>' + icon('chart', 18) + ' ค่าตรวจแยกตามรายการตรวจ</h4>' + types.map(function (k) {
+        return '<div class="sbar"><span>' + esc(k) + '</span><i><em style="width:' + Math.max(2, Math.round(byType[k] / mx * 100)) + '%;background:#7c3aed"></em></i><b>' + baht(byType[k]) + '</b></div>'; }).join('') + '</div>' : '')
+      + '<div class="pbar"><div class="psearch">' + icon('search', 18) + '<input id="tSearch" placeholder="ค้นหาตัวอย่าง / รายการตรวจ / แล็บ" value="' + esc(H.q.ts || '') + '"></div></div>'
+      + '<div class="pchips">' + [['all', 'ทั้งหมด'], ['plan', 'ยังไม่ส่ง'], ['sent', 'รอผล'], ['done', 'ได้ผล / จ่ายแล้ว'], ['cancel', 'ยกเลิก']].map(function (x) {
+        return '<button class="chip' + (f === x[0] ? ' on' : '') + '" data-tf="' + x[0] + '">' + x[1] + ' (' + (cnt[x[0]] || 0) + ')</button>'; }).join('') + '</div><div id="tList"></div>';
+    var draw = function () {
+      var q = (H.q.ts || '').toLowerCase();
+      var rows = all.filter(function (t) { return (f === 'all' || t.status === f) && (!q || [t.sample, t.testType, t.lab, t.note].join(' ').toLowerCase().indexOf(q) >= 0); });
+      var groups = {}, order = [];
+      rows.forEach(function (t) { var g = t.kind === 'other' ? '__other' : t.sample; if (!groups[g]) { groups[g] = []; order.push(g); } groups[g].push(t); });
+      order.sort(function (a, b) { return a === '__other' ? 1 : b === '__other' ? -1 : 0; });
+      var np = {}; H.data.newprods.forEach(function (n) { if (+n.year === y) np[n.name] = n; });
+      $('tList').innerHTML = order.map(function (g) {
+        var list = groups[g], isO = g === '__other', n = np[g];
+        return '<div class="panel qtg"><div class="qtgh"><b>' + (isO ? 'ค่าใช้จ่ายอื่น' : esc(g)) + '</b>' + (n ? '<span class="qmk">' + esc(n.market) + ' · ผลิตภัณฑ์ใหม่</span>' : '')
+          + '<em>' + baht(sum(list.filter(function (t) { return t.status !== 'cancel'; }))) + '</em></div>'
+          + list.map(function (t) {
+            return '<button class="qtr" data-tid="' + esc(t.id) + '"><span class="qtn"><b>' + esc(isO ? t.sample : t.testType) + '</b><small>'
+              + [t.lab, t.sentDate ? (isO ? 'จ่าย ' : 'ส่ง ') + dd(t.sentDate) : '', t.resultDate ? 'ได้ผล ' + dd(t.resultDate) : '', t.result, (t.files || []).length ? '📎 ' + t.files.length + ' ไฟล์' : ''].filter(String).map(esc).join(' · ') + '</small></span>'
+              + '<span class="qtp">' + (t.price === '' || t.price == null ? '–' : baht(t.price)) + '</span><span class="qts ' + t.status + '">' + stLabel(t) + '</span></button>';
+          }).join('') + '</div>';
+      }).join('') || '<div class="empty"><div class="icon">' + icon('flask', 28) + '</div><h4>ไม่มีรายการ</h4><div>' + (all.length ? 'ลองเปลี่ยนตัวกรองหรือคำค้นหา' : 'กด "เพิ่มรายการตรวจ" เพื่อเริ่มบันทึกของปีนี้') + '</div></div>';
+      on('[data-tid]', 'click', function (el) { testForm(H.data.tests.filter(function (t) { return t.id === el.getAttribute('data-tid'); })[0]); }, $('tList'));
+    };
+    $('tSearch').addEventListener('input', function () { H.q.ts = this.value; draw(); });
+    on('[data-tf]', 'click', function (el) { H.q.tf = el.getAttribute('data-tf'); testPage(); }, $('main'));
+    on('[data-yr]', 'click', function (el) { H.q.ty = +el.getAttribute('data-yr'); testPage(); }, $('main'));
+    $('tAdd').addEventListener('click', function () { testForm({ kind: 'test', year: y, status: 'plan' }); });
+    $('tAddO').addEventListener('click', function () { testForm({ kind: 'other', year: y, status: 'plan' }); });
+    $('tPrint').addEventListener('click', function () { window.print(); });
+    draw();
+  }
+  function testForm(t0) {
+    var t = JSON.parse(JSON.stringify(t0)), isO = t.kind === 'other', isNew = !t.id, s = S_();
+    var samples = {}; H.data.newprods.forEach(function (n) { samples[n.name] = 1; }); list(s.products).forEach(function (p) { samples[p] = 1; });
+    H.data.tests.forEach(function (x) { if (x.kind !== 'other' && x.sample) samples[x.sample] = 1; });
+    var types = list(s.testTypes); H.data.tests.forEach(function (x) { if (x.testType && types.indexOf(x.testType) < 0) types.push(x.testType); });
+    var labs = list(s.labs); H.data.tests.forEach(function (x) { if (x.lab && labs.indexOf(x.lab) < 0) labs.push(x.lab); });
+    var stl = isO ? TST_OTHER : TST;
+    var filesHtml = function () {
+      return (t.files || []).map(function (f) { return '<span class="qfile"><a href="' + esc(f.url) + '" target="_blank" rel="noopener">📎 ' + esc(f.name) + '</a><button type="button" data-tfdel="' + esc(f.id) + '" aria-label="ลบไฟล์">' + icon('x', 14) + '</button></span>'; }).join('')
+        + (H.data.hasFolder ? '<button type="button" class="btn btn-line btn-sm" id="tfUp">' + icon('plus', 16) + ' แนบใบผล / ใบเสร็จ (รูป หรือ PDF)</button>' : '<span class="muted">ให้ผู้ดูแลระบบตั้งโฟลเดอร์ของฝ่ายก่อน จึงจะแนบไฟล์ได้</span>');
+    };
+    var body = '<div class="pform">'
+      + S('tYear', 'ปี', yearsOf(H.data.tests).concat([curYear() + 1]).filter(function (v, i, a) { return a.indexOf(v) === i; }).map(function (v) { return [String(v), (v + 543) + ' (' + v + ')']; }), String(t.year), true)
+      + (isO ? F('tSample', 'รายการค่าใช้จ่าย', t.sample, 'text', ' placeholder="เช่น ค่าขอเลข อย. / ค่าสอบเทียบอุปกรณ์"', true)
+        : DL('tSample', 'ตัวอย่าง (ชื่อสินค้า)', t.sample, Object.keys(samples), ' placeholder="พิมพ์หรือเลือก"', true) + S('tType', 'รายการตรวจ', types, t.testType, true, 'เลือกรายการตรวจ'))
+      + F('tPrice', 'ราคา (บาท)', t.price, 'number', ' min="0" step="any" inputmode="decimal"') + DL('tLab', isO ? 'ผู้ให้บริการ / หน่วยงาน' : 'ห้องแล็บ', t.lab, labs)
+      + '<div class="pf full"><label>สถานะ</label><div class="qseg qtseg" id="tSt">' + ['plan', 'sent', 'done', 'cancel'].map(function (k) { return '<button type="button" class="' + k + (t.status === k ? ' on' : '') + '" data-tst="' + k + '" aria-pressed="' + (t.status === k) + '"><b>' + stl[k] + '</b></button>'; }).join('') + '</div></div>'
+      + F('tSent', isO ? 'วันที่จ่าย / ดำเนินการ' : 'วันที่ส่งตรวจ', t.sentDate, 'date') + (isO ? '' : F('tRes', 'วันที่ได้ผล', t.resultDate, 'date') + S('tResult', 'ผลตรวจ', RESULTS, t.result, false, '— ยังไม่มีผล —'))
+      + T('tNote', 'หมายเหตุ', t.note, isO ? '' : 'เช่น เลขที่ใบผล / ค่าที่ไม่ผ่าน')
+      + (isNew ? '' : '<div class="pf full"><label>ใบผล / เอกสาร</label><div class="qfiles" id="tFiles">' + filesHtml() + '</div></div>') + '</div>'
+      + (isNew ? '<p class="muted" style="font-size:12.5px">แนบใบผลได้หลังบันทึก</p>' : '<button type="button" class="link-btn danger" id="tDel">' + icon('trash', 14) + ' ลบรายการนี้</button>');
+    openModal({ color: '#7c3aed', icon: 'flask', wide: true, title: (isNew ? 'เพิ่ม' : 'แก้ไข') + (isO ? 'ค่าใช้จ่ายอื่น' : 'รายการตรวจวิเคราะห์'), body: body, ok: 'บันทึก',
+      onOpen: function () {
+        on('[data-tst]', 'click', function (el) { t.status = el.getAttribute('data-tst'); Array.prototype.forEach.call($('tSt').children, function (b) { var on_ = b === el; b.classList.toggle('on', on_); b.setAttribute('aria-pressed', on_); });
+          if (t.status === 'sent' && !$('tSent').value) $('tSent').value = H.data.today;
+          if (t.status === 'done' && !isO && $('tRes') && !$('tRes').value) $('tRes').value = H.data.today;
+          if (t.status === 'done' && isO && !$('tSent').value) $('tSent').value = H.data.today; }, $('mBody'));
+        bindFiles();
+        if ($('tDel')) $('tDel').addEventListener('click', function () {
+          if (!confirm('ลบ "' + t.sample + (t.testType ? ' · ' + t.testType : '') + '" ?' + ((t.files || []).length ? ' (ไฟล์ที่แนบจะถูกลบด้วย)' : ''))) return;
+          call('qaDeleteTest', state.token, t.id).then(function (r) { if (!r.ok) return toast(r.error); closeModal(); H.data.tests = H.data.tests.filter(function (x) { return x.id !== t.id; }); toast('ลบแล้ว'); testPage(); }).catch(onServerError);
+        });
+      },
+      submit: function () {
+        var o = { id: t.id, kind: t.kind, year: v('tYear'), sample: v('tSample'), testType: isO ? '' : v('tType'), price: v('tPrice'), lab: v('tLab'), status: t.status,
+          sentDate: v('tSent'), resultDate: isO ? '' : v('tRes'), result: isO ? '' : v('tResult'), note: v('tNote') };
+        if (!o.sample) return Promise.resolve(isO ? 'ระบุรายการค่าใช้จ่าย' : 'ระบุตัวอย่าง (ชื่อสินค้า)');
+        if (!isO && !o.testType) return Promise.resolve('เลือกรายการตรวจ');
+        if (o.sentDate && o.resultDate && o.resultDate < o.sentDate) return Promise.resolve('วันที่ได้ผลต้องไม่ก่อนวันที่ส่งตรวจ');
+        return call('qaSaveTest', state.token, o).then(function (r) {
+          if (!r.ok) return r.error;
+          var i = H.data.tests.map(function (x) { return x.id; }).indexOf(r.test.id);
+          if (i >= 0) H.data.tests[i] = r.test; else H.data.tests.push(r.test);
+          closeModal(); H.q.ty = +r.test.year; toast(isNew ? 'เพิ่มรายการแล้ว' : 'บันทึกแล้ว'); testPage();
+        });
+      } });
+    function bindFiles() {
+      if ($('tfUp')) $('tfUp').addEventListener('click', function () {
+        var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*,application/pdf'; inp.style.display = 'none'; document.body.appendChild(inp);
+        inp.addEventListener('change', function () {
+          var file = inp.files && inp.files[0]; document.body.removeChild(inp); if (!file) return;
+          var b = $('tfUp'); b.disabled = true; b.innerHTML = '<span class="spinner dark"></span> กำลังอัปโหลด…';
+          var prep = /^image\//.test(file.type) ? shrink(file).then(function (p) { return p && { name: p.name, mime: 'image/jpeg', b64: p.b64 }; })
+            : file.type === 'application/pdf' && file.size <= 10 * 1024 * 1024 ? new Promise(function (res) { var fr = new FileReader(); fr.onload = function () { res({ name: file.name, mime: 'application/pdf', b64: String(fr.result).split(',')[1] }); }; fr.onerror = function () { res(null); }; fr.readAsDataURL(file); })
+            : Promise.resolve(null);
+          prep.then(function (p) {
+            if (!p) { toast('แนบได้เฉพาะรูป หรือ PDF ไม่เกิน 10 MB'); $('tFiles').innerHTML = filesHtml(); bindFiles(); return; }
+            return call('qaUploadFile', state.token, t.id, 'test', p.name, p.mime, p.b64).then(function (r) {
+              if (!r.ok) toast(r.error); else { t.files = r.files; syncFiles(); toast('แนบไฟล์แล้ว'); }
+              $('tFiles').innerHTML = filesHtml(); bindFiles();
+            });
+          }).catch(onServerError);
+        });
+        inp.click();
+      });
+      on('[data-tfdel]', 'click', function (el) {
+        if (!confirm('ลบไฟล์นี้?')) return;
+        call('qaRemoveFile', state.token, t.id, 'test', el.getAttribute('data-tfdel')).then(function (r) { if (!r.ok) return toast(r.error); t.files = r.files; syncFiles(); $('tFiles').innerHTML = filesHtml(); bindFiles(); }).catch(onServerError);
+      }, $('tFiles') || $('mBody'));
+    }
+    function syncFiles() { var x = H.data.tests.filter(function (y) { return y.id === t.id; })[0]; if (x) x.files = t.files; }
+  }
+
+  // ==================== ผลิตภัณฑ์ใหม่ ====================
+  var STAGES = ['พัฒนาสูตร', 'ส่งตรวจวิเคราะห์', 'ขอเลข อย.', 'พร้อมขาย / วางขายแล้ว', 'ยกเลิก'];
+  function npPage() {
+    var y = curYear(), all = H.data.newprods.filter(function (n) { return +n.year === y; });
+    var tests = H.data.tests.filter(function (t) { return +t.year === y && t.kind !== 'other' && t.status !== 'cancel'; });
+    var card = function (n) {
+      var tl = tests.filter(function (t) { return t.sample === n.name; }), done_ = tl.filter(function (t) { return t.status === 'done'; }).length;
+      var cost = tl.reduce(function (s, t) { return s + (Number(t.price) || 0); }, 0), si = STAGES.indexOf(n.stage);
+      return '<button class="qnp' + (n.stage === 'ยกเลิก' ? ' cancel' : '') + '" data-np="' + esc(n.id) + '"><div class="qnph"><b>' + esc(n.name) + '</b><span class="qstage s' + si + '">' + esc(n.stage || 'ยังไม่ระบุขั้นตอน') + '</span></div>'
+        + '<small>' + [n.fdaNo ? 'อย. ' + n.fdaNo : '', tl.length ? 'ตรวจ ' + tl.length + ' รายการ (ได้ผล ' + done_ + ') · ' + baht(cost) : 'ยังไม่มีรายการตรวจ', n.note].filter(String).map(esc).join(' · ') + '</small></button>';
+    };
+    var col = function (m) { var l = all.filter(function (n) { return n.market === m; }); return '<div class="panel pbox"><h4>' + (m === 'ในประเทศ' ? '🇹🇭 ในประเทศ (Domestic)' : '🌏 ต่างประเทศ (International)') + ' <small class="muted">' + l.length + ' รายการ</small></h4>' + (l.map(card).join('') || '<div class="muted">ยังไม่มี</div>') + '</div>'; };
+    $('main').innerHTML = '<h3>ผลิตภัณฑ์ใหม่</h3><p class="lead">รายการผลิตภัณฑ์ที่พัฒนาในแต่ละปี · ขั้นตอน · เลข อย. · เชื่อมกับรายการตรวจวิเคราะห์ที่ใช้ชื่อเดียวกัน</p>'
+      + '<div class="qtop"><button class="btn btn-primary" id="nAdd">' + icon('plus', 18) + ' เพิ่มผลิตภัณฑ์ใหม่</button></div>'
+      + '<div class="pbar noprint">' + yearChips(H.data.newprods) + '</div>'
+      + '<div class="pgrid">' + col('ในประเทศ') + col('ต่างประเทศ') + '</div>';
+    on('[data-yr]', 'click', function (el) { H.q.ty = +el.getAttribute('data-yr'); npPage(); }, $('main'));
+    on('[data-np]', 'click', function (el) { npForm(H.data.newprods.filter(function (n) { return n.id === el.getAttribute('data-np'); })[0]); }, $('main'));
+    $('nAdd').addEventListener('click', function () { npForm({ year: y, market: 'ในประเทศ', stage: '' }); });
+  }
+  function npForm(n0) {
+    var n = JSON.parse(JSON.stringify(n0)), isNew = !n.id;
+    openModal({ color: '#7c3aed', icon: 'box', title: isNew ? 'เพิ่มผลิตภัณฑ์ใหม่' : 'แก้ไขผลิตภัณฑ์ใหม่', ok: 'บันทึก',
+      body: '<div class="pform">' + F('nName', 'ชื่อผลิตภัณฑ์', n.name, 'text', '', true)
+        + S('nMarket', 'ตลาด', [['ในประเทศ', 'ในประเทศ (Domestic)'], ['ต่างประเทศ', 'ต่างประเทศ (International)']], n.market)
+        + S('nYear', 'ปี', yearsOf(H.data.newprods).concat([curYear() + 1]).filter(function (v, i, a) { return a.indexOf(v) === i; }).map(function (v) { return [String(v), (v + 543) + ' (' + v + ')']; }), String(n.year))
+        + S('nStage', 'ขั้นตอน', STAGES, n.stage, false, '— ยังไม่ระบุ —') + F('nFda', 'เลข อย.', n.fdaNo) + T('nNote', 'หมายเหตุ', n.note) + '</div>'
+        + (isNew ? '' : '<button type="button" class="link-btn danger" id="nDel">' + icon('trash', 14) + ' ลบผลิตภัณฑ์นี้</button>'),
+      onOpen: function () {
+        if ($('nDel')) $('nDel').addEventListener('click', function () {
+          if (!confirm('ลบ "' + n.name + '" ? (รายการตรวจวิเคราะห์ยังอยู่)')) return;
+          call('qaDeleteNewProd', state.token, n.id).then(function (r) { if (!r.ok) return toast(r.error); closeModal(); H.data.newprods = H.data.newprods.filter(function (x) { return x.id !== n.id; }); toast('ลบแล้ว'); npPage(); }).catch(onServerError);
+        });
+      },
+      submit: function () {
+        var o = { id: n.id, name: v('nName'), market: v('nMarket'), year: v('nYear'), stage: v('nStage'), fdaNo: v('nFda'), note: v('nNote') };
+        if (!o.name) return Promise.resolve('ระบุชื่อผลิตภัณฑ์');
+        return call('qaSaveNewProd', state.token, o).then(function (r) {
+          if (!r.ok) return r.error;
+          var i = H.data.newprods.map(function (x) { return x.id; }).indexOf(r.item.id);
+          if (i >= 0) H.data.newprods[i] = r.item; else H.data.newprods.push(r.item);
+          closeModal(); H.q.ty = +r.item.year; toast(isNew ? 'เพิ่มแล้ว' : 'บันทึกแล้ว'); npPage();
+        });
+      } });
+  }
+
   function settings() {
     var s = S_();
     var ta = function (k, label, hint) { return T('s_' + k, label, s[k], hint, false, 2); };
@@ -449,6 +633,7 @@
       + F('s_roundDays', 'กำหนดเสร็จแต่ละรอบ (วัน นับจากวันเริ่ม)', s.roundDays, 'number', ' min="1" max="90"') + '</div></div>'
       + '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('list', 18) + ' ตัวเลือก</h4><div class="pform">'
       + ta('products', 'รายชื่อสินค้า', 'เช่น น้ำพริกปลาแซลมอน 35 กรัม, …') + ta('people', 'รายชื่อผู้รับเรื่อง / ผู้รับผิดชอบ', 'ชื่อพนักงาน')
+      + ta('testTypes', 'รายการตรวจวิเคราะห์', 'เช่น Microbiological and Chemical, Nutrition') + ta('labs', 'ห้องแล็บ / ผู้ให้บริการ')
       + ta('channels', 'ช่องทางรับเรื่อง') + ta('custTypes', 'ประเภทลูกค้า') + ta('issueTypes', 'ประเภทปัญหา') + ta('causeCats', 'หมวดสาเหตุ') + ta('remedies', 'วิธีชดเชยลูกค้า') + '</div></div>'
       + '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('print', 18) + ' หัวแบบฟอร์ม / ช่องลงนาม</h4><div class="pform">'
       + F('s_formCode', 'รหัสแบบฟอร์ม (มุมขวาบนของรายงาน)', s.formCode, 'text', ' placeholder="เช่น FM-QA-01-01 Rev.00 วันที่ประกาศใช้ 01/10/2024"')
@@ -474,6 +659,16 @@
     '.qtop{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}.qbig{flex:none;font-size:16px;padding:13px 20px}.qtop .btn-line b{background:#f1f5f9;border-radius:99px;padding:0 8px;margin-left:4px}',
     '.qreq{color:#dc2626}.qsub{margin:14px 0 6px;font-size:14px;color:#475569}',
     '.qtag{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:99px;white-space:nowrap}.qtag.qopen{background:#e0e7ff;color:#3730a3}.qtag.qinvestigating{background:#fef3c7;color:#92400e}.qtag.qfixing{background:#ffedd5;color:#9a3412}',
+    '.qtag.qrecord{background:#e0e7ff;color:#3730a3}.qst .record.on{border-color:#4f46e5;background:#4f46e5;color:#fff}.qst .record.on small{color:#e0e7ff}',
+    '.qtg{padding:0;overflow:hidden;margin-bottom:12px}.qtgh{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:11px 14px;background:#f8fafc;border-bottom:1px solid var(--line)}.qtgh b{font-size:15px}.qtgh em{margin-left:auto;font-style:normal;font-weight:700;color:#5b21b6}',
+    '.qmk{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:99px;background:#ede9fe;color:#5b21b6}',
+    '.qtr{display:flex;gap:10px;align-items:center;width:100%;text-align:left;background:#fff;border:0;border-bottom:1px solid #f1f5f9;padding:10px 14px;cursor:pointer;min-height:48px;font:inherit;color:inherit}.qtr:last-child{border-bottom:0}.qtr:hover,.qtr:focus-visible{background:#faf5ff;outline:none}',
+    '.qtn{flex:1;min-width:0}.qtn b{display:block;font-size:14px;font-weight:600}.qtn small{display:block;color:var(--muted);font-size:12px;margin-top:2px}.qtp{font-weight:700;white-space:nowrap;font-size:14px}',
+    '.qts{font-size:12px;font-weight:700;padding:4px 10px;border-radius:99px;white-space:nowrap;border:1.5px solid}.qts.plan{color:#b45309;border-color:#f59e0b;background:#fffbeb}.qts.sent{color:#1d4ed8;border-color:#93c5fd;background:#eff6ff}.qts.done{color:#15803d;border-color:#86efac;background:#f0fdf4}.qts.cancel{color:#64748b;border-color:#cbd5e1;background:#f8fafc;text-decoration:line-through}',
+    '.qtseg button.on.plan{background:#f59e0b;border-color:#f59e0b;color:#fff}.qtseg button.on.sent{background:#2563eb;border-color:#2563eb;color:#fff}.qtseg button.on.done{background:#16a34a;border-color:#16a34a;color:#fff}.qtseg button.on.cancel{background:#64748b;border-color:#64748b;color:#fff}',
+    '.qfiles{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.qfile{display:inline-flex;align-items:center;gap:4px;background:#f1f5f9;border-radius:8px;padding:5px 6px 5px 10px;font-size:13px}.qfile a{color:#1d4ed8;text-decoration:none;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.qfile button{border:0;background:none;cursor:pointer;color:#b91c1c;padding:2px;display:flex}',
+    '.qnp{display:block;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px;cursor:pointer;font:inherit;color:inherit}.qnp:hover,.qnp:focus-visible{border-color:#a78bfa;outline:none}.qnp.cancel{opacity:.55}.qnph{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}.qnph b{font-size:14.5px}.qnp small{display:block;color:var(--muted);font-size:12px;margin-top:3px}',
+    '.qstage{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:99px;white-space:nowrap;background:#f1f5f9;color:#475569}.qstage.s0{background:#fef3c7;color:#92400e}.qstage.s1{background:#dbeafe;color:#1e40af}.qstage.s2{background:#ede9fe;color:#5b21b6}.qstage.s3{background:#dcfce7;color:#166534}.qstage.s4{background:#f1f5f9;color:#64748b}',
     '.qtag.qclosed_ok{background:#dcfce7;color:#166534}.qtag.qclosed_fail{background:#f1f5f9;color:#334155;border:1px solid #cbd5e1}.qtag.late{background:#b91c1c;color:#fff}',
     '.qsev{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:99px;border:1px solid}.qsev.sL{color:#166534;border-color:#86efac}.qsev.sM{color:#92400e;border-color:#fcd34d}.qsev.sH{color:#b91c1c;border-color:#fca5a5}.qsev.sC{color:#fff;background:#991b1b;border-color:#991b1b}',
     '.qlatechip{border-color:#fca5a5;color:#b91c1c}.qlist{display:flex;flex-direction:column;gap:10px}',
