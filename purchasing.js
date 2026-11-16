@@ -1090,12 +1090,14 @@
       var cols = hyg ? ['ลำดับที่', 'ชื่อบริษัทผู้ขาย', 'ชื่อผู้ติดต่อ', 'เบอร์โทร และ Email', 'ที่อยู่', 'รายการที่ซื้อ', 'หมายเหตุ']
         : ['ลำดับที่', svc ? 'ชื่อบริษัทผู้ให้บริการ' : 'ชื่อบริษัทผู้ขาย', 'Agent/Broker', svc ? 'ชื่อผู้ให้บริการ' : 'ชื่อผู้ผลิต', 'ชื่อผู้ติดต่อ', 'เบอร์โทร และ Email', 'ที่อยู่', 'รายการที่ซื้อ', 'หมายเหตุ'];
       var br = function (t) { return esc(t || '').replace(/\s*,\s*/g, '<br>'); };
+      // หมายเหตุที่ระบบใส่ตอนนำเข้าข้อมูลครั้งแรก (เช่น "นำเข้าจาก Excel สต๊อกการ์ด") ไม่แสดงในทะเบียน AVL
+      var note = function (t) { return /^นำเข้าจาก/.test(String(t || '').trim()) ? '' : esc(t); };
       var head = '<div class="avlh">' + (logo ? '<img class="avllogo" src="' + logo.src + '" alt="">' : '<span></span>')
         + '<div class="avlt"><b>ทะเบียนรายชื่อผู้ขายและผู้ให้บริการที่ได้รับการอนุมัติ</b><span>Approved Vendor List - AVL</span><em>' + esc(c) + '</em></div><span></span></div>';
       var body = rows.map(function (x, i) {
         var tel = [x.phone, x.phone2].filter(String).map(esc).join('<br>') + (x.email ? '<br>' + esc(x.email) : '');
-        var cells = hyg ? [i + 1, esc(x.name), esc(x.contact), tel, esc(x.address), br(x.items), esc(x.note)]
-          : [i + 1, esc(x.name), esc(x.agent || '-'), esc(x.maker || x.name), esc(x.contact), tel, esc(x.address), br(x.items), esc(x.note)];
+        var cells = hyg ? [i + 1, esc(x.name), esc(x.contact), tel, esc(x.address), br(x.items), note(x.note)]
+          : [i + 1, esc(x.name), esc(x.agent || '-'), esc(x.maker || x.name), esc(x.contact), tel, esc(x.address), br(x.items), note(x.note)];
         return '<tr>' + cells.map(function (v, k) { return '<td' + (k === 0 ? ' class="c"' : '') + '>' + v + '</td>'; }).join('') + '</tr>';
       }).join('') || '<tr><td colspan="' + cols.length + '" class="c muted">ยังไม่มีผู้ขายในประเภทนี้ (กำหนดประเภทได้ที่เมนูผู้ขาย)</td></tr>';
       var widths = hyg ? [5, 22, 10, 13, 24, 16, 10] : [5, 15, 8, 14, 8, 10, 19, 12, 9];   // % ตามสัดส่วนคอลัมน์ในไฟล์ต้นฉบับ
