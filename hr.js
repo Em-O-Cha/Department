@@ -180,7 +180,7 @@
       }).catch(onServerError);
     };
     on('[data-ok]', 'click', function (el) { go2(el, true); }, root);
-    on('[data-no]', 'click', function (el) { if (window.confirm('ไม่อนุมัติคำขอลานี้?')) go2(el, false); }, root);
+    on('[data-no]', 'click', function (el) { ask({ title: 'ไม่อนุมัติคำขอลานี้?', ok: 'ไม่อนุมัติ', tone: 'danger' }).then(function (ok) { if (ok) go2(el, false); }); }, root);
   }
   H.render = function (page) {
     pageSize('');
@@ -342,11 +342,13 @@
     window.scrollTo(0, 0);
   }
   function removeFile(el, after) {
-    if (!window.confirm('ลบไฟล์นี้?')) return;
-    call('hrRemoveFile', state.token, el.getAttribute('data-k'), el.getAttribute('data-o'), el.getAttribute('data-rmf')).then(function (r) {
-      if (!r.ok) return toast(r.error);
-      reload('ลบไฟล์แล้ว').then(after);
-    }).catch(onServerError);
+    ask('ลบไฟล์นี้?').then(function (ok) {
+      if (!ok) return;
+      call('hrRemoveFile', state.token, el.getAttribute('data-k'), el.getAttribute('data-o'), el.getAttribute('data-rmf')).then(function (r) {
+        if (!r.ok) return toast(r.error);
+        reload('ลบไฟล์แล้ว').then(after);
+      }).catch(onServerError);
+    });
   }
   function empModal(e) {
     var isNew = !e, s = H.data.settings;
@@ -813,7 +815,7 @@
         + (L.token && L.group ? '<div><button class="btn btn-sm btn-line" id="fTest">ส่งข้อความทดสอบเข้ากลุ่ม</button></div>' : '') + '</div>';
       loadQr(function () { if (window.QRCode) new window.QRCode($('qrBox'), { text: r.url, width: 160, height: 160, correctLevel: window.QRCode.CorrectLevel.M }); });
       $('fCopy').addEventListener('click', function () { var i = $('fUrl'); i.select(); try { navigator.clipboard.writeText(r.url); } catch (e) { document.execCommand('copy'); } toast('คัดลอกลิงก์แล้ว'); });
-      $('fNew').addEventListener('click', function () { if (!window.confirm('เปลี่ยนลิงก์ใหม่? QR ที่ติดไว้เดิมจะใช้ไม่ได้ ต้องพิมพ์ป้ายใหม่')) return; call('hrFormNewKey', state.token).then(function () { formSettings(); toast('เปลี่ยนลิงก์แล้ว'); }).catch(onServerError); });
+      $('fNew').addEventListener('click', function () { ask({ title: 'เปลี่ยนลิงก์ใหม่?', text: 'QR ที่ติดไว้เดิมจะใช้ไม่ได้ ต้องพิมพ์ป้ายใหม่', ok: 'เปลี่ยนลิงก์' }).then(function (ok) { if (!ok) return; call('hrFormNewKey', state.token).then(function () { formSettings(); toast('เปลี่ยนลิงก์แล้ว'); }).catch(onServerError); }); });
       $('fPoster').addEventListener('click', function () { poster(r.url); });
       if ($('fTest')) $('fTest').addEventListener('click', function () { call('hrLineTest', state.token).then(function (x) { toast(x.ok ? 'ส่งข้อความทดสอบแล้ว' : x.error); }).catch(onServerError); });
     }).catch(onServerError);

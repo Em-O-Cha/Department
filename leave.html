@@ -143,7 +143,7 @@
     if ($('fHalf')) $('fHalf').addEventListener('change', function () { F.half = $('fHalf').checked; formView(); });
     $('fReason').addEventListener('input', function () { F.reason = $('fReason').value; });
     Array.prototype.forEach.call(document.querySelectorAll('[data-pick]'), function (b) { b.addEventListener('click', function () { pick(b.getAttribute('data-pick') === 'cam'); }); });
-    Array.prototype.forEach.call(document.querySelectorAll('[data-rm]'), function (im) { im.addEventListener('click', function () { if (confirm('ลบรูป?')) { F.files.splice(+im.getAttribute('data-rm'), 1); formView(); } }); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-rm]'), function (im) { im.addEventListener('click', function () { F.files.splice(+im.getAttribute('data-rm'), 1); formView(); }); });
     $('send').addEventListener('click', submit);
   }
   function recentHtml() {

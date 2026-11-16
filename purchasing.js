@@ -461,8 +461,8 @@
         return '<div class="pfile">' + fileLink(f) + '<small>' + esc(f.at || '') + '</small><button type="button" class="icon-btn" data-rf="' + esc(f.id) + '" title="ลบไฟล์">' + icon('trash', 16) + '</button></div>';
       }).join('') : '<div class="muted">ยังไม่มีไฟล์แนบ</div>';
       on('[data-rf]', 'click', function (el) {
-        if (!confirm('ลบไฟล์นี้?')) return;
-        call('purRemoveFile', state.token, 'doc', d.id, el.getAttribute('data-rf')).then(function (r) { if (!r.ok) return toast(r.error); d.files = r.files; drawFiles(r.files); reload(); }).catch(onServerError);
+        ask('ลบไฟล์นี้?').then(function (ok) { if (!ok) return;
+          call('purRemoveFile', state.token, 'doc', d.id, el.getAttribute('data-rf')).then(function (r) { if (!r.ok) return toast(r.error); d.files = r.files; drawFiles(r.files); reload(); }).catch(onServerError); });
       }, box);
     };
     wide({
@@ -599,7 +599,7 @@
         if (!edit) return;
         var drawF = function (files) {
           $('vnFiles').innerHTML = files.length ? files.map(function (f) { return '<div class="pfile">' + fileLink(f) + '<small>' + esc(f.at || '') + '</small><button type="button" class="icon-btn" data-rf="' + esc(f.id) + '">' + icon('trash', 16) + '</button></div>'; }).join('') : '<div class="muted">ยังไม่มีไฟล์แนบ</div>';
-          on('[data-rf]', 'click', function (el) { if (!confirm('ลบไฟล์นี้?')) return; call('purRemoveFile', state.token, 'vendor', x.id, el.getAttribute('data-rf')).then(function (r) { if (!r.ok) return toast(r.error); x.files = r.files; drawF(r.files); reload(); }).catch(onServerError); }, $('vnFiles'));
+          on('[data-rf]', 'click', function (el) { ask('ลบไฟล์นี้?').then(function (ok) { if (!ok) return; call('purRemoveFile', state.token, 'vendor', x.id, el.getAttribute('data-rf')).then(function (r) { if (!r.ok) return toast(r.error); x.files = r.files; drawF(r.files); reload(); }).catch(onServerError); }); }, $('vnFiles'));
         };
         drawF(x.files || []);
         $('vnFile').addEventListener('change', function () {

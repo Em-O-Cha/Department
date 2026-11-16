@@ -315,8 +315,10 @@
         dirty = true; draw();
       }, $('main'));
       on('[data-rdel]', 'click', function (el) {
-        if (!confirm('ลบรอบที่ ' + (+el.getAttribute('data-rdel') + 1) + '?')) return;
-        collect(); x.rounds.splice(+el.getAttribute('data-rdel'), 1); if (closed(x)) x.status = autoStatus(); dirty = true; draw();
+        var ri = +el.getAttribute('data-rdel');
+        collect();
+        ask({ title: 'ลบการแก้ไขรอบที่ ' + (ri + 1) + '?', text: 'ข้อมูลที่กรอกในรอบนี้จะหายไป' }).then(function (ok) { if (!ok) return;
+          collect(); x.rounds.splice(ri, 1); if (closed(x)) x.status = autoStatus(); dirty = true; draw(); });
       }, $('main'));
       if ($('cAddR')) $('cAddR').addEventListener('click', function () {
         collect(); var n = x.rounds.length + 1;
@@ -331,15 +333,17 @@
       }, $('main'));
       on('[data-pdel]', 'click', function (el) { var p = el.getAttribute('data-pdel').split('|'); collect(); x.pending[p[0]] = x.pending[p[0]].filter(function (q) { return q.tmp !== p[1]; }); draw(); }, $('main'));
       on('[data-fdel]', 'click', function (el) {
-        var p = el.getAttribute('data-fdel').split('|'); if (!confirm('ลบรูปนี้?')) return;
-        call('qaRemoveFile', state.token, x.id, p[0], p[1]).then(function (r) { if (!r.ok) return toast(r.error); collect(); if (p[0] === 'fix') x.fixFiles = r.files; else x.files = r.files; draw(); H.data = null; }).catch(onServerError);
+        var p = el.getAttribute('data-fdel').split('|');
+        ask('ลบรูปนี้?').then(function (ok) { if (!ok) return;
+          call('qaRemoveFile', state.token, x.id, p[0], p[1]).then(function (r) { if (!r.ok) return toast(r.error); collect(); if (p[0] === 'fix') x.fixFiles = r.files; else x.files = r.files; draw(); H.data = null; }).catch(onServerError); });
       }, $('main'));
       $('cSave').addEventListener('click', save);
     }
     function autoStatus() { return x.rounds.length ? 'fixing' : (x.investigation || x.rootCause || x.causeCat) ? 'investigating' : 'open'; }
     function leave() {
-      if (dirty && !confirm('ยังไม่ได้บันทึก — ออกโดยไม่บันทึก?')) return;
-      H.cur = null; listPage(); window.scrollTo(0, 0);
+      var go_ = function () { H.cur = null; listPage(); window.scrollTo(0, 0); };
+      if (!dirty) return go_();
+      ask({ title: 'ยังไม่ได้บันทึก', text: 'ข้อมูลที่แก้ไขในหน้านี้จะหายไป ถ้าออกตอนนี้', ok: 'ออกโดยไม่บันทึก', cancel: 'อยู่ต่อ', tone: 'warn' }).then(function (ok) { if (ok) go_(); });
     }
     function firstError() {
       if (!x.product) return ['fProduct', 'ระบุสินค้าที่ถูกร้องเรียน'];
@@ -534,8 +538,8 @@
           if (t.status === 'done' && isO && !$('tSent').value) $('tSent').value = H.data.today; }, $('mBody'));
         bindFiles();
         if ($('tDel')) $('tDel').addEventListener('click', function () {
-          if (!confirm('ลบ "' + t.sample + (t.testType ? ' · ' + t.testType : '') + '" ?' + ((t.files || []).length ? ' (ไฟล์ที่แนบจะถูกลบด้วย)' : ''))) return;
-          call('qaDeleteTest', state.token, t.id).then(function (r) { if (!r.ok) return toast(r.error); closeModal(); H.data.tests = H.data.tests.filter(function (x) { return x.id !== t.id; }); toast('ลบแล้ว'); testPage(); }).catch(onServerError);
+          ask({ title: 'ลบรายการนี้?', text: t.sample + (t.testType ? ' · ' + t.testType : '') + ((t.files || []).length ? '\nไฟล์ที่แนบจะถูกลบด้วย' : '') }).then(function (ok) { if (!ok) return;
+            call('qaDeleteTest', state.token, t.id).then(function (r) { if (!r.ok) return toast(r.error); closeModal(); H.data.tests = H.data.tests.filter(function (x) { return x.id !== t.id; }); toast('ลบแล้ว'); testPage(); }).catch(onServerError); });
         });
       },
       submit: function () {
@@ -571,8 +575,8 @@
         inp.click();
       });
       on('[data-tfdel]', 'click', function (el) {
-        if (!confirm('ลบไฟล์นี้?')) return;
-        call('qaRemoveFile', state.token, t.id, 'test', el.getAttribute('data-tfdel')).then(function (r) { if (!r.ok) return toast(r.error); t.files = r.files; syncFiles(); $('tFiles').innerHTML = filesHtml(); bindFiles(); }).catch(onServerError);
+        ask('ลบไฟล์นี้?').then(function (ok) { if (!ok) return;
+          call('qaRemoveFile', state.token, t.id, 'test', el.getAttribute('data-tfdel')).then(function (r) { if (!r.ok) return toast(r.error); t.files = r.files; syncFiles(); $('tFiles').innerHTML = filesHtml(); bindFiles(); }).catch(onServerError); });
       }, $('tFiles') || $('mBody'));
     }
     function syncFiles() { var x = H.data.tests.filter(function (y) { return y.id === t.id; })[0]; if (x) x.files = t.files; }
@@ -608,8 +612,8 @@
         + (isNew ? '' : '<button type="button" class="link-btn danger" id="nDel">' + icon('trash', 14) + ' ลบผลิตภัณฑ์นี้</button>'),
       onOpen: function () {
         if ($('nDel')) $('nDel').addEventListener('click', function () {
-          if (!confirm('ลบ "' + n.name + '" ? (รายการตรวจวิเคราะห์ยังอยู่)')) return;
-          call('qaDeleteNewProd', state.token, n.id).then(function (r) { if (!r.ok) return toast(r.error); closeModal(); H.data.newprods = H.data.newprods.filter(function (x) { return x.id !== n.id; }); toast('ลบแล้ว'); npPage(); }).catch(onServerError);
+          ask({ title: 'ลบผลิตภัณฑ์นี้?', text: n.name + '\nรายการตรวจวิเคราะห์ที่เกี่ยวข้องยังอยู่' }).then(function (ok) { if (!ok) return;
+            call('qaDeleteNewProd', state.token, n.id).then(function (r) { if (!r.ok) return toast(r.error); closeModal(); H.data.newprods = H.data.newprods.filter(function (x) { return x.id !== n.id; }); toast('ลบแล้ว'); npPage(); }).catch(onServerError); });
         });
       },
       submit: function () {

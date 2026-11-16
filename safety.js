@@ -357,11 +357,11 @@
     }, $('main'));
     on('[data-del="gtmp"]', 'click', function (el) { D.gphotos.splice(+el.getAttribute('data-fid').split(':')[1], 1); var y = window.scrollY; walkForm(a); window.scrollTo(0, y); }, $('main'));
     on('[data-del="ckfile"]', 'click', function (el) {
-      if (!window.confirm('ลบรูปนี้?')) return;
+      ask('ลบรูปนี้?').then(function (ok) { if (!ok) return;
       call('sheRemoveFile', state.token, 'check', ex.id, 'files', el.getAttribute('data-fid')).then(function (r) {
         if (!r.ok) return toast(r.error);
         ex.files = r.files; var y = window.scrollY; walkForm(a); window.scrollTo(0, y);
-      }).catch(onServerError);
+      }).catch(onServerError); });
     }, $('main'));
     ['wProb', 'wFix'].forEach(function (id) { $(id).addEventListener('input', function () { D[id === 'wProb' ? 'problem' : 'fix'] = $(id).value; keep(); }); });
     $('wInsp2').addEventListener('change', function () { w.inspector = v('wInsp2'); store('inspector', w.inspector); });
@@ -443,12 +443,12 @@
       on('[data-del="tmp"]', 'click', function (el) { var p = el.getAttribute('data-fid').split(':'); pend[p[0]].splice(+p[1], 1); gallery(); }, $('mBody'));
       on('[data-del="before"],[data-del="after"]', 'click', function (el) {
         var slot = el.getAttribute('data-del'), fid = el.getAttribute('data-fid');
-        if (!window.confirm('ลบรูปนี้?')) return;
+        ask('ลบรูปนี้?').then(function (ok) { if (!ok) return;
         call('sheRemoveFile', state.token, 'finding', f.id, slot, fid).then(function (r) {
           if (!r.ok) return toast(r.error);
           if (slot === 'before') f.beforeFiles = r.files; else f.afterFiles = r.files;
           gallery(); H.data.findings.forEach(function (x) { if (x.id === f.id) { x.beforeFiles = f.beforeFiles; x.afterFiles = f.afterFiles; } });
-        }).catch(onServerError);
+        }).catch(onServerError); });
       }, $('mBody'));
     }
     wide({
@@ -526,8 +526,8 @@
       on('[data-pick]', 'click', function (el) { pickPhotos(function (arr) { pend = pend.concat(arr).slice(0, 6); gallery(); }, el.getAttribute('data-src') === 'cam'); }, $('mBody'));
       on('[data-del="tmp"]', 'click', function (el) { pend.splice(+el.getAttribute('data-fid').split(':')[1], 1); gallery(); }, $('mBody'));
       on('[data-del="files"]', 'click', function (el) {
-        if (!window.confirm('ลบรูปนี้?')) return;
-        call('sheRemoveFile', state.token, 'incident', x.id, 'files', el.getAttribute('data-fid')).then(function (r) { if (!r.ok) return toast(r.error); x.files = r.files; gallery(); }).catch(onServerError);
+        ask('ลบรูปนี้?').then(function (ok) { if (!ok) return;
+        call('sheRemoveFile', state.token, 'incident', x.id, 'files', el.getAttribute('data-fid')).then(function (r) { if (!r.ok) return toast(r.error); x.files = r.files; gallery(); }).catch(onServerError); });
       }, $('mBody'));
     }
     wide({
