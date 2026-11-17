@@ -19,11 +19,11 @@ var PRD_TABLES_ = {
     ['id', 'รหัส'], ['date', 'วันผลิต'], ['grp', 'กลุ่มงาน'], ['productId', 'รหัสสินค้า'], ['product', 'สินค้า'], ['lot', 'LOT / วันที่ผลิต'],
     ['planBatch', 'แผน (batch)'], ['planQty', 'แผน (จำนวน)'], ['dueDate', 'กำหนดส่ง'],
     ['actBatch', 'ทำจริง (batch)'], ['rawKg', 'น้ำหนักวัตถุดิบ (กก.)'], ['fryKg', 'น้ำหนักหลังผัด (กก.)'], ['coolKg', 'น้ำหนักหลังทำเย็น (กก.)'],
-    ['yieldPct', 'Yield (%)'], ['lossPct', '% Lost'], ['actQty', 'จำนวนที่ได้จริง'], ['actCases', 'จำนวนลัง'], ['expMin', 'ควรได้ (ต่ำสุด)'], ['expMax', 'ควรได้ (สูงสุด)'],
+    ['yieldPct', 'Yield (%)'], ['lossPct', '% Lost'], ['actQty', 'จำนวนที่ได้จริง'], ['unit', 'หน่วย'], ['actCases', 'จำนวนลัง'], ['expMin', 'ควรได้ (ต่ำสุด)'], ['expMax', 'ควรได้ (สูงสุด)'],
     ['lossKg', 'ของเสีย (กก.)'], ['lossQty', 'ของเสีย (ชิ้น)'], ['lossNote', 'สาเหตุของเสีย'], ['finishDate', 'วันที่เสร็จ'], ['status', 'สถานะ'], ['note', 'หมายเหตุ'],
     ['by', 'ผู้บันทึก'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
   prd_reports: { tab: 'รายงาน LINE', cols: [
-    ['id', 'รหัส'], ['date', 'วันที่'], ['kind', 'รอบ'], ['grp', 'กลุ่มงาน'], ['problems', 'ปัญหาที่พบ'], ['checks', 'ปิดงาน (ปิดน้ำ/ไฟ/แอร์)'], ['note', 'หมายเหตุ'],
+    ['id', 'รหัส'], ['date', 'วันที่'], ['kind', 'รอบ'], ['grp', 'กลุ่มงาน'], ['title', 'หัวข้อข้อความ'], ['sections', 'หัวข้อเพิ่มเติม'], ['problems', 'ปัญหาที่พบ'], ['checks', 'ปิดงาน (ปิดน้ำ/ไฟ/แอร์)'], ['note', 'หมายเหตุ'],
     ['files', 'รูป'], ['sentAt', 'ส่ง LINE เมื่อ'], ['by', 'ผู้ส่ง'], ['updatedAt', 'แก้ไขล่าสุด']] },
   prd_breakdowns: { tab: 'Breakdown เครื่องจักร', cols: [
     ['id', 'รหัส'], ['date', 'วันที่'], ['grp', 'กลุ่มงาน'], ['machine', 'เครื่องจักร / อุปกรณ์'], ['start', 'เวลาเริ่ม'], ['end', 'เวลาจบ'], ['minutes', 'เวลาที่เสีย (นาที)'],
@@ -31,10 +31,13 @@ var PRD_TABLES_ = {
   prd_settings: { tab: 'ตั้งค่า', cols: [['id', 'รายการ'], ['value', 'ค่า']] }
 };
 var PRD_GROUPS_ = { G2: 'งานผัด', G1: 'งานบรรจุลงซอง/ถ้วย', G3: 'งานบรรจุลงลัง' };
+// หัวข้อข้อความตอนเย็น (ค่าเริ่มต้น · แก้ได้ในหน้าสรุปเย็น)
+var PRD_EVE_TITLE_ = { G2: 'สรุปงานเตรียม/ทอด/ผัด/อบ', G1: 'สรุปงานบรรจุ', G3: 'สรุปงานบรรจุลงลัง' };
+var PRD_EVE_SEC_ = { G2: 'งานผัด/งานอบ/ทำเย็น', G1: 'งานบรรจุ', G3: 'ยอดสินค้าบรรจุลงลัง' };
 var PRD_STATUS_ = { plan: 'ตามแผน', done: 'เสร็จแล้ว', cancel: 'ยกเลิก' };
 var PRD_SETTINGS_DEFAULT_ = {
   target: '85', machines: '', people: '', units: 'ซอง, ถ้วย, กระปุก, ขวด, ชิ้น',
-  checks: 'ปิดน้ำ, ปิดไฟ, ปิดแอร์', morningNote: 'ไลน์ผลิตและบรรจุเลิก 20.00', lossCauses: 'ไหม้ / สุกเกิน, หกหล่น, ซีลไม่ติด / ซองรั่ว, น้ำหนักไม่ได้, สิ่งแปลกปลอม, อื่น ๆ'
+  checks: 'ปิดน้ำ, ปิดไฟ, ปิดแอร์', sectionTitles: 'เตรียมวัตถุดิบ, สรุปงานลงถ้วย, สรุปงานลงซอง, น้ำพริกค้างแพ็ค, หมายเหตุ', morningNote: 'ไลน์ผลิตและบรรจุเลิก 20.00', lossCauses: 'ไหม้ / สุกเกิน, หกหล่น, ซีลไม่ติด / ซองรั่ว, น้ำหนักไม่ได้, สิ่งแปลกปลอม, อื่น ๆ'
 };
 
 var PRD_PRODUCT_SEED_ = [   // [หมวด, ชื่อสินค้า, น้ำหนักวัตถุดิบต่อ batch (kg), จำนวนที่ควรได้ต่ำสุด, สูงสุด] — จากไฟล์ Yield 02.11.2026
@@ -155,7 +158,7 @@ function prdLoad(token, from, to) {
   return { ok: true, today: today, from: from, to: to, sheetUrl: ss.getUrl(), hasFolder: !!deptConfig_(dept.key).folderId, settings: prdSettings_(ss),
     products: purRead_(ss, 'prd_products').sort(function (a, b) { return (Number(a.sort) || 0) - (Number(b.sort) || 0); }),
     plans: purRead_(ss, 'prd_plans').filter(inRange),
-    reports: purRead_(ss, 'prd_reports').filter(inRange).map(function (r) { r.files = purParseFiles_(r.files); return r; }),
+    reports: purRead_(ss, 'prd_reports').filter(inRange).map(function (r) { r.files = purParseFiles_(r.files); r.sections = prdSections_(r.sections); return r; }),
     breakdowns: purRead_(ss, 'prd_breakdowns').filter(inRange),
     line: { token: !!p.getProperty('PROD_LINE_TOKEN'), group: !!p.getProperty('PROD_LINE_GROUP'), setupCode: hrProp_('PROD_LINE_SETUP', hrSetupCode_), webhook: ACC_WEBHOOK_URL_ } };
 }
@@ -200,7 +203,7 @@ function prdCleanPlan_(p, s) {
   var o = { grp: grp, date: purDate_(p.date), productId: purClean_(p.productId, 20), product: purClean_(p.product, 150), lot: prdLotIso_(p.lot),
     planBatch: prdNum_(p.planBatch, 10000), planQty: prdNum_(p.planQty, 1e7), dueDate: purDate_(p.dueDate),
     actBatch: prdNum_(p.actBatch, 10000), rawKg: prdNum_(p.rawKg, 1e6), fryKg: prdNum_(p.fryKg, 1e6), coolKg: prdNum_(p.coolKg, 1e6),
-    actQty: prdNum_(p.actQty, 1e7), actCases: prdNum_(p.actCases, 1e6), lossKg: prdNum_(p.lossKg, 1e6), lossQty: prdNum_(p.lossQty, 1e7),
+    actQty: prdNum_(p.actQty, 1e7), unit: purClean_(p.unit, 20), actCases: prdNum_(p.actCases, 1e6), lossKg: prdNum_(p.lossKg, 1e6), lossQty: prdNum_(p.lossQty, 1e7),
     lossNote: prdText_(p.lossNote, 300), finishDate: purDate_(p.finishDate), status: PRD_STATUS_[p.status] ? p.status : 'plan', note: prdText_(p.note, 500), by: purClean_(p.by, 60) };
   return o;
 }
@@ -292,11 +295,23 @@ function prdSaveReport(token, r) {
   return purLocked_(function () {
     var ss = prdBook_(dept), o = prdReport_(ss, date, kind, grp) || { id: purId_('RP'), date: date, kind: kind, grp: grp, files: '[]' };
     o.problems = prdText_(r.problems, 1500); o.checks = prdText_(r.checks, 300); o.note = prdText_(r.note, 500); o.by = purClean_(r.by, 60) || o.by; o.updatedAt = purNow_();
+    if (kind === 'evening') { o.title = purClean_(r.title, 80); o.sections = JSON.stringify(prdCleanSections_(r.sections)); }
     purWrite_(ss, 'prd_reports', o);
-    var x = prdReport_(ss, date, kind, grp); x.files = purParseFiles_(x.files);
+    var x = prdReport_(ss, date, kind, grp); x.files = purParseFiles_(x.files); x.sections = prdSections_(x.sections);
     return { ok: true, report: x };
   });
 }
+// หัวข้อเพิ่มเติม [{ title, rows: [{ product, lot (yyyy-MM-dd), qty, unit }], text }] — rows = เลือกสินค้า + LOT + จำนวน · text = ข้อความอิสระ (บรรทัดละรายการ)
+function prdCleanSections_(a) {
+  return (Array.isArray(a) ? a : []).slice(0, 10).map(function (x) {
+    x = x || {};
+    var rows = (Array.isArray(x.rows) ? x.rows : []).slice(0, 40).map(function (r) {
+      r = r || {}; return { product: purClean_(r.product, 150), lot: prdLotIso_(r.lot), qty: prdNum_(r.qty, 1e7), unit: purClean_(r.unit, 20) };
+    }).filter(function (r) { return r.product || r.qty !== ''; });
+    return { title: purClean_(x.title, 80), rows: rows, text: prdText_(x.text, 2000) };
+  }).filter(function (x) { return x.title || x.rows.length || x.text; });
+}
+function prdSections_(v) { try { var a = typeof v === 'string' ? JSON.parse(v || '[]') : v; return Array.isArray(a) ? a : []; } catch (e) { return []; } }
 function prdPhotoFolder_(dept) {
   var folderId = deptConfig_(dept.key).folderId;
   if (!folderId) throw new Error('ผู้ดูแลระบบยังไม่ได้ตั้งโฟลเดอร์ของฝ่าย');
@@ -459,11 +474,11 @@ function prdMorningFlex_(date, plans, note) {
   return prdCard_('PRODUCTION PLAN', 'แผนผลิต ' + prdDot_(date), 'บริษัท สปังกี้ ฟู้ด จำกัด · ฝ่ายผลิต · ' + n + ' รายการ', body,
     'แผนผลิต ' + prdDot_(date) + ' · ' + n + ' รายการ');
 }
-function prdEveningFlex_(date, grp, plans, bds, rep, target, prods) {
+function prdEveningFlex_(date, grp, plans, rep, target, prods) {
   var body = [], list = plans.filter(function (x) { return x.grp === grp && x.status !== 'cancel'; });
-  var title = grp === 'G2' ? 'สรุปงานผัด' : grp === 'G1' ? 'สรุปงานบรรจุลงซอง/ถ้วย' : 'สรุปงานบรรจุลงลัง';
-  body.push(prdSec_(grp === 'G3' ? 'ยอดสินค้าบรรจุลงลัง' : grp === 'G1' ? 'ยอดบรรจุ' : 'ผลการผลิต & Yield (เป้า ≥ ' + target + '%)', PRD_GCOLOR_[grp]));
-  if (!list.length) body.push(prdT_('ไม่มีรายการ', { size: 'sm', color: '#64748B', margin: 'md' }));
+  var title = (rep && rep.title) || PRD_EVE_TITLE_[grp];
+  var unitOf = function (x) { return x.unit || (prods[x.productId] || {}).unit || 'ชิ้น'; };
+  if (list.length) body.push(prdSec_(PRD_EVE_SEC_[grp] + (grp === 'G2' ? ' (Yield เป้า ≥ ' + target + '%)' : ''), PRD_GCOLOR_[grp]));
   list.forEach(function (x, i) {
     var sub = [], right = '', rc = '#0F172A';
     if (x.lot) sub.push('LOT ' + prdLotText_(x.lot));
@@ -477,29 +492,35 @@ function prdEveningFlex_(date, grp, plans, bds, rep, target, prods) {
       if (x.yieldPct !== '') { right = 'Yield ' + prdFmt_(x.yieldPct) + '%'; rc = x.yieldPct >= t ? '#15803D' : '#B91C1C'; }
       else right = 'ยังไม่กรอก';
     } else if (grp === 'G1') {
-      right = x.actQty !== '' ? prdFmt_(x.actQty) + ' ชิ้น' : 'ยังไม่กรอก';
-      if (x.planBatch !== '') sub.push('แผน ' + prdFmt_(x.planBatch) + ' batch');
+      right = x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : 'ยังไม่กรอก';
+      if (x.planBatch !== '') sub[0] = (sub[0] ? sub[0] + ' · ' : '') + prdFmt_(x.planBatch) + ' batch';
     } else {
-      right = [x.actQty !== '' ? prdFmt_(x.actQty) + ' ชิ้น' : '', x.actCases !== '' ? prdFmt_(x.actCases) + ' ลัง' : ''].filter(String).join(' ; ') || 'ยังไม่กรอก';
+      right = [x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : '', x.actCases !== '' ? prdFmt_(x.actCases) + ' ลัง' : ''].filter(String).join(' ; ') || 'ยังไม่กรอก';
     }
     if (x.lossKg !== '' || x.lossQty !== '') sub.push({ t: 'ของเสีย ' + [x.lossKg !== '' ? prdFmt_(x.lossKg) + ' กก.' : '', x.lossQty !== '' ? prdFmt_(x.lossQty) + ' ชิ้น' : ''].filter(String).join(' / ') + (x.lossNote ? ' · ' + x.lossNote : ''), c: '#B45309' });
     if (x.dueDate) { var onT = x.finishDate && x.finishDate <= x.dueDate; sub.push({ t: (onT ? '🚚 ทันส่ง ' : '⚠️ กำหนดส่ง ') + prdSlash_(x.dueDate), c: onT ? '#15803D' : '#B91C1C' }); }
     if (x.note) sub.push(x.note);
     body.push(prdRow_(i + 1, x.product, sub, right, rc));
   });
-  var b = bds.filter(function (x) { return x.grp === grp || !x.grp; });
-  if (b.length) {
-    body.push(prdSec_('Breakdown เครื่องจักร (' + b.length + ')', '#DC2626'));
-    b.forEach(function (x, i) {
-      body.push(prdRow_(i + 1, x.machine, [x.start + (x.end ? '–' + x.end : '') + (x.minutes !== '' ? ' (' + x.minutes + ' นาที)' : ''), { t: 'ปัญหา: ' + x.problem, c: '#B91C1C' }, x.fix ? { t: 'แก้ไข: ' + x.fix, c: '#15803D' } : ''], ''));
+  // หัวข้อที่พิมพ์เอง (เช่น เตรียมวัตถุดิบ / น้ำพริกค้างแพ็ค) — 1 บรรทัด = 1 รายการ
+  var secs = prdSections_(rep && rep.sections);
+  secs.forEach(function (sec) {
+    body.push(prdSec_(sec.title || 'หัวข้อเพิ่มเติม', '#7C3AED'));
+    (sec.rows || []).forEach(function (r, i) {
+      var amt = r.qty !== '' && r.qty != null ? prdFmt_(r.qty) + ' ' + (r.unit || '') : '';
+      body.push(prdRow_(i + 1, r.product || '-', [[r.lot ? 'LOT ' + prdLotText_(r.lot) : '', amt].filter(String).join(' · ')], ''));
     });
-  }
+    var lines = String(sec.text || '').split('\n').map(function (l) { return l.trim(); }).filter(String);
+    if (!lines.length && !(sec.rows || []).length) body.push(prdT_('-', { size: 'sm', color: '#64748B', margin: 'sm' }));
+    lines.forEach(function (l) { var head = /^\d+[.)]/.test(l); body.push(prdT_(l, { size: 'sm', color: head ? '#0F172A' : '#475569', margin: head ? 'md' : 'xs', weight: head ? 'bold' : 'regular' })); });
+  });
+  if (!list.length && !secs.length) body.push(prdT_('ไม่มีรายการ', { size: 'sm', color: '#64748B', margin: 'md' }));
   body.push(prdSec_('ปัญหาที่พบ', '#64748B'));
   body.push(prdT_(rep && rep.problems ? rep.problems : '-', { size: 'sm', color: '#334155', margin: 'sm' }));
   if (rep && rep.checks) body.push(prdBox_([prdT_('✅ ' + rep.checks + ' เรียบร้อย', { size: 'sm', color: '#166534', weight: 'bold' })], { margin: 'xl', backgroundColor: '#F0FDF4', cornerRadius: '12px', paddingAll: '12px' }));
   var nPhotos = rep ? purParseFiles_(rep.files).length : 0;
   if (nPhotos) body.push(prdT_('📷 รูปประกอบ ' + nPhotos + ' รูป อยู่ในข้อความถัดไป', { size: 'xxs', color: '#64748B', margin: 'md', align: 'center' }));
-  return prdCard_('DAILY REPORT · ' + grp, title + ' ' + prdSlash_(date), PRD_GROUPS_[grp] + (rep && rep.by ? ' · รายงานโดย ' + rep.by : ''), body,
+  return prdCard_('DAILY REPORT · ' + grp, title + ' ประจำวันที่ ' + prdSlash_(date), grp + ' · ' + PRD_GROUPS_[grp] + (rep && rep.by ? ' · รายงานโดย ' + rep.by : ''), body,
     title + ' ประจำวันที่ ' + prdSlash_(date), PRD_GCOLOR_[grp] === '#16A34A' ? '#15803D' : PRD_GCOLOR_[grp] === '#2563EB' ? '#1D4ED8' : '#C2410C');
 }
 // ส่ง LINE: kind = morning (แผนทั้งวัน) | evening (สรุปของกลุ่ม grp + รูปแยกเป็นภาพ)
@@ -517,8 +538,7 @@ function prdSendLine(token, kind, date, grp, by) {
       if (!plans.length) return { ok: false, error: 'ยังไม่มีแผนผลิตของวันนี้' };
       msgs = [prdMorningFlex_(date, plans, rep && rep.note ? rep.note : s.morningNote)];
     } else {
-      var bds = purRead_(ss, 'prd_breakdowns').filter(function (x) { return x.date === date; });
-      msgs = [prdEveningFlex_(date, grp, plans, bds, rep, Number(s.target) || 85, prods)];
+      msgs = [prdEveningFlex_(date, grp, plans, rep, Number(s.target) || 85, prods)];
       (rep ? purParseFiles_(rep.files) : []).forEach(function (f) {
         msgs.push({ type: 'image', originalContentUrl: f.url + '=w1600', previewImageUrl: f.url + '=w600' });
       });
@@ -540,7 +560,7 @@ function prdLinePreview(token, kind, date, grp) {
   purRead_(ss, 'prd_products').forEach(function (p) { prods[p.id] = p; });
   if (kind === 'evening') {
     var rep = prdReport_(ss, date, 'evening', grp);
-    return { ok: true, flex: prdEveningFlex_(date, grp, plans, purRead_(ss, 'prd_breakdowns').filter(function (x) { return x.date === date; }), rep, Number(s.target) || 85, prods),
+    return { ok: true, flex: prdEveningFlex_(date, grp, plans, rep, Number(s.target) || 85, prods),
       photos: rep ? purParseFiles_(rep.files).length : 0 };
   }
   var mr = prdReport_(ss, date, 'morning', '');
