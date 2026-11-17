@@ -566,6 +566,21 @@ function prdLinePreview(token, kind, date, grp) {
   var mr = prdReport_(ss, date, 'morning', '');
   return { ok: true, flex: prdMorningFlex_(date, plans, mr && mr.note ? mr.note : s.morningNote), photos: 0 };
 }
+// ใส่ Channel access token จากหน้าตั้งค่าของฝ่ายผลิต (ไม่ต้องเข้า Apps Script) — ตรวจกับ LINE ก่อนว่า token ใช้ได้ แล้วเก็บใน Script Property PROD_LINE_TOKEN
+// ไม่ส่งค่า token กลับไปหน้าเว็บ · ไม่บันทึกลงชีต/ประวัติ
+function prdSetLineToken(token, value) {
+  requirePrd_(token);
+  var v = String(value || '').replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9+\/=]{100,400}$/.test(v)) return { ok: false, error: 'รูปแบบ token ไม่ถูกต้อง — คัดลอก Channel access token (long-lived) จาก LINE Developers มาวางทั้งหมด' };
+  hrRate_('prdtoken', 10, 3600);
+  var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/info', { headers: { Authorization: 'Bearer ' + v }, muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) return { ok: false, error: 'LINE ไม่ยอมรับ token นี้ (รหัส ' + res.getResponseCode() + ') — ตรวจว่าคัดลอกครบ และเป็น token ของ OA ที่ถูกต้อง' };
+  var info = JSON.parse(res.getContentText() || '{}'), p = props_(), old = p.getProperty('PROD_LINE_TOKEN');
+  p.setProperty('PROD_LINE_TOKEN', v);
+  CacheService.getScriptCache().remove('prd_bot_id');
+  if (old && old !== v) p.deleteProperty('PROD_LINE_GROUP');   // เปลี่ยน OA → ต้องผูกกลุ่มใหม่
+  return { ok: true, botName: info.displayName || '', regroup: !!(old && old !== v), line: { token: true, group: !!p.getProperty('PROD_LINE_GROUP'), setupCode: hrProp_('PROD_LINE_SETUP', hrSetupCode_), webhook: ACC_WEBHOOK_URL_ } };
+}
 function prdLineTest(token) {
   requirePrd_(token);
   return prdLinePush_([{ type: 'text', text: '✅ ทดสอบการเชื่อมต่อ: ระบบงานองค์กร ฝ่ายผลิต ส่งข้อความเข้ากลุ่มนี้ได้แล้ว' }]);

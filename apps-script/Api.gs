@@ -45,7 +45,7 @@ function apiFunctions_() {
     // ฝ่ายผลิต (Prod.gs)
     prdLoad: prdLoad, prdSaveProduct: prdSaveProduct, prdSavePlans: prdSavePlans, prdDeletePlan: prdDeletePlan, prdSaveBreakdown: prdSaveBreakdown,
     prdDeleteBreakdown: prdDeleteBreakdown, prdSaveReport: prdSaveReport, prdUploadPhoto: prdUploadPhoto, prdRemovePhoto: prdRemovePhoto,
-    prdSaveSettings: prdSaveSettings, prdLog: prdLog, prdDashboard: prdDashboard, prdSendLine: prdSendLine, prdLinePreview: prdLinePreview, prdLineTest: prdLineTest,
+    prdSaveSettings: prdSaveSettings, prdLog: prdLog, prdDashboard: prdDashboard, prdSendLine: prdSendLine, prdLinePreview: prdLinePreview, prdLineTest: prdLineTest, prdSetLineToken: prdSetLineToken,
     // ผู้บริหาร (Executive.gs)
     execOverview: execOverview, execDashboard: execDashboard, execVerify: execVerify
   };

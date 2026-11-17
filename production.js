@@ -582,12 +582,13 @@
       + (L.token && L.group
         ? '<div class="a7chk ok"><i>✓</i><span>เชื่อมต่อ LINE เรียบร้อย — แผนผลิตและสรุปงานจะส่งเข้ากลุ่มที่ผูกไว้</span></div>'
           + '<div class="a7lineacts"><button class="btn btn-line btn-sm" id="sTest">' + icon('send', 16) + ' ส่งข้อความทดสอบเข้ากลุ่ม</button>'
-          + '<button class="btn btn-line btn-sm" id="sGroup">' + icon('gear', 16) + ' เปลี่ยนกลุ่มที่รับรายงาน</button></div>'
+          + '<button class="btn btn-line btn-sm" id="sGroup">' + icon('gear', 16) + ' เปลี่ยนกลุ่มที่รับรายงาน</button>'
+          + '<button class="btn btn-line btn-sm" id="sTokChg">' + icon('gear', 16) + ' เปลี่ยน token / OA</button></div>'
         : '<div class="a7chk ' + (L.token ? 'ok' : 'bad') + '"><i>' + (L.token ? '✓' : '✕') + '</i><span>PROD_LINE_TOKEN (Channel access token) ' + (L.token ? 'ใส่แล้ว' : 'ยังไม่ได้ใส่') + '</span></div>'
           + '<div class="a7chk bad"><i>✕</i><span>กลุ่ม LINE ที่รับรายงาน ยังไม่ได้ผูก</span></div>'
           + '<ol class="a7ol">'
-          + (L.token ? '' : '<li>ใส่ Channel access token ของ OA ที่จะใช้ส่งรายงานผลิตใน Apps Script → Project Settings → Script Properties ชื่อ <code>PROD_LINE_TOKEN</code> (ใช้ OA เดียวกับฝ่ายบัญชีก็ได้)</li>'
-            + '<li>ใน LINE Developers → Messaging API ของ OA นั้น: ใส่ Webhook URL ด้านล่าง แล้วเปิด Use webhook และ Allow bot to join group chats' + copyBox(L.webhook, 'Webhook URL') + '</li>')
+          + (L.token ? '' : '<li>วาง Channel access token (long-lived) ของ OA ที่จะใช้ส่งรายงานผลิต แล้วกด "บันทึก token" — ระบบตรวจกับ LINE ให้ก่อนบันทึก (ใช้ OA / token เดียวกับฝ่ายบัญชีก็ได้)' + tokenBox() + '</li>')
+          + '<li>ใน LINE Developers → Messaging API ของ OA นั้น: ใส่ Webhook URL ด้านล่าง แล้วเปิด Use webhook และ Allow bot to join group chats (ถ้าใช้ OA เดียวกับฝ่ายบัญชี ตั้งไว้แล้ว ข้ามได้)' + copyBox(L.webhook, 'Webhook URL') + '</li>'
           + '<li>' + bindStep(L.setupCode) + '</li></ol>')
       + '</div>'
       + '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('chart', 18) + ' เป้าหมาย</h4><div class="pform"><div class="pf"><label for="s_target">Yield ขั้นต่ำ (%) ของทุกสินค้า</label><input id="s_target" inputmode="decimal" value="' + esc(s.target) + '"></div></div></div>'
@@ -597,12 +598,34 @@
       + '<div class="qsave"><button class="btn btn-primary" id="sSave">' + icon('check', 18) + ' บันทึกการตั้งค่า</button></div>';
     bindCopy($('main'));
     if ($('sGroup')) $('sGroup').addEventListener('click', changeGroup);
+    if ($('sTokSave')) bindToken($('main'));
+    if ($('sTokChg')) $('sTokChg').addEventListener('click', function () {
+      wide({ icon: 'send', title: 'เปลี่ยน token / OA ของฝ่ายผลิต', noCancel: true, ok: 'ปิด', body: '<p style="margin-top:0">วาง Channel access token ใหม่ ระบบตรวจกับ LINE ก่อนบันทึก · ถ้าเป็น OA ตัวใหม่ ต้องผูกกลุ่มใหม่อีกครั้ง</p>' + tokenBox(),
+        onOpen: function () { bindToken($('mBody')); }, submit: function () { closeModal(); return Promise.resolve(); } });
+    });
     if ($('sTest')) $('sTest').addEventListener('click', function () { call('prdLineTest', state.token).then(function (r) { toast(r.ok ? 'ส่งข้อความทดสอบแล้ว' : r.error); }).catch(onServerError); });
     $('sSave').addEventListener('click', function () {
       var o = {}, b = this; ['target', 'machines', 'lossCauses', 'checks', 'units', 'sectionTitles', 'morningNote'].forEach(function (k) { if ($('s_' + k)) o[k] = $('s_' + k).value.trim(); });
       if (!(Number(o.target) > 0 && Number(o.target) <= 100)) return toast('Yield ขั้นต่ำต้องอยู่ระหว่าง 1–100');
       b.disabled = true;
       call('prdSaveSettings', state.token, o).then(function (r) { b.disabled = false; if (!r.ok) return toast(r.error); H.data.settings = r.settings; toast('บันทึกการตั้งค่าแล้ว'); }).catch(function (e) { b.disabled = false; onServerError(e); });
+    });
+  }
+  // ---- LINE token: ใส่จากหน้านี้ได้เลย (เก็บใน Script Property PROD_LINE_TOKEN ฝั่งระบบ ไม่แสดงค่ากลับ)
+  function tokenBox() { return '<div class="a7copy xtok"><input type="password" id="sTok" placeholder="วาง Channel access token ที่นี่" autocomplete="off" spellcheck="false" aria-label="Channel access token"><button class="btn btn-primary btn-sm" id="sTokSave" type="button">บันทึก token</button></div>'; }
+  function bindToken(root) {
+    var b = root.querySelector('#sTokSave'), inp = root.querySelector('#sTok');
+    b.addEventListener('click', function () {
+      var v = inp.value.replace(/\s+/g, '');
+      if (!v) { inp.focus(); return toast('วาง token ก่อน'); }
+      b.disabled = true; b.innerHTML = '<span class="spinner"></span> กำลังตรวจกับ LINE…';
+      call('prdSetLineToken', state.token, v).then(function (r) {
+        b.disabled = false; b.textContent = 'บันทึก token';
+        if (!r.ok) return toast(r.error);
+        inp.value = ''; H.data.line = r.line; closeModal();
+        toast('บันทึก token แล้ว ✅' + (r.botName ? ' (OA: ' + r.botName + ')' : '') + (r.regroup || !r.line.group ? ' — ต่อไปผูกกลุ่ม LINE' : ''));
+        settings();
+      }).catch(function (e) { b.disabled = false; b.textContent = 'บันทึก token'; onServerError(e); });
     });
   }
   // ---- LINE: คัดลอกคำสั่ง / เปลี่ยนกลุ่ม (แบบเดียวกับฝ่ายบัญชี)
