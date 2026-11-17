@@ -25,6 +25,7 @@ var SHE_TABLES_ = {
     ['risk', 'ระดับความเสี่ยง'], ['recommendation', 'ข้อเสนอแนะ / การปรับปรุงแก้ไข'], ['responsible', 'ผู้รับผิดชอบ'],
     ['dueDate', 'กำหนดเสร็จ'], ['status', 'สถานะ'], ['doneDate', 'วันที่แก้ไขเสร็จ'], ['remark', 'หมายเหตุ'],
     ['beforeFiles', 'รูปก่อนปรับปรุง'], ['afterFiles', 'รูปหลังปรับปรุง'], ['checkId', 'รหัสผลตรวจ'], ['inspector', 'ผู้ตรวจ'],
+    ['lastSeen', 'ตรวจพบล่าสุด'], ['lastRound', 'รอบที่พบล่าสุด'], ['seenCount', 'จำนวนครั้งที่ตรวจพบ'], ['mergedInto', 'รวมกับรายการ'],
     ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
   she_incidents: { tab: 'อุบัติเหตุ', cols: [
     ['id', 'รหัส'], ['date', 'วันที่เกิดเหตุ'], ['time', 'เวลา'], ['type', 'ประเภท'], ['areaId', 'รหัสพื้นที่'], ['location', 'สถานที่'],
@@ -72,8 +73,8 @@ function requireShe_(token) {
 }
 function sheRegister_() {
   Object.keys(SHE_TABLES_).forEach(function (k) { PUR_TABLES_[k] = SHE_TABLES_[k]; });
-  ['doneDate'].forEach(function (k) { PUR_DATE_KEYS_[k] = 1; });
-  ['rounds', 'round', 'no', 'order', 'lostDays', 'passCount', 'failCount'].forEach(function (k) { PUR_NUM_KEYS_[k] = 1; });
+  ['doneDate', 'lastSeen'].forEach(function (k) { PUR_DATE_KEYS_[k] = 1; });
+  ['rounds', 'round', 'no', 'order', 'lostDays', 'passCount', 'failCount', 'lastRound', 'seenCount'].forEach(function (k) { PUR_NUM_KEYS_[k] = 1; });
 }
 function sheBook_(dept) {
   sheRegister_();
@@ -118,7 +119,13 @@ function sheAreasWithItems_(ss) {
   });
 }
 function sheCheckOut_(c) { c.results = sheJson_(c.results, {}); c.files = purParseFiles_(c.files); return c; }
-function sheFindingOut_(f) { f.beforeFiles = purParseFiles_(f.beforeFiles); f.afterFiles = purParseFiles_(f.afterFiles); return f; }
+function sheFindingOut_(f) {
+  f.beforeFiles = purParseFiles_(f.beforeFiles); f.afterFiles = purParseFiles_(f.afterFiles);
+  f.lastSeen = purDate_(f.lastSeen) || f.date; f.lastRound = Number(f.lastRound) || ''; f.seenCount = Number(f.seenCount) || 1;
+  return f;
+}
+// รายการที่ถูกรวมเข้ากับรายการอื่นแล้ว (พบซ้ำ) — ไม่แสดง/ไม่นับ
+function sheLive_(f) { return !f.mergedInto; }
 
 // ---------- โหลดข้อมูลทั้งหมดของหน้า (ผลตรวจย้อนหลัง 70 วัน) ----------
 function sheLoad(token) {
@@ -127,7 +134,7 @@ function sheLoad(token) {
     ok: true, today: today, sheetUrl: ss.getUrl(), hasFolder: !!deptConfig_(dept.key).folderId,
     settings: sheSettings_(ss), areas: sheAreasWithItems_(ss),
     checks: purRead_(ss, 'she_checks').filter(function (c) { return c.date >= since; }).map(sheCheckOut_),
-    findings: purRead_(ss, 'she_findings').map(sheFindingOut_).sort(function (a, b) { return String(b.date + b.createdAt).localeCompare(String(a.date + a.createdAt)); }),
+    findings: purRead_(ss, 'she_findings').filter(sheLive_).map(sheFindingOut_).sort(function (a, b) { return String(b.lastSeen + b.createdAt).localeCompare(String(a.lastSeen + a.createdAt)); }),
     incidents: purRead_(ss, 'she_incidents').map(function (x) { x.files = purParseFiles_(x.files); return x; }).sort(function (a, b) { return String(b.date + b.time).localeCompare(String(a.date + a.time)); })
   };
 }
@@ -135,7 +142,8 @@ function sheLoad(token) {
 // ---------- ตรวจรอบ: บันทึกผล 1 รอบ ของ 1 พื้นที่ (+ สร้างข้อบกพร่องของข้อที่ไม่ผ่าน) ----------
 // c = { id?, date, areaId, round, results: {itemId: 'P'|'O'|'-'}, problem, fix, inspector }
 // newFindings = [{ itemId, problem, dept, risk, recommendation, responsible, dueDate }]
-function sheSaveCheck(token, c, newFindings) {
+// repeatIds = ข้อบกพร่องเดิมที่ยังไม่แก้ (พื้นที่ + หัวข้อเดียวกัน) ซึ่งรอบนี้ยังไม่ผ่าน → ไม่สร้างรายการใหม่ แค่อัปเดต "ตรวจพบล่าสุด"
+function sheSaveCheck(token, c, newFindings, repeatIds) {
   var dept = requireShe_(token);
   c = c || {};
   var date = purDate_(c.date);
@@ -169,11 +177,22 @@ function sheSaveCheck(token, c, newFindings) {
       var fr = sheNewFinding_(ss, {
         date: date, areaId: area.id, location: area.name, dept: f.dept, category: it ? it.category : purClean_(f.category, 80),
         itemId: it ? it.id : '', problem: f.problem || (it ? it.detail : ''), risk: f.risk, recommendation: f.recommendation,
-        responsible: f.responsible, dueDate: f.dueDate, remark: f.remark, checkId: rec.id, inspector: rec.inspector
+        responsible: f.responsible, dueDate: f.dueDate, remark: f.remark, checkId: rec.id, inspector: rec.inspector, round: round
       });
       created.push({ itemId: f.itemId || '', key: f.key || '', id: fr.id, code: fr.code });
     });
-    return { ok: true, check: sheCheckOut_(purRead_(ss, 'she_checks').filter(function (x) { return x.id === rec.id; })[0]), findings: created };
+    var reps = Array.isArray(repeatIds) ? repeatIds.slice(0, 30).map(String) : [], repeated = [];
+    if (reps.length) purRead_(ss, 'she_findings').forEach(function (f) {
+      if (reps.indexOf(f.id) < 0 || f.status === 'done' || f.mergedInto || f.areaId !== area.id) return;
+      if (String(rec.results).indexOf('"' + f.itemId + '":"O"') < 0) return;   // รอบนี้ข้อนี้ต้องไม่ผ่านจริง
+      var ls = purDate_(f.lastSeen) || purDate_(f.date), lr = Number(f.lastRound) || 0;
+      if (date < ls || (date === ls && round === lr)) return;   // เคยนับรอบนี้แล้ว / เป็นรอบเก่ากว่า
+      if (date > ls || round > lr) { f.lastSeen = date; f.lastRound = round; }
+      f.seenCount = (Number(f.seenCount) || 1) + 1; f.updatedAt = now;
+      purWrite_(ss, 'she_findings', f); repeated.push(f.code);
+    });
+    if (repeated.length) purLogWrite_(ss, 'พบข้อบกพร่องเดิมซ้ำ', 'she_findings', repeated.join(','), area.name + ' ' + date + ' รอบ ' + round);
+    return { ok: true, check: sheCheckOut_(purRead_(ss, 'she_checks').filter(function (x) { return x.id === rec.id; })[0]), findings: created, repeated: repeated };
   });
 }
 // ผลตรวจในช่วงวันที่ (ใช้ตอนเปิดดู/แก้ผลตรวจที่เก่ากว่า 70 วัน) — ไม่เกิน 92 วันต่อครั้ง
@@ -212,7 +231,7 @@ function sheFindingFields_(rec, f) {
 function sheNewFinding_(ss, f) {
   var now = purNow_(), date = purDate_(f.date) || purToday_();
   var rec = { id: purId_('FD'), code: sheNextCode_(ss, date), date: date, status: 'open', beforeFiles: '[]', afterFiles: '[]',
-    checkId: purClean_(f.checkId, 40), inspector: purClean_(f.inspector, 80), createdAt: now, updatedAt: now };
+    checkId: purClean_(f.checkId, 40), inspector: purClean_(f.inspector, 80), lastSeen: date, lastRound: Number(f.round) || '', seenCount: 1, createdAt: now, updatedAt: now };
   sheFindingFields_(rec, f);
   if (!rec.problem) rec.problem = '(ไม่ระบุ)';
   purWrite_(ss, 'she_findings', rec);
@@ -243,6 +262,33 @@ function sheSaveFinding(token, f) {
     purWrite_(ss, 'she_findings', row);
     purLogWrite_(ss, 'แก้ข้อบกพร่อง', 'she_findings', row.id, row.code + ' ' + SHE_FINDING_ST_[st] + ' (เดิม ' + old + ')');
     return { ok: true, finding: sheFindingOut_(purRead_(ss, 'she_findings').filter(function (x) { return x.id === row.id; })[0]) };
+  });
+}
+// รวมรายการข้อบกพร่องที่ซ้ำกัน (พื้นที่ + หัวข้อเดียวกัน) ให้เหลือรายการเดียว: เก็บ keepId · ที่เหลือติดป้าย "รวมกับ <เลขที่>" แล้วซ่อน
+// รายการที่เก็บได้: วันที่พบครั้งแรก = วันแรกสุด · ตรวจพบล่าสุด = ครั้งหลังสุด · นับจำนวนครั้งรวม · รูปก่อนปรับปรุงรวมกัน (สูงสุด 12)
+function sheMergeFindings(token, keepId, ids) {
+  var dept = requireShe_(token);
+  ids = (Array.isArray(ids) ? ids : []).slice(0, 40).map(String).filter(function (x) { return x && x !== keepId; });
+  if (!keepId || !ids.length) return { ok: false, error: 'ไม่มีรายการให้รวม' };
+  return purLocked_(function () {
+    var ss = sheBook_(dept), all = purRead_(ss, 'she_findings'), keep = all.filter(function (x) { return x.id === keepId; })[0];
+    if (!keep || keep.mergedInto) return { ok: false, error: 'ไม่พบรายการที่จะเก็บไว้' };
+    var others = all.filter(function (x) { return ids.indexOf(x.id) >= 0 && !x.mergedInto && x.areaId === keep.areaId; });
+    if (!others.length) return { ok: false, error: 'ไม่พบรายการที่จะรวม' };
+    var now = purNow_(), files = purParseFiles_(keep.beforeFiles), seen = Number(keep.seenCount) || 1;
+    var first = purDate_(keep.date), ls = purDate_(keep.lastSeen) || first, lr = Number(keep.lastRound) || 0;
+    others.forEach(function (o) {
+      var od = purDate_(o.date), ol = purDate_(o.lastSeen) || od, orr = Number(o.lastRound) || 0;
+      if (od && od < first) first = od;
+      if (ol > ls || (ol === ls && orr > lr)) { ls = ol; lr = orr; }
+      seen += Number(o.seenCount) || 1;
+      purParseFiles_(o.beforeFiles).forEach(function (f) { if (files.length < 12 && !files.some(function (x) { return x.id === f.id; })) files.push(f); });
+      o.mergedInto = keep.code; o.updatedAt = now; purWrite_(ss, 'she_findings', o);
+    });
+    keep.date = first; keep.lastSeen = ls; keep.lastRound = lr || ''; keep.seenCount = seen; keep.beforeFiles = JSON.stringify(files); keep.updatedAt = now;
+    purWrite_(ss, 'she_findings', keep);
+    purLogWrite_(ss, 'รวมข้อบกพร่องซ้ำ', 'she_findings', keep.id, keep.code + ' ← ' + others.map(function (o) { return o.code; }).join(', '));
+    return { ok: true, finding: sheFindingOut_(purRead_(ss, 'she_findings').filter(function (x) { return x.id === keep.id; })[0]), merged: others.map(function (o) { return o.id; }) };
   });
 }
 function sheDeleteFinding(token, id) {
@@ -396,7 +442,7 @@ function sheMonthReport(token, ym, areaId) {
   var ss = sheBook_(dept), area = sheAreasWithItems_(ss).filter(function (a) { return a.id === areaId; })[0];
   if (!area) return { ok: false, error: 'ไม่พบพื้นที่' };
   var checks = purRead_(ss, 'she_checks').filter(function (c) { return c.areaId === area.id && String(c.date).slice(0, 7) === ym; }).map(sheCheckOut_);
-  var findings = purRead_(ss, 'she_findings').filter(function (f) { return f.areaId === area.id && String(f.date).slice(0, 7) === ym; }).map(sheFindingOut_);
+  var findings = purRead_(ss, 'she_findings').filter(function (f) { return sheLive_(f) && f.areaId === area.id && String(f.date).slice(0, 7) === ym; }).map(sheFindingOut_);
   var used = {};
   checks.forEach(function (c) { Object.keys(c.results).forEach(function (k) { used[k] = 1; }); });
   return { ok: true, ym: ym, area: { id: area.id, name: area.name, title: area.title, rounds: area.rounds },
@@ -409,7 +455,7 @@ function sheFindingReport(token, from, to) {
   if (!purDate_(from) || !purDate_(to) || from > to) return { ok: false, error: 'เลือกช่วงวันที่ให้ถูกต้อง' };
   var ss = sheBook_(dept);
   return { ok: true, from: from, to: to, settings: sheSettings_(ss),
-    findings: purRead_(ss, 'she_findings').filter(function (f) { return f.date >= from && f.date <= to; }).map(sheFindingOut_)
+    findings: purRead_(ss, 'she_findings').filter(function (f) { return sheLive_(f) && f.date >= from && f.date <= to; }).map(sheFindingOut_)
       .sort(function (a, b) { return String(a.date + a.code).localeCompare(String(b.date + b.code)); }) };
 }
 function sheLog(token, limit) {
@@ -432,8 +478,9 @@ function sheDashboard_(dept, from, to) {
   areas.forEach(function (a) { areaIdx[a.id] = a; a.items.forEach(function (it) { itemIdx[it.id] = it; }); });
   var allChecks = purRead_(ss, 'she_checks').map(sheCheckOut_);
   var checks = allChecks.filter(function (c) { return c.date >= from && c.date <= to; });
-  var findingsAll = purRead_(ss, 'she_findings').map(sheFindingOut_);
-  var findings = findingsAll.filter(function (f) { return f.date >= from && f.date <= to; });
+  var findingsAll = purRead_(ss, 'she_findings').filter(sheLive_).map(sheFindingOut_);
+  // ข้อบกพร่องในช่วง = พบครั้งแรกในช่วง หรือยังตรวจพบซ้ำในช่วง
+  var findings = findingsAll.filter(function (f) { return (f.date >= from && f.date <= to) || (f.lastSeen >= from && f.date <= to); });
   var incAll = purRead_(ss, 'she_incidents');
   var inc = incAll.filter(function (x) { return x.date >= from && x.date <= to; });
 
@@ -501,7 +548,7 @@ function sheDashboard_(dept, from, to) {
   var near = inc.filter(function (x) { return x.type === 'near'; }).length;
   if (near) insights.push({ level: 'warn', text: 'เหตุการณ์เกือบเกิด (Near miss) ' + near + ' ครั้ง — ควรแก้ก่อนเกิดเหตุจริง' });
 
-  var brief = function (f) { return { id: f.id, code: f.code, date: f.date, location: f.location, problem: f.problem, responsible: f.responsible, dueDate: f.dueDate, risk: f.risk, status: f.status,
+  var brief = function (f) { return { id: f.id, code: f.code, date: f.date, lastSeen: f.lastSeen, lastRound: f.lastRound, seenCount: f.seenCount, location: f.location, problem: f.problem, responsible: f.responsible, dueDate: f.dueDate, risk: f.risk, status: f.status,
     photo: (f.beforeFiles[0] || {}).id || '', after: (f.afterFiles[0] || {}).id || '' }; };
   return {
     from: from, to: to, today: today,
@@ -512,7 +559,7 @@ function sheDashboard_(dept, from, to) {
       avgCloseDays: closeDays.length ? Math.round(closeDays.reduce(function (s, x) { return s + x; }, 0) / closeDays.length * 10) / 10 : null,
       byArea: cnt(findings, 'location'), byRisk: cnt(findings, 'risk', SHE_RISK_), byCategory: cnt(findings, 'category').slice(0, 8),
       overdueList: overdue.sort(function (a, b) { return String(a.dueDate).localeCompare(String(b.dueDate)); }).slice(0, 15).map(brief),
-      recent: findings.slice().sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); }).slice(0, 8).map(brief) },
+      recent: findings.slice().sort(function (a, b) { return String(b.lastSeen + (b.lastRound || 0)).localeCompare(String(a.lastSeen + (a.lastRound || 0))); }).slice(0, 8).map(brief) },
     incidents: { total: inc.length, accidents: accIn.length, near: near, lostDays: lostDays, lastAccident: last, safeDays: last ? sheDays_(last, today) : null,
       byType: cnt(inc, 'type', SHE_INC_TYPES_),
       list: inc.slice().sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); }).slice(0, 10).map(function (x) {

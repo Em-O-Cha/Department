@@ -58,6 +58,21 @@
   function activeAreas() { return H.data.areas.filter(function (a) { return a.active !== 'ปิด'; }); }
   function img(id, w) { return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w' + (w || 600); }
   function riskTag(r) { return '<span class="stag r' + (r || 'M') + '">' + (RISK[r] || 'ปานกลาง') + '</span>'; }
+  // "ตรวจพบล่าสุด 17 พ.ย. 69 รอบ 3 · พบ 4 ครั้ง" (แสดงเมื่อพบซ้ำ)
+  function seenText(f) {
+    if (!f || (Number(f.seenCount) || 1) < 2) return '';
+    return 'ตรวจพบล่าสุด ' + dd(f.lastSeen || f.date) + (f.lastRound ? ' รอบ ' + f.lastRound : '') + ' · พบ ' + f.seenCount + ' ครั้ง';
+  }
+  // ใหม่สุดก่อน: ตรวจพบล่าสุด → รอบ → เลขที่
+  function seenSort(a, b) {
+    var k = function (f) { return String(f.lastSeen || f.date) + ('0' + (Number(f.lastRound) || 0)).slice(-2) + String(f.code); };
+    return k(b).localeCompare(k(a));
+  }
+  // ข้อบกพร่องเดิมที่ยังไม่แก้ของพื้นที่ + หัวข้อเดียวกัน (ล่าสุด)
+  function openFindingOf(areaId, itemId) {
+    return H.data.findings.filter(function (f) { return f.areaId === areaId && f.itemId === itemId && f.status !== 'done'; })
+      .sort(seenSort)[0];
+  }
   function stTag(f) {
     var late = f.status !== 'done' && f.dueDate && f.dueDate < todayIso();
     return '<span class="stag s' + f.status + (late ? ' late' : '') + '">' + (late ? 'เกินกำหนด' : ST[f.status] || f.status) + '</span>';
@@ -214,7 +229,7 @@
         .concat(x.list.map(function (o) { return '<div class="li"><span>' + dd(o.date) + ' · ' + esc(o.type) + '</span><b>' + esc(o.location || '') + '</b><small>' + esc([o.person, o.injury, o.lostDays ? 'หยุดงาน ' + o.lostDays + ' วัน' : ''].filter(String).join(' · ')) + '</small></div>'; })), 'ไม่มีเหตุการณ์ในช่วงนี้')
       + '</div>';
     if (f.recent.length) html += '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('camera', 18) + ' ข้อบกพร่องล่าสุด</h4><div class="srecent">' + f.recent.map(function (o) {
-      return '<div class="src" data-fd="' + esc(o.id) + '">' + (o.photo ? '<img src="' + img(o.photo, 400) + '" alt="" loading="lazy">' : '<div class="snoimg">ไม่มีรูป</div>') + '<b>' + esc(o.location) + '</b><span>' + esc(o.problem) + '</span>' + stTag(o) + '</div>';
+      return '<div class="src" data-fd="' + esc(o.id) + '">' + (o.photo ? '<img src="' + img(o.photo, 400) + '" alt="" loading="lazy">' : '<div class="snoimg">ไม่มีรูป</div>') + '<b>' + esc(o.location) + '</b><span>' + esc(o.problem) + '</span>' + (seenText(o) ? '<small class="sseen">🔁 ' + esc(seenText(o)) + '</small>' : '') + stTag(o) + '</div>';
     }).join('') + '</div></div>';
     return html;
   };
@@ -296,13 +311,17 @@
     var items = a.items.filter(function (it) { return it.active !== 'ปิด' || (ex && ex.results[it.id]); });
     var linked = {};   // ข้อที่ไม่ผ่านซึ่งมีรายการข้อบกพร่องแล้ว (จากการบันทึกรอบนี้ก่อนหน้า)
     if (ex) H.data.findings.forEach(function (f) { if (f.checkId === ex.id && f.itemId) linked[f.itemId] = f; });
+    // ข้อที่ยังมีข้อบกพร่องเดิมค้างอยู่ (จากรอบ/วันก่อน) → ไม่สร้างซ้ำ ยกเว้นผู้ตรวจเลือกว่าเป็นปัญหาใหม่
+    var prev = {};
+    a.items.forEach(function (it) { if (!linked[it.id]) { var o = openFindingOf(a.id, it.id); if (o) prev[it.id] = o; } });
     if (!w.draft) {
       var saved = null; try { saved = JSON.parse(store(draftKey()) || 'null'); } catch (e) {}
-      w.draft = saved || { results: ex ? Object.assign({}, ex.results) : {}, problem: ex ? ex.problem : '', fix: ex ? ex.fix : '', fails: {} };
+      w.draft = saved || { results: ex ? Object.assign({}, ex.results) : {}, problem: ex ? ex.problem : '', fix: ex ? ex.fix : '', fails: {}, fresh: {} };
       w.draft.photos = {};   // รูปที่ยังไม่อัปโหลด (อยู่ในเครื่องเท่านั้น)
       w.draft.gphotos = [];  // รูปปัญหาที่พบ (ภาพรวมรอบนี้) ที่ยังไม่อัปโหลด
     }
     var D = w.draft, depts = list(H.data.settings.depts);
+    D.fresh = D.fresh || {};
     var answered = items.filter(function (it) { return D.results[it.id]; }).length;
     var html = '<div class="swalk-h"><button class="btn btn-sm btn-line" id="wBack">' + icon('back', 16) + ' รอบ</button><div><h3 style="margin:0">' + esc(a.name) + ' · รอบที่ ' + w.round + '</h3><span class="muted">' + thDate(w.date) + (ex ? ' · แก้ไขผลตรวจเดิม' : '') + '</span></div>'
       + '<button class="btn btn-sm btn-line" id="wAllP">✓ ผ่านทุกข้อที่ยังว่าง</button></div>'
@@ -314,8 +333,13 @@
           + '<button type="button" class="sb o' + (r === 'O' ? ' on' : '') + '" data-res="O" data-it="' + it.id + '">✗ ไม่ผ่าน</button>'
           + '<button type="button" class="sb n' + (r === '-' ? ' on' : '') + '" data-res="-" data-it="' + it.id + '">– ไม่เกี่ยวข้อง</button></div>';
         if (r === 'O') {
+          var pv = prev[it.id];
           if (lk) h += '<div class="sfail linked">มีรายการข้อบกพร่องแล้ว <b>' + esc(lk.code) + '</b> · ' + esc(lk.problem) + ' ' + stTag(lk) + ' <button type="button" class="link-btn" data-fd="' + lk.id + '">เปิดดู / เพิ่มรูป</button></div>';
-          else h += '<div class="sfail"><div class="pform">'
+          else if (pv && !D.fresh[it.id]) h += '<div class="sfail linked srepeat"><div class="srph">' + ((pv.beforeFiles || [])[0] ? '<img src="' + img(pv.beforeFiles[0].id, 200) + '" alt="">' : '') + '<div><b>ข้อบกพร่องเดิมยังไม่ได้แก้ไข</b> · ' + esc(pv.code) + ' ' + stTag(pv)
+            + '<div>' + esc(pv.problem) + '</div><small class="muted">พบครั้งแรก ' + dd(pv.date) + (seenText(pv) ? ' · ' + esc(seenText(pv)) : '') + '</small>'
+            + '<div class="srpn">บันทึกรอบนี้แล้ว ระบบจะนับเป็น "ตรวจพบซ้ำ" ในรายการเดิม (ไม่สร้างรายการใหม่ ไม่ต้องถ่ายรูปซ้ำ)</div>'
+            + '<div class="srpb"><button type="button" class="link-btn" data-fd="' + pv.id + '">เปิดดู / เพิ่มรูป</button><button type="button" class="link-btn" data-fresh="' + it.id + '">เป็นปัญหาใหม่ (สร้างรายการใหม่)</button></div></div></div></div>';
+          else h += '<div class="sfail">' + (pv ? '<div class="srpn">สร้างเป็นรายการใหม่ (แยกจาก ' + esc(pv.code) + ') · <button type="button" class="link-btn" data-fresh="' + it.id + '">ยกเลิก ใช้รายการเดิม</button></div>' : '') + '<div class="pform">'
             + '<div class="pf full"><label>ปัญหาที่พบ (ไม่ใส่ = ใช้ข้อความหัวข้อตรวจ)</label><textarea data-ff="problem" data-it="' + it.id + '" rows="2" placeholder="เช่น สายไฟชำรุดหน้าตู้ไฟ G2">' + esc(fl.problem || '') + '</textarea></div>'
             + '<div class="pf"><label>หน่วยงาน / แผนก / ฝ่าย</label><input data-ff="dept" data-it="' + it.id + '" list="sDepts" value="' + esc(fl.dept || '') + '"></div>'
             + '<div class="pf"><label>ผู้รับผิดชอบแก้ไข</label><input data-ff="responsible" data-it="' + it.id + '" value="' + esc(fl.responsible || '') + '"></div>'
@@ -342,9 +366,10 @@
       D.results[id] = D.results[id] === r ? '' : r;
       if (!D.results[id]) delete D.results[id];
       keep(); var y = window.scrollY; walkForm(a); window.scrollTo(0, y);
-      if (r === 'O' && D.results[id] === 'O' && !linked[id] && !(D.photos[id] || []).length) setTimeout(function () { var b = document.querySelector('[data-shot="' + id + '"]'); if (b) b.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 60);
+      if (r === 'O' && D.results[id] === 'O' && !linked[id] && !(prev[id] && !D.fresh[id]) && !(D.photos[id] || []).length) setTimeout(function () { var b = document.querySelector('[data-shot="' + id + '"]'); if (b) b.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 60);
     }, $('main'));
     on('[data-ff]', 'input', function (el) { var id = el.getAttribute('data-it'); D.fails[id] = D.fails[id] || {}; D.fails[id][el.getAttribute('data-ff')] = el.value; keep(); }, $('main'));
+    on('[data-fresh]', 'click', function (el) { var id = el.getAttribute('data-fresh'); D.fresh[id] = !D.fresh[id]; keep(); var y = window.scrollY; walkForm(a); window.scrollTo(0, y); }, $('main'));
     on('[data-risk]', 'click', function (el) { var id = el.getAttribute('data-it'); D.fails[id] = D.fails[id] || {}; D.fails[id].risk = el.getAttribute('data-risk'); keep(); var y = window.scrollY; walkForm(a); window.scrollTo(0, y); }, $('main'));
     on('[data-shot]', 'click', function (el) {
       var id = el.getAttribute('data-shot');
@@ -375,12 +400,13 @@
       if (miss.length) { toast('ยังไม่ได้ตรวจ ' + miss.length + ' ข้อ'); var el = $('it_' + miss[0].id); if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
       w.inspector = v('wInsp2'); store('inspector', w.inspector);
       if (!w.inspector) { toast('ใส่ชื่อผู้ตรวจก่อนบันทึก'); $('wInsp2').focus(); return; }
-      var nf = items.filter(function (it) { return D.results[it.id] === 'O' && !linked[it.id]; }).map(function (it) {
+      var reps = items.filter(function (it) { return D.results[it.id] === 'O' && !linked[it.id] && prev[it.id] && !D.fresh[it.id]; }).map(function (it) { return prev[it.id].id; });
+      var nf = items.filter(function (it) { return D.results[it.id] === 'O' && !linked[it.id] && !(prev[it.id] && !D.fresh[it.id]); }).map(function (it) {
         var fl = D.fails[it.id] || {};
         return { itemId: it.id, problem: fl.problem || it.detail, dept: fl.dept || '', responsible: fl.responsible || '', risk: fl.risk || 'M', dueDate: fl.dueDate || addDays(w.date, 7), recommendation: fl.recommendation || '' };
       });
       var btn = $('wSave'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> กำลังบันทึก…';
-      call('sheSaveCheck', state.token, { id: ex ? ex.id : '', date: w.date, areaId: a.id, round: w.round, results: D.results, problem: D.problem, fix: D.fix, inspector: w.inspector }, nf).then(function (r) {
+      call('sheSaveCheck', state.token, { id: ex ? ex.id : '', date: w.date, areaId: a.id, round: w.round, results: D.results, problem: D.problem, fix: D.fix, inspector: w.inspector }, nf, reps).then(function (r) {
         if (!r.ok) throw new Error(r.error);
         var jobs = [];
         r.findings.forEach(function (f) { (D.photos[f.itemId] || []).forEach(function (p) { jobs.push(['finding', f.id, 'before', p]); }); });
@@ -389,7 +415,7 @@
           store(draftKey(), null);
           var n = r.findings.length;
           w.round = 0; w.draft = null;
-          reload('บันทึกผลตรวจแล้ว' + (n ? ' · สร้างรายการข้อบกพร่อง ' + n + ' รายการ' : '') + (fails ? ' · อัปโหลดรูปไม่สำเร็จ ' + fails + ' รูป (เพิ่มได้ที่หน้าข้อบกพร่อง)' : ''));
+          reload('บันทึกผลตรวจแล้ว' + (n ? ' · สร้างรายการข้อบกพร่อง ' + n + ' รายการ' : '') + ((r.repeated || []).length ? ' · ข้อบกพร่องเดิมพบซ้ำ ' + r.repeated.length + ' รายการ' : '') + (fails ? ' · อัปโหลดรูปไม่สำเร็จ ' + fails + ' รูป (เพิ่มได้ที่หน้าข้อบกพร่อง)' : ''));
         });
       }).catch(function (e) { btn.disabled = false; btn.innerHTML = icon('check', 18) + ' บันทึกผลตรวจรอบที่ ' + w.round; if (String(e.message).indexOf('SESSION_EXPIRED') >= 0) return onServerError(e); toast(e.message); });
     });
@@ -415,17 +441,42 @@
       + '<div class="pbar"><div class="psearch">' + icon('search', 18) + '<input id="fq" type="search" placeholder="ค้นหา เลขที่ / พื้นที่ / ปัญหา / ผู้รับผิดชอบ" value="' + esc(q.fq || '') + '"></div>'
       + '<select id="fArea"><option value="">ทุกพื้นที่</option>' + areas.map(function (a) { return '<option value="' + a.id + '"' + (q.farea === a.id ? ' selected' : '') + '>' + esc(a.name) + '</option>'; }).join('') + '</select>'
       + '<button class="btn btn-sm btn-primary" id="fNew">' + icon('plus', 16) + ' บันทึกข้อบกพร่อง</button></div>'
+      + dupHtml()
       + '<div class="sfinds">' + (rows.map(function (f) {
         var b = f.beforeFiles[0], a2 = f.afterFiles[0];
         return '<button class="sfind" data-fd="' + f.id + '"><div class="sfimg">' + (b ? '<img src="' + img(b.id, 300) + '" alt="" loading="lazy">' : '<div class="snoimg">ไม่มีรูปก่อน</div>') + (a2 ? '<img class="aft" src="' + img(a2.id, 300) + '" alt="" loading="lazy">' : '') + '</div>'
           + '<div class="sfinfo"><div><span class="sedit" style="float:right">' + icon('edit', 15) + ' แก้ไข</span><b>' + esc(f.code) + '</b> · ' + dd(f.date) + ' · ' + esc(f.location) + ' ' + stTag(f) + ' ' + riskTag(f.risk) + '</div><div class="sfp">' + esc(f.problem) + '</div>'
-          + '<small>' + esc([f.dept, f.responsible ? 'ผู้รับผิดชอบ ' + f.responsible : '', f.status === 'done' ? 'เสร็จ ' + dd(f.doneDate) : f.dueDate ? 'กำหนด ' + dd(f.dueDate) : ''].filter(String).join(' · ')) + '</small></div></button>';
+          + '<small>' + esc([f.dept, f.responsible ? 'ผู้รับผิดชอบ ' + f.responsible : '', f.status === 'done' ? 'เสร็จ ' + dd(f.doneDate) : f.dueDate ? 'กำหนด ' + dd(f.dueDate) : ''].filter(String).join(' · ')) + '</small>'
+          + (seenText(f) ? '<small class="sseen">🔁 ' + esc(seenText(f)) + '</small>' : '') + '</div></button>';
       }).join('') || '<div class="panel muted">ไม่มีรายการ</div>') + '</div>';
     on('[data-fst]', 'click', function (el) { q.fst = el.getAttribute('data-fst'); findings(); }, $('main'));
     $('fq').addEventListener('input', function () { q.fq = $('fq').value; clearTimeout(H.ft); H.ft = setTimeout(function () { findings(); var e = $('fq'); e.focus(); e.setSelectionRange(e.value.length, e.value.length); }, 250); });
     $('fArea').addEventListener('change', function () { q.farea = $('fArea').value; findings(); });
     $('fNew').addEventListener('click', function () { findingModal(null); });
+    on('[data-merge]', 'click', function (el) {
+      var g = dupGroups()[+el.getAttribute('data-merge')]; if (!g) return;
+      var keep = g[0];
+      ask({ title: 'รวม ' + g.length + ' รายการให้เหลือรายการเดียว?', text: 'เก็บ ' + keep.code + ' (ล่าสุด) ไว้ · ' + g.slice(1).map(function (x) { return x.code; }).join(', ') + ' จะถูกรวมเข้าไป\nวันที่พบครั้งแรก จำนวนครั้งที่พบ และรูป จะรวมไว้ในรายการเดียว', ok: 'รวมรายการ' }).then(function (ok) {
+        if (!ok) return;
+        el.disabled = true;
+        call('sheMergeFindings', state.token, keep.id, g.slice(1).map(function (x) { return x.id; })).then(function (r) {
+          if (!r.ok) { el.disabled = false; return toast(r.error); }
+          reload('รวมรายการแล้ว');
+        }).catch(onServerError);
+      });
+    }, $('main'));
     on('[data-fd]', 'click', function (el) { findingModal(H.data.findings.filter(function (x) { return x.id === el.getAttribute('data-fd'); })[0]); }, $('main'));
+  }
+  // กลุ่มข้อบกพร่องที่ยังไม่แก้ซ้ำกัน (พื้นที่ + หัวข้อตรวจเดียวกัน) — ใหม่สุดก่อน
+  function dupGroups() {
+    var by = {};
+    H.data.findings.forEach(function (f) { if (f.status === 'done' || !f.itemId) return; var k = f.areaId + '|' + f.itemId; (by[k] = by[k] || []).push(f); });
+    return Object.keys(by).map(function (k) { return by[k].sort(seenSort); }).filter(function (g) { return g.length > 1; });
+  }
+  function dupHtml() {
+    var gs = dupGroups(); if (!gs.length) return '';
+    return '<div class="panel sdup"><b>🔁 พบรายการซ้ำ ' + gs.length + ' กลุ่ม</b> — ข้อบกพร่องเดิมถูกบันทึกใหม่ทุกรอบที่ตรวจ รวมให้เหลือรายการเดียวได้ (เก็บรายการล่าสุดไว้)'
+      + gs.map(function (g, k) { return '<div class="sdupr"><span>' + esc(g[0].location) + ' · ' + esc(g[0].problem) + '<small>' + g.map(function (x) { return x.code; }).join(', ') + '</small></span><button class="btn btn-sm btn-line" data-merge="' + k + '">รวม ' + g.length + ' รายการ</button></div>'; }).join('') + '</div>';
   }
   function findingModal(f) {
     var isNew = !f, s = H.data.settings, t = H.data.today;
@@ -755,6 +806,8 @@
     '.sins .sin{padding:6px 10px;border-radius:8px;margin-top:6px;font-size:14px;border-left:4px solid}.sin.ok{background:#f0fdf4;border-color:#16a34a}.sin.warn{background:#fffbeb;border-color:#d97706}.sin.bad{background:#fef2f2;border-color:#dc2626}',
     '.strend{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;align-items:end}.stm{text-align:center;font-size:11.5px}.stm b{display:block;font-size:12.5px}.stm span{color:var(--muted)}.stbars{height:90px;display:flex;align-items:flex-end;justify-content:center;gap:3px;border-bottom:1px solid var(--line)}',
     '.stbars em{width:10px;border-radius:3px 3px 0 0;min-height:1px}.b1{background:#d97706}.b2{background:#16a34a}.b3{background:#dc2626}.slegend{font-size:11.5px;color:var(--muted);margin-top:6px}.slegend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 3px 0 8px;vertical-align:-1px}',
+    '.sseen{display:block;color:#7c3aed;font-size:12px}.srepeat{display:block}.srph{display:flex;gap:10px;align-items:flex-start}.srph img{width:72px;height:72px;object-fit:cover;border-radius:8px;flex:none}.srpn{font-size:12.5px;color:#5b21b6;background:#f5f3ff;border-radius:8px;padding:6px 8px;margin:6px 0}.srpb{display:flex;gap:14px;flex-wrap:wrap}',
+    '.sdup{background:#f5f3ff;border:1.5px solid #ddd6fe;font-size:14px;margin-bottom:12px}.sdupr{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px dashed #ddd6fe;margin-top:8px}.sdupr small{display:block;color:var(--muted);font-size:12px}',
     '.srecent{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}.src{border:1px solid var(--line);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:4px;font-size:13px;cursor:pointer}.src img,.src .snoimg{width:100%;height:110px;object-fit:cover;border-radius:8px}.src span{color:#334155}',
     // รายงาน FM-05 / FM-06 (A4 แนวนอน)
     '.sreport{background:#fff;border-radius:14px;padding:18px;margin-top:14px;box-shadow:var(--shadow);color:#0f172a;overflow-x:auto}',
