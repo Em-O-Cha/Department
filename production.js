@@ -39,12 +39,16 @@
   function me() { try { return localStorage.getItem('prd_by') || ''; } catch (e) { return ''; } }
   function setMe(v) { try { localStorage.setItem('prd_by', v); } catch (e) {} }
   function wide(cfg) { cfg.wide = true; cfg.color = cfg.color || state.dept.color; openModal(cfg); }
+  // แผน = จำนวน + หน่วย (ตรงกับ prdPlanUnit_ / prdPlanText_ ใน Prod.gs): G1/G2 จำนวนอยู่ใน planBatch (เริ่มต้น batch) · G3 อยู่ใน planQty (เริ่มต้น ลัง)
+  function planUnit(x) { return String(x.planUnit || '').trim() || (x.grp === 'G3' ? 'ลัง' : 'batch'); }
+  function isBatch(u) { return /^batch$/i.test(String(u || '').trim()); }
+  function planText(x) { var n = x.grp === 'G3' ? x.planQty : x.planBatch; return n === '' || n == null ? '' : fmt(n) + ' ' + planUnit(x); }
   // ผลคำนวณของรายการ (ตรงกับ prdCalc_ ใน Prod.gs)
   function calc(x) {
     var p = prodOf(x.productId), base = num(x.coolKg) !== '' ? num(x.coolKg) : num(x.fryKg), raw = num(x.rawKg);
     var y = x.grp === 'G2' && raw && base !== '' ? Math.round(base / raw * 10000) / 100 : '';
-    var b = num(x.actBatch) !== '' ? num(x.actBatch) : num(x.planBatch);
-    var eb = num(x.planBatch) !== '' ? num(x.planBatch) : num(x.actBatch);   // ช่วงที่ควรได้ คิดจากแผน (ไม่เปลี่ยนตามที่กรอกผล)
+    var b = num(x.actBatch) !== '' ? num(x.actBatch) : isBatch(planUnit(x)) ? num(x.planBatch) : '';
+    var eb = num(x.planBatch) !== '' && isBatch(planUnit(x)) ? num(x.planBatch) : num(x.actBatch);   // ช่วงที่ควรได้ คิดจากแผน (เฉพาะแผนที่เป็น batch) ไม่เปลี่ยนตามที่กรอกผล
     var lo = p && x.grp === 'G2' && eb !== '' && p.qtyMin !== '' ? Math.round(p.qtyMin * eb) : '', hi = p && x.grp === 'G2' && eb !== '' && p.qtyMax !== '' ? Math.round(p.qtyMax * eb) : '';
     var q = num(x.actQty), qs = q === '' || lo === '' ? '' : q < lo ? 'low' : q > hi ? 'high' : 'ok';
     return { yieldPct: y, lossPct: y === '' ? '' : Math.round((100 - y) * 100) / 100, target: target(p), expMin: lo, expMax: hi, qtyState: qs, rawStd: p && p.rawKg !== '' && b !== '' ? Math.round(p.rawKg * b * 1000) / 1000 : '', unit: x.unit || (p && p.unit) || 'ชิ้น', punit: (p && p.unit) || 'ชิ้น', usedFry: num(x.coolKg) === '' && num(x.fryKg) !== '' };
@@ -179,7 +183,7 @@
   }
   // ---- แผนเช้า: ใส่แผนของทุกกลุ่ม (เฉพาะช่องแผน) แล้วส่งแผนเข้า LINE เป็นการ์ดเดียว
   function planTab(mr) {
-    var D = H.day, s = S_(), html = '';
+    var D = H.day, s = S_(), html = '<datalist id="xPlanU"><option value="batch"><option value="กก."><option value="ลัง">' + list(s.units).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>';
     GROUPS.forEach(function (g) {
       var its = []; D.items.forEach(function (x, i) { if (x.grp === g[0] && !x._carry) its.push(i); });
       var gl = g[0] === 'G2' ? 'งานเตรียมวัตถุดิบ/ทอด/ผัด/อบ' : g[1];
@@ -252,7 +256,7 @@
         return '<div class="xsec"><div class="xsech"><span class="xin"><input data-st="' + k + '" value="' + esc(x.title) + '" list="xSecT" placeholder="ชื่อหัวข้อ เช่น สรุปงานลงถ้วย" maxlength="80"></span><button class="icon-btn" data-sdel="' + k + '" aria-label="ลบหัวข้อนี้">' + icon('trash', 16) + '</button></div>'
           + mine.map(function (p, j) {
             var q = resText(p);
-            return '<div class="xsplan"><span class="xsn">' + (j + 1) + '.</span><div class="xspn"><b>' + esc(p.product) + '</b><small>จากแผน' + (p.lot ? ' · LOT ' + lotText(p.lot) : '') + (p.planBatch !== '' && p.planBatch != null ? ' · ' + fmt(p.planBatch) + ' batch' : '') + '</small></div>'
+            return '<div class="xsplan"><span class="xsn">' + (j + 1) + '.</span><div class="xspn"><b>' + esc(p.product) + '</b><small>จากแผน' + (p.lot ? ' · LOT ' + lotText(p.lot) : '') + (planText(p) ? ' · แผน ' + planText(p) : '') + '</small></div>'
               + '<b class="xspq' + (q ? '' : ' muted') + '">' + (q || 'ยังไม่กรอก') + '</b>'
               + (secs.length > 1 ? '<label class="xspmv"><span>อยู่ในหัวข้อ</span><select data-pmv="' + esc(p.id || '') + '"' + (p.id ? '' : ' disabled title="กดบันทึกก่อน"') + '>' + secs.map(function (t, kk) { return '<option value="' + kk + '"' + (kk === k ? ' selected' : '') + '>' + esc(t.title || 'หัวข้อที่ ' + (kk + 1)) + '</option>'; }).join('') + '</select></label>' : '') + '</div>';
           }).join('')
@@ -316,16 +320,17 @@
       + '<button class="icon-btn" data-del="' + i + '" aria-label="ลบรายการ" title="ลบรายการ">' + icon('trash', 16) + '</button></div>';
     if (mode === 'm') {
       var plan = fi(i, 'lot', 'LOT (วันที่ผลิต)', x.lot, ' type="date"')
-        + (g === 'G3' ? fi(i, 'planQty', 'แผน (ลัง)', x.planQty) : fi(i, 'planBatch', 'แผน (batch)', x.planBatch))
+        + (g === 'G3' ? fi(i, 'planQty', 'แผน (จำนวน)', x.planQty) : fi(i, 'planBatch', 'แผน (จำนวน)', x.planBatch))
+        + fi(i, 'planUnit', 'หน่วย', x.planUnit, ' list="xPlanU" maxlength="20" placeholder="' + (g === 'G3' ? 'ลัง' : 'batch') + '"')
         + fi(i, 'note', 'หมายเหตุ', x.note, ' maxlength="200"');
       return head + '<div class="xgrid" style="margin-top:10px">' + plan + '</div></article>';
     }
     if (g === 'G2' && c.yieldPct !== '') tags += '<span class="xy ' + (c.yieldPct >= c.target ? 'ok' : 'bad') + '">Yield ' + fmt(c.yieldPct) + '%</span>';
     if (c.qtyState) tags += '<span class="xq ' + c.qtyState + '">' + (c.qtyState === 'ok' ? '✓ ตามช่วง' : c.qtyState === 'low' ? '↓ ต่ำกว่าช่วง' : '↑ เกินช่วง') + '</span>';
     if (x.status === 'cancel') tags += '<span class="xdu late">ยกเลิก</span>';
-    var chips = [x._carry ? 'ค้างจาก ' + dd(x.date) : '', x.lot ? 'LOT ' + lotText(x.lot) : '', x.planBatch !== '' && x.planBatch != null ? 'แผน ' + fmt(x.planBatch) + ' batch' : '', x.planQty !== '' && x.planQty != null ? 'แผน ' + fmt(x.planQty) + ' ลัง' : '', x.note || ''].filter(String);
+    var chips = [x._carry ? 'ค้างจาก ' + dd(x.date) : '', x.lot ? 'LOT ' + lotText(x.lot) : '', planText(x) ? 'แผน ' + planText(x) : '', x.note || ''].filter(String);
     var res = g === 'G2'
-      ? fi(i, 'actBatch', 'ทำจริง (batch)', x.actBatch, ' inputmode="decimal" placeholder="' + esc(x.planBatch || '') + '"')
+      ? fi(i, 'actBatch', 'ทำจริง (batch)', x.actBatch, ' inputmode="decimal" placeholder="' + esc(isBatch(planUnit(x)) ? x.planBatch || '' : '') + '"')
         + fi(i, 'rawKg', 'น้ำหนักวัตถุดิบ', x.rawKg, ' inputmode="decimal"' + (c.rawStd !== '' ? ' placeholder="มาตรฐาน ' + c.rawStd + '"' : ''), 'กก.')
         + fi(i, 'fryKg', 'น้ำหนักหลังผัด', x.fryKg, null, 'กก.') + fi(i, 'coolKg', 'น้ำหนักหลังทำเย็น', x.coolKg, null, 'กก.')
         + '<div class="xcalc" data-calc="' + i + '">' + calcHtml(x, c) + '</div>'
