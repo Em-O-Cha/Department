@@ -545,8 +545,7 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
     if (x.lot) sub.push('LOT ' + prdLotText_(x.lot));
     if (grp === 'G2') {
       var b = x.actBatch !== '' ? x.actBatch : x.planBatch;
-      var bt = x.actBatch !== '' ? prdFmt_(x.actBatch) + ' ' + (x.actBatchUnit || 'batch') : prdPlanText_(x);
-      sub.push(bt + (x.rawKg !== '' ? (bt ? ' · ' : '') + 'วัตถุดิบ ' + prdW_(x.rawKg, x.rawUnit) + ' → ' + (x.coolKg !== '' ? prdW_(x.coolKg, x.coolUnit) : prdW_(x.fryKg, x.fryUnit)) + (x.coolKg === '' && x.fryKg !== '' ? ' (หลังผัด)' : '') : ''));
+      // บรรทัดจำนวน batch / น้ำหนักวัตถุดิบ → หลังผัด / หลังทำเย็น ไม่แสดงใน LINE (ผู้ใช้ขอเอาออก 17/11/69) — ดูได้ในหน้าระบบ
       if (x.actQty !== '') {
         var ok = x.expMin === '' || (x.actQty >= x.expMin && x.actQty <= x.expMax);
         var qc = ok ? '#15803D' : x.actQty < x.expMin ? '#B91C1C' : '#C2410C';   // ตามช่วง เขียว · น้อยกว่า แดง · เกิน ส้ม
