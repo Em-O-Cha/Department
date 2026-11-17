@@ -511,7 +511,7 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
       sub.push((b !== '' ? prdFmt_(b) + ' batch' : '') + (x.rawKg !== '' ? (b !== '' ? ' · ' : '') + 'วัตถุดิบ ' + prdFmt_(x.rawKg) + ' → ' + prdFmt_(x.coolKg !== '' ? x.coolKg : x.fryKg) + ' กก.' + (x.coolKg === '' && x.fryKg !== '' ? ' (หลังผัด)' : '') : ''));
       if (x.actQty !== '') {
         var ok = x.expMin === '' || (x.actQty >= x.expMin && x.actQty <= x.expMax);
-        var qc = ok ? '#15803D' : x.actQty < x.expMin ? '#C2410C' : '#B91C1C';   // ตามช่วง เขียว · น้อยกว่า ส้ม · เกิน แดง
+        var qc = ok ? '#15803D' : x.actQty < x.expMin ? '#B91C1C' : '#C2410C';   // ตามช่วง เขียว · น้อยกว่า แดง · เกิน ส้ม
         if (x.expMin !== '') sub.push({ t: (ok ? '✅ ตามช่วง' : x.actQty < x.expMin ? '🔻 ต่ำกว่าช่วง' : '🔺 เกินช่วง') + ' (ควรได้ ' + prdFmt_(x.expMin) + (x.expMax !== x.expMin ? '–' + prdFmt_(x.expMax) : '') + ')', c: qc });
         right = prdFmt_(x.actQty) + ' ' + unitOf(x); rc = x.expMin === '' ? '#0F172A' : qc;
       } else right = 'ยังไม่กรอก';

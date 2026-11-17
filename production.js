@@ -307,14 +307,14 @@
     var y = c.yieldPct;
     return '<div class="xyb ' + (y === '' ? '' : y >= c.target ? 'ok' : 'bad') + '"><span>Yield' + (c.usedFry ? ' (ใช้น้ำหนักหลังผัด)' : '') + '</span><b>' + (y === '' ? '–' : fmt(y) + '%') + '</b><small>เป้า ≥ ' + c.target + '%</small></div>'
       + '<div class="xyb"><span>% Lost</span><b>' + (c.lossPct === '' ? '–' : fmt(c.lossPct) + '%') + '</b><small>= 100 − Yield</small></div>'
-      + '<div class="xyb ' + (c.qtyState === 'ok' ? 'ok' : c.qtyState === 'high' ? 'bad' : c.qtyState === 'low' ? 'low' : '') + '"><span>ควรได้</span><b>' + (c.expMin === '' ? '–' : fmt(c.expMin, 0) + (c.expMax !== c.expMin ? '–' + fmt(c.expMax, 0) : '')) + '</b><small>' + (c.qtyState === 'ok' ? '✓ ได้ตามช่วง' : c.qtyState === 'low' ? '↓ ได้น้อยกว่าช่วง' : c.qtyState === 'high' ? '↑ ได้มากกว่าช่วง' : c.unit) + '</small></div>';
+      + '<div class="xyb ' + (c.qtyState === 'ok' ? 'ok' : c.qtyState === 'low' ? 'bad' : c.qtyState === 'high' ? 'high' : '') + '"><span>ควรได้</span><b>' + (c.expMin === '' ? '–' : fmt(c.expMin, 0) + (c.expMax !== c.expMin ? '–' + fmt(c.expMax, 0) : '')) + '</b><small>' + (c.qtyState === 'ok' ? '✓ ได้ตามช่วง' : c.qtyState === 'low' ? '↓ ได้น้อยกว่าช่วง' : c.qtyState === 'high' ? '↑ ได้มากกว่าช่วง' : c.unit) + '</small></div>';
   }
   function bindCards() {
     var D = H.day, root = $('dBody');
     on('[data-i][data-k]', 'input', function (el) {
       var i = +el.getAttribute('data-i'), x = D.items[i]; x[el.getAttribute('data-k')] = el.value.trim(); markDirty();
       var box = root.querySelector('[data-calc="' + i + '"]'), cc = calc(x); if (box) box.innerHTML = calcHtml(x, cc);
-      var qi = root.querySelector('[data-i="' + i + '"][data-k="actQty"]');   // สีช่องผลิตได้จริง: ตามช่วง เขียว · เกิน แดง · น้อยกว่า ส้ม
+      var qi = root.querySelector('[data-i="' + i + '"][data-k="actQty"]');   // สีกรอบช่องผลิตได้จริง: ตามช่วง เขียว · น้อยกว่า แดง · เกิน ส้ม
       if (qi && x.grp === 'G2') qi.parentNode.className = 'xin' + (cc.qtyState ? ' q-' + cc.qtyState : '');
       if (el.getAttribute('data-k') === 'finishDate') { var fb = root.querySelector('[data-fin="' + i + '"]'); if (fb) fb.innerHTML = finHtml(i, x); }
     }, root);
@@ -704,13 +704,13 @@
     '.xcard{min-width:0;background:#fff;border-radius:14px;box-shadow:var(--shadow);border-left:5px solid var(--g);padding:12px 14px;margin-bottom:12px}.xch{display:flex;gap:8px;align-items:center}.xno{width:28px;height:28px;border-radius:50%;background:var(--g);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;flex:none}',
     '.xprod{flex:1;min-width:0;padding:9px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-size:15px;font-weight:600;background:#fff}',
     '.xtags{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 0 36px}.xtags span{font-size:12px;font-weight:700;padding:3px 10px;border-radius:99px;border:1.5px solid}',
-    '.xy.ok,.xq.ok,.xdu.ok{color:#15803d;border-color:#86efac;background:#f0fdf4}.xy.bad,.xq.high,.xdu.late{color:#b91c1c;border-color:#fca5a5;background:#fef2f2}.xq.low{color:#c2410c;border-color:#fdba74;background:#fff7ed}.xdu.wait{color:#475569;border-color:#cbd5e1;background:#f8fafc}',
+    '.xy.ok,.xq.ok,.xdu.ok{color:#15803d;border-color:#86efac;background:#f0fdf4}.xy.bad,.xq.low,.xdu.late{color:#b91c1c;border-color:#fca5a5;background:#fef2f2}.xq.high{color:#c2410c;border-color:#fdba74;background:#fff7ed}.xdu.wait{color:#475569;border-color:#cbd5e1;background:#f8fafc}',
     '.xsub{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin:12px 0 6px}',
     '.xgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px 10px}.xf{display:flex;flex-direction:column;gap:3px;margin:0;min-width:0;font-size:12.5px;color:var(--muted)}.xf.full{grid-column:1/-1}',
     '.xin{display:flex;align-items:center;border:1.5px solid var(--line);border-radius:9px;background:#fff;overflow:hidden}.xin:focus-within{border-color:var(--c)}.xin input{flex:1;min-width:0;width:100%;border:0;padding:9px 10px;font:inherit;font-size:15px;color:var(--ink);background:none}.xin input:focus{outline:none}.xin em{font-style:normal;padding:0 10px;color:var(--muted);font-size:13px;background:#f8fafc;align-self:stretch;display:flex;align-items:center}',
     '.xf textarea{border:1.5px solid var(--line);border-radius:9px;padding:9px 10px;font:inherit;font-size:15px;color:var(--ink)}',
     '.xcalc{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.xyb{border-radius:10px;background:#f8fafc;border:1.5px solid var(--line);padding:8px 10px}.xyb span{display:block;font-size:12px;color:var(--muted)}.xyb b{font-size:20px}.xyb small{display:block;font-size:11.5px;color:var(--muted)}',
-    '.xyb.ok{background:#f0fdf4;border-color:#86efac}.xyb.ok b{color:#15803d}.xyb.bad{background:#fef2f2;border-color:#fca5a5}.xyb.bad b{color:#b91c1c}.xyb.low{background:#fff7ed;border-color:#fdba74}.xyb.low b{color:#c2410c}.xin.q-ok{border-color:#22c55e;background:#f0fdf4}.xin.q-high{border-color:#ef4444;background:#fef2f2}.xin.q-low{border-color:#f97316;background:#fff7ed}.xin.q-ok input,.xin.q-high input,.xin.q-low input{background:transparent;font-weight:700}.xin.q-ok input{color:#15803d}.xin.q-high input{color:#b91c1c}.xin.q-low input{color:#c2410c}',
+    '.xyb.ok{background:#f0fdf4;border-color:#86efac}.xyb.ok b{color:#15803d}.xyb.bad{background:#fef2f2;border-color:#fca5a5}.xyb.bad b{color:#b91c1c}.xyb.high{background:#fff7ed;border-color:#fdba74}.xyb.high b{color:#c2410c}.xin.q-ok,.xin.q-high,.xin.q-low{border-width:2.5px}.xin.q-ok{border-color:#16a34a}.xin.q-low{border-color:#dc2626}.xin.q-high{border-color:#f97316}.xin.q-ok input,.xin.q-high input,.xin.q-low input{font-weight:700}',
     '.xres{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}.xres summary{cursor:pointer;font-weight:700;font-size:14px;padding:6px 0;min-height:32px}.xres summary small{font-weight:400;color:var(--muted)}',
     '.xchk{display:flex;align-items:center;gap:8px;font-size:14px;margin:10px 0 0;cursor:pointer}.xchk input{width:20px;height:20px}',
     '.xadd{width:100%;border:2px dashed var(--g)!important;color:var(--g)!important;background:#fff!important;min-height:48px;margin-bottom:14px}',
