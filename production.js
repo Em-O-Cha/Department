@@ -191,9 +191,9 @@
     D.items.forEach(function (x, i) { if (x.grp === g) its.push(i); });
     var causes = list(s.lossCauses);
     var html = '<datalist id="xUnits">' + list(s.units).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist><datalist id="xCauses">' + causes.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>'
-      + (its.length ? '' : '<div class="panel muted" style="font-size:14px">ยังไม่มีแผนของ ' + g + ' วันนี้ — ใส่แผนที่ "🌅 แผนเช้า" หรือกดเพิ่มรายการที่ผลิตนอกแผนด้านล่าง</div>')
-      + its.map(function (i, n) { return itemCard(D.items[i], i, n, 'e'); }).join('')
-      + '<button class="btn btn-line xadd" id="gAdd" style="--g:' + GCOLOR[g] + '">' + icon('plus', 18) + ' เพิ่มรายการที่ผลิตนอกแผน (' + g + ')</button>';
+      + (its.length ? '<p class="muted" style="margin:0 0 10px;font-size:13px">รายการดึงมาจากแผนเช้า — กรอกผลลัพธ์ของแต่ละรายการ (ต้องการเพิ่ม / แก้แผน ให้ไปที่ "🌅 แผนเช้า")</p>'
+        : '<div class="panel" style="font-size:14px">ยังไม่มีแผนของ ' + g + ' วันนี้ <button class="btn btn-line btn-sm" id="gToPlan" style="margin-left:8px">ไปใส่แผนที่ 🌅 แผนเช้า</button></div>')
+      + its.map(function (i, n) { return itemCard(D.items[i], i, n, 'e'); }).join('');
     // สรุปเย็นของกลุ่ม
     var checks = list(s.checks), done = rep && rep.checks ? list(rep.checks) : [];
     var secs = H.secDraft && H.secDraft.key === D.date + g ? H.secDraft.list : ((rep && rep.sections) || []).map(function (x) {
@@ -227,7 +227,7 @@
       + '<div class="xsend"><button class="btn btn-primary" id="gSend" style="--c:#06c755">' + icon('send', 18) + ' ดูตัวอย่าง & ส่งสรุป ' + g + '</button>' + (rep && rep.sentAt ? '<span class="xok">✓ ส่งแล้ว ' + esc(rep.sentAt.slice(11, 16)) + ' น.</span>' : '') + '</div></section>';
     $('dBody').innerHTML = html;
     bindCards();
-    $('gAdd').addEventListener('click', function () { addItem(g); });
+    if ($('gToPlan')) $('gToPlan').addEventListener('click', function () { collect(); H.q.mode = 'm'; dayPage(); });
     var readSecs = readSecDraft;
     on('[data-sradd]', 'click', function (el) {
       readSecs(); var k = +el.getAttribute('data-sradd'), rows = secs[k].rows = secs[k].rows || [], last = rows[rows.length - 1];
@@ -270,9 +270,8 @@
     if (c.qtyState) tags += '<span class="xq ' + c.qtyState + '">' + (c.qtyState === 'ok' ? '✓ ตามช่วง' : c.qtyState === 'low' ? '↓ ต่ำกว่าช่วง' : '↑ เกินช่วง') + '</span>';
     if (c.due) tags += '<span class="xdu ' + c.due + '">' + (c.due === 'ok' ? '🚚 ทันส่ง' : c.due === 'late' ? '⚠️ ไม่ทันส่ง' : 'ส่ง ' + dd(x.dueDate)) + '</span>';
     if (x.status === 'cancel') tags += '<span class="xdu late">ยกเลิก</span>';
-    var planLine = [x.planBatch !== '' && x.planBatch != null ? 'แผน ' + fmt(x.planBatch) + ' batch' : '', x.planQty !== '' && x.planQty != null ? 'แผน ' + fmt(x.planQty) + ' ลัง' : '', x.note || ''].filter(String).join(' · ');
-    var res = fi(i, 'lot', 'LOT (วันที่ผลิต)', x.lot, ' type="date"');
-    res += g === 'G2'
+    var chips = [x.lot ? 'LOT ' + lotText(x.lot) : '', x.planBatch !== '' && x.planBatch != null ? 'แผน ' + fmt(x.planBatch) + ' batch' : '', x.planQty !== '' && x.planQty != null ? 'แผน ' + fmt(x.planQty) + ' ลัง' : '', x.note || ''].filter(String);
+    var res = g === 'G2'
       ? fi(i, 'actBatch', 'ทำจริง (batch)', x.actBatch, ' inputmode="decimal" placeholder="' + esc(x.planBatch || '') + '"')
         + fi(i, 'rawKg', 'น้ำหนักวัตถุดิบ', x.rawKg, ' inputmode="decimal"' + (c.rawStd !== '' ? ' placeholder="มาตรฐาน ' + c.rawStd + '"' : ''), 'กก.')
         + fi(i, 'fryKg', 'น้ำหนักหลังผัด', x.fryKg, null, 'กก.') + fi(i, 'coolKg', 'น้ำหนักหลังทำเย็น', x.coolKg, null, 'กก.')
@@ -282,7 +281,9 @@
         + fi(i, 'unit', 'หน่วย', x.unit, ' list="xUnits" maxlength="20" placeholder="' + esc(c.unit) + '"') + (g === 'G3' ? fi(i, 'actCases', 'จำนวนลัง', x.actCases, ' inputmode="numeric"', 'ลัง') : '');
     res += fi(i, 'lossKg', 'ของเสีย (น้ำหนัก)', x.lossKg, null, 'กก.') + fi(i, 'lossQty', 'ของเสีย (จำนวน)', x.lossQty, ' inputmode="numeric"', 'ชิ้น')
       + fi(i, 'lossNote', 'สาเหตุของเสีย', x.lossNote, ' list="xCauses" maxlength="150"') + fi(i, 'finishDate', 'วันที่เสร็จ', x.finishDate, ' type="date"');
-    return head + (planLine ? '<div class="xplanl">📋 ' + esc(planLine) + '</div>' : (x._new ? '<div class="xplanl">นอกแผน</div>' : ''))
+    // หัวการ์ดเย็น: สินค้าจากแผนเช้า (แก้ไม่ได้ที่นี่) + ข้อมูลแผน
+    return '<article class="xcard" data-g="' + g + '" style="--g:' + GCOLOR[g] + '"><div class="xch"><span class="xno">' + (n + 1) + '</span><div class="xpname"><b>' + esc(x.product || '(ยังไม่เลือกสินค้า)') + '</b>'
+      + '<div class="xchips">' + chips.map(function (t) { return '<span>' + esc(t) + '</span>'; }).join('') + '</div></div></div>'
       + (tags ? '<div class="xtags">' + tags + '</div>' : '')
       + '<div class="xgrid" style="margin-top:10px">' + res + '</div>'
       + '<label class="xchk"><input type="checkbox" data-cancel="' + i + '"' + (x.status === 'cancel' ? ' checked' : '') + '> ยกเลิกรายการนี้ (ไม่ได้ผลิต)</label></article>';
@@ -648,6 +649,7 @@
     '.xtab b{display:block;font-size:14px}.xtab small{color:var(--muted);font-size:12px}.xtab.on{border-color:var(--g);background:color-mix(in srgb,var(--g) 8%,white)}',
     '.xmode{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}.xmb{border:2px solid var(--line);background:#fff;border-radius:14px;padding:12px 14px;text-align:left;cursor:pointer;font:inherit;color:var(--ink);box-shadow:var(--shadow);min-height:64px}.xmb b{display:block;font-size:17px}.xmb span{display:block;font-size:12.5px;color:var(--muted);margin-top:2px}.xmb.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 10%,white)}.xmb .xok{font-size:12px}',
     '.xtabs3{grid-template-columns:repeat(3,minmax(0,1fr))}.xgsec{margin-bottom:18px}.xgh{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:16px}.xgh span{background:var(--g);color:#fff;border-radius:8px;padding:2px 8px;font-size:13px}.xgh small{color:var(--muted);font-weight:400}',
+    '.xpname{flex:1;min-width:0}.xpname b{font-size:16px;display:block}.xchips{display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:4px}.xchips span{font-size:12.5px;background:#f1f5f9;color:#334155;border-radius:99px;padding:2px 9px}',
     '.xplanl{margin:8px 0 0 36px;font-size:13px;color:#334155;background:#f8fafc;border-radius:8px;padding:6px 10px}',
     '.xcard{min-width:0;background:#fff;border-radius:14px;box-shadow:var(--shadow);border-left:5px solid var(--g);padding:12px 14px;margin-bottom:12px}.xch{display:flex;gap:8px;align-items:center}.xno{width:28px;height:28px;border-radius:50%;background:var(--g);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;flex:none}',
     '.xprod{flex:1;min-width:0;padding:9px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-size:15px;font-weight:600;background:#fff}',
