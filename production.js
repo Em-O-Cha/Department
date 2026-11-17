@@ -568,18 +568,24 @@
     var ta = function (k, label, hint) { return '<div class="pf full"><label for="s_' + k + '">' + label + '</label><textarea id="s_' + k + '" rows="2" placeholder="' + esc(hint || '') + '">' + esc(s[k] || '') + '</textarea></div>'; };
     $('main').innerHTML = '<h3>ตั้งค่า / LINE</h3><p class="lead">รายการตัวเลือก (คั่นด้วย , ) · เป้าหมาย · การเชื่อม LINE กลุ่มฝ่ายผลิต</p>'
       + '<div class="panel pbox"><h4>' + icon('send', 18) + ' LINE กลุ่มฝ่ายผลิต</h4>'
-      + '<div class="xline"><div class="' + (L.token ? 'ok' : 'bad') + '">' + (L.token ? '✓' : '✕') + ' Channel access token (Script Property <code>PROD_LINE_TOKEN</code>) ' + (L.token ? 'ใส่แล้ว' : 'ยังไม่ได้ใส่') + '</div>'
-      + '<div class="' + (L.group ? 'ok' : 'bad') + '">' + (L.group ? '✓' : '✕') + ' กลุ่ม LINE ที่รับรายงาน ' + (L.group ? 'ผูกแล้ว' : 'ยังไม่ได้ผูก') + '</div></div>'
-      + '<ol class="xol">' + (L.token ? '' : '<li>ใส่ Channel access token ของ LINE OA ที่จะใช้ส่งรายงานผลิต ใน Apps Script → Project Settings → Script Properties ชื่อ <code>PROD_LINE_TOKEN</code> (ใช้ OA เดียวกับฝ่ายบัญชีก็ได้)</li>'
-        + '<li>ใน LINE Developers ของ OA นั้น ตั้ง Webhook URL เป็น <code class="xcode">' + esc(L.webhook) + '</code> เปิด Use webhook และ Allow bot to join group chats</li>')
-      + '<li>เชิญ OA เข้ากลุ่มของฝ่ายผลิต แล้วพิมพ์ในกลุ่ม: <code class="xcode">ตั้งค่ากลุ่ม ผลิต ' + esc(L.setupCode) + '</code> <button class="btn btn-line btn-sm" id="sCopy">คัดลอก</button> <small class="muted">(รหัสใช้ได้ครั้งเดียว)</small></li></ol>'
-      + (L.token && L.group ? '<button class="btn btn-line btn-sm" id="sTest">' + icon('send', 16) + ' ส่งข้อความทดสอบเข้ากลุ่ม</button>' : '') + '</div>'
+      + (L.token && L.group
+        ? '<div class="a7chk ok"><i>✓</i><span>เชื่อมต่อ LINE เรียบร้อย — แผนผลิตและสรุปงานจะส่งเข้ากลุ่มที่ผูกไว้</span></div>'
+          + '<div class="a7lineacts"><button class="btn btn-line btn-sm" id="sTest">' + icon('send', 16) + ' ส่งข้อความทดสอบเข้ากลุ่ม</button>'
+          + '<button class="btn btn-line btn-sm" id="sGroup">' + icon('gear', 16) + ' เปลี่ยนกลุ่มที่รับรายงาน</button></div>'
+        : '<div class="a7chk ' + (L.token ? 'ok' : 'bad') + '"><i>' + (L.token ? '✓' : '✕') + '</i><span>PROD_LINE_TOKEN (Channel access token) ' + (L.token ? 'ใส่แล้ว' : 'ยังไม่ได้ใส่') + '</span></div>'
+          + '<div class="a7chk bad"><i>✕</i><span>กลุ่ม LINE ที่รับรายงาน ยังไม่ได้ผูก</span></div>'
+          + '<ol class="a7ol">'
+          + (L.token ? '' : '<li>ใส่ Channel access token ของ OA ที่จะใช้ส่งรายงานผลิตใน Apps Script → Project Settings → Script Properties ชื่อ <code>PROD_LINE_TOKEN</code> (ใช้ OA เดียวกับฝ่ายบัญชีก็ได้)</li>'
+            + '<li>ใน LINE Developers → Messaging API ของ OA นั้น: ใส่ Webhook URL ด้านล่าง แล้วเปิด Use webhook และ Allow bot to join group chats' + copyBox(L.webhook, 'Webhook URL') + '</li>')
+          + '<li>' + bindStep(L.setupCode) + '</li></ol>')
+      + '</div>'
       + '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('chart', 18) + ' เป้าหมาย</h4><div class="pform"><div class="pf"><label for="s_target">Yield ขั้นต่ำ (%) ของทุกสินค้า</label><input id="s_target" inputmode="decimal" value="' + esc(s.target) + '"></div></div></div>'
       + '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('list', 18) + ' ตัวเลือก</h4><div class="pform">'
       + ta('machines', 'รายชื่อเครื่องจักร / อุปกรณ์', 'เช่น กระทะผัด 1, เครื่องซีล 2, ตู้เย็น') + ta('lossCauses', 'สาเหตุของเสีย') + ta('checks', 'รายการปิดงานตอนเย็น', 'ปิดน้ำ, ปิดไฟ, ปิดแอร์')
       + ta('units', 'หน่วยนับสินค้า', 'ซอง, ถ้วย, กระปุก, ดวง') + ta('sectionTitles', 'หัวข้อสำเร็จรูปสำหรับข้อความเย็น', 'เตรียมวัตถุดิบ, น้ำพริกค้างแพ็ค') + ta('morningNote', 'ข้อความท้ายแผนผลิตตอนเช้า (ค่าเริ่มต้น)') + '</div></div>'
       + '<div class="qsave"><button class="btn btn-primary" id="sSave">' + icon('check', 18) + ' บันทึกการตั้งค่า</button></div>';
-    $('sCopy').addEventListener('click', function () { var t = 'ตั้งค่ากลุ่ม ผลิต ' + L.setupCode; try { navigator.clipboard.writeText(t); toast('คัดลอกแล้ว'); } catch (e) { toast(t); } });
+    bindCopy($('main'));
+    if ($('sGroup')) $('sGroup').addEventListener('click', changeGroup);
     if ($('sTest')) $('sTest').addEventListener('click', function () { call('prdLineTest', state.token).then(function (r) { toast(r.ok ? 'ส่งข้อความทดสอบแล้ว' : r.error); }).catch(onServerError); });
     $('sSave').addEventListener('click', function () {
       var o = {}, b = this; ['target', 'machines', 'lossCauses', 'checks', 'units', 'sectionTitles', 'morningNote'].forEach(function (k) { if ($('s_' + k)) o[k] = $('s_' + k).value.trim(); });
@@ -587,6 +593,32 @@
       b.disabled = true;
       call('prdSaveSettings', state.token, o).then(function (r) { b.disabled = false; if (!r.ok) return toast(r.error); H.data.settings = r.settings; toast('บันทึกการตั้งค่าแล้ว'); }).catch(function (e) { b.disabled = false; onServerError(e); });
     });
+  }
+  // ---- LINE: คัดลอกคำสั่ง / เปลี่ยนกลุ่ม (แบบเดียวกับฝ่ายบัญชี)
+  function copyBox(text, label) { return '<div class="a7copy"><input readonly value="' + esc(text) + '" aria-label="' + esc(label) + '"><button class="btn btn-line btn-sm" data-copy="' + esc(text) + '">คัดลอก</button></div>'; }
+  function bindStep(code) {
+    return 'เชิญ OA เข้ากลุ่ม LINE ของฝ่ายผลิต แล้วพิมพ์ข้อความนี้ในกลุ่ม ระบบจะจำกลุ่มให้เอง' + copyBox('ตั้งค่ากลุ่ม ผลิต ' + (code || ''), 'คำสั่งผูกกลุ่ม')
+      + '<small class="muted">รหัสใช้ได้ครั้งเดียว</small>';
+  }
+  function bindCopy(root) {
+    on('[data-copy]', 'click', function (el) {
+      var t = el.getAttribute('data-copy'), done = function () { toast('คัดลอกแล้ว'); };
+      if (navigator.clipboard) navigator.clipboard.writeText(t).then(done, function () { el.previousSibling.select(); });
+      else { el.previousSibling.select(); document.execCommand('copy'); done(); }
+    }, root);
+  }
+  // เปลี่ยนกลุ่ม: ดึงรหัสล่าสุดก่อน (รหัสเดิมใช้ไปแล้ว)
+  function changeGroup() {
+    wide({ icon: 'send', title: 'เปลี่ยนกลุ่มที่รับรายงาน', noCancel: true, ok: 'ปิด',
+      body: '<div id="gBody"><span class="spinner dark"></span> กำลังโหลดรหัสล่าสุด…</div><p class="muted">พิมพ์ในกลุ่มใหม่แล้ว แผนผลิตและสรุปงานครั้งต่อไปจะส่งไปกลุ่มใหม่แทน (กลุ่มเดิมจะไม่ได้รับ)</p>',
+      onOpen: function () {
+        call('prdLoad', state.token, H.data.from, H.data.to).then(function (d) {
+          H.data.line = d.line;
+          var g = $('gBody'); if (!g) return;
+          g.innerHTML = '<ol class="a7ol"><li>' + bindStep(d.line.setupCode) + '</li></ol>'; bindCopy(g);
+        }).catch(onServerError);
+      },
+      submit: function () { closeModal(); return Promise.resolve(); } });
   }
   function logPage() {
     $('main').innerHTML = '<h3>ประวัติการแก้ไข</h3><p class="lead">บันทึกทุกครั้งที่เพิ่ม/แก้/ลบข้อมูล และส่ง LINE</p><div id="lOut" class="panel"><span class="spinner dark"></span> กำลังโหลด</div>';
