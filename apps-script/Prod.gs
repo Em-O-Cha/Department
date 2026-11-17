@@ -450,8 +450,8 @@ function prdDashboard_(dept, from, to) {
 
 // ---------- LINE ----------
 // วันที่แบบไลน์ผลิตใช้: 17.11.26
-function prdDot_(iso) { var p = String(iso).split('-'); return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0].slice(2) : String(iso || ''); }
-function prdSlash_(iso) { var p = String(iso).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0].slice(2) : String(iso || ''); }
+function prdDot_(iso) { var p = String(iso).split('-'); return p.length === 3 ? p[2] + '.' + p[1] + '.' + String(+p[0] + 543).slice(2) : String(iso || ''); }
+function prdSlash_(iso) { var p = String(iso).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + String(+p[0] + 543).slice(2) : String(iso || ''); }
 function prdLotText_(v) { var iso = prdLotIso_(v); return iso ? prdSlash_(iso) : String(v || '').replace(/^'/, ''); }
 function prdFmt_(n) { return n === '' || n == null ? '-' : Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
 function prdLinePush_(messages) {

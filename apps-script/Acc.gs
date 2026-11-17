@@ -504,7 +504,7 @@ function accLinePush_(messages) {
 }
 // วันที่แบบที่ฝ่ายบัญชีใช้: 12.11.26 (ค.ศ. 2 หลัก) · วันในสัปดาห์ภาษาไทย
 var ACC_DAYS_ = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
-function accDot_(iso) { if (!iso) return '-'; var p = iso.split('-'); return p[2] + '.' + p[1] + '.' + p[0].slice(2); }
+function accDot_(iso) { if (!iso) return '-'; var p = iso.split('-'); return p[2] + '.' + p[1] + '.' + String(+p[0] + 543).slice(2); }
 function accDayName_(iso) { var p = iso.split('-'); return ACC_DAYS_[new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay()]; }
 function accDotRange_(list) { return !list.length ? '-' : list.length === 1 ? accDot_(list[0]) : accDot_(list[0]) + ' – ' + accDot_(list[list.length - 1]); }
 function accDeliveryText_(list) { return !list.length ? '-' : list.length === 1 ? 'วัน' + accDayName_(list[0]) + ' ที่ ' + accDot_(list[0]) : accDotRange_(list); }

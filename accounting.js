@@ -374,7 +374,7 @@
   // ---------- ภาพตารางสีสำหรับ LINE (สร้างในเบราว์เซอร์ด้วย html2canvas) ----------
   var H2C_URL = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
   var DAYS = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
-  function dot(iso) { if (!iso) return '-'; var p = iso.split('-'); return p[2] + '.' + p[1] + '.' + p[0].slice(2); }
+  function dot(iso) { if (!iso) return '-'; var p = iso.split('-'); return p[2] + '.' + p[1] + '.' + String(+p[0] + 543).slice(2); }
   function dotRange(l) { return !l || !l.length ? '-' : l.length === 1 ? dot(l[0]) : dot(l[0]) + ' – ' + dot(l[l.length - 1]); }
   function delivText(l) { if (!l || !l.length) return '-'; if (l.length > 1) return dotRange(l); var p = l[0].split('-'); return 'วัน' + DAYS[new Date(+p[0], +p[1] - 1, +p[2]).getDay()] + ' ที่ ' + dot(l[0]); }
   // ตารางสำหรับภาพ: กว้าง 1080px ศูนย์ละ 1 แถว ตัวเลขใหญ่ อ่านบนมือถือได้
