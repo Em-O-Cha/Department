@@ -98,7 +98,7 @@
   }
   function dayPage() {
     var q = H.q, t = H.data.today;
-    q.date = q.date || t; q.tab = q.tab || 'plan';
+    q.date = q.date || t; q.mode = q.mode || 'm'; if (!GNAME[q.tab]) q.tab = 'G2';
     // ข้อมูลโหลดใหม่ (และยังไม่ได้แก้อะไร) หรือเปลี่ยนวัน → อ่านรายการของวันนั้นใหม่
     if (!H.day || H.day.date !== q.date || (H.day.src !== H.data && !H.day.dirty)) H.day = { date: q.date, items: dayItems(q.date), dirty: false, src: H.data };
     var D = H.day, items = D.items;
@@ -109,12 +109,16 @@
       + '<div class="xdate"><button class="icon-btn" id="dPrev" aria-label="วันก่อนหน้า">‹</button><label><span>' + dayName(D.date) + '</span><input type="date" id="dDate" value="' + D.date + '"></label><button class="icon-btn" id="dNext" aria-label="วันถัดไป">›</button>'
       + (D.date !== t ? '<button class="btn btn-line btn-sm" id="dToday">วันนี้</button>' : '') + '</div>'
       + '<label class="xme">ผู้บันทึก <input id="dMe" value="' + esc(me()) + '" placeholder="ชื่อของคุณ" maxlength="40"></label></div>'
-      + '<div class="xtabs" role="tablist">' + [['plan', '🌅 แผนทั้งวัน (เช้า)', '#0E7490', items.length]].concat(GROUPS.map(function (g) { return [g[0], g[0] + ' ' + g[1], g[2], cnt(g[0])]; })).map(function (x) {
-        var r = x[0] === 'plan' ? mr : rep('evening', x[0]);
-        return '<button role="tab" class="xtab' + (q.tab === x[0] ? ' on' : '') + '" data-tab="' + x[0] + '" style="--g:' + x[2] + '" aria-selected="' + (q.tab === x[0]) + '"><b>' + esc(x[1]) + '</b><small>' + x[3] + ' รายการ' + (r && r.sentAt ? ' · ส่งแล้ว ✓' : '') + '</small></button>';
-      }).join('') + '</div><div id="dBody"></div>'
+      // เช้า = ใส่แผน + ส่งแผน · เย็น = ใส่ผลจริงทีละกลุ่ม + ส่งสรุปของกลุ่ม (ไม่ปนกัน)
+      + '<div class="xmode" role="tablist">' + [['m', '🌅 แผนเช้า', 'ใส่แผนผลิตของวันนี้ แล้วส่งแผนเข้า LINE', mr && mr.sentAt], ['e', '🌙 สรุปเย็น', 'ใส่ผลผลิตจริงของแต่ละกลุ่ม แล้วส่งสรุป', null]].map(function (x) {
+        return '<button role="tab" class="xmb' + (q.mode === x[0] ? ' on' : '') + '" data-mode="' + x[0] + '" aria-selected="' + (q.mode === x[0]) + '"><b>' + x[1] + (x[3] ? ' <small class="xok">✓ ส่งแล้ว</small>' : '') + '</b><span>' + x[2] + '</span></button>';
+      }).join('') + '</div>'
+      + (q.mode === 'e' ? '<div class="xtabs xtabs3" role="tablist">' + GROUPS.map(function (g) {
+        var r = rep('evening', g[0]);
+        return '<button role="tab" class="xtab' + (q.tab === g[0] ? ' on' : '') + '" data-tab="' + g[0] + '" style="--g:' + g[2] + '" aria-selected="' + (q.tab === g[0]) + '"><b>' + g[0] + ' ' + esc(g[1]) + '</b><small>' + cnt(g[0]) + ' รายการ' + (r && r.sentAt ? ' · ส่งแล้ว ✓' : '') + '</small></button>';
+      }).join('') + '</div>' : '') + '<div id="dBody"></div>'
       + '<div class="xsave" id="dSaveBar"' + (D.dirty ? '' : ' hidden') + '><span>มีการแก้ไขที่ยังไม่บันทึก</span><button class="btn btn-line" id="dUndo">ยกเลิก</button><button class="btn btn-primary" id="dSave">' + icon('check', 18) + ' บันทึก</button></div>';
-    if (q.tab === 'plan') planTab(mr); else groupTab(q.tab, rep('evening', q.tab));
+    if (q.mode === 'm') planTab(mr); else groupTab(q.tab, rep('evening', q.tab));
     var goDate = function (d) {
       if (!d) return;
       var doIt = function () { H.q.date = d; H.day = null; ensureRange(d).then(dayPage).catch(onServerError); };
@@ -127,6 +131,7 @@
     if ($('dToday')) $('dToday').addEventListener('click', function () { goDate(t); });
     $('dMe').addEventListener('change', function () { setMe(this.value.trim()); });
     on('[data-tab]', 'click', function (el) { collect(); H.q.tab = el.getAttribute('data-tab'); dayPage(); }, $('main'));
+    on('[data-mode]', 'click', function (el) { collect(); H.q.mode = el.getAttribute('data-mode'); dayPage(); window.scrollTo(0, 0); }, $('main'));
     $('dSave').addEventListener('click', saveDay);
     $('dUndo').addEventListener('click', function () { ask({ title: 'ยกเลิกการแก้ไขทั้งหมดของวันนี้?', ok: 'ยกเลิกการแก้ไข', cancel: 'กลับไปแก้ต่อ', tone: 'warn' }).then(function (ok) { if (ok) { H.day = null; dayPage(); } }); });
   }
@@ -148,22 +153,21 @@
   function fi(i, k, label, val, attrs, unit) {
     return '<label class="xf"><span>' + label + '</span><span class="xin"><input data-i="' + i + '" data-k="' + k + '" value="' + esc(val == null ? '' : val) + '"' + (attrs || ' inputmode="decimal"') + '>' + (unit ? '<em>' + unit + '</em>' : '') + '</span></label>';
   }
-  // ---- แท็บ "แผนทั้งวัน": ภาพรวมทุกกลุ่ม + ส่งแผนเช้า
+  // ---- แผนเช้า: ใส่แผนของทุกกลุ่ม (เฉพาะช่องแผน) แล้วส่งแผนเข้า LINE เป็นการ์ดเดียว
   function planTab(mr) {
-    var D = H.day, s = S_();
-    var html = '<div class="panel pbox"><h4>' + icon('send', 18) + ' ส่งแผนผลิตเข้า LINE (รอบเช้า)</h4><p class="muted" style="margin:0 0 10px;font-size:13px">ใส่แผนของแต่ละกลุ่มในแท็บ G2 / G1 / G3 แล้วกลับมากดส่งที่นี่ — ส่งรวมทุกกลุ่มเป็นการ์ดเดียว</p>'
+    var D = H.day, s = S_(), html = '';
+    GROUPS.forEach(function (g) {
+      var its = []; D.items.forEach(function (x, i) { if (x.grp === g[0]) its.push(i); });
+      html += '<section class="xgsec" style="--g:' + g[2] + '"><h4 class="xgh"><span>' + g[0] + '</span>' + esc(g[1]) + ' <small>' + its.length + ' รายการ</small></h4>'
+        + its.map(function (i, n) { return itemCard(D.items[i], i, n, 'm'); }).join('')
+        + '<button class="btn btn-line xadd" data-add="' + g[0] + '" style="--g:' + g[2] + '">' + icon('plus', 18) + ' เพิ่มแผน ' + g[0] + ' · ' + esc(g[1]) + '</button></section>';
+    });
+    html += '<div class="panel pbox xeve" style="--g:#0E7490"><h4>' + icon('send', 18) + ' ส่งแผนผลิตเข้า LINE</h4><p class="muted" style="margin:0 0 10px;font-size:13px">ส่งแผนของทุกกลุ่ม (G2 / G1 / G3) รวมเป็นการ์ดเดียว · กด "บันทึก" ก่อนส่ง</p>'
       + '<label class="xf full"><span>ข้อความท้ายการ์ด</span><span class="xin"><input id="mNote" value="' + esc(mr && mr.note ? mr.note : s.morningNote) + '" maxlength="200"></span></label>'
       + '<div class="xsend"><button class="btn btn-primary" id="mSend" style="--c:#06c755">' + icon('send', 18) + ' ดูตัวอย่าง & ส่งแผนผลิต</button>' + (mr && mr.sentAt ? '<span class="xok">✓ ส่งแล้ว ' + esc(mr.sentAt.slice(11, 16)) + ' น.</span>' : '') + '</div></div>';
-    GROUPS.forEach(function (g) {
-      var its = D.items.filter(function (x) { return x.grp === g[0]; });
-      html += '<div class="panel xsum" style="--g:' + g[2] + '"><div class="xsumh"><b>' + g[0] + ' · ' + g[1] + '</b><button class="link-btn" data-goto="' + g[0] + '">แก้ไข ›</button></div>'
-        + (its.length ? its.map(function (x, i) {
-          return '<div class="xsrow"><span>' + (i + 1) + '. ' + esc(x.product || '(ยังไม่เลือกสินค้า)') + (x.lot ? ' <small>LOT ' + lotText(x.lot) + '</small>' : '') + '</span><b>' + [x.planBatch !== '' && x.planBatch != null ? fmt(x.planBatch) + ' batch' : '', x.planQty !== '' && x.planQty != null ? fmt(x.planQty) + (g[0] === 'G3' ? ' ลัง' : ' ชิ้น') : ''].filter(String).join(' · ') + '</b>'
-            + (x.dueDate ? '<small class="xdue">ส่ง ' + dd(x.dueDate) + '</small>' : '') + '</div>';
-        }).join('') : '<div class="muted" style="font-size:13px">ยังไม่มีแผน</div>') + '</div>';
-    });
     $('dBody').innerHTML = html;
-    on('[data-goto]', 'click', function (el) { H.q.tab = el.getAttribute('data-goto'); dayPage(); }, $('dBody'));
+    bindCards();
+    on('[data-add]', 'click', function (el) { addItem(el.getAttribute('data-add')); }, $('dBody'));
     $('mSend').addEventListener('click', function () {
       if (H.day.dirty) return toast('กด "บันทึก" ก่อน แล้วค่อยส่ง');
       if (!D.items.length) return toast('ยังไม่มีแผนของวันนี้');
@@ -173,6 +177,13 @@
       }).catch(function (e) { b.disabled = false; onServerError(e); });
     });
   }
+  function addItem(g) {
+    collect();
+    var D = H.day, last = D.items.filter(function (x) { return x.grp === g; }).slice(-1)[0];
+    D.items.push({ grp: g, date: D.date, productId: '', product: '', lot: g === 'G2' ? D.date : (last ? last.lot : ''), planBatch: '', planQty: '', dueDate: last ? last.dueDate : '', status: 'plan', _new: true });
+    markDirty(); dayPage();
+    var cards = document.querySelectorAll('.xcard[data-g="' + g + '"]'); var c = cards[cards.length - 1]; if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); var sel = c.querySelector('select'); if (sel) sel.focus(); }
+  }
   function upsertReport(r) { var a = H.data.reports, i = a.map(function (x) { return x.id; }).indexOf(r.id); if (i >= 0) a[i] = r; else a.push(r); }
   // ---- แท็บกลุ่มงาน: การ์ดรายการ (แผน + ผลจริง) + สรุปเย็น
   function groupTab(g, rep) {
@@ -180,8 +191,9 @@
     D.items.forEach(function (x, i) { if (x.grp === g) its.push(i); });
     var causes = list(s.lossCauses);
     var html = '<datalist id="xUnits">' + list(s.units).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist><datalist id="xCauses">' + causes.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>'
-      + its.map(function (i, n) { return itemCard(D.items[i], i, n); }).join('')
-      + '<button class="btn btn-line xadd" id="gAdd" style="--g:' + GCOLOR[g] + '">' + icon('plus', 18) + ' เพิ่มรายการ ' + g + ' · ' + GNAME[g] + '</button>';
+      + (its.length ? '' : '<div class="panel muted" style="font-size:14px">ยังไม่มีแผนของ ' + g + ' วันนี้ — ใส่แผนที่ "🌅 แผนเช้า" หรือกดเพิ่มรายการที่ผลิตนอกแผนด้านล่าง</div>')
+      + its.map(function (i, n) { return itemCard(D.items[i], i, n, 'e'); }).join('')
+      + '<button class="btn btn-line xadd" id="gAdd" style="--g:' + GCOLOR[g] + '">' + icon('plus', 18) + ' เพิ่มรายการที่ผลิตนอกแผน (' + g + ')</button>';
     // สรุปเย็นของกลุ่ม
     var checks = list(s.checks), done = rep && rep.checks ? list(rep.checks) : [];
     var secs = H.secDraft && H.secDraft.key === D.date + g ? H.secDraft.list : ((rep && rep.sections) || []).map(function (x) {
@@ -214,14 +226,8 @@
       + '<div class="xsub">รูปประกอบ ' + (rep && rep.files.length ? '(' + rep.files.length + ')' : '') + '</div><div class="xphotos" id="gPhotos">' + photosHtml(rep) + '</div>'
       + '<div class="xsend"><button class="btn btn-primary" id="gSend" style="--c:#06c755">' + icon('send', 18) + ' ดูตัวอย่าง & ส่งสรุป ' + g + '</button>' + (rep && rep.sentAt ? '<span class="xok">✓ ส่งแล้ว ' + esc(rep.sentAt.slice(11, 16)) + ' น.</span>' : '') + '</div></section>';
     $('dBody').innerHTML = html;
-    bindCards(g);
-    $('gAdd').addEventListener('click', function () {
-      collect();
-      var last = D.items.filter(function (x) { return x.grp === g; }).slice(-1)[0];
-      D.items.push({ grp: g, date: D.date, productId: '', product: '', lot: g === 'G2' ? D.date : (last ? last.lot : ''), planBatch: '', planQty: '', dueDate: last ? last.dueDate : '', status: 'plan', _open: true });
-      markDirty(); dayPage();
-      var cards = document.querySelectorAll('.xcard'); var c = cards[cards.length - 1]; if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); var sel = c.querySelector('select'); if (sel) sel.focus(); }
-    });
+    bindCards();
+    $('gAdd').addEventListener('click', function () { addItem(g); });
     var readSecs = readSecDraft;
     on('[data-sradd]', 'click', function (el) {
       readSecs(); var k = +el.getAttribute('data-sradd'), rows = secs[k].rows = secs[k].rows || [], last = rows[rows.length - 1];
@@ -249,18 +255,24 @@
       saveEvening(g).then(function (ok) { b.disabled = false; if (ok) sendLine('evening', D.date, g); });
     });
   }
-  function itemCard(x, i, n) {
-    var g = x.grp, c = calc(x), open = x._open || x.status === 'done' || num(x.actQty) !== '' || num(x.coolKg) !== '';
-    var tags = '';
+  // การ์ดรายการ: mode 'm' = เฉพาะช่องแผน · 'e' = ผลจริง (แสดงแผนเป็นบรรทัดสรุป)
+  function itemCard(x, i, n, mode) {
+    var g = x.grp, c = calc(x), tags = '';
+    var head = '<article class="xcard" data-g="' + g + '" style="--g:' + GCOLOR[g] + '"><div class="xch"><span class="xno">' + (n + 1) + '</span>' + productSelect(i, x)
+      + '<button class="icon-btn" data-del="' + i + '" aria-label="ลบรายการ" title="ลบรายการ">' + icon('trash', 16) + '</button></div>';
+    if (mode === 'm') {
+      var plan = fi(i, 'lot', 'LOT (วันที่ผลิต)', x.lot, ' type="date"')
+        + (g === 'G3' ? fi(i, 'planQty', 'แผน (ลัง)', x.planQty) : fi(i, 'planBatch', 'แผน (batch)', x.planBatch))
+        + fi(i, 'dueDate', 'กำหนดส่ง', x.dueDate, ' type="date"') + fi(i, 'note', 'หมายเหตุ', x.note, ' maxlength="200"');
+      return head + '<div class="xgrid" style="margin-top:10px">' + plan + '</div></article>';
+    }
     if (g === 'G2' && c.yieldPct !== '') tags += '<span class="xy ' + (c.yieldPct >= c.target ? 'ok' : 'bad') + '">Yield ' + fmt(c.yieldPct) + '%</span>';
     if (c.qtyState) tags += '<span class="xq ' + c.qtyState + '">' + (c.qtyState === 'ok' ? '✓ ตามช่วง' : c.qtyState === 'low' ? '↓ ต่ำกว่าช่วง' : '↑ เกินช่วง') + '</span>';
     if (c.due) tags += '<span class="xdu ' + c.due + '">' + (c.due === 'ok' ? '🚚 ทันส่ง' : c.due === 'late' ? '⚠️ ไม่ทันส่ง' : 'ส่ง ' + dd(x.dueDate)) + '</span>';
     if (x.status === 'cancel') tags += '<span class="xdu late">ยกเลิก</span>';
-    var plan = g === 'G2'
-      ? fi(i, 'lot', 'LOT (วันที่ผลิต)', x.lot, ' type="date"') + fi(i, 'planBatch', 'แผน (batch)', x.planBatch) + fi(i, 'dueDate', 'กำหนดส่ง', x.dueDate, ' type="date"') + fi(i, 'note', 'หมายเหตุ', x.note, ' maxlength="200"')
-      : fi(i, 'lot', 'LOT (วันที่ผลิต)', x.lot, ' type="date"') + (g === 'G1' ? fi(i, 'planBatch', 'แผน (batch)', x.planBatch) : fi(i, 'planQty', 'แผน (ลัง)', x.planQty))
-        + fi(i, 'dueDate', 'กำหนดส่ง', x.dueDate, ' type="date"') + fi(i, 'note', 'หมายเหตุ', x.note, ' maxlength="200"');
-    var res = g === 'G2'
+    var planLine = [x.planBatch !== '' && x.planBatch != null ? 'แผน ' + fmt(x.planBatch) + ' batch' : '', x.planQty !== '' && x.planQty != null ? 'แผน ' + fmt(x.planQty) + ' ลัง' : '', x.note || ''].filter(String).join(' · ');
+    var res = fi(i, 'lot', 'LOT (วันที่ผลิต)', x.lot, ' type="date"');
+    res += g === 'G2'
       ? fi(i, 'actBatch', 'ทำจริง (batch)', x.actBatch, ' inputmode="decimal" placeholder="' + esc(x.planBatch || '') + '"')
         + fi(i, 'rawKg', 'น้ำหนักวัตถุดิบ', x.rawKg, ' inputmode="decimal"' + (c.rawStd !== '' ? ' placeholder="มาตรฐาน ' + c.rawStd + '"' : ''), 'กก.')
         + fi(i, 'fryKg', 'น้ำหนักหลังผัด', x.fryKg, null, 'กก.') + fi(i, 'coolKg', 'น้ำหนักหลังทำเย็น', x.coolKg, null, 'กก.')
@@ -270,12 +282,10 @@
         + fi(i, 'unit', 'หน่วย', x.unit, ' list="xUnits" maxlength="20" placeholder="' + esc(c.unit) + '"') + (g === 'G3' ? fi(i, 'actCases', 'จำนวนลัง', x.actCases, ' inputmode="numeric"', 'ลัง') : '');
     res += fi(i, 'lossKg', 'ของเสีย (น้ำหนัก)', x.lossKg, null, 'กก.') + fi(i, 'lossQty', 'ของเสีย (จำนวน)', x.lossQty, ' inputmode="numeric"', 'ชิ้น')
       + fi(i, 'lossNote', 'สาเหตุของเสีย', x.lossNote, ' list="xCauses" maxlength="150"') + fi(i, 'finishDate', 'วันที่เสร็จ', x.finishDate, ' type="date"');
-    return '<article class="xcard" style="--g:' + GCOLOR[g] + '"><div class="xch"><span class="xno">' + (n + 1) + '</span>' + productSelect(i, x)
-      + '<button class="icon-btn" data-del="' + i + '" aria-label="ลบรายการ" title="ลบรายการ">' + icon('trash', 16) + '</button></div>'
+    return head + (planLine ? '<div class="xplanl">📋 ' + esc(planLine) + '</div>' : (x._new ? '<div class="xplanl">นอกแผน</div>' : ''))
       + (tags ? '<div class="xtags">' + tags + '</div>' : '')
-      + '<div class="xsub">แผน</div><div class="xgrid">' + plan + '</div>'
-      + '<details class="xres"' + (open ? ' open' : '') + '><summary>ผลจริง' + (x.status === 'done' ? ' ✓' : '') + ' <small>' + (g === 'G2' ? 'น้ำหนัก · Yield · จำนวน · ของเสีย' : 'จำนวน · ของเสีย') + '</small></summary><div class="xgrid">' + res + '</div>'
-      + '<label class="xchk"><input type="checkbox" data-cancel="' + i + '"' + (x.status === 'cancel' ? ' checked' : '') + '> ยกเลิกรายการนี้ (ไม่ได้ผลิต)</label></details></article>';
+      + '<div class="xgrid" style="margin-top:10px">' + res + '</div>'
+      + '<label class="xchk"><input type="checkbox" data-cancel="' + i + '"' + (x.status === 'cancel' ? ' checked' : '') + '> ยกเลิกรายการนี้ (ไม่ได้ผลิต)</label></article>';
   }
   function calcHtml(x, c) {
     if (x.grp !== 'G2') return '';
@@ -284,7 +294,7 @@
       + '<div class="xyb"><span>% Lost</span><b>' + (c.lossPct === '' ? '–' : fmt(c.lossPct) + '%') + '</b><small>= 100 − Yield</small></div>'
       + '<div class="xyb ' + (c.qtyState === 'ok' ? 'ok' : c.qtyState ? 'bad' : '') + '"><span>ควรได้</span><b>' + (c.expMin === '' ? '–' : fmt(c.expMin, 0) + (c.expMax !== c.expMin ? '–' + fmt(c.expMax, 0) : '')) + '</b><small>' + (c.qtyState === 'ok' ? '✓ ได้ตามช่วง' : c.qtyState === 'low' ? '↓ ได้น้อยกว่าช่วง' : c.qtyState === 'high' ? '↑ ได้มากกว่าช่วง' : c.unit) + '</small></div>';
   }
-  function bindCards(g) {
+  function bindCards() {
     var D = H.day, root = $('dBody');
     on('[data-i][data-k]', 'input', function (el) {
       var i = +el.getAttribute('data-i'), x = D.items[i]; x[el.getAttribute('data-k')] = el.value.trim(); markDirty();
@@ -636,6 +646,9 @@
     '.xme{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);margin:0}.xme input{border:1.5px solid var(--line);border-radius:9px;padding:7px 10px;font:inherit;width:150px}',
     '.xtabs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}.xtab{border:2px solid transparent;background:#fff;border-radius:12px;padding:10px 12px;text-align:left;box-shadow:var(--shadow);cursor:pointer;font:inherit;color:var(--ink);border-top:4px solid var(--g);min-height:56px}',
     '.xtab b{display:block;font-size:14px}.xtab small{color:var(--muted);font-size:12px}.xtab.on{border-color:var(--g);background:color-mix(in srgb,var(--g) 8%,white)}',
+    '.xmode{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}.xmb{border:2px solid var(--line);background:#fff;border-radius:14px;padding:12px 14px;text-align:left;cursor:pointer;font:inherit;color:var(--ink);box-shadow:var(--shadow);min-height:64px}.xmb b{display:block;font-size:17px}.xmb span{display:block;font-size:12.5px;color:var(--muted);margin-top:2px}.xmb.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 10%,white)}.xmb .xok{font-size:12px}',
+    '.xtabs3{grid-template-columns:repeat(3,minmax(0,1fr))}.xgsec{margin-bottom:18px}.xgh{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:16px}.xgh span{background:var(--g);color:#fff;border-radius:8px;padding:2px 8px;font-size:13px}.xgh small{color:var(--muted);font-weight:400}',
+    '.xplanl{margin:8px 0 0 36px;font-size:13px;color:#334155;background:#f8fafc;border-radius:8px;padding:6px 10px}',
     '.xcard{min-width:0;background:#fff;border-radius:14px;box-shadow:var(--shadow);border-left:5px solid var(--g);padding:12px 14px;margin-bottom:12px}.xch{display:flex;gap:8px;align-items:center}.xno{width:28px;height:28px;border-radius:50%;background:var(--g);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;flex:none}',
     '.xprod{flex:1;min-width:0;padding:9px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-size:15px;font-weight:600;background:#fff}',
     '.xtags{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 0 36px}.xtags span{font-size:12px;font-weight:700;padding:3px 10px;border-radius:99px;border:1.5px solid}',
@@ -665,7 +678,7 @@
     '.xdays{display:flex;gap:6px;align-items:flex-end;height:150px;overflow-x:auto}.xday{flex:1;min-width:34px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;font-size:11px}.xday em{width:70%;border-radius:6px 6px 0 0}.xday span{color:var(--muted);white-space:nowrap}',
     '.xcat{padding:10px 14px;font-weight:700;background:#f8fafc;border-bottom:1px solid var(--line)}.xcat small{color:var(--muted);font-weight:400}.xoff td{opacity:.55}',
     '.xline div{padding:4px 0;font-size:14px}.xline .ok{color:#15803d}.xline .bad{color:#b91c1c}.xol{padding-left:20px;line-height:1.7;font-size:14px}.xcode{background:#f1f5f9;padding:2px 6px;border-radius:6px;word-break:break-all}',
-    '@media (max-width:760px){.xtabs{grid-template-columns:repeat(2,minmax(0,1fr))}.xgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.xcalc{grid-template-columns:repeat(3,minmax(0,1fr))}.xyb{padding:6px 8px}.xin input{font-size:16px;padding:9px 8px}.xin em{padding:0 6px}.xyb b{font-size:16px}.xme{width:100%}.xme input{flex:1}.xyr{grid-template-columns:minmax(0,1fr) 70px 50px}}'
+    '@media (max-width:760px){.xtabs{grid-template-columns:repeat(2,minmax(0,1fr))}.xtabs3{grid-template-columns:repeat(3,minmax(0,1fr))}.xtabs3 .xtab{padding:8px}.xtabs3 .xtab b{font-size:12.5px}.xmb b{font-size:15px}.xplanl{margin-left:0}.xgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.xcalc{grid-template-columns:repeat(3,minmax(0,1fr))}.xyb{padding:6px 8px}.xin input{font-size:16px;padding:9px 8px}.xin em{padding:0 6px}.xyb b{font-size:16px}.xme{width:100%}.xme input{flex:1}.xyr{grid-template-columns:minmax(0,1fr) 70px 50px}}'
   ].join('\n');
   document.head.appendChild(css);
 })();
