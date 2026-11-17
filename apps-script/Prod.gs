@@ -509,8 +509,9 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
   var body = [], mine = plans.filter(function (x) { return x.grp === grp && x.status !== 'cancel'; });
   var list = mine.filter(function (x) { return x.date === date; }), carried = mine.filter(function (x) { return x.date < date; });
   var dpt = String(date).split('-'), dTh = dpt[2] + '/' + dpt[1] + '/' + String(+dpt[0] + 543).slice(2);
-  var title = (rep && rep.title) || PRD_EVE_TITLE_[grp] + ' ประจำวันที่ ' + dTh;
-  if (!/ประจำวันที่/.test(title)) title += ' ประจำวันที่ ' + dTh;   // หัวข้อเก่าที่ไม่มีวันที่
+  // หัวข้อที่ผู้ใช้แก้ได้ + วันที่ต่อท้ายอัตโนมัติเสมอ (ถ้าเคยพิมพ์วันที่ไว้เองให้ตัดออกก่อน)
+  var title = String((rep && rep.title) || PRD_EVE_TITLE_[grp]).replace(/\s*ประจำวันที่.*$/, '') || PRD_EVE_TITLE_[grp];
+  title += ' ประจำวันที่ ' + dTh;
   var unitOf = function (x) { return x.unit || (prods[x.productId] || {}).unit || 'ชิ้น'; };
   if (list.length) body.push(prdSec_(PRD_EVE_SEC_[grp], PRD_GCOLOR_[grp]));
   var row = function (x, i) {
