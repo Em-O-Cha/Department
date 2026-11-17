@@ -61,6 +61,11 @@
       + causes.map(function (c) { return '<option' + (!other && x.lateCause === c ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '<option value="__other"' + (other ? ' selected' : '') + '>อื่น ๆ (ระบุ)</option></select></span></label>'
       + (other ? '<label class="xf"><span>ระบุสาเหตุ</span><span class="xin"><input data-i="' + i + '" data-k="lateCause" value="' + esc(x.lateCause || '') + '" maxlength="200" placeholder="พิมพ์สาเหตุ"></span></label>' : '') + '</div></div>';
   }
+  // ผลที่กรอกของรายการแผน เป็นข้อความสั้น เช่น "20 ถ้วย" / "30 ชิ้น ; 5 ลัง"
+  function resText(x) {
+    var u = x.unit || (prodOf(x.productId) || {}).unit || 'ชิ้น', q = num(x.actQty), cs = num(x.actCases);
+    return [q !== '' ? fmt(q) + ' ' + u : '', x.grp === 'G3' && cs !== '' ? fmt(cs) + ' ลัง' : ''].filter(String).join(' ; ');
+  }
   function shrink(file) {
     return new Promise(function (res) {
       var url = URL.createObjectURL(file), im = new Image();
@@ -220,10 +225,17 @@
       + (cits.length ? '<h4 class="xcarryh">⏳ งานค้างจากวันก่อน <small>' + cits.length + ' รายการ · เสร็จแล้วให้เลือกวันที่เสร็จ</small></h4>' + cits.map(function (i, n) { return itemCard(D.items[i], i, n, 'e'); }).join('') : '');
     // สรุปเย็นของกลุ่ม
     var checks = list(s.checks), done = rep && rep.checks ? list(rep.checks) : [];
+    var EVESEC = { G2: 'งานผัด/งานอบ/ทำเย็น', G1: 'งานบรรจุ', G3: 'ยอดสินค้าบรรจุลงลัง' };
     var secs = H.secDraft && H.secDraft.key === D.date + g ? H.secDraft.list : ((rep && rep.sections) || []).map(function (x) {
-      return { title: x.title, text: x.text || '', rows: (x.rows || []).map(function (r) { return { product: r.product, lot: lotIso(r.lot), qty: r.qty, unit: r.unit }; }) };
+      return { title: x.title, text: x.text || '', plans: Array.isArray(x.plans) ? x.plans.slice() : null, rows: (x.rows || []).map(function (r) { return { product: r.product, lot: lotIso(r.lot), qty: r.qty, unit: r.unit }; }) };
     });
+    // หัวข้อแรก = รายการจากแผน (รายงานเก่าที่ยังไม่มี plans ให้เพิ่มหัวข้อนี้ไว้บนสุด)
+    if (!secs.some(function (x) { return Array.isArray(x.plans); })) secs.unshift({ title: EVESEC[g], text: '', rows: [], plans: [] });
+    secs.forEach(function (x) { if (!Array.isArray(x.plans)) x.plans = []; });
     H.secDraft = { key: D.date + g, list: secs };
+    // รายการจากแผนวันนี้ → หัวข้อที่เลือกไว้ (ไม่ได้เลือก = หัวข้อแรก)
+    var planIts = D.items.filter(function (x) { return x.grp === g && !x._carry && x.status !== 'cancel' && x.productId; });
+    var secOf = function (x) { for (var k = 0; k < secs.length; k++) if (x.id && secs[k].plans.indexOf(x.id) >= 0) return k; return 0; };
     var EVE = { G2: 'สรุปงานเตรียม/ทอด/ผัด/อบ', G1: 'สรุปงานบรรจุ', G3: 'สรุปงานบรรจุ' };
     // หัวข้อ = ข้อความที่แก้ได้ · วันที่ต่อท้ายให้อัตโนมัติ (แสดงข้างช่อง)
     var dp = D.date.split('-'), dTh = 'ประจำวันที่ ' + dp[2] + '/' + dp[1] + '/' + String(+dp[0] + 543).slice(2);
@@ -232,13 +244,20 @@
       + '<p class="muted" style="margin:0 0 10px;font-size:13px">คนที่กรอกผลของกลุ่มนี้ เป็นคนกดส่งสรุปเข้า LINE · รูปจะส่งแยกเป็นภาพ ๆ ต่อจากการ์ด</p>'
       + '<label class="xf full"><span>หัวข้อข้อความ</span><span class="xin xtitle"><input id="gTitle" value="' + esc(curT) + '" placeholder="' + esc(EVE[g]) + '" maxlength="80"><em>' + dTh + '</em></span></label>'
       + '<small class="muted" style="display:block;margin:4px 0 0">ขึ้นเป็นหัวการ์ด LINE · แก้ข้อความได้ วันที่ใส่ให้เอง (ลบให้ว่าง = กลับเป็นค่าเริ่มต้น)</small>'
-      + '<div class="xsub">หัวข้อเพิ่มเติม (พิมพ์เอง)</div><datalist id="xSecT">' + list(s.sectionTitles).map(function (t) { return '<option value="' + esc(t) + '">'; }).join('') + '</datalist>'
+      + '<div class="xsub">รายการในข้อความ LINE</div><small class="muted" style="display:block;margin:-4px 0 8px">รายการจากแผนวันนี้ขึ้นให้เอง (แก้ตัวเลขที่การ์ดด้านบน) · เลือกย้ายไปหัวข้ออื่นได้ · เพิ่มรายการ / หัวข้อเองได้</small><datalist id="xSecT">' + list(s.sectionTitles).map(function (t) { return '<option value="' + esc(t) + '">'; }).join('') + '</datalist>'
       + '<datalist id="xProdL">' + H.data.products.filter(function (p) { return p.active !== 'ไม่ใช้'; }).map(function (p) { return '<option value="' + esc(p.name) + '">'; }).join('') + '</datalist>'
       + '<datalist id="xSecU"><option value="batch"><option value="kg.">' + list(s.units).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '<option value="ลัง"></datalist>'
       + '<div id="gSecs">' + secs.map(function (x, k) {
-        return '<div class="xsec"><div class="xsech"><span class="xin"><input data-st="' + k + '" value="' + esc(x.title) + '" list="xSecT" placeholder="ชื่อหัวข้อ เช่น น้ำพริกค้างแพ็ค" maxlength="80"></span><button class="icon-btn" data-sdel="' + k + '" aria-label="ลบหัวข้อนี้">' + icon('trash', 16) + '</button></div>'
+        var mine = planIts.filter(function (p) { return secOf(p) === k; });
+        return '<div class="xsec"><div class="xsech"><span class="xin"><input data-st="' + k + '" value="' + esc(x.title) + '" list="xSecT" placeholder="ชื่อหัวข้อ เช่น สรุปงานลงถ้วย" maxlength="80"></span><button class="icon-btn" data-sdel="' + k + '" aria-label="ลบหัวข้อนี้">' + icon('trash', 16) + '</button></div>'
+          + mine.map(function (p, j) {
+            var q = resText(p);
+            return '<div class="xsplan"><span class="xsn">' + (j + 1) + '.</span><div class="xspn"><b>' + esc(p.product) + '</b><small>จากแผน' + (p.lot ? ' · LOT ' + lotText(p.lot) : '') + (p.planBatch !== '' && p.planBatch != null ? ' · ' + fmt(p.planBatch) + ' batch' : '') + '</small></div>'
+              + '<b class="xspq' + (q ? '' : ' muted') + '">' + (q || 'ยังไม่กรอก') + '</b>'
+              + (secs.length > 1 ? '<label class="xspmv"><span>อยู่ในหัวข้อ</span><select data-pmv="' + esc(p.id || '') + '"' + (p.id ? '' : ' disabled title="กดบันทึกก่อน"') + '>' + secs.map(function (t, kk) { return '<option value="' + kk + '"' + (kk === k ? ' selected' : '') + '>' + esc(t.title || 'หัวข้อที่ ' + (kk + 1)) + '</option>'; }).join('') + '</select></label>' : '') + '</div>';
+          }).join('')
           + (x.rows || []).map(function (r, j) {
-            return '<div class="xsrw"><span class="xsn">' + (j + 1) + '.</span><label class="xf xsp"><span>สินค้า / รายการ</span><span class="xin"><input data-sr="' + k + ':' + j + ':product" value="' + esc(r.product || '') + '" list="xProdL" placeholder="เลือกหรือพิมพ์" maxlength="150"></span></label>'
+            return '<div class="xsrw"><span class="xsn">' + (mine.length + j + 1) + '.</span><label class="xf xsp"><span>สินค้า / รายการ</span><span class="xin"><input data-sr="' + k + ':' + j + ':product" value="' + esc(r.product || '') + '" list="xProdL" placeholder="เลือกหรือพิมพ์" maxlength="150"></span></label>'
               + '<label class="xf xsl"><span>LOT (วันที่)</span><span class="xin"><input type="date" data-sr="' + k + ':' + j + ':lot" value="' + esc(r.lot || '') + '"></span></label>'
               + '<label class="xf xsq"><span>จำนวน</span><span class="xin"><input data-sr="' + k + ':' + j + ':qty" value="' + esc(r.qty == null ? '' : r.qty) + '" inputmode="decimal"></span></label>'
               + '<label class="xf xsu"><span>หน่วย</span><span class="xin"><input data-sr="' + k + ':' + j + ':unit" value="' + esc(r.unit || '') + '" list="xSecU" placeholder="batch" maxlength="20"></span></label>'
@@ -264,14 +283,20 @@
     on('[data-srdel]', 'click', function (el) { readSecs(); var a = el.getAttribute('data-srdel').split(':'); secs[+a[0]].rows.splice(+a[1], 1); saveEvening(g, true).then(function () { collect(); dayPage(); }); }, $('dBody'));
     on('[data-sr]', 'change', function () { readSecs(); saveEvening(g, true); }, $('dBody'));
     $('gSecAdd').addEventListener('click', function () {
-      readSecs(); secs.push({ title: '', text: '', rows: [{ product: '', lot: '', qty: '', unit: 'batch' }] }); collect(); dayPage();
+      readSecs(); secs.push({ title: '', text: '', plans: [], rows: [{ product: '', lot: '', qty: '', unit: 'batch' }] }); collect(); dayPage();
       var inps = document.querySelectorAll('[data-st]'); if (inps.length) inps[inps.length - 1].focus();
     });
     on('[data-sdel]', 'click', function (el) {
       readSecs(); var k = +el.getAttribute('data-sdel');
-      ask({ title: 'ลบหัวข้อ "' + (secs[k].title || 'ไม่มีชื่อ') + '"?', text: 'ข้อความในหัวข้อนี้จะหายไป' }).then(function (ok) { if (!ok) return; secs.splice(k, 1); saveEvening(g, true).then(function () { collect(); dayPage(); }); });
+      ask({ title: 'ลบหัวข้อ "' + (secs[k].title || 'ไม่มีชื่อ') + '"?', text: 'รายการที่พิมพ์เพิ่มในหัวข้อนี้จะหายไป' + (secs[k].plans.length || k === 0 ? '\nรายการจากแผนจะย้ายไปอยู่หัวข้อแรก' : '') }).then(function (ok) { if (!ok) return; secs.splice(k, 1); saveEvening(g, true).then(function () { collect(); dayPage(); }); });
     }, $('dBody'));
     on('[data-st],[data-sx]', 'change', function () { readSecs(); saveEvening(g, true); }, $('dBody'));
+    on('[data-pmv]', 'change', function (el) {   // ย้ายรายการจากแผนไปหัวข้ออื่น
+      readSecs(); var id = el.getAttribute('data-pmv'), k = +el.value;
+      secs.forEach(function (x) { x.plans = x.plans.filter(function (y) { return y !== id; }); });
+      if (k > 0) secs[k].plans.push(id);
+      saveEvening(g, true).then(function () { collect(); dayPage(); });
+    }, $('dBody'));
     $('gTitle').addEventListener('change', function () { saveEvening(g, true); });
     on('[data-chk]', 'change', function () { saveEvening(g, true); }, $('dBody'));
     $('gProb').addEventListener('change', function () { saveEvening(g, true); });
@@ -730,6 +755,7 @@
     '.xsave[hidden]{display:none!important}.xsave{position:sticky;bottom:10px;z-index:5;display:flex;gap:8px;align-items:center;background:#0f172a;color:#fff;border-radius:14px;padding:10px 12px;box-shadow:0 10px 30px rgba(15,23,42,.35);margin-top:8px}.xsave span{flex:1;font-size:13.5px}.xsave .btn-line{background:#fff}',
     '.xfinw{grid-column:1/-1}.xfin{border-radius:10px;padding:8px 10px;background:#f8fafc;border:1.5px solid var(--line);font-size:13px}.xfin b{display:block;font-size:14px}.xfin small{display:block;color:var(--muted);font-size:12px}.xfin.ok{background:#f0fdf4;border-color:#86efac}.xfin b.ok{color:#15803d}.xfin.bad{background:#fef2f2;border-color:#fca5a5}.xfin b.bad{color:#b91c1c}.xlc{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-top:8px}.xin select{width:100%;border:0;background:transparent;font:inherit;padding:8px;min-width:0}',
     '.xtitle em{white-space:nowrap;font-style:normal;font-weight:700;color:var(--ink)}',
+    '.xsplan{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:4px 8px;align-items:center;padding:6px 0;border-bottom:1px dashed var(--line)}.xspn b{display:block;font-size:14px}.xspn small{color:var(--muted);font-size:12px}.xspq{font-size:14px;text-align:right}.xspq.muted{font-weight:400}.xspmv{grid-column:2/-1;display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)}.xspmv select{border:1.5px solid var(--line);border-radius:8px;padding:4px 6px;font:inherit;font-size:13px;background:#fff;max-width:100%}',
     '.xcarryh{margin:16px 0 8px;font-size:15px;color:#6d28d9}.xcarryh small{color:var(--muted);font-weight:400;font-size:12.5px}.xcarryn{background:#f5f3ff;border:1.5px solid #ddd6fe;color:#5b21b6;font-size:14px;margin-bottom:12px}',
     '.xeve{border-top:4px solid var(--g)}.xbd{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13.5px}.xbd small{grid-column:1/-1;color:var(--muted)}',
     '.xsrw{display:grid;grid-template-columns:22px minmax(0,2fr) minmax(0,1.2fr) minmax(0,.8fr) minmax(0,.8fr) 34px;gap:6px;align-items:end;margin-bottom:6px}.xsn{font-weight:700;color:var(--muted);padding-bottom:10px}.xsrw .icon-btn{margin-bottom:6px}',
