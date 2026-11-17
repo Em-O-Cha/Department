@@ -39,7 +39,7 @@ var DEPARTMENTS = [
     menus: ['ตรวจรับวัตถุดิบ', 'ตรวจสินค้าสำเร็จรูป', 'ข้อร้องเรียน / NC', 'เอกสารมาตรฐาน'] },
   { key: 'RD',   name: 'วิจัยและพัฒนา',       en: 'Research & Development', color: '#db2777',
     sheetId: '', ownerEmail: '', appUrl: '',
-    menus: ['โครงการพัฒนา', 'สูตร / ส่วนผสม', 'ผลการทดสอบ', 'ตัวอย่างสินค้า'] },
+    menus: ['ผลิตภัณฑ์ใหม่', 'คู่ค้า', 'ต้นทุนสินค้า'] },
   { key: 'PROD', name: 'ฝ่ายผลิต',           en: 'Production',          color: '#0891b2',
     sheetId: '', ownerEmail: '', appUrl: '',
     menus: ['แผนการผลิต', 'บันทึกการผลิต', 'เครื่องจักร / ซ่อมบำรุง', 'ของเสีย / สูญเสีย'] },
@@ -49,9 +49,7 @@ var DEPARTMENTS = [
   { key: 'LOG',  name: 'ขนส่งและคลัง',       en: 'Logistics & Warehouse', color: '#475569',
     sheetId: '', ownerEmail: '', appUrl: '',
     menus: ['รับสินค้าเข้าคลัง', 'จ่ายสินค้า / ส่งของ', 'ตารางรถขนส่ง', 'สินค้าคงคลัง'] },
-  { key: 'COST', name: 'ต้นทุนสินค้า',        en: 'Product Costing',     color: '#0f766e',
-    sheetId: '', ownerEmail: '', appUrl: '',
-    menus: ['รอกำหนดข้อมูล'] },
+  // ต้นทุนสินค้า (COST) ย้ายไปรวมในระบบ RD แล้ว (17/11/69) — ไม่มีการ์ดแยก
   // ผู้บริหาร: ไม่ใช่แผนก — ดู Dashboard ของทุกฝ่ายได้อย่างเดียว (Executive.gs) · ตั้งรหัสผ่านเองด้วยรหัสตั้งค่าจากผู้ดูแลระบบ
   { key: 'EXEC', name: 'ผู้บริหาร',            en: 'Executive Dashboard', color: '#c62828', exec: true,
     sheetId: '', ownerEmail: '', appUrl: '',
@@ -139,7 +137,7 @@ function findDept_(key) {
 }
 
 // โมดูลที่ทำแล้วของแต่ละแผนก (หน้าเว็บสร้างเมนูตามโมดูล) — ยังไม่มี = เมนูตัวอย่าง
-var DEPT_MODULES_ = { HR: 'hr', ACC: 'accounting', PUR: 'purchasing', QA: 'quality', SHE: 'safety', PROD: 'production', EXEC: 'executive' };
+var DEPT_MODULES_ = { HR: 'hr', ACC: 'accounting', PUR: 'purchasing', QA: 'quality', SHE: 'safety', PROD: 'production', RD: 'rd', EXEC: 'executive' };
 function deptView_(d) {
   return { key: d.key, name: d.name, en: d.en, color: d.color, menus: d.menus.slice(), ownerEmail: d.ownerEmail || '', module: DEPT_MODULES_[d.key] || '' };
 }

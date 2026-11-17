@@ -43,6 +43,9 @@ function apiFunctions_() {
     qaLoad: qaLoad, qaSave: qaSave, qaDelete: qaDelete, qaUploadFile: qaUploadFile, qaRemoveFile: qaRemoveFile, qaSaveSettings: qaSaveSettings,
     qaLog: qaLog, qaDashboard: qaDashboard, qaSaveTest: qaSaveTest, qaDeleteTest: qaDeleteTest, qaSaveNewProd: qaSaveNewProd, qaDeleteNewProd: qaDeleteNewProd,
     // ฝ่ายผลิต (Prod.gs)
+    rdLoad: rdLoad, rdSaveProduct: rdSaveProduct, rdDeleteProduct: rdDeleteProduct, rdSavePartner: rdSavePartner, rdDeletePartner: rdDeletePartner,
+    rdSaveSettings: rdSaveSettings, rdLog: rdLog, rdDashboard: rdDashboard,
+    rdSaveTrial: rdSaveTrial, rdDeleteTrial: rdDeleteTrial, rdUploadTrialPhoto: rdUploadTrialPhoto, rdRemoveTrialPhoto: rdRemoveTrialPhoto,
     prdLoad: prdLoad, prdSaveProduct: prdSaveProduct, prdSavePlans: prdSavePlans, prdDeletePlan: prdDeletePlan, prdSaveBreakdown: prdSaveBreakdown,
     prdDeleteBreakdown: prdDeleteBreakdown, prdSaveReport: prdSaveReport, prdUploadPhoto: prdUploadPhoto, prdRemovePhoto: prdRemovePhoto,
     prdSaveSettings: prdSaveSettings, prdLog: prdLog, prdDashboard: prdDashboard, prdSendLine: prdSendLine, prdLinePreview: prdLinePreview, prdLineTest: prdLineTest, prdSetLineToken: prdSetLineToken,
