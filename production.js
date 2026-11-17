@@ -44,10 +44,10 @@
     var p = prodOf(x.productId), base = num(x.coolKg) !== '' ? num(x.coolKg) : num(x.fryKg), raw = num(x.rawKg);
     var y = x.grp === 'G2' && raw && base !== '' ? Math.round(base / raw * 10000) / 100 : '';
     var b = num(x.actBatch) !== '' ? num(x.actBatch) : num(x.planBatch);
-    var lo = p && x.grp === 'G2' && b !== '' && p.qtyMin !== '' ? Math.round(p.qtyMin * b) : '', hi = p && x.grp === 'G2' && b !== '' && p.qtyMax !== '' ? Math.round(p.qtyMax * b) : '';
+    var eb = num(x.planBatch) !== '' ? num(x.planBatch) : num(x.actBatch);   // ช่วงที่ควรได้ คิดจากแผน (ไม่เปลี่ยนตามที่กรอกผล)
+    var lo = p && x.grp === 'G2' && eb !== '' && p.qtyMin !== '' ? Math.round(p.qtyMin * eb) : '', hi = p && x.grp === 'G2' && eb !== '' && p.qtyMax !== '' ? Math.round(p.qtyMax * eb) : '';
     var q = num(x.actQty), qs = q === '' || lo === '' ? '' : q < lo ? 'low' : q > hi ? 'high' : 'ok';
-    var due = x.dueDate ? (x.finishDate ? (x.finishDate <= x.dueDate ? 'ok' : 'late') : (x.dueDate < H.data.today ? 'late' : 'wait')) : '';
-    return { yieldPct: y, lossPct: y === '' ? '' : Math.round((100 - y) * 100) / 100, target: target(p), expMin: lo, expMax: hi, qtyState: qs, due: due, rawStd: p && p.rawKg !== '' && b !== '' ? Math.round(p.rawKg * b * 1000) / 1000 : '', unit: (p && p.unit) || 'ชิ้น', usedFry: num(x.coolKg) === '' && num(x.fryKg) !== '' };
+    return { yieldPct: y, lossPct: y === '' ? '' : Math.round((100 - y) * 100) / 100, target: target(p), expMin: lo, expMax: hi, qtyState: qs, rawStd: p && p.rawKg !== '' && b !== '' ? Math.round(p.rawKg * b * 1000) / 1000 : '', unit: (p && p.unit) || 'ชิ้น', usedFry: num(x.coolKg) === '' && num(x.fryKg) !== '' };
   }
   function shrink(file) {
     return new Promise(function (res) {
@@ -158,9 +158,10 @@
     var D = H.day, s = S_(), html = '';
     GROUPS.forEach(function (g) {
       var its = []; D.items.forEach(function (x, i) { if (x.grp === g[0]) its.push(i); });
-      html += '<section class="xgsec" style="--g:' + g[2] + '"><h4 class="xgh"><span>' + g[0] + '</span>' + esc(g[1]) + ' <small>' + its.length + ' รายการ</small></h4>'
+      var gl = g[0] === 'G2' ? 'งานเตรียมวัตถุดิบ/ทอด/ผัด/อบ' : g[1];
+      html += '<section class="xgsec" style="--g:' + g[2] + '"><h4 class="xgh"><span>' + g[0] + '</span>' + esc(gl) + ' <small>' + its.length + ' รายการ</small></h4>'
         + its.map(function (i, n) { return itemCard(D.items[i], i, n, 'm'); }).join('')
-        + '<button class="btn btn-line xadd" data-add="' + g[0] + '" style="--g:' + g[2] + '">' + icon('plus', 18) + ' เพิ่มแผน ' + g[0] + ' · ' + esc(g[1]) + '</button></section>';
+        + '<button class="btn btn-line xadd" data-add="' + g[0] + '" style="--g:' + g[2] + '">' + icon('plus', 18) + ' เพิ่มแผน ' + g[0] + ' · ' + esc(gl) + '</button></section>';
     });
     html += '<div class="panel pbox xeve" style="--g:#0E7490"><h4>' + icon('send', 18) + ' ส่งแผนผลิตเข้า LINE</h4><p class="muted" style="margin:0 0 10px;font-size:13px">ส่งแผนของทุกกลุ่ม (G2 / G1 / G3) รวมเป็นการ์ดเดียว · กด "บันทึก" ก่อนส่ง</p>'
       + '<label class="xf full"><span>ข้อความท้ายการ์ด</span><span class="xin"><input id="mNote" value="' + esc(mr && mr.note ? mr.note : s.morningNote) + '" maxlength="200"></span></label>'
@@ -180,7 +181,7 @@
   function addItem(g) {
     collect();
     var D = H.day, last = D.items.filter(function (x) { return x.grp === g; }).slice(-1)[0];
-    D.items.push({ grp: g, date: D.date, productId: '', product: '', lot: g === 'G2' ? D.date : (last ? last.lot : ''), planBatch: '', planQty: '', dueDate: last ? last.dueDate : '', status: 'plan', _new: true });
+    D.items.push({ grp: g, date: D.date, productId: '', product: '', lot: g === 'G2' ? D.date : (last ? last.lot : ''), planBatch: '', planQty: '', status: 'plan', _new: true });
     markDirty(); dayPage();
     var cards = document.querySelectorAll('.xcard[data-g="' + g + '"]'); var c = cards[cards.length - 1]; if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); var sel = c.querySelector('select'); if (sel) sel.focus(); }
   }
@@ -200,11 +201,12 @@
       return { title: x.title, text: x.text || '', rows: (x.rows || []).map(function (r) { return { product: r.product, lot: lotIso(r.lot), qty: r.qty, unit: r.unit }; }) };
     });
     H.secDraft = { key: D.date + g, list: secs };
-    var EVE = { G2: 'สรุปงานเตรียม/ทอด/ผัด/อบ', G1: 'สรุปงานบรรจุ', G3: 'สรุปงานบรรจุลงลัง' };
+    var EVE = { G2: 'สรุปงานเตรียม/ทอด/ผัด/อบ', G1: 'สรุปงานบรรจุ', G3: 'สรุปงานบรรจุ' };
+    var dp = D.date.split('-'), defT = EVE[g] + ' ประจำวันที่ ' + dp[2] + '/' + dp[1] + '/' + String(+dp[0] + 543).slice(2);
     html += '<section class="panel pbox xeve" style="--g:' + GCOLOR[g] + '"><h4>🌙 สรุปงานเย็น ' + g + ' · ' + GNAME[g] + '</h4>'
       + '<p class="muted" style="margin:0 0 10px;font-size:13px">คนที่กรอกผลของกลุ่มนี้ เป็นคนกดส่งสรุปเข้า LINE · รูปจะส่งแยกเป็นภาพ ๆ ต่อจากการ์ด</p>'
-      + '<label class="xf full"><span>หัวข้อข้อความ</span><span class="xin"><input id="gTitle" value="' + esc(rep && rep.title ? rep.title : '') + '" placeholder="' + esc(EVE[g]) + '" maxlength="80"></span></label>'
-      + '<small class="muted" style="display:block;margin:4px 0 0">การ์ดจะขึ้นว่า "' + esc((rep && rep.title) || EVE[g]) + ' ประจำวันที่ …" ตามด้วยรายการของกลุ่มนี้</small>'
+      + '<label class="xf full"><span>หัวข้อข้อความ</span><span class="xin"><input id="gTitle" value="' + esc(rep && rep.title ? rep.title : defT) + '" placeholder="' + esc(defT) + '" maxlength="100"></span></label>'
+      + '<small class="muted" style="display:block;margin:4px 0 0">ขึ้นเป็นหัวการ์ด LINE · แก้ข้อความได้ (ลบให้ว่าง = กลับเป็นค่าเริ่มต้น)</small>'
       + '<div class="xsub">หัวข้อเพิ่มเติม (พิมพ์เอง)</div><datalist id="xSecT">' + list(s.sectionTitles).map(function (t) { return '<option value="' + esc(t) + '">'; }).join('') + '</datalist>'
       + '<datalist id="xProdL">' + H.data.products.filter(function (p) { return p.active !== 'ไม่ใช้'; }).map(function (p) { return '<option value="' + esc(p.name) + '">'; }).join('') + '</datalist>'
       + '<datalist id="xSecU"><option value="batch"><option value="kg.">' + list(s.units).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '<option value="ลัง"></datalist>'
@@ -263,12 +265,11 @@
     if (mode === 'm') {
       var plan = fi(i, 'lot', 'LOT (วันที่ผลิต)', x.lot, ' type="date"')
         + (g === 'G3' ? fi(i, 'planQty', 'แผน (ลัง)', x.planQty) : fi(i, 'planBatch', 'แผน (batch)', x.planBatch))
-        + fi(i, 'dueDate', 'กำหนดส่ง', x.dueDate, ' type="date"') + fi(i, 'note', 'หมายเหตุ', x.note, ' maxlength="200"');
+        + fi(i, 'note', 'หมายเหตุ', x.note, ' maxlength="200"');
       return head + '<div class="xgrid" style="margin-top:10px">' + plan + '</div></article>';
     }
     if (g === 'G2' && c.yieldPct !== '') tags += '<span class="xy ' + (c.yieldPct >= c.target ? 'ok' : 'bad') + '">Yield ' + fmt(c.yieldPct) + '%</span>';
     if (c.qtyState) tags += '<span class="xq ' + c.qtyState + '">' + (c.qtyState === 'ok' ? '✓ ตามช่วง' : c.qtyState === 'low' ? '↓ ต่ำกว่าช่วง' : '↑ เกินช่วง') + '</span>';
-    if (c.due) tags += '<span class="xdu ' + c.due + '">' + (c.due === 'ok' ? '🚚 ทันส่ง' : c.due === 'late' ? '⚠️ ไม่ทันส่ง' : 'ส่ง ' + dd(x.dueDate)) + '</span>';
     if (x.status === 'cancel') tags += '<span class="xdu late">ยกเลิก</span>';
     var chips = [x.lot ? 'LOT ' + lotText(x.lot) : '', x.planBatch !== '' && x.planBatch != null ? 'แผน ' + fmt(x.planBatch) + ' batch' : '', x.planQty !== '' && x.planQty != null ? 'แผน ' + fmt(x.planQty) + ' ลัง' : '', x.note || ''].filter(String);
     var res = g === 'G2'
@@ -438,7 +439,7 @@
     if (!q.from) { q.from = addDays(t, -6); q.to = t; }
     var lm = addDays(t.slice(0, 8) + '01', -1);
     var quick = [['7 วัน', addDays(t, -6), t], ['เดือนนี้', t.slice(0, 8) + '01', t], ['เดือนก่อน', lm.slice(0, 8) + '01', lm], ['3 เดือน', addDays(t, -89), t]];
-    $('main').innerHTML = '<h3>ภาพรวมฝ่ายผลิต</h3><p class="lead">Yield · จำนวนผลิตเทียบมาตรฐาน · ของเสีย · ทันเวลาจัดส่ง · Breakdown · <a href="' + esc(H.data.sheetUrl) + '" target="_blank" rel="noopener">เปิด Google Sheet</a></p>'
+    $('main').innerHTML = '<h3>ภาพรวมฝ่ายผลิต</h3><p class="lead">Yield · จำนวนผลิตเทียบมาตรฐาน · ของเสีย · Breakdown · <a href="' + esc(H.data.sheetUrl) + '" target="_blank" rel="noopener">เปิด Google Sheet</a></p>'
       + '<div class="pbar noprint"><div class="pchips" style="margin:0">' + quick.map(function (x) { return '<button class="chip' + (q.from === x[1] && q.to === x[2] ? ' on' : '') + '" data-q="' + x[1] + '|' + x[2] + '">' + x[0] + '</button>'; }).join('') + '</div>'
       + '<input type="date" id="qFrom" value="' + q.from + '" aria-label="ตั้งแต่"> – <input type="date" id="qTo" value="' + q.to + '" aria-label="ถึง"><button class="btn btn-sm btn-line" id="qPrint">' + icon('print', 16) + ' พิมพ์</button></div>'
       + '<div id="qOut"><div class="panel"><span class="spinner dark"></span> กำลังสรุป…</div></div>';
@@ -458,7 +459,6 @@
     var html = '<div class="kpis">'
       + tile(k.yieldPct == null ? '–' : fmt(k.yieldPct, 1) + '%', 'Yield เฉลี่ย (งานผัด)', k.yieldPct == null ? '#64748b' : k.yieldPct >= tg ? '#16a34a' : '#dc2626', 'เป้า ≥ ' + tg + '% · ต่ำกว่าเป้า ' + k.below + ' จาก ' + k.runs + ' รายการ')
       + tile(pct(k.qtyIn, k.qtyRuns), 'ผลิตได้ตามช่วงจำนวน', k.qtyLow ? '#d97706' : '#16a34a', 'ตามช่วง ' + k.qtyIn + ' · ต่ำกว่า ' + k.qtyLow + ' (จาก ' + k.qtyRuns + ')')
-      + tile(pct(k.onTime, k.withDue), 'ทันเวลาจัดส่ง', k.late ? '#dc2626' : '#16a34a', 'ทัน ' + k.onTime + ' จาก ' + k.withDue + ' รายการที่มีกำหนดส่ง · ไม่ทัน ' + k.late)
       + tile(fmt(k.lossKg) + ' กก.', 'ของเสีย', '#b45309', fmt(k.lossQty, 0) + ' ชิ้น')
       + tile(fmt(k.bdMinutes, 0) + ' นาที', 'Breakdown เครื่องจักร', k.bdCount ? '#dc2626' : '#16a34a', k.bdCount + ' ครั้ง')
       + '</div>';
@@ -468,10 +468,7 @@
       return '<div class="xyr"><span title="' + esc(p.name) + '">' + esc(p.name) + '<small>' + p.runs + ' ครั้ง · Lost ' + (y == null ? '–' : fmt(100 - y, 1) + '%') + (p.expMin ? ' · ได้ ' + fmt(p.qty, 0) + ' (ควร ' + fmt(p.expMin, 0) + '–' + fmt(p.expMax, 0) + ')' : '') + (p.lossKg ? ' · เสีย ' + fmt(p.lossKg) + ' กก.' : '') + '</small></span>'
         + '<i><em style="width:' + Math.max(2, Math.min(100, (y || 0) / mx * 100)) + '%;background:' + (ok ? '#16a34a' : '#dc2626') + '"></em><u style="left:' + p.target + '%"></u></i><b class="' + (ok ? 'pos' : 'neg') + '">' + (y == null ? '–' : fmt(y, 1) + '%') + '</b></div>';
     }).join('') : '<div class="muted">ยังไม่มีผลงานผัดในช่วงนี้</div>') + '</div>'
-      + '<div class="panel pbox"><h4>' + icon('warn', 18) + ' ไม่ทันเวลาจัดส่ง</h4>' + (r.lateList.length ? r.lateList.map(function (x) {
-        return '<div class="li"><span>' + esc(x.grp) + ' · ' + esc(x.product) + '</span><b class="neg">ส่ง ' + dd(x.dueDate) + '</b><small>ผลิต ' + dd(x.date) + ' · ' + (x.finishDate ? 'เสร็จ ' + dd(x.finishDate) : 'ยังไม่เสร็จ') + '</small></div>';
-      }).join('') : '<div class="muted">ทันทุกรายการ 👍</div>')
-      + '<h4 style="margin-top:16px">' + icon('gear2', 18) + ' Breakdown แยกเครื่อง</h4>' + (r.machines.length ? r.machines.map(function (m) {
+      + '<div class="panel pbox"><h4>' + icon('gear2', 18) + ' Breakdown แยกเครื่อง</h4>' + (r.machines.length ? r.machines.map(function (m) {
         return '<div class="li"><span>' + esc(m.name) + '</span><b>' + fmt(m.minutes, 0) + ' นาที</b><small>' + m.n + ' ครั้ง</small></div>';
       }).join('') : '<div class="muted">ไม่มี</div>')
       + '<h4 style="margin-top:16px">' + icon('box', 18) + ' งานบรรจุ</h4><div class="li"><span>บรรจุลงซอง/ถ้วย (G1)</span><b>' + fmt(k.packed, 0) + ' ชิ้น</b></div><div class="li"><span>บรรจุลงลัง (G3)</span><b>' + fmt(k.cases, 0) + ' ลัง</b></div></div></div>';

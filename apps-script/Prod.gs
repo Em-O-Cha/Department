@@ -32,7 +32,8 @@ var PRD_TABLES_ = {
 };
 var PRD_GROUPS_ = { G2: 'งานผัด', G1: 'งานบรรจุลงซอง/ถ้วย', G3: 'งานบรรจุลงลัง' };
 // หัวข้อข้อความตอนเย็น (ค่าเริ่มต้น · แก้ได้ในหน้าสรุปเย็น)
-var PRD_EVE_TITLE_ = { G2: 'สรุปงานเตรียม/ทอด/ผัด/อบ', G1: 'สรุปงานบรรจุ', G3: 'สรุปงานบรรจุลงลัง' };
+var PRD_EVE_TITLE_ = { G2: 'สรุปงานเตรียม/ทอด/ผัด/อบ', G1: 'สรุปงานบรรจุ', G3: 'สรุปงานบรรจุ' };
+var PRD_MOR_LABEL_ = { G2: 'งานเตรียมวัตถุดิบ/ทอด/ผัด/อบ', G1: 'งานบรรจุลงซอง/ถ้วย', G3: 'งานบรรจุลงลัง' };
 var PRD_EVE_SEC_ = { G2: 'งานผัด/งานอบ/ทำเย็น', G1: 'งานบรรจุ', G3: 'ยอดสินค้าบรรจุลงลัง' };
 var PRD_STATUS_ = { plan: 'ตามแผน', done: 'เสร็จแล้ว', cancel: 'ยกเลิก' };
 var PRD_SETTINGS_DEFAULT_ = {
@@ -140,7 +141,7 @@ function prdCalc_(o, prod, s) {
   var base = o.coolKg !== '' ? o.coolKg : o.fryKg;
   o.yieldPct = o.grp === 'G2' && o.rawKg && base !== '' ? Math.round(base / o.rawKg * 10000) / 100 : '';
   o.lossPct = o.yieldPct === '' ? '' : Math.round((100 - o.yieldPct) * 100) / 100;
-  var b = o.actBatch !== '' ? o.actBatch : o.planBatch;
+  var b = o.planBatch !== '' ? o.planBatch : o.actBatch;   // ช่วงที่ควรได้ คิดจากแผน (ไม่เปลี่ยนตามที่กรอกผล)
   o.expMin = prod && o.grp === 'G2' && b !== '' && prod.qtyMin !== '' ? Math.round(prod.qtyMin * b) : '';
   o.expMax = prod && o.grp === 'G2' && b !== '' && prod.qtyMax !== '' ? Math.round(prod.qtyMax * b) : '';
   return o;
@@ -295,7 +296,7 @@ function prdSaveReport(token, r) {
   return purLocked_(function () {
     var ss = prdBook_(dept), o = prdReport_(ss, date, kind, grp) || { id: purId_('RP'), date: date, kind: kind, grp: grp, files: '[]' };
     o.problems = prdText_(r.problems, 1500); o.checks = prdText_(r.checks, 300); o.note = prdText_(r.note, 500); o.by = purClean_(r.by, 60) || o.by; o.updatedAt = purNow_();
-    if (kind === 'evening') { o.title = purClean_(r.title, 80); o.sections = JSON.stringify(prdCleanSections_(r.sections)); }
+    if (kind === 'evening') { o.title = purClean_(r.title, 100); o.sections = JSON.stringify(prdCleanSections_(r.sections)); }
     purWrite_(ss, 'prd_reports', o);
     var x = prdReport_(ss, date, kind, grp); x.files = purParseFiles_(x.files); x.sections = prdSections_(x.sections);
     return { ok: true, report: x };
@@ -462,10 +463,10 @@ function prdMorningFlex_(date, plans, note) {
   ['G2', 'G1', 'G3'].forEach(function (g) {
     var list = plans.filter(function (x) { return x.grp === g && x.status !== 'cancel'; });
     if (!list.length) return;
-    body.push(prdSec_(g + ' · ' + PRD_GROUPS_[g] + ' (' + list.length + ' รายการ)', PRD_GCOLOR_[g]));
+    body.push(prdSec_(g + ' · ' + PRD_MOR_LABEL_[g] + ' (' + list.length + ' รายการ)', PRD_GCOLOR_[g]));
     list.forEach(function (x, i) {
       var amt = [x.planBatch !== '' ? prdFmt_(x.planBatch) + ' batch' : '', x.planQty !== '' ? prdFmt_(x.planQty) + (g === 'G3' ? ' ลัง' : ' ชิ้น') : ''].filter(String).join(' · ');
-      body.push(prdRow_(i + 1, x.product, [x.lot ? 'LOT ' + prdLotText_(x.lot) : '', x.dueDate ? { t: 'ส่ง ' + prdSlash_(x.dueDate), c: '#B45309' } : '', x.note], amt, PRD_GCOLOR_[g]));
+      body.push(prdRow_(i + 1, x.product, [x.lot ? 'LOT ' + prdLotText_(x.lot) : '', x.note], amt, PRD_GCOLOR_[g]));
       n++;
     });
   });
@@ -476,21 +477,22 @@ function prdMorningFlex_(date, plans, note) {
 }
 function prdEveningFlex_(date, grp, plans, rep, target, prods) {
   var body = [], list = plans.filter(function (x) { return x.grp === grp && x.status !== 'cancel'; });
-  var title = (rep && rep.title) || PRD_EVE_TITLE_[grp];
+  var dpt = String(date).split('-'), dTh = dpt[2] + '/' + dpt[1] + '/' + String(+dpt[0] + 543).slice(2);
+  var title = (rep && rep.title) || PRD_EVE_TITLE_[grp] + ' ประจำวันที่ ' + dTh;
+  if (!/ประจำวันที่/.test(title)) title += ' ประจำวันที่ ' + dTh;   // หัวข้อเก่าที่ไม่มีวันที่
   var unitOf = function (x) { return x.unit || (prods[x.productId] || {}).unit || 'ชิ้น'; };
-  if (list.length) body.push(prdSec_(PRD_EVE_SEC_[grp] + (grp === 'G2' ? ' (Yield เป้า ≥ ' + target + '%)' : ''), PRD_GCOLOR_[grp]));
+  if (list.length) body.push(prdSec_(PRD_EVE_SEC_[grp], PRD_GCOLOR_[grp]));
   list.forEach(function (x, i) {
     var sub = [], right = '', rc = '#0F172A';
     if (x.lot) sub.push('LOT ' + prdLotText_(x.lot));
     if (grp === 'G2') {
-      var p = prods[x.productId] || {}, t = p.target !== '' && p.target != null ? Number(p.target) : target, b = x.actBatch !== '' ? x.actBatch : x.planBatch;
+      var b = x.actBatch !== '' ? x.actBatch : x.planBatch;
       sub.push((b !== '' ? prdFmt_(b) + ' batch' : '') + (x.rawKg !== '' ? (b !== '' ? ' · ' : '') + 'วัตถุดิบ ' + prdFmt_(x.rawKg) + ' → ' + prdFmt_(x.coolKg !== '' ? x.coolKg : x.fryKg) + ' กก.' + (x.coolKg === '' && x.fryKg !== '' ? ' (หลังผัด)' : '') : ''));
       if (x.actQty !== '') {
         var ok = x.expMin === '' || (x.actQty >= x.expMin && x.actQty <= x.expMax);
-        sub.push({ t: (ok ? '✅ ' : x.actQty < x.expMin ? '🔻 ' : '🔺 ') + 'ได้ ' + prdFmt_(x.actQty) + (x.expMin !== '' ? ' (ควรได้ ' + prdFmt_(x.expMin) + (x.expMax !== x.expMin ? '–' + prdFmt_(x.expMax) : '') + ')' : ''), c: ok ? '#15803D' : '#B91C1C' });
-      }
-      if (x.yieldPct !== '') { right = 'Yield ' + prdFmt_(x.yieldPct) + '%'; rc = x.yieldPct >= t ? '#15803D' : '#B91C1C'; }
-      else right = 'ยังไม่กรอก';
+        if (x.expMin !== '') sub.push({ t: (ok ? '✅ ตามช่วง' : x.actQty < x.expMin ? '🔻 ต่ำกว่าช่วง' : '🔺 เกินช่วง') + ' (ควรได้ ' + prdFmt_(x.expMin) + (x.expMax !== x.expMin ? '–' + prdFmt_(x.expMax) : '') + ')', c: ok ? '#15803D' : '#B91C1C' });
+        right = prdFmt_(x.actQty) + ' ' + unitOf(x); rc = ok ? '#0F172A' : '#B91C1C';
+      } else right = 'ยังไม่กรอก';
     } else if (grp === 'G1') {
       right = x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : 'ยังไม่กรอก';
       if (x.planBatch !== '') sub[0] = (sub[0] ? sub[0] + ' · ' : '') + prdFmt_(x.planBatch) + ' batch';
@@ -498,7 +500,6 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
       right = [x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : '', x.actCases !== '' ? prdFmt_(x.actCases) + ' ลัง' : ''].filter(String).join(' ; ') || 'ยังไม่กรอก';
     }
     if (x.lossKg !== '' || x.lossQty !== '') sub.push({ t: 'ของเสีย ' + [x.lossKg !== '' ? prdFmt_(x.lossKg) + ' กก.' : '', x.lossQty !== '' ? prdFmt_(x.lossQty) + ' ชิ้น' : ''].filter(String).join(' / ') + (x.lossNote ? ' · ' + x.lossNote : ''), c: '#B45309' });
-    if (x.dueDate) { var onT = x.finishDate && x.finishDate <= x.dueDate; sub.push({ t: (onT ? '🚚 ทันส่ง ' : '⚠️ กำหนดส่ง ') + prdSlash_(x.dueDate), c: onT ? '#15803D' : '#B91C1C' }); }
     if (x.note) sub.push(x.note);
     body.push(prdRow_(i + 1, x.product, sub, right, rc));
   });
@@ -520,8 +521,8 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
   if (rep && rep.checks) body.push(prdBox_([prdT_('✅ ' + rep.checks + ' เรียบร้อย', { size: 'sm', color: '#166534', weight: 'bold' })], { margin: 'xl', backgroundColor: '#F0FDF4', cornerRadius: '12px', paddingAll: '12px' }));
   var nPhotos = rep ? purParseFiles_(rep.files).length : 0;
   if (nPhotos) body.push(prdT_('📷 รูปประกอบ ' + nPhotos + ' รูป อยู่ในข้อความถัดไป', { size: 'xxs', color: '#64748B', margin: 'md', align: 'center' }));
-  return prdCard_('DAILY REPORT · ' + grp, title + ' ประจำวันที่ ' + prdSlash_(date), grp + ' · ' + PRD_GROUPS_[grp] + (rep && rep.by ? ' · รายงานโดย ' + rep.by : ''), body,
-    title + ' ประจำวันที่ ' + prdSlash_(date), PRD_GCOLOR_[grp] === '#16A34A' ? '#15803D' : PRD_GCOLOR_[grp] === '#2563EB' ? '#1D4ED8' : '#C2410C');
+  return prdCard_('DAILY REPORT · ' + grp, title, grp + ' · ' + PRD_GROUPS_[grp] + (rep && rep.by ? ' · รายงานโดย ' + rep.by : ''), body,
+    title, PRD_GCOLOR_[grp] === '#16A34A' ? '#15803D' : PRD_GCOLOR_[grp] === '#2563EB' ? '#1D4ED8' : '#C2410C');
 }
 // ส่ง LINE: kind = morning (แผนทั้งวัน) | evening (สรุปของกลุ่ม grp + รูปแยกเป็นภาพ)
 function prdSendLine(token, kind, date, grp, by) {
