@@ -484,17 +484,21 @@ function prdRow_(no, name, sub, right, rightColor) {
   return { type: 'box', layout: 'horizontal', margin: 'md', contents: c };
 }
 var PRD_GCOLOR_ = { G2: '#EA580C', G1: '#2563EB', G3: '#16A34A' };
+var PRD_GTINT_ = { G2: '#FFEDD5', G1: '#DBEAFE', G3: '#DCFCE7' };
 function prdMorningFlex_(date, plans, note) {
   var body = [], n = 0;
   ['G2', 'G1', 'G3'].forEach(function (g) {
     var list = plans.filter(function (x) { return x.grp === g && x.status !== 'cancel'; });
     if (!list.length) return;
-    body.push(prdSec_(g + ' · ' + PRD_MOR_LABEL_[g] + ' (' + list.length + ' รายการ)', PRD_GCOLOR_[g]));
+    // แต่ละกลุ่ม (อาคาร) เป็นกล่องสีของตัวเอง: แถบหัวสีเข้ม + พื้นสีอ่อน
+    var rows = [prdBox_([prdT_(g + ' · ' + PRD_MOR_LABEL_[g], { size: 'md', weight: 'bold', color: '#FFFFFF' }), prdT_(list.length + ' รายการ', { size: 'xxs', color: '#FFFFFF', margin: 'xs' })],
+      { backgroundColor: PRD_GCOLOR_[g], cornerRadius: '10px', paddingAll: '10px' })];
     list.forEach(function (x, i) {
       var amt = [x.planBatch !== '' ? prdFmt_(x.planBatch) + ' batch' : '', x.planQty !== '' ? prdFmt_(x.planQty) + (g === 'G3' ? ' ลัง' : ' ชิ้น') : ''].filter(String).join(' · ');
-      body.push(prdRow_(i + 1, x.product, [x.lot ? 'LOT ' + prdLotText_(x.lot) : '', x.note], amt, PRD_GCOLOR_[g]));
+      rows.push(prdRow_(i + 1, x.product, [x.lot ? 'LOT ' + prdLotText_(x.lot) : '', x.note], amt, PRD_GCOLOR_[g]));
       n++;
     });
+    body.push(prdBox_(rows, { margin: 'lg', backgroundColor: PRD_GTINT_[g], cornerRadius: '14px', paddingAll: '8px', paddingBottom: '12px', borderColor: PRD_GCOLOR_[g], borderWidth: '1px' }));
   });
   if (!n) body.push(prdT_('ยังไม่มีรายการในแผน', { size: 'sm', color: '#64748B', margin: 'lg' }));
   if (note) body.push(prdBox_([prdT_('📌 ' + note, { size: 'sm', color: '#9A3412', weight: 'bold' })], { margin: 'xl', backgroundColor: '#FFF7ED', cornerRadius: '12px', paddingAll: '12px' }));
