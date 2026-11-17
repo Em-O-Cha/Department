@@ -152,7 +152,8 @@
     $('main').innerHTML = '<div class="xdhead"><h3>แผนผลิต / บันทึกผล</h3>'
       + '<div class="xdate"><button class="icon-btn" id="dPrev" aria-label="วันก่อนหน้า">‹</button><label><span>' + dayName(D.date) + '</span><input type="date" id="dDate" value="' + D.date + '"></label><button class="icon-btn" id="dNext" aria-label="วันถัดไป">›</button>'
       + (D.date !== t ? '<button class="btn btn-line btn-sm" id="dToday">วันนี้</button>' : '') + '</div>'
-      + '<label class="xme">ผู้บันทึก <input id="dMe" value="' + esc(me()) + '" placeholder="ชื่อของคุณ" maxlength="40"></label></div>'
+      + '<label class="xme">ผู้บันทึก <input id="dMe" list="xPeople" value="' + esc(me()) + '" placeholder="เลือกหรือพิมพ์ชื่อ" maxlength="40"></label>'
+      + '<datalist id="xPeople">' + list(S_().people).map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist></div>'
       // เช้า = ใส่แผน + ส่งแผน · เย็น = ใส่ผลจริงทีละกลุ่ม + ส่งสรุปของกลุ่ม (ไม่ปนกัน)
       + '<div class="xmode" role="tablist">' + [['m', '🌅 แผนเช้า', 'ใส่แผนผลิตของวันนี้ แล้วส่งแผนเข้า LINE', mr && mr.sentAt], ['e', '🌙 สรุปเย็น', 'ใส่ผลผลิตจริงของแต่ละกลุ่ม แล้วส่งสรุป', null]].map(function (x) {
         return '<button role="tab" class="xmb' + (q.mode === x[0] ? ' on' : '') + '" data-mode="' + x[0] + '" aria-selected="' + (q.mode === x[0]) + '"><b>' + x[1] + (x[3] ? ' <small class="xok">✓ ส่งแล้ว</small>' : '') + '</b><span>' + x[2] + '</span></button>';
@@ -691,7 +692,7 @@
       + '</div>'
       + '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('chart', 18) + ' เป้าหมาย</h4><div class="pform"><div class="pf"><label for="s_target">Yield ขั้นต่ำ (%) ของทุกสินค้า</label><input id="s_target" inputmode="decimal" value="' + esc(s.target) + '"></div></div></div>'
       + '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('list', 18) + ' ตัวเลือก</h4><div class="pform">'
-      + ta('machines', 'รายชื่อเครื่องจักร / อุปกรณ์', 'เช่น กระทะผัด 1, เครื่องซีล 2, ตู้เย็น') + ta('lossCauses', 'สาเหตุของเสีย') + ta('lateCauses', 'สาเหตุที่เสร็จช้ากว่ากำหนด', 'Breakdown เครื่องจักร, วัตถุดิบไม่พอ / มาช้า') + ta('checks', 'รายการปิดงานตอนเย็น', 'ปิดน้ำ, ปิดไฟ, ปิดแอร์')
+      + ta('machines', 'รายชื่อเครื่องจักร / อุปกรณ์', 'เช่น กระทะผัด 1, เครื่องซีล 2, ตู้เย็น') + ta('people', 'รายชื่อผู้บันทึก (ตัวเลือกในช่อง ผู้บันทึก)', 'เช่น สมชาย, สมหญิง') + ta('lossCauses', 'สาเหตุของเสีย') + ta('lateCauses', 'สาเหตุที่เสร็จช้ากว่ากำหนด', 'Breakdown เครื่องจักร, วัตถุดิบไม่พอ / มาช้า') + ta('checks', 'รายการปิดงานตอนเย็น', 'ปิดน้ำ, ปิดไฟ, ปิดแอร์')
       + ta('units', 'หน่วยนับสินค้า', 'ซอง, ถ้วย, กระปุก, ดวง') + ta('sectionTitles', 'หัวข้อสำเร็จรูปสำหรับข้อความเย็น', 'เตรียมวัตถุดิบ, น้ำพริกค้างแพ็ค') + ta('morningNote', 'ข้อความท้ายแผนผลิตตอนเช้า (ค่าเริ่มต้น)') + '</div></div>'
       + '<div class="qsave"><button class="btn btn-primary" id="sSave">' + icon('check', 18) + ' บันทึกการตั้งค่า</button></div>';
     bindCopy($('main'));
@@ -703,7 +704,7 @@
     });
     if ($('sTest')) $('sTest').addEventListener('click', function () { call('prdLineTest', state.token).then(function (r) { toast(r.ok ? 'ส่งข้อความทดสอบแล้ว' : r.error); }).catch(onServerError); });
     $('sSave').addEventListener('click', function () {
-      var o = {}, b = this; ['target', 'machines', 'lossCauses', 'lateCauses', 'checks', 'units', 'sectionTitles', 'morningNote'].forEach(function (k) { if ($('s_' + k)) o[k] = $('s_' + k).value.trim(); });
+      var o = {}, b = this; ['target', 'machines', 'people', 'lossCauses', 'lateCauses', 'checks', 'units', 'sectionTitles', 'morningNote'].forEach(function (k) { if ($('s_' + k)) o[k] = $('s_' + k).value.trim(); });
       if (!(Number(o.target) > 0 && Number(o.target) <= 100)) return toast('Yield ขั้นต่ำต้องอยู่ระหว่าง 1–100');
       b.disabled = true;
       call('prdSaveSettings', state.token, o).then(function (r) { b.disabled = false; if (!r.ok) return toast(r.error); H.data.settings = r.settings; toast('บันทึกการตั้งค่าแล้ว'); }).catch(function (e) { b.disabled = false; onServerError(e); });

@@ -125,6 +125,7 @@ function prdSettings_(ss) {
   Object.keys(PRD_SETTINGS_DEFAULT_).forEach(function (k) { s[k] = PRD_SETTINGS_DEFAULT_[k]; });
   purRead_(ss, 'prd_settings').forEach(function (x) { if (x.id) s[x.id] = String(x.value == null ? '' : x.value); });
   // ชุดสาเหตุเสร็จช้าเดิม (ยังไม่เคยแก้เอง) → ใช้ชุดใหม่ที่ครบกว่า
+  if (!String(s.people || '').trim() && typeof PRD_PEOPLE_DEFAULT_ !== 'undefined') s.people = PRD_PEOPLE_DEFAULT_;   // รายชื่อผู้บันทึกเริ่มต้น (ProdPeople.gs)
   if (s.checks === 'ปิดน้ำ, ปิดไฟ, ปิดแอร์') s.checks = PRD_SETTINGS_DEFAULT_.checks;   // ชุดเดิม → เพิ่มปิดแก๊ส
   if (s.lateCauses === 'Breakdown เครื่องจักร, วัตถุดิบไม่พอ / มาช้า, คนไม่พอ, งานแทรก / เปลี่ยนแผน') s.lateCauses = PRD_SETTINGS_DEFAULT_.lateCauses;
   return s;
