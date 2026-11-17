@@ -8,7 +8,8 @@ var EXEC_DASHBOARDS_ = { PUR: function (dept, from, to) { return purDashboard_(d
   HR: function (dept, from, to) { return hrDashboard_(dept, from, to); },
   SHE: function (dept, from, to) { var d = sheDashboard_(dept, from, to); d.kind = 'safety'; return d; },
   QA: function (dept, from, to) { return qaDashboard_(dept, from, to); },
-  ACC: function (dept, from, to) { return accDashboard_(dept, from, to, 'po', ''); } };
+  ACC: function (dept, from, to) { return accDashboard_(dept, from, to, 'po', ''); },
+  PROD: function (dept, from, to) { return prdDashboard_(dept, from, to); } };
 
 function requireExec_(token) {
   var d = requireDept_(token);

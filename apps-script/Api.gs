@@ -42,6 +42,10 @@ function apiFunctions_() {
     // ฝ่ายประกันคุณภาพ — ข้อร้องเรียนลูกค้า (Qa.gs)
     qaLoad: qaLoad, qaSave: qaSave, qaDelete: qaDelete, qaUploadFile: qaUploadFile, qaRemoveFile: qaRemoveFile, qaSaveSettings: qaSaveSettings,
     qaLog: qaLog, qaDashboard: qaDashboard, qaSaveTest: qaSaveTest, qaDeleteTest: qaDeleteTest, qaSaveNewProd: qaSaveNewProd, qaDeleteNewProd: qaDeleteNewProd,
+    // ฝ่ายผลิต (Prod.gs)
+    prdLoad: prdLoad, prdSaveProduct: prdSaveProduct, prdSavePlans: prdSavePlans, prdDeletePlan: prdDeletePlan, prdSaveBreakdown: prdSaveBreakdown,
+    prdDeleteBreakdown: prdDeleteBreakdown, prdSaveReport: prdSaveReport, prdUploadPhoto: prdUploadPhoto, prdRemovePhoto: prdRemovePhoto,
+    prdSaveSettings: prdSaveSettings, prdLog: prdLog, prdDashboard: prdDashboard, prdSendLine: prdSendLine, prdLinePreview: prdLinePreview, prdLineTest: prdLineTest,
     // ผู้บริหาร (Executive.gs)
     execOverview: execOverview, execDashboard: execDashboard, execVerify: execVerify
   };
@@ -52,9 +56,12 @@ function doPost(e) {
   try {
     var req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     if (Array.isArray(req.events)) {   // Webhook ของ LINE OA: ฝ่ายบัญชี (Acc.gs) แยกด้วย destination ไม่ใช่ = ฝ่ายบุคคล (HrPublic.gs)
-      var isAcc = accIsMyBot_(req.destination);
-      if (req.events.length) accDiagLog_({ ev: 'webhook', acc: isAcc, types: req.events.map(function (x) { return x.type + (x.source ? '/' + x.source.type : ''); }).join(',') });
-      if (isAcc) accLineWebhook_(req.events);
+      var isAcc = accIsMyBot_(req.destination), isPrd = prdIsMyBot_(req.destination);
+      if (req.events.length) accDiagLog_({ ev: 'webhook', acc: isAcc, prd: isPrd, types: req.events.map(function (x) { return x.type + (x.source ? '/' + x.source.type : ''); }).join(',') });
+      // ฝ่ายผลิต (Prod.gs) ใช้ OA ของตัวเอง หรือใช้ OA เดียวกับฝ่ายบัญชีก็ได้ (แยกด้วยคำว่า "ผลิต" ในคำสั่ง)
+      if (isPrd && !isAcc) prdLineWebhook_(req.events);
+      else if (isAcc && isPrd) { prdLineWebhook_(req.events.filter(prdIsCommand_), true); accLineWebhook_(req.events.filter(function (x) { return !prdIsCommand_(x); })); }
+      else if (isAcc) accLineWebhook_(req.events);
       else hrLineWebhook_(req.events);
       return ContentService.createTextOutput('OK');
     }
