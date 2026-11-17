@@ -20,7 +20,7 @@ var PRD_TABLES_ = {
     ['planBatch', 'แผน (batch)'], ['planQty', 'แผน (จำนวน)'], ['dueDate', 'กำหนดส่ง'],
     ['actBatch', 'ทำจริง (batch)'], ['rawKg', 'น้ำหนักวัตถุดิบ (กก.)'], ['fryKg', 'น้ำหนักหลังผัด (กก.)'], ['coolKg', 'น้ำหนักหลังทำเย็น (กก.)'],
     ['yieldPct', 'Yield (%)'], ['lossPct', '% Lost'], ['actQty', 'จำนวนที่ได้จริง'], ['unit', 'หน่วย'], ['actCases', 'จำนวนลัง'], ['expMin', 'ควรได้ (ต่ำสุด)'], ['expMax', 'ควรได้ (สูงสุด)'],
-    ['lossKg', 'ของเสีย (กก.)'], ['lossQty', 'ของเสีย (ชิ้น)'], ['lossNote', 'สาเหตุของเสีย'], ['finishDate', 'วันที่เสร็จ'], ['status', 'สถานะ'], ['note', 'หมายเหตุ'],
+    ['lossKg', 'ของเสีย (กก.)'], ['lossQty', 'ของเสีย (ชิ้น)'], ['lossNote', 'สาเหตุของเสีย'], ['finishDate', 'วันที่เสร็จ'], ['lateCause', 'สาเหตุเสร็จช้ากว่ากำหนด'], ['status', 'สถานะ'], ['note', 'หมายเหตุ'],
     ['by', 'ผู้บันทึก'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
   prd_reports: { tab: 'รายงาน LINE', cols: [
     ['id', 'รหัส'], ['date', 'วันที่'], ['kind', 'รอบ'], ['grp', 'กลุ่มงาน'], ['title', 'หัวข้อข้อความ'], ['sections', 'หัวข้อเพิ่มเติม'], ['problems', 'ปัญหาที่พบ'], ['checks', 'ปิดงาน (ปิดน้ำ/ไฟ/แอร์)'], ['note', 'หมายเหตุ'],
@@ -38,7 +38,7 @@ var PRD_EVE_SEC_ = { G2: 'งานผัด/งานอบ/ทำเย็น'
 var PRD_STATUS_ = { plan: 'ตามแผน', done: 'เสร็จแล้ว', cancel: 'ยกเลิก' };
 var PRD_SETTINGS_DEFAULT_ = {
   target: '85', machines: '', people: '', units: 'ซอง, ถ้วย, กระปุก, ขวด, ชิ้น',
-  checks: 'ปิดน้ำ, ปิดไฟ, ปิดแอร์', sectionTitles: 'เตรียมวัตถุดิบ, สรุปงานลงถ้วย, สรุปงานลงซอง, น้ำพริกค้างแพ็ค, หมายเหตุ', morningNote: 'ไลน์ผลิตและบรรจุเลิก 20.00', lossCauses: 'ไหม้ / สุกเกิน, หกหล่น, ซีลไม่ติด / ซองรั่ว, น้ำหนักไม่ได้, สิ่งแปลกปลอม, อื่น ๆ'
+  checks: 'ปิดน้ำ, ปิดไฟ, ปิดแอร์', sectionTitles: 'เตรียมวัตถุดิบ, สรุปงานลงถ้วย, สรุปงานลงซอง, น้ำพริกค้างแพ็ค, หมายเหตุ', morningNote: 'ไลน์ผลิตและบรรจุเลิก 20.00', lateCauses: 'Breakdown เครื่องจักร, วัตถุดิบไม่พอ / มาช้า, คนไม่พอ, งานแทรก / เปลี่ยนแผน', lossCauses: 'ไหม้ / สุกเกิน, หกหล่น, ซีลไม่ติด / ซองรั่ว, น้ำหนักไม่ได้, สิ่งแปลกปลอม, อื่น ๆ'
 };
 
 var PRD_PRODUCT_SEED_ = [   // [หมวด, ชื่อสินค้า, น้ำหนักวัตถุดิบต่อ batch (kg), จำนวนที่ควรได้ต่ำสุด, สูงสุด] — จากไฟล์ Yield 02.11.2026
@@ -199,13 +199,28 @@ function prdLotIso_(v) {
   var y = +m[3]; if (y < 100) y += 2000; if (y > 2400) y -= 543;
   return y + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
 }
+// กำหนดเสร็จ: G2 ต้องเสร็จในวันผลิต · G1 / G3 ไม่เกิน 3 วันหลังวันผลิต
+var PRD_FINISH_DAYS_ = { G2: 0, G1: 3, G3: 3 };
+function prdDeadline_(x) {
+  var d = String(x.date || ''), n = PRD_FINISH_DAYS_[x.grp] || 0, p = d.split('-');
+  if (p.length !== 3 || !n) return d;
+  var t = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n));
+  return t.getUTCFullYear() + '-' + ('0' + (t.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + t.getUTCDate()).slice(-2);
+}
+// สถานะเสร็จ: ok = ตามกำหนด · late = เสร็จช้า · over = ยังไม่เสร็จและเลยกำหนด · wait = ยังไม่เสร็จ ยังไม่ถึงกำหนด
+function prdFinishState_(x, today) {
+  var dl = prdDeadline_(x);
+  if (x.finishDate) return x.finishDate <= dl ? 'ok' : 'late';
+  return today > dl ? 'over' : 'wait';
+}
+function prdTh_(iso) { var p = String(iso || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + String(+p[0] + 543).slice(2) : String(iso || ''); }
 function prdCleanPlan_(p, s) {
   var grp = PRD_GROUPS_[p.grp] ? p.grp : 'G2';
   var o = { grp: grp, date: purDate_(p.date), productId: purClean_(p.productId, 20), product: purClean_(p.product, 150), lot: prdLotIso_(p.lot),
     planBatch: prdNum_(p.planBatch, 10000), planQty: prdNum_(p.planQty, 1e7), dueDate: purDate_(p.dueDate),
     actBatch: prdNum_(p.actBatch, 10000), rawKg: prdNum_(p.rawKg, 1e6), fryKg: prdNum_(p.fryKg, 1e6), coolKg: prdNum_(p.coolKg, 1e6),
     actQty: prdNum_(p.actQty, 1e7), unit: purClean_(p.unit, 20), actCases: prdNum_(p.actCases, 1e6), lossKg: prdNum_(p.lossKg, 1e6), lossQty: prdNum_(p.lossQty, 1e7),
-    lossNote: prdText_(p.lossNote, 300), finishDate: purDate_(p.finishDate), status: PRD_STATUS_[p.status] ? p.status : 'plan', note: prdText_(p.note, 500), by: purClean_(p.by, 60) };
+    lossNote: prdText_(p.lossNote, 300), finishDate: purDate_(p.finishDate), lateCause: prdText_(p.lateCause, 300), status: PRD_STATUS_[p.status] ? p.status : 'plan', note: prdText_(p.note, 500), by: purClean_(p.by, 60) };
   return o;
 }
 function prdSavePlans(token, items) {
@@ -219,6 +234,7 @@ function prdSavePlans(token, items) {
     if (c.grp === 'G2' && c.coolKg !== '' && c.rawKg === '') return { ok: false, error: c.product + ': ใส่น้ำหนักวัตถุดิบก่อน จึงคิด Yield ได้' };
     if (c.rawKg !== '' && ((c.coolKg !== '' && c.coolKg > c.rawKg * 1.5) || (c.fryKg !== '' && c.fryKg > c.rawKg * 1.5))) return { ok: false, error: c.product + ': น้ำหนักหลังผัด/หลังทำเย็นมากกว่าวัตถุดิบเกินจริง — ตรวจหน่วย (กก.)' };
     if (c.finishDate && c.date && c.finishDate < c.date) return { ok: false, error: c.product + ': วันที่เสร็จต้องไม่ก่อนวันผลิต' };
+    if (c.status !== 'cancel' && c.finishDate && c.finishDate > prdDeadline_(c) && !c.lateCause) return { ok: false, error: c.grp + ' ' + c.product + ': เสร็จช้ากว่ากำหนด — ใส่สาเหตุ' };
   }
   return purLocked_(function () {
     var ss = prdBook_(dept), s = prdSettings_(ss), all = purRead_(ss, 'prd_plans'), prods = purRead_(ss, 'prd_products'), now = purNow_(), saved = [];
@@ -226,8 +242,9 @@ function prdSavePlans(token, items) {
       var c = prdCleanPlan_(it), old = it.id ? all.filter(function (x) { return x.id === it.id; })[0] : null;
       var o = old || { id: purId_('PL'), createdAt: now };
       Object.keys(c).forEach(function (k) { o[k] = c[k]; });
-      if (o.status === 'plan' && (o.finishDate || (o.grp === 'G2' ? o.coolKg !== '' || o.actQty !== '' : o.actQty !== '' || o.actCases !== ''))) o.status = 'done';
-      if (o.status === 'done' && !o.finishDate) o.finishDate = o.date;
+      // เสร็จแล้ว = เลือกวันที่เสร็จแล้วเท่านั้น (ผู้กรอกเลือกเอง ไม่เติมให้อัตโนมัติ)
+      if (o.status === 'plan' && o.finishDate) o.status = 'done';
+      if (o.status === 'done' && !o.finishDate) o.status = 'plan';
       if (!o.lot && o.grp === 'G2') o.lot = o.date;   // งานผัด: LOT = วันที่ผลิต
       prdCalc_(o, prods.filter(function (x) { return x.id === o.productId; })[0], s);
       o.updatedAt = now;
@@ -398,9 +415,12 @@ function prdDashboard_(dept, from, to) {
   });
   var prodList = Object.keys(byProd).map(function (k) { var o = byProd[k]; o.yieldPct = o.raw ? Math.round(o.out / o.raw * 1000) / 10 : null; return o; })
     .sort(function (a, b) { return (a.yieldPct == null ? 999 : a.yieldPct) - (b.yieldPct == null ? 999 : b.yieldPct); });
-  var withDue = plans.filter(function (x) { return x.dueDate; });
-  var onTime = withDue.filter(function (x) { return x.finishDate && x.finishDate <= x.dueDate; }).length;
-  var late = withDue.filter(function (x) { return (x.finishDate && x.finishDate > x.dueDate) || (!x.finishDate && x.dueDate < today); });
+  plans.forEach(function (x) { x._fs = prdFinishState_(x, today); });
+  var judged = plans.filter(function (x) { return x._fs !== 'wait'; });
+  var onTime = judged.filter(function (x) { return x._fs === 'ok'; }).length;
+  var late = judged.filter(function (x) { return x._fs !== 'ok'; }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+  var byCause = {};
+  late.forEach(function (x) { var k = x.lateCause || (x._fs === 'over' ? 'ยังไม่เสร็จ (ยังไม่ระบุสาเหตุ)' : 'ไม่ระบุ'); byCause[k] = (byCause[k] || 0) + 1; });
   var qtyRuns = g2.filter(function (x) { return x.actQty !== '' && x.expMin !== ''; });
   var bds = purRead_(ss, 'prd_breakdowns').filter(function (x) { return x.date >= from && x.date <= to; });
   var byMachine = {};
@@ -409,12 +429,13 @@ function prdDashboard_(dept, from, to) {
   g2.forEach(function (x) { var o = days[x.date] = days[x.date] || { date: x.date, raw: 0, out: 0 }; o.raw += Number(x.rawKg) || 0; o.out += Number(x.coolKg !== '' ? x.coolKg : x.fryKg) || 0; });
   return { kind: 'production', from: from, to: to, target: defTarget,
     kpi: { runs: g2.length, yieldPct: raw ? Math.round(cool / raw * 1000) / 10 : null, below: g2.filter(function (x) { return x.yieldPct < tgt(x); }).length,
-      lossKg: Math.round(sum(plans, 'lossKg') * 100) / 100, lossQty: sum(plans, 'lossQty'), onTime: onTime, withDue: withDue.length, late: late.length,
+      lossKg: Math.round(sum(plans, 'lossKg') * 100) / 100, lossQty: sum(plans, 'lossQty'), onTime: onTime, judged: judged.length, late: late.length,
       qtyIn: qtyRuns.filter(function (x) { return x.actQty >= x.expMin && x.actQty <= x.expMax; }).length, qtyLow: qtyRuns.filter(function (x) { return x.actQty < x.expMin; }).length, qtyRuns: qtyRuns.length,
       bdCount: bds.length, bdMinutes: sum(bds, 'minutes'),
       packed: sum(plans.filter(function (x) { return x.grp === 'G1'; }), 'actQty'), cases: sum(plans.filter(function (x) { return x.grp === 'G3'; }), 'actCases') },
     products: prodList.slice(0, 40),
-    lateList: late.slice(0, 15).map(function (x) { return { date: x.date, grp: x.grp, product: x.product, dueDate: x.dueDate, finishDate: x.finishDate }; }),
+    lateList: late.slice(0, 15).map(function (x) { return { date: x.date, grp: x.grp, product: x.product, deadline: prdDeadline_(x), finishDate: x.finishDate, cause: x.lateCause, state: x._fs }; }),
+    lateCauses: Object.keys(byCause).map(function (k) { return { name: k, n: byCause[k] }; }).sort(function (a, b) { return b.n - a.n; }),
     machines: Object.keys(byMachine).map(function (k) { return byMachine[k]; }).sort(function (a, b) { return b.minutes - a.minutes; }),
     days: Object.keys(days).sort().map(function (k) { var o = days[k]; return { date: k, yieldPct: o.raw ? Math.round(o.out / o.raw * 1000) / 10 : null }; }) };
 }
@@ -500,6 +521,10 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
       right = [x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : '', x.actCases !== '' ? prdFmt_(x.actCases) + ' ลัง' : ''].filter(String).join(' ; ') || 'ยังไม่กรอก';
     }
     if (x.lossKg !== '' || x.lossQty !== '') sub.push({ t: 'ของเสีย ' + [x.lossKg !== '' ? prdFmt_(x.lossKg) + ' กก.' : '', x.lossQty !== '' ? prdFmt_(x.lossQty) + ' ชิ้น' : ''].filter(String).join(' / ') + (x.lossNote ? ' · ' + x.lossNote : ''), c: '#B45309' });
+    var fs = prdFinishState_(x, purToday_()), dl = prdDeadline_(x);
+    if (fs === 'ok') sub.push({ t: '🏁 เสร็จ ' + prdTh_(x.finishDate) + ' ตามกำหนด', c: '#15803D' });
+    else if (fs === 'wait') sub.push({ t: '⏳ ยังไม่เสร็จ · กำหนดเสร็จ ' + prdTh_(dl), c: '#64748B' });
+    else sub.push({ t: '⚠️ ' + (fs === 'late' ? 'เสร็จ ' + prdTh_(x.finishDate) + ' ช้ากว่ากำหนด' : 'ยังไม่เสร็จ เลยกำหนด') + ' (กำหนด ' + prdTh_(dl) + ')' + (x.lateCause ? ' · สาเหตุ: ' + x.lateCause : ''), c: '#B91C1C' });
     if (x.note) sub.push(x.note);
     body.push(prdRow_(i + 1, x.product, sub, right, rc));
   });

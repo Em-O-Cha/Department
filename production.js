@@ -49,6 +49,18 @@
     var q = num(x.actQty), qs = q === '' || lo === '' ? '' : q < lo ? 'low' : q > hi ? 'high' : 'ok';
     return { yieldPct: y, lossPct: y === '' ? '' : Math.round((100 - y) * 100) / 100, target: target(p), expMin: lo, expMax: hi, qtyState: qs, rawStd: p && p.rawKg !== '' && b !== '' ? Math.round(p.rawKg * b * 1000) / 1000 : '', unit: (p && p.unit) || 'ชิ้น', usedFry: num(x.coolKg) === '' && num(x.fryKg) !== '' };
   }
+  // กำหนดเสร็จ: G2 ภายในวันผลิต · G1 / G3 ไม่เกิน 3 วัน (ตรงกับ prdDeadline_ ใน Prod.gs)
+  function deadline(x) { var p = String(x.date || '').split('-'), n = x.grp === 'G2' ? 0 : 3; if (p.length !== 3 || !n) return x.date; var t = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n)); return t.toISOString().slice(0, 10); }
+  function finState(x) { var dl = deadline(x); return x.finishDate ? (x.finishDate <= dl ? 'ok' : 'late') : (H.data.today > dl ? 'over' : 'wait'); }
+  function finHtml(i, x) {
+    var fs = finState(x), dl = deadline(x), causes = list(S_().lateCauses), other = x._lcO || (x.lateCause && causes.indexOf(x.lateCause) < 0);
+    var head = fs === 'ok' ? '<b class="ok">✓ เสร็จตามกำหนด</b>' : fs === 'wait' ? '<b>กำหนดเสร็จ ' + dd(dl) + '</b><small>' + (x.grp === 'G2' ? 'ต้องเสร็จภายในวันผลิต' : 'ไม่เกิน 3 วันหลังวันผลิต') + ' · เสร็จแล้วให้เลือกวันที่เสร็จ</small>'
+      : '<b class="bad">⚠️ ' + (fs === 'late' ? 'เสร็จช้ากว่ากำหนด' : 'ยังไม่เสร็จ เลยกำหนดแล้ว') + '</b><small>กำหนดเสร็จ ' + dd(dl) + (x.grp === 'G2' ? ' (ภายในวันผลิต)' : ' (ไม่เกิน 3 วัน)') + '</small>';
+    if (fs === 'ok' || fs === 'wait') return '<div class="xfin ' + fs + '">' + head + '</div>';
+    return '<div class="xfin bad">' + head + '<div class="xlc"><label class="xf"><span>สาเหตุ' + (fs === 'late' ? ' (ต้องใส่)' : '') + '</span><span class="xin"><select data-lcs="' + i + '"><option value="">— เลือกสาเหตุ —</option>'
+      + causes.map(function (c) { return '<option' + (!other && x.lateCause === c ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '<option value="__other"' + (other ? ' selected' : '') + '>อื่น ๆ (ระบุ)</option></select></span></label>'
+      + (other ? '<label class="xf"><span>ระบุสาเหตุ</span><span class="xin"><input data-i="' + i + '" data-k="lateCause" value="' + esc(x.lateCause || '') + '" maxlength="200" placeholder="พิมพ์สาเหตุ"></span></label>' : '') + '</div></div>';
+  }
   function shrink(file) {
     return new Promise(function (res) {
       var url = URL.createObjectURL(file), im = new Image();
@@ -281,7 +293,8 @@
       : fi(i, 'actQty', g === 'G1' ? 'จำนวนที่บรรจุได้' : 'จำนวนที่บรรจุลงลัง', x.actQty, ' inputmode="numeric"')
         + fi(i, 'unit', 'หน่วย', x.unit, ' list="xUnits" maxlength="20" placeholder="' + esc(c.unit) + '"') + (g === 'G3' ? fi(i, 'actCases', 'จำนวนลัง', x.actCases, ' inputmode="numeric"', 'ลัง') : '');
     res += fi(i, 'lossKg', 'ของเสีย (น้ำหนัก)', x.lossKg, null, 'กก.') + fi(i, 'lossQty', 'ของเสีย (จำนวน)', x.lossQty, ' inputmode="numeric"', 'ชิ้น')
-      + fi(i, 'lossNote', 'สาเหตุของเสีย', x.lossNote, ' list="xCauses" maxlength="150"') + fi(i, 'finishDate', 'วันที่เสร็จ', x.finishDate, ' type="date"');
+      + fi(i, 'lossNote', 'สาเหตุของเสีย', x.lossNote, ' list="xCauses" maxlength="150"') + fi(i, 'finishDate', 'วันที่เสร็จ', x.finishDate, ' type="date" min="' + esc(x.date || '') + '"')
+      + '<div class="xfinw" data-fin="' + i + '">' + finHtml(i, x) + '</div>';
     // หัวการ์ดเย็น: สินค้าจากแผนเช้า (แก้ไม่ได้ที่นี่) + ข้อมูลแผน
     return '<article class="xcard" data-g="' + g + '" style="--g:' + GCOLOR[g] + '"><div class="xch"><span class="xno">' + (n + 1) + '</span><div class="xpname"><b>' + esc(x.product || '(ยังไม่เลือกสินค้า)') + '</b>'
       + '<div class="xchips">' + chips.map(function (t) { return '<span>' + esc(t) + '</span>'; }).join('') + '</div></div></div>'
@@ -301,7 +314,15 @@
     on('[data-i][data-k]', 'input', function (el) {
       var i = +el.getAttribute('data-i'), x = D.items[i]; x[el.getAttribute('data-k')] = el.value.trim(); markDirty();
       var box = root.querySelector('[data-calc="' + i + '"]'); if (box) box.innerHTML = calcHtml(x, calc(x));
+      if (el.getAttribute('data-k') === 'finishDate') { var fb = root.querySelector('[data-fin="' + i + '"]'); if (fb) fb.innerHTML = finHtml(i, x); }
     }, root);
+    if (!root._lcs) (root._lcs = 1) && root.addEventListener('change', function (e) {   // ผูกครั้งเดียว (กล่องสาเหตุถูกวาดใหม่บ่อย)
+      var el = e.target; if (!el.hasAttribute || !el.hasAttribute('data-lcs') || !H.day) return;
+      var i = +el.getAttribute('data-lcs'), x = H.day.items[i];
+      if (el.value === '__other') { x._lcO = true; x.lateCause = ''; } else { x._lcO = false; x.lateCause = el.value; }
+      markDirty(); var fb = this.querySelector('[data-fin="' + i + '"]'); fb.innerHTML = finHtml(i, x);
+      var t = fb.querySelector('input'); if (t) t.focus();
+    });
     on('[data-pi]', 'change', function (el) {
       var i = +el.getAttribute('data-pi'), x = D.items[i];
       if (el.value === '__new') { el.value = x.productId || ''; return prodForm({}, function (p) { collect(); x.productId = p.id; x.product = p.name; markDirty(); dayPage(); }); }
@@ -328,6 +349,7 @@
       var x = items[i];
       if (!x.productId) { H.q.tab = x.grp; dayPage(); return toast('รายการที่ ' + (items.filter(function (y) { return y.grp === x.grp; }).indexOf(x) + 1) + ' ของ ' + x.grp + ': เลือกสินค้า'); }
       if (x.grp === 'G2' && num(x.coolKg) !== '' && num(x.rawKg) === '') { H.q.tab = 'G2'; dayPage(); return toast(x.product + ': ใส่น้ำหนักวัตถุดิบก่อน จึงคิด Yield ได้'); }
+      if (x.status !== 'cancel' && finState(x) === 'late' && !String(x.lateCause || '').trim()) { H.q.tab = x.grp; dayPage(); var fb = document.querySelector('[data-fin="' + i + '"]'); if (fb) fb.scrollIntoView({ behavior: 'smooth', block: 'center' }); return toast(x.grp + ' ' + x.product + ': เสร็จช้ากว่ากำหนด — เลือกสาเหตุ'); }
     }
     var b = $('dSave'); b.disabled = true; b.innerHTML = '<span class="spinner"></span> กำลังบันทึก…';
     var payload = items.map(function (x) { var o = {}; Object.keys(x).forEach(function (k) { if (k[0] !== '_') o[k] = x[k]; }); o.date = D.date; o.by = o.by || me(); return o; });
@@ -459,6 +481,7 @@
     var html = '<div class="kpis">'
       + tile(k.yieldPct == null ? '–' : fmt(k.yieldPct, 1) + '%', 'Yield เฉลี่ย (งานผัด)', k.yieldPct == null ? '#64748b' : k.yieldPct >= tg ? '#16a34a' : '#dc2626', 'เป้า ≥ ' + tg + '% · ต่ำกว่าเป้า ' + k.below + ' จาก ' + k.runs + ' รายการ')
       + tile(pct(k.qtyIn, k.qtyRuns), 'ผลิตได้ตามช่วงจำนวน', k.qtyLow ? '#d97706' : '#16a34a', 'ตามช่วง ' + k.qtyIn + ' · ต่ำกว่า ' + k.qtyLow + ' (จาก ' + k.qtyRuns + ')')
+      + tile(pct(k.onTime, k.judged), 'เสร็จตามกำหนด', k.late ? '#dc2626' : '#16a34a', 'ตามกำหนด ' + k.onTime + ' จาก ' + k.judged + ' · ช้า/เลยกำหนด ' + k.late + '<br>G2 ภายในวัน · G1/G3 ไม่เกิน 3 วัน')
       + tile(fmt(k.lossKg) + ' กก.', 'ของเสีย', '#b45309', fmt(k.lossQty, 0) + ' ชิ้น')
       + tile(fmt(k.bdMinutes, 0) + ' นาที', 'Breakdown เครื่องจักร', k.bdCount ? '#dc2626' : '#16a34a', k.bdCount + ' ครั้ง')
       + '</div>';
@@ -468,7 +491,12 @@
       return '<div class="xyr"><span title="' + esc(p.name) + '">' + esc(p.name) + '<small>' + p.runs + ' ครั้ง · Lost ' + (y == null ? '–' : fmt(100 - y, 1) + '%') + (p.expMin ? ' · ได้ ' + fmt(p.qty, 0) + ' (ควร ' + fmt(p.expMin, 0) + '–' + fmt(p.expMax, 0) + ')' : '') + (p.lossKg ? ' · เสีย ' + fmt(p.lossKg) + ' กก.' : '') + '</small></span>'
         + '<i><em style="width:' + Math.max(2, Math.min(100, (y || 0) / mx * 100)) + '%;background:' + (ok ? '#16a34a' : '#dc2626') + '"></em><u style="left:' + p.target + '%"></u></i><b class="' + (ok ? 'pos' : 'neg') + '">' + (y == null ? '–' : fmt(y, 1) + '%') + '</b></div>';
     }).join('') : '<div class="muted">ยังไม่มีผลงานผัดในช่วงนี้</div>') + '</div>'
-      + '<div class="panel pbox"><h4>' + icon('gear2', 18) + ' Breakdown แยกเครื่อง</h4>' + (r.machines.length ? r.machines.map(function (m) {
+      + '<div class="panel pbox"><h4>' + icon('warn', 18) + ' เสร็จช้ากว่ากำหนด</h4>' + ((r.lateList || []).length ? (r.lateCauses || []).map(function (c) {
+        return '<div class="li"><span>' + esc(c.name) + '</span><b class="neg">' + c.n + ' รายการ</b></div>';
+      }).join('') + '<div style="margin-top:8px">' + r.lateList.map(function (x) {
+        return '<div class="li"><span>' + esc(x.grp) + ' · ' + esc(x.product) + '</span><b class="neg">' + (x.finishDate ? 'เสร็จ ' + dd(x.finishDate) : 'ยังไม่เสร็จ') + '</b><small>ผลิต ' + dd(x.date) + ' · กำหนด ' + dd(x.deadline) + (x.cause ? ' · ' + esc(x.cause) : '') + '</small></div>';
+      }).join('') + '</div>' : '<div class="muted">เสร็จตามกำหนดทุกรายการ 👍</div>')
+      + '<h4 style="margin-top:16px">' + icon('gear2', 18) + ' Breakdown แยกเครื่อง</h4>' + (r.machines.length ? r.machines.map(function (m) {
         return '<div class="li"><span>' + esc(m.name) + '</span><b>' + fmt(m.minutes, 0) + ' นาที</b><small>' + m.n + ' ครั้ง</small></div>';
       }).join('') : '<div class="muted">ไม่มี</div>')
       + '<h4 style="margin-top:16px">' + icon('box', 18) + ' งานบรรจุ</h4><div class="li"><span>บรรจุลงซอง/ถ้วย (G1)</span><b>' + fmt(k.packed, 0) + ' ชิ้น</b></div><div class="li"><span>บรรจุลงลัง (G3)</span><b>' + fmt(k.cases, 0) + ' ลัง</b></div></div></div>';
@@ -590,7 +618,7 @@
       + '</div>'
       + '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('chart', 18) + ' เป้าหมาย</h4><div class="pform"><div class="pf"><label for="s_target">Yield ขั้นต่ำ (%) ของทุกสินค้า</label><input id="s_target" inputmode="decimal" value="' + esc(s.target) + '"></div></div></div>'
       + '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('list', 18) + ' ตัวเลือก</h4><div class="pform">'
-      + ta('machines', 'รายชื่อเครื่องจักร / อุปกรณ์', 'เช่น กระทะผัด 1, เครื่องซีล 2, ตู้เย็น') + ta('lossCauses', 'สาเหตุของเสีย') + ta('checks', 'รายการปิดงานตอนเย็น', 'ปิดน้ำ, ปิดไฟ, ปิดแอร์')
+      + ta('machines', 'รายชื่อเครื่องจักร / อุปกรณ์', 'เช่น กระทะผัด 1, เครื่องซีล 2, ตู้เย็น') + ta('lossCauses', 'สาเหตุของเสีย') + ta('lateCauses', 'สาเหตุที่เสร็จช้ากว่ากำหนด', 'Breakdown เครื่องจักร, วัตถุดิบไม่พอ / มาช้า') + ta('checks', 'รายการปิดงานตอนเย็น', 'ปิดน้ำ, ปิดไฟ, ปิดแอร์')
       + ta('units', 'หน่วยนับสินค้า', 'ซอง, ถ้วย, กระปุก, ดวง') + ta('sectionTitles', 'หัวข้อสำเร็จรูปสำหรับข้อความเย็น', 'เตรียมวัตถุดิบ, น้ำพริกค้างแพ็ค') + ta('morningNote', 'ข้อความท้ายแผนผลิตตอนเช้า (ค่าเริ่มต้น)') + '</div></div>'
       + '<div class="qsave"><button class="btn btn-primary" id="sSave">' + icon('check', 18) + ' บันทึกการตั้งค่า</button></div>';
     bindCopy($('main'));
@@ -602,7 +630,7 @@
     });
     if ($('sTest')) $('sTest').addEventListener('click', function () { call('prdLineTest', state.token).then(function (r) { toast(r.ok ? 'ส่งข้อความทดสอบแล้ว' : r.error); }).catch(onServerError); });
     $('sSave').addEventListener('click', function () {
-      var o = {}, b = this; ['target', 'machines', 'lossCauses', 'checks', 'units', 'sectionTitles', 'morningNote'].forEach(function (k) { if ($('s_' + k)) o[k] = $('s_' + k).value.trim(); });
+      var o = {}, b = this; ['target', 'machines', 'lossCauses', 'lateCauses', 'checks', 'units', 'sectionTitles', 'morningNote'].forEach(function (k) { if ($('s_' + k)) o[k] = $('s_' + k).value.trim(); });
       if (!(Number(o.target) > 0 && Number(o.target) <= 100)) return toast('Yield ขั้นต่ำต้องอยู่ระหว่าง 1–100');
       b.disabled = true;
       call('prdSaveSettings', state.token, o).then(function (r) { b.disabled = false; if (!r.ok) return toast(r.error); H.data.settings = r.settings; toast('บันทึกการตั้งค่าแล้ว'); }).catch(function (e) { b.disabled = false; onServerError(e); });
@@ -685,6 +713,7 @@
     '.xchk{display:flex;align-items:center;gap:8px;font-size:14px;margin:10px 0 0;cursor:pointer}.xchk input{width:20px;height:20px}',
     '.xadd{width:100%;border:2px dashed var(--g)!important;color:var(--g)!important;background:#fff!important;min-height:48px;margin-bottom:14px}',
     '.xsave[hidden]{display:none!important}.xsave{position:sticky;bottom:10px;z-index:5;display:flex;gap:8px;align-items:center;background:#0f172a;color:#fff;border-radius:14px;padding:10px 12px;box-shadow:0 10px 30px rgba(15,23,42,.35);margin-top:8px}.xsave span{flex:1;font-size:13.5px}.xsave .btn-line{background:#fff}',
+    '.xfinw{grid-column:1/-1}.xfin{border-radius:10px;padding:8px 10px;background:#f8fafc;border:1.5px solid var(--line);font-size:13px}.xfin b{display:block;font-size:14px}.xfin small{display:block;color:var(--muted);font-size:12px}.xfin.ok{background:#f0fdf4;border-color:#86efac}.xfin b.ok{color:#15803d}.xfin.bad{background:#fef2f2;border-color:#fca5a5}.xfin b.bad{color:#b91c1c}.xlc{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-top:8px}.xin select{width:100%;border:0;background:transparent;font:inherit;padding:8px;min-width:0}',
     '.xeve{border-top:4px solid var(--g)}.xbd{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13.5px}.xbd small{grid-column:1/-1;color:var(--muted)}',
     '.xsrw{display:grid;grid-template-columns:22px minmax(0,2fr) minmax(0,1.2fr) minmax(0,.8fr) minmax(0,.8fr) 34px;gap:6px;align-items:end;margin-bottom:6px}.xsn{font-weight:700;color:var(--muted);padding-bottom:10px}.xsrw .icon-btn{margin-bottom:6px}',
     '@media (max-width:760px){.xsrw{grid-template-columns:22px minmax(0,1fr) minmax(0,1fr) 34px;border-bottom:1px dashed var(--line);padding-bottom:8px}.xsrw .xsn{grid-row:1;grid-column:1}.xsrw .xsp{grid-row:1;grid-column:2/4}.xsrw .icon-btn{grid-row:1;grid-column:4}.xsrw .xsl{grid-row:2;grid-column:2/4}.xsrw .xsq{grid-row:3;grid-column:2}.xsrw .xsu{grid-row:3;grid-column:3}}',
