@@ -556,7 +556,7 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
   });
   if (!list.length && !carried.length && !secs.length) body.push(prdT_('ไม่มีรายการ', { size: 'sm', color: '#64748B', margin: 'md' }));
   body.push(prdSec_('ปัญหาที่พบ', '#64748B'));
-  body.push(prdT_(rep && rep.problems ? rep.problems : '-', { size: 'sm', color: '#334155', margin: 'sm' }));
+  body.push(prdT_(rep && rep.problems ? rep.problems : 'ไม่พบปัญหา', { size: 'sm', color: rep && rep.problems ? '#334155' : '#15803D', margin: 'sm' }));
   if (rep && rep.checks) body.push(prdBox_([prdT_('✅ ' + rep.checks + ' เรียบร้อย', { size: 'sm', color: '#166534', weight: 'bold' })], { margin: 'xl', backgroundColor: '#F0FDF4', cornerRadius: '12px', paddingAll: '12px' }));
   var nPhotos = rep ? purParseFiles_(rep.files).length : 0;
   if (nPhotos) body.push(prdT_('📷 รูปประกอบ ' + nPhotos + ' รูป อยู่ในข้อความถัดไป', { size: 'xxs', color: '#64748B', margin: 'md', align: 'center' }));

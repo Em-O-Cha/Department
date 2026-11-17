@@ -246,7 +246,7 @@
           + '<textarea data-sx="' + k + '" rows="' + Math.max(2, String(x.text || '').split('\n').length) + '" placeholder="ข้อความเพิ่มเติม (ไม่บังคับ) เช่น ทอดเกล็ดขนมปัง 300 kg.">' + esc(x.text) + '</textarea></div>';
       }).join('') + '</div>'
       + '<button class="btn btn-line btn-sm" id="gSecAdd">' + icon('plus', 16) + ' เพิ่มหัวข้อ</button>'
-      + '<label class="xf full" style="margin-top:12px"><span>ปัญหาที่พบ</span><textarea id="gProb" rows="3" placeholder="ไม่มี เว้นว่างไว้ได้ (จะขึ้นว่า -)">' + esc(rep ? rep.problems : '') + '</textarea></label>'
+      + '<label class="xf full" style="margin-top:12px"><span>ปัญหาที่พบ</span><textarea id="gProb" rows="3" placeholder="ไม่มี เว้นว่างไว้ได้ (จะขึ้นว่า ไม่พบปัญหา)">' + esc(rep ? rep.problems : '') + '</textarea></label>'
       + '<div class="xsub">ปิดงาน</div><div class="xchecks">' + checks.map(function (c) { return '<label class="xchk"><input type="checkbox" data-chk="' + esc(c) + '"' + (done.indexOf(c) >= 0 ? ' checked' : '') + '> ' + esc(c) + '</label>'; }).join('') + '</div>'
       + '<div class="xsub">รูปประกอบ ' + (rep && rep.files.length ? '(' + rep.files.length + ')' : '') + '</div><div class="xphotos" id="gPhotos">' + photosHtml(rep) + '</div>'
       + '<div class="xsend"><button class="btn btn-primary" id="gSend" style="--c:#06c755">' + icon('send', 18) + ' ดูตัวอย่าง & ส่งสรุป ' + g + '</button>' + (rep && rep.sentAt ? '<span class="xok">✓ ส่งแล้ว ' + esc(rep.sentAt.slice(11, 16)) + ' น.</span>' : '') + '</div></section>';
