@@ -268,7 +268,7 @@
       }).join('') + '</div>'
       + '<button class="btn btn-line btn-sm" id="gSecAdd">' + icon('plus', 16) + ' เพิ่มหัวข้อ</button>'
       + '<label class="xf full" style="margin-top:12px"><span>ปัญหาที่พบ</span><textarea id="gProb" rows="3" placeholder="ไม่มี เว้นว่างไว้ได้ (จะขึ้นว่า ไม่พบปัญหา)">' + esc(rep ? rep.problems : '') + '</textarea></label>'
-      + '<div class="xsub">ปิดงาน</div><div class="xchecks">' + checks.map(function (c) { return '<label class="xchk"><input type="checkbox" data-chk="' + esc(c) + '"' + (done.indexOf(c) >= 0 ? ' checked' : '') + '> ' + esc(c) + '</label>'; }).join('') + '</div>'
+      + '<div class="xsub">ปิดงาน</div><div class="xchecks">' + (checks.length > 1 ? '<label class="xchk xall"><input type="checkbox" id="gChkAll"' + (checks.every(function (c) { return done.indexOf(c) >= 0; }) ? ' checked' : '') + '> เลือกทั้งหมด</label>' : '') + checks.map(function (c) { return '<label class="xchk"><input type="checkbox" data-chk="' + esc(c) + '"' + (done.indexOf(c) >= 0 ? ' checked' : '') + '> ' + esc(c) + '</label>'; }).join('') + '</div>'
       + '<div class="xsub">รูปประกอบ ' + (rep && rep.files.length ? '(' + rep.files.length + ')' : '') + '</div><div class="xphotos" id="gPhotos">' + photosHtml(rep) + '</div>'
       + '<div class="xsend"><button class="btn btn-primary" id="gSend" style="--c:#06c755">' + icon('send', 18) + ' ดูตัวอย่าง & ส่งสรุป ' + g + '</button>' + (rep && rep.sentAt ? '<span class="xok">✓ ส่งแล้ว ' + esc(rep.sentAt.slice(11, 16)) + ' น.</span>' : '') + '</div></section>';
     $('dBody').innerHTML = html;
@@ -298,7 +298,9 @@
       saveEvening(g, true).then(function () { collect(); dayPage(); });
     }, $('dBody'));
     $('gTitle').addEventListener('change', function () { saveEvening(g, true); });
-    on('[data-chk]', 'change', function () { saveEvening(g, true); }, $('dBody'));
+    var syncAll = function () { var a = $('gChkAll'); if (!a) return; var bs = document.querySelectorAll('[data-chk]'); a.checked = Array.prototype.every.call(bs, function (b) { return b.checked; }); };
+    on('[data-chk]', 'change', function () { syncAll(); saveEvening(g, true); }, $('dBody'));
+    if ($('gChkAll')) $('gChkAll').addEventListener('change', function () { var v = this.checked; Array.prototype.forEach.call(document.querySelectorAll('[data-chk]'), function (b) { b.checked = v; }); saveEvening(g, true); });
     $('gProb').addEventListener('change', function () { saveEvening(g, true); });
     bindPhotos(g);
     $('gSend').addEventListener('click', function () {
@@ -758,7 +760,7 @@
     '.xtitle em{white-space:nowrap;font-style:normal;font-weight:700;color:var(--ink)}',
     '.xsplan{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:4px 8px;align-items:center;padding:6px 0;border-bottom:1px dashed var(--line)}.xspn b{display:block;font-size:14px}.xspn small{color:var(--muted);font-size:12px}.xspq{font-size:14px;text-align:right}.xspq.muted{font-weight:400}.xspmv{grid-column:2/-1;display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)}.xspmv select{border:1.5px solid var(--line);border-radius:8px;padding:4px 6px;font:inherit;font-size:13px;background:#fff;max-width:100%}',
     '.xcarryh{margin:16px 0 8px;font-size:15px;color:#6d28d9}.xcarryh small{color:var(--muted);font-weight:400;font-size:12.5px}.xcarryn{background:#f5f3ff;border:1.5px solid #ddd6fe;color:#5b21b6;font-size:14px;margin-bottom:12px}',
-    '.xeve{border-top:4px solid var(--g)}.xbd{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13.5px}.xbd small{grid-column:1/-1;color:var(--muted)}',
+    '.xchk.xall{font-weight:700;border-right:1.5px solid var(--line);padding-right:12px;margin-right:2px}.xeve{border-top:4px solid var(--g)}.xbd{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13.5px}.xbd small{grid-column:1/-1;color:var(--muted)}',
     '.xsrw{display:grid;grid-template-columns:22px minmax(0,2fr) minmax(0,1.2fr) minmax(0,.8fr) minmax(0,.8fr) 34px;gap:6px;align-items:end;margin-bottom:6px}.xsn{font-weight:700;color:var(--muted);padding-bottom:10px}.xsrw .icon-btn{margin-bottom:6px}',
     '@media (max-width:760px){.xsrw{grid-template-columns:22px minmax(0,1fr) minmax(0,1fr) 34px;border-bottom:1px dashed var(--line);padding-bottom:8px}.xsrw .xsn{grid-row:1;grid-column:1}.xsrw .xsp{grid-row:1;grid-column:2/4}.xsrw .icon-btn{grid-row:1;grid-column:4}.xsrw .xsl{grid-row:2;grid-column:2/4}.xsrw .xsq{grid-row:3;grid-column:2}.xsrw .xsu{grid-row:3;grid-column:3}}',
     '.xsec .btn-sm{margin:2px 0 8px}.xsec{border:1.5px solid var(--line);border-radius:12px;padding:8px;margin-bottom:8px;background:#faf5ff}.xsech{display:flex;gap:6px;align-items:center;margin-bottom:6px}.xsech .xin{flex:1}.xsec textarea{width:100%;border:1.5px solid var(--line);border-radius:9px;padding:9px 10px;font:inherit;font-size:15px;color:var(--ink)}',
