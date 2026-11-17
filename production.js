@@ -103,7 +103,13 @@
     var y = +m[3]; if (y < 100) y += 2000; if (y > 2400) y -= 543; return y + '-' + pad(m[2]) + '-' + pad(m[1]);
   }
   function lotText(v) { var i = lotIso(v); return i ? dd(i) : String(v || ''); }
-  function dayItems(date) { return H.data.plans.filter(function (x) { return x.date === date; }).map(function (x) { var y = JSON.parse(JSON.stringify(x)); y.lot = lotIso(y.lot) || (y.grp === 'G2' ? y.date : ''); return y; }); }
+  // รายการของวัน + งานค้างจากวันก่อน (ย้อน 14 วัน, ยังไม่เสร็จหรือเสร็จวันนี้ — ตรงกับ prdCarried_ ใน Prod.gs) ติดธง _carry
+  function dayItems(date) {
+    var from = addDays(date, -14);
+    return H.data.plans.filter(function (x) { return x.date === date || (x.date < date && x.date >= from && x.status !== 'cancel' && (!x.finishDate || x.finishDate === date)); })
+      .sort(function (a, b) { return (a.date === date ? 0 : 1) - (b.date === date ? 0 : 1); })
+      .map(function (x) { var y = JSON.parse(JSON.stringify(x)); y.lot = lotIso(y.lot) || (y.grp === 'G2' ? y.date : ''); if (x.date !== date) y._carry = true; return y; });
+  }
   function ensureRange(date) {
     if (date >= H.data.from && date <= H.data.to) return Promise.resolve();
     return H.load(addDays(date, -30), addDays(date, 30));
@@ -114,7 +120,8 @@
     // ข้อมูลโหลดใหม่ (และยังไม่ได้แก้อะไร) หรือเปลี่ยนวัน → อ่านรายการของวันนั้นใหม่
     if (!H.day || H.day.date !== q.date || (H.day.src !== H.data && !H.day.dirty)) H.day = { date: q.date, items: dayItems(q.date), dirty: false, src: H.data };
     var D = H.day, items = D.items;
-    var cnt = function (g) { return items.filter(function (x) { return x.grp === g; }).length; };
+    var cnt = function (g) { return items.filter(function (x) { return x.grp === g && !x._carry; }).length; };
+    var ccnt = function (g) { return items.filter(function (x) { return x.grp === g && x._carry; }).length; };
     var rep = function (kind, g) { return H.data.reports.filter(function (r) { return r.date === D.date && r.kind === kind && String(r.grp || '') === String(g || ''); })[0]; };
     var mr = rep('morning', '');
     $('main').innerHTML = '<div class="xdhead"><h3>แผนผลิต / บันทึกผล</h3>'
@@ -127,7 +134,7 @@
       }).join('') + '</div>'
       + (q.mode === 'e' ? '<div class="xtabs xtabs3" role="tablist">' + GROUPS.map(function (g) {
         var r = rep('evening', g[0]);
-        return '<button role="tab" class="xtab' + (q.tab === g[0] ? ' on' : '') + '" data-tab="' + g[0] + '" style="--g:' + g[2] + '" aria-selected="' + (q.tab === g[0]) + '"><b>' + g[0] + ' ' + esc(g[1]) + '</b><small>' + cnt(g[0]) + ' รายการ' + (r && r.sentAt ? ' · ส่งแล้ว ✓' : '') + '</small></button>';
+        return '<button role="tab" class="xtab' + (q.tab === g[0] ? ' on' : '') + '" data-tab="' + g[0] + '" style="--g:' + g[2] + '" aria-selected="' + (q.tab === g[0]) + '"><b>' + g[0] + ' ' + esc(g[1]) + '</b><small>' + cnt(g[0]) + ' รายการ' + (ccnt(g[0]) ? ' · ค้าง ' + ccnt(g[0]) : '') + (r && r.sentAt ? ' · ส่งแล้ว ✓' : '') + '</small></button>';
       }).join('') + '</div>' : '') + '<div id="dBody"></div>'
       + '<div class="xsave" id="dSaveBar"' + (D.dirty ? '' : ' hidden') + '><span>มีการแก้ไขที่ยังไม่บันทึก</span><button class="btn btn-line" id="dUndo">ยกเลิก</button><button class="btn btn-primary" id="dSave">' + icon('check', 18) + ' บันทึก</button></div>';
     if (q.mode === 'm') planTab(mr); else groupTab(q.tab, rep('evening', q.tab));
@@ -169,7 +176,7 @@
   function planTab(mr) {
     var D = H.day, s = S_(), html = '';
     GROUPS.forEach(function (g) {
-      var its = []; D.items.forEach(function (x, i) { if (x.grp === g[0]) its.push(i); });
+      var its = []; D.items.forEach(function (x, i) { if (x.grp === g[0] && !x._carry) its.push(i); });
       var gl = g[0] === 'G2' ? 'งานเตรียมวัตถุดิบ/ทอด/ผัด/อบ' : g[1];
       html += '<section class="xgsec" style="--g:' + g[2] + '"><h4 class="xgh"><span>' + g[0] + '</span>' + esc(gl) + ' <small>' + its.length + ' รายการ</small></h4>'
         + its.map(function (i, n) { return itemCard(D.items[i], i, n, 'm'); }).join('')
@@ -178,12 +185,14 @@
     html += '<div class="panel pbox xeve" style="--g:#0E7490"><h4>' + icon('send', 18) + ' ส่งแผนผลิตเข้า LINE</h4><p class="muted" style="margin:0 0 10px;font-size:13px">ส่งแผนของทุกกลุ่ม (G2 / G1 / G3) รวมเป็นการ์ดเดียว · กด "บันทึก" ก่อนส่ง</p>'
       + '<label class="xf full"><span>ข้อความท้ายการ์ด</span><span class="xin"><input id="mNote" value="' + esc(mr && mr.note ? mr.note : s.morningNote) + '" maxlength="200"></span></label>'
       + '<div class="xsend"><button class="btn btn-primary" id="mSend" style="--c:#06c755">' + icon('send', 18) + ' ดูตัวอย่าง & ส่งแผนผลิต</button>' + (mr && mr.sentAt ? '<span class="xok">✓ ส่งแล้ว ' + esc(mr.sentAt.slice(11, 16)) + ' น.</span>' : '') + '</div></div>';
+    var nc = D.items.filter(function (x) { return x._carry; }).length;
+    if (nc) html = '<div class="panel xcarryn">⏳ มีงานค้างจากวันก่อน ' + nc + ' รายการ — ดู / กรอกผลได้ใน "🌙 สรุปเย็น"</div>' + html;
     $('dBody').innerHTML = html;
     bindCards();
     on('[data-add]', 'click', function (el) { addItem(el.getAttribute('data-add')); }, $('dBody'));
     $('mSend').addEventListener('click', function () {
       if (H.day.dirty) return toast('กด "บันทึก" ก่อน แล้วค่อยส่ง');
-      if (!D.items.length) return toast('ยังไม่มีแผนของวันนี้');
+      if (!D.items.filter(function (x) { return !x._carry; }).length) return toast('ยังไม่มีแผนของวันนี้');
       var b = this; b.disabled = true;
       call('prdSaveReport', state.token, { date: D.date, kind: 'morning', note: $('mNote').value, by: me() }).then(function (r) {
         b.disabled = false; if (!r.ok) return toast(r.error); upsertReport(r.report); sendLine('morning', D.date, '');
@@ -201,12 +210,14 @@
   // ---- แท็บกลุ่มงาน: การ์ดรายการ (แผน + ผลจริง) + สรุปเย็น
   function groupTab(g, rep) {
     var D = H.day, s = S_(), its = [];
-    D.items.forEach(function (x, i) { if (x.grp === g) its.push(i); });
+    var cits = [];
+    D.items.forEach(function (x, i) { if (x.grp === g) (x._carry ? cits : its).push(i); });
     var causes = list(s.lossCauses);
     var html = '<datalist id="xUnits">' + list(s.units).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist><datalist id="xCauses">' + causes.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>'
       + (its.length ? '<p class="muted" style="margin:0 0 10px;font-size:13px">รายการดึงมาจากแผนเช้า — กรอกผลลัพธ์ของแต่ละรายการ (ต้องการเพิ่ม / แก้แผน ให้ไปที่ "🌅 แผนเช้า")</p>'
         : '<div class="panel" style="font-size:14px">ยังไม่มีแผนของ ' + g + ' วันนี้ <button class="btn btn-line btn-sm" id="gToPlan" style="margin-left:8px">ไปใส่แผนที่ 🌅 แผนเช้า</button></div>')
-      + its.map(function (i, n) { return itemCard(D.items[i], i, n, 'e'); }).join('');
+      + its.map(function (i, n) { return itemCard(D.items[i], i, n, 'e'); }).join('')
+      + (cits.length ? '<h4 class="xcarryh">⏳ งานค้างจากวันก่อน <small>' + cits.length + ' รายการ · เสร็จแล้วให้เลือกวันที่เสร็จ</small></h4>' + cits.map(function (i, n) { return itemCard(D.items[i], i, n, 'e'); }).join('') : '');
     // สรุปเย็นของกลุ่ม
     var checks = list(s.checks), done = rep && rep.checks ? list(rep.checks) : [];
     var secs = H.secDraft && H.secDraft.key === D.date + g ? H.secDraft.list : ((rep && rep.sections) || []).map(function (x) {
@@ -283,7 +294,7 @@
     if (g === 'G2' && c.yieldPct !== '') tags += '<span class="xy ' + (c.yieldPct >= c.target ? 'ok' : 'bad') + '">Yield ' + fmt(c.yieldPct) + '%</span>';
     if (c.qtyState) tags += '<span class="xq ' + c.qtyState + '">' + (c.qtyState === 'ok' ? '✓ ตามช่วง' : c.qtyState === 'low' ? '↓ ต่ำกว่าช่วง' : '↑ เกินช่วง') + '</span>';
     if (x.status === 'cancel') tags += '<span class="xdu late">ยกเลิก</span>';
-    var chips = [x.lot ? 'LOT ' + lotText(x.lot) : '', x.planBatch !== '' && x.planBatch != null ? 'แผน ' + fmt(x.planBatch) + ' batch' : '', x.planQty !== '' && x.planQty != null ? 'แผน ' + fmt(x.planQty) + ' ลัง' : '', x.note || ''].filter(String);
+    var chips = [x._carry ? 'ค้างจาก ' + dd(x.date) : '', x.lot ? 'LOT ' + lotText(x.lot) : '', x.planBatch !== '' && x.planBatch != null ? 'แผน ' + fmt(x.planBatch) + ' batch' : '', x.planQty !== '' && x.planQty != null ? 'แผน ' + fmt(x.planQty) + ' ลัง' : '', x.note || ''].filter(String);
     var res = g === 'G2'
       ? fi(i, 'actBatch', 'ทำจริง (batch)', x.actBatch, ' inputmode="decimal" placeholder="' + esc(x.planBatch || '') + '"')
         + fi(i, 'rawKg', 'น้ำหนักวัตถุดิบ', x.rawKg, ' inputmode="decimal"' + (c.rawStd !== '' ? ' placeholder="มาตรฐาน ' + c.rawStd + '"' : ''), 'กก.')
@@ -354,7 +365,7 @@
       if (x.status !== 'cancel' && finState(x) === 'late' && !String(x.lateCause || '').trim()) { H.q.tab = x.grp; dayPage(); var fb = document.querySelector('[data-fin="' + i + '"]'); if (fb) fb.scrollIntoView({ behavior: 'smooth', block: 'center' }); return toast(x.grp + ' ' + x.product + ': เสร็จช้ากว่ากำหนด — เลือกสาเหตุ'); }
     }
     var b = $('dSave'); b.disabled = true; b.innerHTML = '<span class="spinner"></span> กำลังบันทึก…';
-    var payload = items.map(function (x) { var o = {}; Object.keys(x).forEach(function (k) { if (k[0] !== '_') o[k] = x[k]; }); o.date = D.date; o.by = o.by || me(); return o; });
+    var payload = items.map(function (x) { var o = {}; Object.keys(x).forEach(function (k) { if (k[0] !== '_') o[k] = x[k]; }); o.date = x._carry ? x.date : D.date; o.by = o.by || me(); return o; });
     call('prdSavePlans', state.token, payload).then(function (r) {
       if (!r.ok) { b.disabled = false; b.innerHTML = icon('check', 18) + ' บันทึก'; return toast(r.error); }
       var ids = {}; r.plans.forEach(function (p) { ids[p.id] = 1; });
@@ -716,6 +727,7 @@
     '.xadd{width:100%;border:2px dashed var(--g)!important;color:var(--g)!important;background:#fff!important;min-height:48px;margin-bottom:14px}',
     '.xsave[hidden]{display:none!important}.xsave{position:sticky;bottom:10px;z-index:5;display:flex;gap:8px;align-items:center;background:#0f172a;color:#fff;border-radius:14px;padding:10px 12px;box-shadow:0 10px 30px rgba(15,23,42,.35);margin-top:8px}.xsave span{flex:1;font-size:13.5px}.xsave .btn-line{background:#fff}',
     '.xfinw{grid-column:1/-1}.xfin{border-radius:10px;padding:8px 10px;background:#f8fafc;border:1.5px solid var(--line);font-size:13px}.xfin b{display:block;font-size:14px}.xfin small{display:block;color:var(--muted);font-size:12px}.xfin.ok{background:#f0fdf4;border-color:#86efac}.xfin b.ok{color:#15803d}.xfin.bad{background:#fef2f2;border-color:#fca5a5}.xfin b.bad{color:#b91c1c}.xlc{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-top:8px}.xin select{width:100%;border:0;background:transparent;font:inherit;padding:8px;min-width:0}',
+    '.xcarryh{margin:16px 0 8px;font-size:15px;color:#6d28d9}.xcarryh small{color:var(--muted);font-weight:400;font-size:12.5px}.xcarryn{background:#f5f3ff;border:1.5px solid #ddd6fe;color:#5b21b6;font-size:14px;margin-bottom:12px}',
     '.xeve{border-top:4px solid var(--g)}.xbd{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13.5px}.xbd small{grid-column:1/-1;color:var(--muted)}',
     '.xsrw{display:grid;grid-template-columns:22px minmax(0,2fr) minmax(0,1.2fr) minmax(0,.8fr) minmax(0,.8fr) 34px;gap:6px;align-items:end;margin-bottom:6px}.xsn{font-weight:700;color:var(--muted);padding-bottom:10px}.xsrw .icon-btn{margin-bottom:6px}',
     '@media (max-width:760px){.xsrw{grid-template-columns:22px minmax(0,1fr) minmax(0,1fr) 34px;border-bottom:1px dashed var(--line);padding-bottom:8px}.xsrw .xsn{grid-row:1;grid-column:1}.xsrw .xsp{grid-row:1;grid-column:2/4}.xsrw .icon-btn{grid-row:1;grid-column:4}.xsrw .xsl{grid-row:2;grid-column:2/4}.xsrw .xsq{grid-row:3;grid-column:2}.xsrw .xsu{grid-row:3;grid-column:3}}',

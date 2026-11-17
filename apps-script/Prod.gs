@@ -213,6 +213,11 @@ function prdFinishState_(x, today) {
   if (x.finishDate) return x.finishDate <= dl ? 'ok' : 'late';
   return today > dl ? 'over' : 'wait';
 }
+// งานค้างจากวันก่อน (ย้อนไม่เกิน 14 วัน): ยังไม่เสร็จ หรือเพิ่งเสร็จในวันนี้ — แสดงต่อในสรุปเย็นของวันนี้
+function prdCarried_(all, date) {
+  var p = String(date).split('-'), t = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] - 14)), from = t.toISOString().slice(0, 10);
+  return all.filter(function (x) { return x.date < date && x.date >= from && x.status !== 'cancel' && (!x.finishDate || x.finishDate === date); });
+}
 function prdTh_(iso) { var p = String(iso || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + String(+p[0] + 543).slice(2) : String(iso || ''); }
 function prdCleanPlan_(p, s) {
   var grp = PRD_GROUPS_[p.grp] ? p.grp : 'G2';
@@ -497,13 +502,14 @@ function prdMorningFlex_(date, plans, note) {
     'แผนผลิต ' + prdDot_(date) + ' · ' + n + ' รายการ');
 }
 function prdEveningFlex_(date, grp, plans, rep, target, prods) {
-  var body = [], list = plans.filter(function (x) { return x.grp === grp && x.status !== 'cancel'; });
+  var body = [], mine = plans.filter(function (x) { return x.grp === grp && x.status !== 'cancel'; });
+  var list = mine.filter(function (x) { return x.date === date; }), carried = mine.filter(function (x) { return x.date < date; });
   var dpt = String(date).split('-'), dTh = dpt[2] + '/' + dpt[1] + '/' + String(+dpt[0] + 543).slice(2);
   var title = (rep && rep.title) || PRD_EVE_TITLE_[grp] + ' ประจำวันที่ ' + dTh;
   if (!/ประจำวันที่/.test(title)) title += ' ประจำวันที่ ' + dTh;   // หัวข้อเก่าที่ไม่มีวันที่
   var unitOf = function (x) { return x.unit || (prods[x.productId] || {}).unit || 'ชิ้น'; };
   if (list.length) body.push(prdSec_(PRD_EVE_SEC_[grp], PRD_GCOLOR_[grp]));
-  list.forEach(function (x, i) {
+  var row = function (x, i) {
     var sub = [], right = '', rc = '#0F172A';
     if (x.lot) sub.push('LOT ' + prdLotText_(x.lot));
     if (grp === 'G2') {
@@ -527,8 +533,11 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
     else if (fs === 'wait') sub.push({ t: '⏳ ยังไม่เสร็จ · กำหนดเสร็จ ' + prdTh_(dl), c: '#64748B' });
     else sub.push({ t: '⚠️ ' + (fs === 'late' ? 'เสร็จ ' + prdTh_(x.finishDate) + ' ช้ากว่ากำหนด' : 'ยังไม่เสร็จ เลยกำหนด') + ' (กำหนด ' + prdTh_(dl) + ')' + (x.lateCause ? ' · สาเหตุ: ' + x.lateCause : ''), c: '#B91C1C' });
     if (x.note) sub.push(x.note);
+    if (x.date < date) sub.unshift({ t: 'ค้างจากวันที่ ' + prdTh_(x.date), c: '#7C3AED' });
     body.push(prdRow_(i + 1, x.product, sub, right, rc));
-  });
+  };
+  list.forEach(row);
+  if (carried.length) { body.push(prdSec_('งานค้างจากวันก่อน (' + carried.length + ' รายการ)', '#7C3AED')); carried.forEach(row); }
   // หัวข้อที่พิมพ์เอง (เช่น เตรียมวัตถุดิบ / น้ำพริกค้างแพ็ค) — 1 บรรทัด = 1 รายการ
   var secs = prdSections_(rep && rep.sections);
   secs.forEach(function (sec) {
@@ -541,7 +550,7 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
     if (!lines.length && !(sec.rows || []).length) body.push(prdT_('-', { size: 'sm', color: '#64748B', margin: 'sm' }));
     lines.forEach(function (l) { var head = /^\d+[.)]/.test(l); body.push(prdT_(l, { size: 'sm', color: head ? '#0F172A' : '#475569', margin: head ? 'md' : 'xs', weight: head ? 'bold' : 'regular' })); });
   });
-  if (!list.length && !secs.length) body.push(prdT_('ไม่มีรายการ', { size: 'sm', color: '#64748B', margin: 'md' }));
+  if (!list.length && !carried.length && !secs.length) body.push(prdT_('ไม่มีรายการ', { size: 'sm', color: '#64748B', margin: 'md' }));
   body.push(prdSec_('ปัญหาที่พบ', '#64748B'));
   body.push(prdT_(rep && rep.problems ? rep.problems : '-', { size: 'sm', color: '#334155', margin: 'sm' }));
   if (rep && rep.checks) body.push(prdBox_([prdT_('✅ ' + rep.checks + ' เรียบร้อย', { size: 'sm', color: '#166534', weight: 'bold' })], { margin: 'xl', backgroundColor: '#F0FDF4', cornerRadius: '12px', paddingAll: '12px' }));
@@ -558,14 +567,14 @@ function prdSendLine(token, kind, date, grp, by) {
   kind = kind === 'evening' ? 'evening' : 'morning';
   if (kind === 'evening' && !PRD_GROUPS_[grp]) return { ok: false, error: 'เลือกกลุ่มงาน' };
   return purLocked_(function () {
-    var ss = prdBook_(dept), s = prdSettings_(ss), plans = purRead_(ss, 'prd_plans').filter(function (x) { return x.date === date; });
+    var ss = prdBook_(dept), s = prdSettings_(ss), allPlans = purRead_(ss, 'prd_plans'), plans = allPlans.filter(function (x) { return x.date === date; });
     var prods = {}; purRead_(ss, 'prd_products').forEach(function (p) { prods[p.id] = p; });
     var rep = prdReport_(ss, date, kind, kind === 'evening' ? grp : ''), msgs;
     if (kind === 'morning') {
       if (!plans.length) return { ok: false, error: 'ยังไม่มีแผนผลิตของวันนี้' };
       msgs = [prdMorningFlex_(date, plans, rep && rep.note ? rep.note : s.morningNote)];
     } else {
-      msgs = [prdEveningFlex_(date, grp, plans, rep, Number(s.target) || 85, prods)];
+      msgs = [prdEveningFlex_(date, grp, plans.concat(prdCarried_(allPlans, date)), rep, Number(s.target) || 85, prods)];
       (rep ? purParseFiles_(rep.files) : []).forEach(function (f) {
         msgs.push({ type: 'image', originalContentUrl: f.url + '=w1600', previewImageUrl: f.url + '=w600' });
       });
@@ -583,11 +592,11 @@ function prdSendLine(token, kind, date, grp, by) {
 function prdLinePreview(token, kind, date, grp) {
   var dept = requirePrd_(token), ss = prdBook_(dept), s = prdSettings_(ss);
   date = purDate_(date);
-  var plans = purRead_(ss, 'prd_plans').filter(function (x) { return x.date === date; }), prods = {};
+  var allPlans = purRead_(ss, 'prd_plans'), plans = allPlans.filter(function (x) { return x.date === date; }), prods = {};
   purRead_(ss, 'prd_products').forEach(function (p) { prods[p.id] = p; });
   if (kind === 'evening') {
     var rep = prdReport_(ss, date, 'evening', grp);
-    return { ok: true, flex: prdEveningFlex_(date, grp, plans, rep, Number(s.target) || 85, prods),
+    return { ok: true, flex: prdEveningFlex_(date, grp, plans.concat(prdCarried_(allPlans, date)), rep, Number(s.target) || 85, prods),
       photos: rep ? purParseFiles_(rep.files).length : 0 };
   }
   var mr = prdReport_(ss, date, 'morning', '');
