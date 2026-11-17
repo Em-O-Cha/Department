@@ -186,9 +186,18 @@ function prdSaveProduct(token, p) {
 }
 
 // ---------- แผนผลิต + ผลจริง ----------
+// LOT = วันที่ (yyyy-MM-dd) · รับแบบเดิม 16/11/26 หรือ 16/11/2569 แล้วแปลงให้
+function prdLotIso_(v) {
+  var s = String(v || '').trim().replace(/^'/, '');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  var m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
+  if (!m) return '';
+  var y = +m[3]; if (y < 100) y += 2000; if (y > 2400) y -= 543;
+  return y + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+}
 function prdCleanPlan_(p, s) {
   var grp = PRD_GROUPS_[p.grp] ? p.grp : 'G2';
-  var o = { grp: grp, date: purDate_(p.date), productId: purClean_(p.productId, 20), product: purClean_(p.product, 150), lot: purClean_(p.lot, 40),
+  var o = { grp: grp, date: purDate_(p.date), productId: purClean_(p.productId, 20), product: purClean_(p.product, 150), lot: prdLotIso_(p.lot),
     planBatch: prdNum_(p.planBatch, 10000), planQty: prdNum_(p.planQty, 1e7), dueDate: purDate_(p.dueDate),
     actBatch: prdNum_(p.actBatch, 10000), rawKg: prdNum_(p.rawKg, 1e6), fryKg: prdNum_(p.fryKg, 1e6), coolKg: prdNum_(p.coolKg, 1e6),
     actQty: prdNum_(p.actQty, 1e7), actCases: prdNum_(p.actCases, 1e6), lossKg: prdNum_(p.lossKg, 1e6), lossQty: prdNum_(p.lossQty, 1e7),
@@ -215,6 +224,7 @@ function prdSavePlans(token, items) {
       Object.keys(c).forEach(function (k) { o[k] = c[k]; });
       if (o.status === 'plan' && (o.finishDate || (o.grp === 'G2' ? o.coolKg !== '' || o.actQty !== '' : o.actQty !== '' || o.actCases !== ''))) o.status = 'done';
       if (o.status === 'done' && !o.finishDate) o.finishDate = o.date;
+      if (!o.lot && o.grp === 'G2') o.lot = o.date;   // งานผัด: LOT = วันที่ผลิต
       prdCalc_(o, prods.filter(function (x) { return x.id === o.productId; })[0], s);
       o.updatedAt = now;
       purWrite_(ss, 'prd_plans', o);
@@ -397,6 +407,7 @@ function prdDashboard_(dept, from, to) {
 // วันที่แบบไลน์ผลิตใช้: 17.11.26
 function prdDot_(iso) { var p = String(iso).split('-'); return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0].slice(2) : String(iso || ''); }
 function prdSlash_(iso) { var p = String(iso).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0].slice(2) : String(iso || ''); }
+function prdLotText_(v) { var iso = prdLotIso_(v); return iso ? prdSlash_(iso) : String(v || '').replace(/^'/, ''); }
 function prdFmt_(n) { return n === '' || n == null ? '-' : Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
 function prdLinePush_(messages) {
   var p = props_(), token = p.getProperty('PROD_LINE_TOKEN'), group = p.getProperty('PROD_LINE_GROUP');
@@ -439,7 +450,7 @@ function prdMorningFlex_(date, plans, note) {
     body.push(prdSec_(g + ' · ' + PRD_GROUPS_[g] + ' (' + list.length + ' รายการ)', PRD_GCOLOR_[g]));
     list.forEach(function (x, i) {
       var amt = [x.planBatch !== '' ? prdFmt_(x.planBatch) + ' batch' : '', x.planQty !== '' ? prdFmt_(x.planQty) + (g === 'G3' ? ' ลัง' : ' ชิ้น') : ''].filter(String).join(' · ');
-      body.push(prdRow_(i + 1, x.product, [x.lot ? 'LOT ' + x.lot : '', x.dueDate ? { t: 'ส่ง ' + prdSlash_(x.dueDate), c: '#B45309' } : '', x.note], amt, PRD_GCOLOR_[g]));
+      body.push(prdRow_(i + 1, x.product, [x.lot ? 'LOT ' + prdLotText_(x.lot) : '', x.dueDate ? { t: 'ส่ง ' + prdSlash_(x.dueDate), c: '#B45309' } : '', x.note], amt, PRD_GCOLOR_[g]));
       n++;
     });
   });
@@ -455,7 +466,7 @@ function prdEveningFlex_(date, grp, plans, bds, rep, target, prods) {
   if (!list.length) body.push(prdT_('ไม่มีรายการ', { size: 'sm', color: '#64748B', margin: 'md' }));
   list.forEach(function (x, i) {
     var sub = [], right = '', rc = '#0F172A';
-    if (x.lot) sub.push('LOT ' + x.lot);
+    if (x.lot) sub.push('LOT ' + prdLotText_(x.lot));
     if (grp === 'G2') {
       var p = prods[x.productId] || {}, t = p.target !== '' && p.target != null ? Number(p.target) : target, b = x.actBatch !== '' ? x.actBatch : x.planBatch;
       sub.push((b !== '' ? prdFmt_(b) + ' batch' : '') + (x.rawKg !== '' ? (b !== '' ? ' · ' : '') + 'วัตถุดิบ ' + prdFmt_(x.rawKg) + ' → ' + prdFmt_(x.coolKg !== '' ? x.coolKg : x.fryKg) + ' กก.' + (x.coolKg === '' && x.fryKg !== '' ? ' (หลังผัด)' : '') : ''));

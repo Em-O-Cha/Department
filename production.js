@@ -84,7 +84,14 @@
   };
 
   // ==================== แผนผลิต / บันทึกผล (รายวัน) ====================
-  function dayItems(date) { return H.data.plans.filter(function (x) { return x.date === date; }).map(function (x) { return JSON.parse(JSON.stringify(x)); }); }
+  // LOT เป็นวันที่ (yyyy-MM-dd) · ข้อมูลเก่าที่พิมพ์ 16/11/26 แปลงให้
+  function lotIso(v) {
+    var s = String(v || '').trim().replace(/^'/, ''); if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    var m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/); if (!m) return '';
+    var y = +m[3]; if (y < 100) y += 2000; if (y > 2400) y -= 543; return y + '-' + pad(m[2]) + '-' + pad(m[1]);
+  }
+  function lotText(v) { var i = lotIso(v); return i ? dd(i) : String(v || ''); }
+  function dayItems(date) { return H.data.plans.filter(function (x) { return x.date === date; }).map(function (x) { var y = JSON.parse(JSON.stringify(x)); y.lot = lotIso(y.lot) || (y.grp === 'G2' ? y.date : ''); return y; }); }
   function ensureRange(date) {
     if (date >= H.data.from && date <= H.data.to) return Promise.resolve();
     return H.load(addDays(date, -30), addDays(date, 30));
@@ -151,7 +158,7 @@
       var its = D.items.filter(function (x) { return x.grp === g[0]; });
       html += '<div class="panel xsum" style="--g:' + g[2] + '"><div class="xsumh"><b>' + g[0] + ' · ' + g[1] + '</b><button class="link-btn" data-goto="' + g[0] + '">แก้ไข ›</button></div>'
         + (its.length ? its.map(function (x, i) {
-          return '<div class="xsrow"><span>' + (i + 1) + '. ' + esc(x.product || '(ยังไม่เลือกสินค้า)') + (x.lot ? ' <small>LOT ' + esc(x.lot) + '</small>' : '') + '</span><b>' + [x.planBatch !== '' && x.planBatch != null ? fmt(x.planBatch) + ' batch' : '', x.planQty !== '' && x.planQty != null ? fmt(x.planQty) + (g[0] === 'G3' ? ' ลัง' : ' ชิ้น') : ''].filter(String).join(' · ') + '</b>'
+          return '<div class="xsrow"><span>' + (i + 1) + '. ' + esc(x.product || '(ยังไม่เลือกสินค้า)') + (x.lot ? ' <small>LOT ' + lotText(x.lot) + '</small>' : '') + '</span><b>' + [x.planBatch !== '' && x.planBatch != null ? fmt(x.planBatch) + ' batch' : '', x.planQty !== '' && x.planQty != null ? fmt(x.planQty) + (g[0] === 'G3' ? ' ลัง' : ' ชิ้น') : ''].filter(String).join(' · ') + '</b>'
             + (x.dueDate ? '<small class="xdue">ส่ง ' + dd(x.dueDate) + '</small>' : '') + '</div>';
         }).join('') : '<div class="muted" style="font-size:13px">ยังไม่มีแผน</div>') + '</div>';
     });
@@ -193,7 +200,7 @@
     $('gAdd').addEventListener('click', function () {
       collect();
       var last = D.items.filter(function (x) { return x.grp === g; }).slice(-1)[0];
-      D.items.push({ grp: g, date: D.date, productId: '', product: '', lot: g === 'G2' ? '' : (last ? last.lot : ''), planBatch: '', planQty: '', dueDate: last ? last.dueDate : '', status: 'plan', _open: true });
+      D.items.push({ grp: g, date: D.date, productId: '', product: '', lot: g === 'G2' ? D.date : (last ? last.lot : ''), planBatch: '', planQty: '', dueDate: last ? last.dueDate : '', status: 'plan', _open: true });
       markDirty(); dayPage();
       var cards = document.querySelectorAll('.xcard'); var c = cards[cards.length - 1]; if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); var sel = c.querySelector('select'); if (sel) sel.focus(); }
     });
@@ -215,8 +222,8 @@
     if (c.due) tags += '<span class="xdu ' + c.due + '">' + (c.due === 'ok' ? '🚚 ทันส่ง' : c.due === 'late' ? '⚠️ ไม่ทันส่ง' : 'ส่ง ' + dd(x.dueDate)) + '</span>';
     if (x.status === 'cancel') tags += '<span class="xdu late">ยกเลิก</span>';
     var plan = g === 'G2'
-      ? fi(i, 'planBatch', 'แผน (batch)', x.planBatch) + fi(i, 'dueDate', 'กำหนดส่ง', x.dueDate, ' type="date"') + fi(i, 'note', 'หมายเหตุ', x.note, ' maxlength="200"')
-      : fi(i, 'lot', 'LOT / วันที่ผลิต', x.lot, ' placeholder="เช่น 16/11/26" maxlength="30"') + (g === 'G1' ? fi(i, 'planBatch', 'แผน (batch)', x.planBatch) : fi(i, 'planQty', 'แผน (ลัง)', x.planQty))
+      ? fi(i, 'lot', 'LOT (วันที่ผลิต)', x.lot, ' type="date"') + fi(i, 'planBatch', 'แผน (batch)', x.planBatch) + fi(i, 'dueDate', 'กำหนดส่ง', x.dueDate, ' type="date"') + fi(i, 'note', 'หมายเหตุ', x.note, ' maxlength="200"')
+      : fi(i, 'lot', 'LOT (วันที่ผลิต)', x.lot, ' type="date"') + (g === 'G1' ? fi(i, 'planBatch', 'แผน (batch)', x.planBatch) : fi(i, 'planQty', 'แผน (ลัง)', x.planQty))
         + fi(i, 'dueDate', 'กำหนดส่ง', x.dueDate, ' type="date"') + fi(i, 'note', 'หมายเหตุ', x.note, ' maxlength="200"');
     var res = g === 'G2'
       ? fi(i, 'actBatch', 'ทำจริง (batch)', x.actBatch, ' inputmode="decimal" placeholder="' + esc(x.planBatch || '') + '"')
