@@ -549,8 +549,8 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
       if (x.actQty !== '') {
         var ok = x.expMin === '' || (x.actQty >= x.expMin && x.actQty <= x.expMax);
         var qc = ok ? '#15803D' : x.actQty < x.expMin ? '#B91C1C' : '#C2410C';   // ตามช่วง เขียว · น้อยกว่า แดง · เกิน ส้ม
-        if (x.expMin !== '') sub.push({ t: (ok ? '✅ ตามช่วง' : x.actQty < x.expMin ? '🔻 ต่ำกว่าช่วง' : '🔺 เกินช่วง') + ' (ควรได้ ' + prdFmt_(x.expMin) + (x.expMax !== x.expMin ? '–' + prdFmt_(x.expMax) : '') + ')', c: qc });
-        right = prdFmt_(x.actQty) + ' ' + unitOf(x); rc = x.expMin === '' ? '#0F172A' : qc;
+        // ไม่แสดงบรรทัด ตามช่วง / ควรได้ ใน LINE (ผู้ใช้ขอเอาออก 17/11/69) — ดูได้ในหน้าระบบ
+        right = prdFmt_(x.actQty) + ' ' + unitOf(x);
       } else right = 'ยังไม่กรอก';
     } else if (grp === 'G1') {
       right = x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : 'ยังไม่กรอก';
@@ -558,7 +558,7 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
     } else {
       right = [x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : '', x.actCases !== '' ? prdFmt_(x.actCases) + ' ลัง' : ''].filter(String).join(' ; ') || 'ยังไม่กรอก';
     }
-    if (x.lossKg !== '' || x.lossQty !== '') sub.push({ t: 'ของเสีย ' + [x.lossKg !== '' ? prdW_(x.lossKg, x.lossKgUnit) : '', x.lossQty !== '' ? prdFmt_(x.lossQty) + ' ' + (x.lossQtyUnit || 'ชิ้น') : ''].filter(String).join(' / ') + (x.lossNote ? ' · ' + x.lossNote : ''), c: '#B45309' });
+    // ของเสียไม่แสดงใน LINE (ผู้ใช้ขอเอาออก 17/11/69) — ดูได้ในหน้าระบบ / Dashboard
     var fs = prdFinishState_(x, purToday_()), dl = prdDeadline_(x);
     if (fs === 'ok') sub.push({ t: '🏁 เสร็จ ' + prdTh_(x.finishDate) + ' ตามกำหนด', c: '#15803D' });
     else if (fs === 'wait') sub.push({ t: '⏳ ยังไม่เสร็จ · กำหนดเสร็จ ' + prdTh_(dl), c: '#64748B' });
