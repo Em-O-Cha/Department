@@ -42,16 +42,28 @@
   // แผน = จำนวน + หน่วย (ตรงกับ prdPlanUnit_ / prdPlanText_ ใน Prod.gs): G1/G2 จำนวนอยู่ใน planBatch (เริ่มต้น batch) · G3 อยู่ใน planQty (เริ่มต้น ลัง)
   function planUnit(x) { return String(x.planUnit || '').trim() || (x.grp === 'G3' ? 'ลัง' : 'batch'); }
   function isBatch(u) { return /^batch$/i.test(String(u || '').trim()); }
+  // น้ำหนัก: เลือก กก. / กรัม ได้ทุกช่อง (ชีตเก็บเป็น กก. — แปลงไป-กลับให้) · ตรงกับ prdToKg_ / prdBatches_ ใน Prod.gs
+  var W = { 'กก.': 1, 'กรัม': 0.001 }, WFIELDS = [['rawKg', 'rawUnit'], ['fryKg', 'fryUnit'], ['coolKg', 'coolUnit'], ['lossKg', 'lossKgUnit']];
+  function wUnit(u) { return W[String(u || '').trim()] ? String(u).trim() : 'กก.'; }
+  function kgOf(v, u) { v = num(v); return v === '' ? '' : v * W[wUnit(u)]; }
+  function batchesOf(n, unit, p) {
+    n = num(n); if (n === '') return '';
+    if (!String(unit || '').trim() || isBatch(unit)) return n;
+    if (W[String(unit).trim()] && p && Number(p.rawKg) > 0) return kgOf(n, unit) / Number(p.rawKg);
+    return '';
+  }
   function planText(x) { var n = x.grp === 'G3' ? x.planQty : x.planBatch; return n === '' || n == null ? '' : fmt(n) + ' ' + planUnit(x); }
   // ผลคำนวณของรายการ (ตรงกับ prdCalc_ ใน Prod.gs)
   function calc(x) {
-    var p = prodOf(x.productId), base = num(x.coolKg) !== '' ? num(x.coolKg) : num(x.fryKg), raw = num(x.rawKg);
+    var p = prodOf(x.productId), base = num(x.coolKg) !== '' ? kgOf(x.coolKg, x.coolUnit) : kgOf(x.fryKg, x.fryUnit), raw = kgOf(x.rawKg, x.rawUnit);
     var y = x.grp === 'G2' && raw && base !== '' ? Math.round(base / raw * 10000) / 100 : '';
-    var b = num(x.actBatch) !== '' ? num(x.actBatch) : isBatch(planUnit(x)) ? num(x.planBatch) : '';
-    var eb = num(x.planBatch) !== '' && isBatch(planUnit(x)) ? num(x.planBatch) : num(x.actBatch);   // ช่วงที่ควรได้ คิดจากแผน (เฉพาะแผนที่เป็น batch) ไม่เปลี่ยนตามที่กรอกผล
-    var lo = p && x.grp === 'G2' && eb !== '' && p.qtyMin !== '' ? Math.round(p.qtyMin * eb) : '', hi = p && x.grp === 'G2' && eb !== '' && p.qtyMax !== '' ? Math.round(p.qtyMax * eb) : '';
+    var pu = planUnit(x), same = p && num(x.planBatch) !== '' && pu === String(p.unit || '').trim();
+    // จำนวน batch ตามสัดส่วน: ทำจริงก่อน (มาตรฐานวัตถุดิบ) · ช่วงที่ควรได้คิดจากแผน (ไม่เปลี่ยนตามที่กรอกผล)
+    var b = batchesOf(x.actBatch, x.actBatchUnit, p); if (b === '') b = batchesOf(x.planBatch, pu, p);
+    var eb = batchesOf(x.planBatch, pu, p); if (eb === '' && !same) eb = batchesOf(x.actBatch, x.actBatchUnit, p);
+    var lo = p && x.grp === 'G2' ? (same ? num(x.planBatch) : eb !== '' && p.qtyMin !== '' ? Math.round(p.qtyMin * eb) : '') : '', hi = p && x.grp === 'G2' ? (same ? num(x.planBatch) : eb !== '' && p.qtyMax !== '' ? Math.round(p.qtyMax * eb) : '') : '';
     var q = num(x.actQty), qs = q === '' || lo === '' ? '' : q < lo ? 'low' : q > hi ? 'high' : 'ok';
-    return { yieldPct: y, lossPct: y === '' ? '' : Math.round((100 - y) * 100) / 100, target: target(p), expMin: lo, expMax: hi, qtyState: qs, rawStd: p && p.rawKg !== '' && b !== '' ? Math.round(p.rawKg * b * 1000) / 1000 : '', unit: x.unit || (p && p.unit) || 'ชิ้น', punit: (p && p.unit) || 'ชิ้น', usedFry: num(x.coolKg) === '' && num(x.fryKg) !== '' };
+    return { yieldPct: y, lossPct: y === '' ? '' : Math.round((100 - y) * 100) / 100, target: target(p), expMin: lo, expMax: hi, qtyState: qs, rawStd: p && p.rawKg !== '' && b !== '' ? Math.round(p.rawKg * b / W[wUnit(x.rawUnit)] * 1000) / 1000 : '', batches: b, ebatches: eb, unit: x.unit || (p && p.unit) || 'ชิ้น', punit: (p && p.unit) || 'ชิ้น', usedFry: num(x.coolKg) === '' && num(x.fryKg) !== '' };
   }
   // กำหนดเสร็จ: G2 ภายในวันผลิต · G1 / G3 ไม่เกิน 3 วัน (ตรงกับ prdDeadline_ ใน Prod.gs)
   function deadline(x) { var p = String(x.date || '').split('-'), n = x.grp === 'G2' ? 0 : 3; if (p.length !== 3 || !n) return x.date; var t = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n)); return t.toISOString().slice(0, 10); }
@@ -117,7 +129,11 @@
     var from = addDays(date, -14);
     return H.data.plans.filter(function (x) { return x.date === date || (x.date < date && x.date >= from && x.status !== 'cancel' && (!x.finishDate || x.finishDate === date)); })
       .sort(function (a, b) { return (a.date === date ? 0 : 1) - (b.date === date ? 0 : 1); })
-      .map(function (x) { var y = JSON.parse(JSON.stringify(x)); y.lot = lotIso(y.lot) || (y.grp === 'G2' ? y.date : ''); if (x.date !== date) y._carry = true; return y; });
+      .map(function (x) {
+        var y = JSON.parse(JSON.stringify(x)); y.lot = lotIso(y.lot) || (y.grp === 'G2' ? y.date : ''); if (x.date !== date) y._carry = true;
+        WFIELDS.forEach(function (f) { y[f[1]] = wUnit(y[f[1]]); if (y[f[0]] !== '' && y[f[0]] != null) y[f[0]] = Math.round(Number(y[f[0]]) / W[y[f[1]]] * 1000) / 1000; });   // ชีตเก็บ กก. → แสดงตามหน่วยที่เลือก
+        return y;
+      });
   }
   function ensureRange(date) {
     if (date >= H.data.from && date <= H.data.to) return Promise.resolve();
@@ -178,6 +194,12 @@
       return '<optgroup label="' + esc(c) + '">' + cats[c].map(function (p) { return '<option value="' + esc(p.id) + '"' + (p.id === x.productId ? ' selected' : '') + '>' + esc(p.name) + '</option>'; }).join('') + '</optgroup>';
     }).join('') + (x.productId && !prodOf(x.productId) && x.product ? '<option value="' + esc(x.productId) + '" selected>' + esc(x.product) + '</option>' : '') + '<option value="__new">+ เพิ่มสินค้าใหม่…</option></select>';
   }
+  // ช่องตัวเลข + เลือกหน่วยในกล่องเดียวกัน (แยกหน่วย แก้เองได้)
+  function fiU(i, k, label, val, attrs, uk, uval, opts) {
+    if (uval && opts.indexOf(uval) < 0) opts = opts.concat([uval]);
+    return '<label class="xf"><span>' + label + '</span><span class="xin"><input data-i="' + i + '" data-k="' + k + '" value="' + esc(val == null ? '' : val) + '"' + (attrs || ' inputmode="decimal"') + '>'
+      + '<select class="xu" data-i="' + i + '" data-k="' + uk + '" aria-label="หน่วย">' + opts.map(function (o) { return '<option' + (o === uval ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select></span></label>';
+  }
   function fi(i, k, label, val, attrs, unit) {
     return '<label class="xf"><span>' + label + '</span><span class="xin"><input data-i="' + i + '" data-k="' + k + '" value="' + esc(val == null ? '' : val) + '"' + (attrs || ' inputmode="decimal"') + '>' + (unit ? '<em>' + unit + '</em>' : '') + '</span></label>';
   }
@@ -188,6 +210,7 @@
       var its = []; D.items.forEach(function (x, i) { if (x.grp === g[0] && !x._carry) its.push(i); });
       var gl = g[0] === 'G2' ? 'งานเตรียมวัตถุดิบ/ทอด/ผัด/อบ' : g[1];
       html += '<section class="xgsec" style="--g:' + g[2] + '"><h4 class="xgh"><span>' + g[0] + '</span>' + esc(gl) + ' <small>' + its.length + ' รายการ</small></h4>'
+        + (g[0] === 'G2' ? '<p class="xhint">หน่วยแผน: batch · กก. / กรัม (= น้ำหนักวัตถุดิบ ระบบแปลงเป็น batch ตามมาตรฐานให้) · หรือหน่วยสินค้า เช่น ชิ้น (= จำนวนที่ควรได้)</p>' : '')
         + its.map(function (i, n) { return itemCard(D.items[i], i, n, 'm'); }).join('')
         + '<button class="btn btn-line xadd" data-add="' + g[0] + '" style="--g:' + g[2] + '">' + icon('plus', 18) + ' เพิ่มแผน ' + g[0] + ' · ' + esc(gl) + '</button></section>';
     });
@@ -330,15 +353,16 @@
     if (x.status === 'cancel') tags += '<span class="xdu late">ยกเลิก</span>';
     var chips = [x._carry ? 'ค้างจาก ' + dd(x.date) : '', x.lot ? 'LOT ' + lotText(x.lot) : '', planText(x) ? 'แผน ' + planText(x) : '', x.note || ''].filter(String);
     var res = g === 'G2'
-      ? fi(i, 'actBatch', 'ทำจริง (batch)', x.actBatch, ' inputmode="decimal" placeholder="' + esc(isBatch(planUnit(x)) ? x.planBatch || '' : '') + '"')
-        + fi(i, 'rawKg', 'น้ำหนักวัตถุดิบ', x.rawKg, ' inputmode="decimal"' + (c.rawStd !== '' ? ' placeholder="มาตรฐาน ' + c.rawStd + '"' : ''), 'กก.')
-        + fi(i, 'fryKg', 'น้ำหนักหลังผัด', x.fryKg, null, 'กก.') + fi(i, 'coolKg', 'น้ำหนักหลังทำเย็น', x.coolKg, null, 'กก.')
+      ? fiU(i, 'actBatch', 'ทำจริง', x.actBatch, ' inputmode="decimal" placeholder="' + esc(isBatch(planUnit(x)) ? x.planBatch || '' : '') + '"', 'actBatchUnit', x.actBatchUnit || 'batch', ['batch', 'กก.', 'กรัม'])
+        + fiU(i, 'rawKg', 'น้ำหนักวัตถุดิบ', x.rawKg, ' inputmode="decimal"' + (c.rawStd !== '' ? ' placeholder="มาตรฐาน ' + c.rawStd + '"' : ''), 'rawUnit', wUnit(x.rawUnit), ['กก.', 'กรัม'])
+        + fiU(i, 'fryKg', 'น้ำหนักหลังผัด', x.fryKg, null, 'fryUnit', wUnit(x.fryUnit), ['กก.', 'กรัม']) + fiU(i, 'coolKg', 'น้ำหนักหลังทำเย็น', x.coolKg, null, 'coolUnit', wUnit(x.coolUnit), ['กก.', 'กรัม'])
         + '<div class="xcalc" data-calc="' + i + '">' + calcHtml(x, c) + '</div>'
         + fi(i, 'actQty', 'จำนวนที่ผลิตได้จริง', x.actQty, ' inputmode="numeric"').replace('class="xin"', 'class="xin' + (c.qtyState ? ' q-' + c.qtyState : '') + '"')
         + fi(i, 'unit', 'หน่วย', x.unit, ' list="xUnits" maxlength="20" placeholder="' + esc(c.punit) + '"')
       : fi(i, 'actQty', g === 'G1' ? 'จำนวนที่บรรจุได้' : 'จำนวนที่บรรจุลงลัง', x.actQty, ' inputmode="numeric"')
         + fi(i, 'unit', 'หน่วย', x.unit, ' list="xUnits" maxlength="20" placeholder="' + esc(c.punit) + '"') + (g === 'G3' ? fi(i, 'actCases', 'จำนวนลัง', x.actCases, ' inputmode="numeric"', 'ลัง') : '');
-    res += fi(i, 'lossKg', 'ของเสีย (น้ำหนัก)', x.lossKg, null, 'กก.') + fi(i, 'lossQty', 'ของเสีย (จำนวน)', x.lossQty, ' inputmode="numeric"', 'ชิ้น')
+    var qUnits = ['ชิ้น']; list(S_().units).forEach(function (u) { if (qUnits.indexOf(u) < 0) qUnits.push(u); });
+    res += fiU(i, 'lossKg', 'ของเสีย (น้ำหนัก)', x.lossKg, null, 'lossKgUnit', wUnit(x.lossKgUnit), ['กก.', 'กรัม']) + fiU(i, 'lossQty', 'ของเสีย (จำนวน)', x.lossQty, ' inputmode="numeric"', 'lossQtyUnit', x.lossQtyUnit || 'ชิ้น', qUnits)
       + fi(i, 'lossNote', 'สาเหตุของเสีย', x.lossNote, ' list="xCauses" maxlength="150"') + fi(i, 'finishDate', 'วันที่เสร็จ', x.finishDate, ' type="date" min="' + esc(x.date || '') + '"')
       + '<div class="xfinw" data-fin="' + i + '">' + finHtml(i, x) + '</div>';
     // หัวการ์ดเย็น: สินค้าจากแผนเช้า (แก้ไม่ได้ที่นี่) + ข้อมูลแผน
@@ -353,13 +377,14 @@
     var y = c.yieldPct;
     return '<div class="xyb ' + (y === '' ? '' : y >= c.target ? 'ok' : 'bad') + '"><span>Yield' + (c.usedFry ? ' (ใช้น้ำหนักหลังผัด)' : '') + '</span><b>' + (y === '' ? '–' : fmt(y) + '%') + '</b><small>เป้า ≥ ' + c.target + '%</small></div>'
       + '<div class="xyb"><span>% Lost</span><b>' + (c.lossPct === '' ? '–' : fmt(c.lossPct) + '%') + '</b><small>= 100 − Yield</small></div>'
-      + '<div class="xyb ' + (c.qtyState === 'ok' ? 'ok' : c.qtyState === 'low' ? 'bad' : c.qtyState === 'high' ? 'high' : '') + '"><span>ควรได้</span><b>' + (c.expMin === '' ? '–' : fmt(c.expMin, 0) + (c.expMax !== c.expMin ? '–' + fmt(c.expMax, 0) : '')) + '</b><small>' + (c.qtyState === 'ok' ? '✓ ได้ตามช่วง' : c.qtyState === 'low' ? '↓ ได้น้อยกว่าช่วง' : c.qtyState === 'high' ? '↑ ได้มากกว่าช่วง' : c.punit) + '</small></div>';
+      + '<div class="xyb ' + (c.qtyState === 'ok' ? 'ok' : c.qtyState === 'low' ? 'bad' : c.qtyState === 'high' ? 'high' : '') + '"><span>ควรได้</span><b>' + (c.expMin === '' ? '–' : fmt(c.expMin, 0) + (c.expMax !== c.expMin ? '–' + fmt(c.expMax, 0) : '')) + '</b><small>' + (c.qtyState === 'ok' ? '✓ ได้ตามช่วง' : c.qtyState === 'low' ? '↓ ได้น้อยกว่าช่วง' : c.qtyState === 'high' ? '↑ ได้มากกว่าช่วง' : c.punit) + (c.ebatches !== '' && c.expMin !== '' && !isBatch(planUnit(x)) ? ' · คิดจาก ≈ ' + fmt(c.ebatches, 2) + ' batch' : '') + '</small></div>';
   }
   function bindCards() {
     var D = H.day, root = $('dBody');
     on('[data-i][data-k]', 'input', function (el) {
       var i = +el.getAttribute('data-i'), x = D.items[i]; x[el.getAttribute('data-k')] = el.value.trim(); markDirty();
       var box = root.querySelector('[data-calc="' + i + '"]'), cc = calc(x); if (box) box.innerHTML = calcHtml(x, cc);
+      var rw = root.querySelector('[data-i="' + i + '"][data-k="rawKg"]'); if (rw) rw.placeholder = cc.rawStd !== '' ? 'มาตรฐาน ' + cc.rawStd : '';
       var qi = root.querySelector('[data-i="' + i + '"][data-k="actQty"]');   // สีกรอบช่องผลิตได้จริง: ตามช่วง เขียว · น้อยกว่า แดง · เกิน ส้ม
       if (qi && x.grp === 'G2') qi.parentNode.className = 'xin' + (cc.qtyState ? ' q-' + cc.qtyState : '');
       if (el.getAttribute('data-k') === 'finishDate') { var fb = root.querySelector('[data-fin="' + i + '"]'); if (fb) fb.innerHTML = finHtml(i, x); }
@@ -765,6 +790,8 @@
     '.xtitle em{white-space:nowrap;font-style:normal;font-weight:700;color:var(--ink)}',
     '.xsplan{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:4px 8px;align-items:center;padding:6px 0;border-bottom:1px dashed var(--line)}.xspn b{display:block;font-size:14px}.xspn small{color:var(--muted);font-size:12px}.xspq{font-size:14px;text-align:right}.xspq.muted{font-weight:400}.xspmv{grid-column:2/-1;display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)}.xspmv select{border:1.5px solid var(--line);border-radius:8px;padding:4px 6px;font:inherit;font-size:13px;background:#fff;max-width:100%}',
     '.xcarryh{margin:16px 0 8px;font-size:15px;color:#6d28d9}.xcarryh small{color:var(--muted);font-weight:400;font-size:12.5px}.xcarryn{background:#f5f3ff;border:1.5px solid #ddd6fe;color:#5b21b6;font-size:14px;margin-bottom:12px}',
+    '.xin select.xu{flex:none;width:auto;max-width:42%;border:0;border-left:1.5px solid var(--line);background:#f8fafc;color:#334155;font:inherit;font-size:13px;padding:0 6px;align-self:stretch;cursor:pointer}',
+    '.xhint{font-size:12.5px;color:#9a3412;margin:-4px 2px 8px}',
     '.xchk.xall{font-weight:700;border-right:1.5px solid var(--line);padding-right:12px;margin-right:2px}.xeve{border-top:4px solid var(--g)}.xbd{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13.5px}.xbd small{grid-column:1/-1;color:var(--muted)}',
     '.xsrw{display:grid;grid-template-columns:22px minmax(0,2fr) minmax(0,1.2fr) minmax(0,.8fr) minmax(0,.8fr) 34px;gap:6px;align-items:end;margin-bottom:6px}.xsn{font-weight:700;color:var(--muted);padding-bottom:10px}.xsrw .icon-btn{margin-bottom:6px}',
     '@media (max-width:760px){.xsrw{grid-template-columns:22px minmax(0,1fr) minmax(0,1fr) 34px;border-bottom:1px dashed var(--line);padding-bottom:8px}.xsrw .xsn{grid-row:1;grid-column:1}.xsrw .xsp{grid-row:1;grid-column:2/4}.xsrw .icon-btn{grid-row:1;grid-column:4}.xsrw .xsl{grid-row:2;grid-column:2/4}.xsrw .xsq{grid-row:3;grid-column:2}.xsrw .xsu{grid-row:3;grid-column:3}}',

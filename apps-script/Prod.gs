@@ -18,9 +18,9 @@ var PRD_TABLES_ = {
   prd_plans: { tab: 'แผนผลิต', cols: [
     ['id', 'รหัส'], ['date', 'วันผลิต'], ['grp', 'กลุ่มงาน'], ['productId', 'รหัสสินค้า'], ['product', 'สินค้า'], ['lot', 'LOT / วันที่ผลิต'],
     ['planBatch', 'แผน (batch)'], ['planQty', 'แผน (จำนวน)'], ['planUnit', 'หน่วยแผน'], ['dueDate', 'กำหนดส่ง'],
-    ['actBatch', 'ทำจริง (batch)'], ['rawKg', 'น้ำหนักวัตถุดิบ (กก.)'], ['fryKg', 'น้ำหนักหลังผัด (กก.)'], ['coolKg', 'น้ำหนักหลังทำเย็น (กก.)'],
+    ['actBatch', 'ทำจริง (batch)'], ['actBatchUnit', 'หน่วยทำจริง'], ['rawKg', 'น้ำหนักวัตถุดิบ (กก.)'], ['fryKg', 'น้ำหนักหลังผัด (กก.)'], ['coolKg', 'น้ำหนักหลังทำเย็น (กก.)'],
     ['yieldPct', 'Yield (%)'], ['lossPct', '% Lost'], ['actQty', 'จำนวนที่ได้จริง'], ['unit', 'หน่วย'], ['actCases', 'จำนวนลัง'], ['expMin', 'ควรได้ (ต่ำสุด)'], ['expMax', 'ควรได้ (สูงสุด)'],
-    ['lossKg', 'ของเสีย (กก.)'], ['lossQty', 'ของเสีย (ชิ้น)'], ['lossNote', 'สาเหตุของเสีย'], ['finishDate', 'วันที่เสร็จ'], ['lateCause', 'สาเหตุเสร็จช้ากว่ากำหนด'], ['status', 'สถานะ'], ['note', 'หมายเหตุ'],
+    ['lossKg', 'ของเสีย (กก.)'], ['lossQty', 'ของเสีย (ชิ้น)'], ['rawUnit', 'หน่วยน้ำหนักวัตถุดิบ'], ['fryUnit', 'หน่วยน้ำหนักหลังผัด'], ['coolUnit', 'หน่วยน้ำหนักหลังทำเย็น'], ['lossKgUnit', 'หน่วยของเสีย (น้ำหนัก)'], ['lossQtyUnit', 'หน่วยของเสีย (จำนวน)'], ['lossNote', 'สาเหตุของเสีย'], ['finishDate', 'วันที่เสร็จ'], ['lateCause', 'สาเหตุเสร็จช้ากว่ากำหนด'], ['status', 'สถานะ'], ['note', 'หมายเหตุ'],
     ['by', 'ผู้บันทึก'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
   prd_reports: { tab: 'รายงาน LINE', cols: [
     ['id', 'รหัส'], ['date', 'วันที่'], ['kind', 'รอบ'], ['grp', 'กลุ่มงาน'], ['title', 'หัวข้อข้อความ'], ['sections', 'หัวข้อเพิ่มเติม'], ['problems', 'ปัญหาที่พบ'], ['checks', 'ปิดงาน (ปิดน้ำ/ไฟ/แอร์)'], ['note', 'หมายเหตุ'],
@@ -143,6 +143,18 @@ function prdSeedProducts_(ss) {
 // แผน: จำนวน + หน่วย (แก้หน่วยได้เอง) — G1/G2 เก็บจำนวนใน planBatch (หน่วยเริ่มต้น batch) · G3 เก็บใน planQty (หน่วยเริ่มต้น ลัง)
 function prdPlanUnit_(x) { return String(x.planUnit || '').trim() || (x.grp === 'G3' ? 'ลัง' : 'batch'); }
 function prdIsBatch_(u) { return /^batch$/i.test(String(u || '').trim()); }
+// น้ำหนัก: ชีตเก็บเป็น กก. เสมอ (คำนวณ Yield / Dashboard ได้ตรง) + เก็บหน่วยที่ผู้กรอกเลือกไว้แสดงกลับ
+var PRD_W_ = { 'กก.': 1, 'กรัม': 0.001 };
+function prdWUnit_(u) { return PRD_W_[String(u || '').trim()] ? String(u).trim() : 'กก.'; }
+function prdToKg_(v, u) { return v === '' || v == null ? '' : Math.round(Number(v) * PRD_W_[prdWUnit_(u)] * 1000) / 1000; }
+function prdW_(kg, u) { u = prdWUnit_(u); return kg === '' || kg == null ? '-' : prdFmt_(Math.round(Number(kg) / PRD_W_[u] * 1000) / 1000) + ' ' + u; }
+// จำนวน batch ตามสัดส่วน: batch = ตามนั้น · น้ำหนัก (กก. / กรัม) = น้ำหนักวัตถุดิบ ÷ วัตถุดิบมาตรฐานต่อ batch
+function prdBatches_(n, unit, prod) {
+  if (n === '' || n == null) return '';
+  if (!String(unit || '').trim() || prdIsBatch_(unit)) return Number(n);
+  if (PRD_W_[String(unit).trim()] && prod && Number(prod.rawKg) > 0) return prdToKg_(n, unit) / Number(prod.rawKg);
+  return '';
+}
 function prdPlanText_(x) {
   var n = x.grp === 'G3' ? x.planQty : x.planBatch;
   return n === '' || n == null ? '' : prdFmt_(n) + ' ' + prdPlanUnit_(x);
@@ -151,9 +163,11 @@ function prdCalc_(o, prod, s) {
   var base = o.coolKg !== '' ? o.coolKg : o.fryKg;
   o.yieldPct = o.grp === 'G2' && o.rawKg && base !== '' ? Math.round(base / o.rawKg * 10000) / 100 : '';
   o.lossPct = o.yieldPct === '' ? '' : Math.round((100 - o.yieldPct) * 100) / 100;
-  var b = o.planBatch !== '' && prdIsBatch_(prdPlanUnit_(o)) ? o.planBatch : o.actBatch;   // ช่วงที่ควรได้ คิดจากแผน (เฉพาะแผนที่เป็น batch) ไม่เปลี่ยนตามที่กรอกผล
-  o.expMin = prod && o.grp === 'G2' && b !== '' && prod.qtyMin !== '' ? Math.round(prod.qtyMin * b) : '';
-  o.expMax = prod && o.grp === 'G2' && b !== '' && prod.qtyMax !== '' ? Math.round(prod.qtyMax * b) : '';
+  // ช่วงที่ควรได้ คิดจากแผน (ไม่เปลี่ยนตามที่กรอกผล): แผนเป็น batch / น้ำหนัก → คิดตามสัดส่วน · แผนเป็นหน่วยสินค้า → ควรได้ = แผน
+  var pu = prdPlanUnit_(o), b = prdBatches_(o.planBatch, pu, prod), same = prod && o.planBatch !== '' && String(pu).trim() === String(prod.unit || '').trim();
+  if (b === '' && !same) b = prdBatches_(o.actBatch, o.actBatchUnit, prod);
+  o.expMin = prod && o.grp === 'G2' ? (same ? Number(o.planBatch) : b !== '' && prod.qtyMin !== '' ? Math.round(prod.qtyMin * b) : '') : '';
+  o.expMax = prod && o.grp === 'G2' ? (same ? Number(o.planBatch) : b !== '' && prod.qtyMax !== '' ? Math.round(prod.qtyMax * b) : '') : '';
   return o;
 }
 
@@ -233,8 +247,10 @@ function prdCleanPlan_(p, s) {
   var grp = PRD_GROUPS_[p.grp] ? p.grp : 'G2';
   var o = { grp: grp, date: purDate_(p.date), productId: purClean_(p.productId, 20), product: purClean_(p.product, 150), lot: prdLotIso_(p.lot),
     planBatch: prdNum_(p.planBatch, 1e7), planQty: prdNum_(p.planQty, 1e7), planUnit: purClean_(p.planUnit, 20), dueDate: purDate_(p.dueDate),
-    actBatch: prdNum_(p.actBatch, 10000), rawKg: prdNum_(p.rawKg, 1e6), fryKg: prdNum_(p.fryKg, 1e6), coolKg: prdNum_(p.coolKg, 1e6),
-    actQty: prdNum_(p.actQty, 1e7), unit: purClean_(p.unit, 20), actCases: prdNum_(p.actCases, 1e6), lossKg: prdNum_(p.lossKg, 1e6), lossQty: prdNum_(p.lossQty, 1e7),
+    actBatch: prdNum_(p.actBatch, 1e7), actBatchUnit: /^(batch|กก\.|กรัม)$/.test(p.actBatchUnit) ? p.actBatchUnit : '',
+    rawUnit: prdWUnit_(p.rawUnit), fryUnit: prdWUnit_(p.fryUnit), coolUnit: prdWUnit_(p.coolUnit), lossKgUnit: prdWUnit_(p.lossKgUnit), lossQtyUnit: purClean_(p.lossQtyUnit, 20),
+    rawKg: prdNum_(prdToKg_(purNum_(p.rawKg), p.rawUnit), 1e6), fryKg: prdNum_(prdToKg_(purNum_(p.fryKg), p.fryUnit), 1e6), coolKg: prdNum_(prdToKg_(purNum_(p.coolKg), p.coolUnit), 1e6),
+    actQty: prdNum_(p.actQty, 1e7), unit: purClean_(p.unit, 20), actCases: prdNum_(p.actCases, 1e6), lossKg: prdNum_(prdToKg_(purNum_(p.lossKg), p.lossKgUnit), 1e6), lossQty: prdNum_(p.lossQty, 1e7),
     lossNote: prdText_(p.lossNote, 300), finishDate: purDate_(p.finishDate), lateCause: prdText_(p.lateCause, 300), status: PRD_STATUS_[p.status] ? p.status : 'plan', note: prdText_(p.note, 500), by: purClean_(p.by, 60) };
   return o;
 }
@@ -529,8 +545,8 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
     if (x.lot) sub.push('LOT ' + prdLotText_(x.lot));
     if (grp === 'G2') {
       var b = x.actBatch !== '' ? x.actBatch : x.planBatch;
-      var bt = x.actBatch !== '' ? prdFmt_(x.actBatch) + ' batch' : prdPlanText_(x);
-      sub.push(bt + (x.rawKg !== '' ? (bt ? ' · ' : '') + 'วัตถุดิบ ' + prdFmt_(x.rawKg) + ' → ' + prdFmt_(x.coolKg !== '' ? x.coolKg : x.fryKg) + ' กก.' + (x.coolKg === '' && x.fryKg !== '' ? ' (หลังผัด)' : '') : ''));
+      var bt = x.actBatch !== '' ? prdFmt_(x.actBatch) + ' ' + (x.actBatchUnit || 'batch') : prdPlanText_(x);
+      sub.push(bt + (x.rawKg !== '' ? (bt ? ' · ' : '') + 'วัตถุดิบ ' + prdW_(x.rawKg, x.rawUnit) + ' → ' + (x.coolKg !== '' ? prdW_(x.coolKg, x.coolUnit) : prdW_(x.fryKg, x.fryUnit)) + (x.coolKg === '' && x.fryKg !== '' ? ' (หลังผัด)' : '') : ''));
       if (x.actQty !== '') {
         var ok = x.expMin === '' || (x.actQty >= x.expMin && x.actQty <= x.expMax);
         var qc = ok ? '#15803D' : x.actQty < x.expMin ? '#B91C1C' : '#C2410C';   // ตามช่วง เขียว · น้อยกว่า แดง · เกิน ส้ม
@@ -543,7 +559,7 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
     } else {
       right = [x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : '', x.actCases !== '' ? prdFmt_(x.actCases) + ' ลัง' : ''].filter(String).join(' ; ') || 'ยังไม่กรอก';
     }
-    if (x.lossKg !== '' || x.lossQty !== '') sub.push({ t: 'ของเสีย ' + [x.lossKg !== '' ? prdFmt_(x.lossKg) + ' กก.' : '', x.lossQty !== '' ? prdFmt_(x.lossQty) + ' ชิ้น' : ''].filter(String).join(' / ') + (x.lossNote ? ' · ' + x.lossNote : ''), c: '#B45309' });
+    if (x.lossKg !== '' || x.lossQty !== '') sub.push({ t: 'ของเสีย ' + [x.lossKg !== '' ? prdW_(x.lossKg, x.lossKgUnit) : '', x.lossQty !== '' ? prdFmt_(x.lossQty) + ' ' + (x.lossQtyUnit || 'ชิ้น') : ''].filter(String).join(' / ') + (x.lossNote ? ' · ' + x.lossNote : ''), c: '#B45309' });
     var fs = prdFinishState_(x, purToday_()), dl = prdDeadline_(x);
     if (fs === 'ok') sub.push({ t: '🏁 เสร็จ ' + prdTh_(x.finishDate) + ' ตามกำหนด', c: '#15803D' });
     else if (fs === 'wait') sub.push({ t: '⏳ ยังไม่เสร็จ · กำหนดเสร็จ ' + prdTh_(dl), c: '#64748B' });
