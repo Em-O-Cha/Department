@@ -47,7 +47,7 @@
     var eb = num(x.planBatch) !== '' ? num(x.planBatch) : num(x.actBatch);   // ช่วงที่ควรได้ คิดจากแผน (ไม่เปลี่ยนตามที่กรอกผล)
     var lo = p && x.grp === 'G2' && eb !== '' && p.qtyMin !== '' ? Math.round(p.qtyMin * eb) : '', hi = p && x.grp === 'G2' && eb !== '' && p.qtyMax !== '' ? Math.round(p.qtyMax * eb) : '';
     var q = num(x.actQty), qs = q === '' || lo === '' ? '' : q < lo ? 'low' : q > hi ? 'high' : 'ok';
-    return { yieldPct: y, lossPct: y === '' ? '' : Math.round((100 - y) * 100) / 100, target: target(p), expMin: lo, expMax: hi, qtyState: qs, rawStd: p && p.rawKg !== '' && b !== '' ? Math.round(p.rawKg * b * 1000) / 1000 : '', unit: (p && p.unit) || 'ชิ้น', usedFry: num(x.coolKg) === '' && num(x.fryKg) !== '' };
+    return { yieldPct: y, lossPct: y === '' ? '' : Math.round((100 - y) * 100) / 100, target: target(p), expMin: lo, expMax: hi, qtyState: qs, rawStd: p && p.rawKg !== '' && b !== '' ? Math.round(p.rawKg * b * 1000) / 1000 : '', unit: x.unit || (p && p.unit) || 'ชิ้น', punit: (p && p.unit) || 'ชิ้น', usedFry: num(x.coolKg) === '' && num(x.fryKg) !== '' };
   }
   // กำหนดเสร็จ: G2 ภายในวันผลิต · G1 / G3 ไม่เกิน 3 วัน (ตรงกับ prdDeadline_ ใน Prod.gs)
   function deadline(x) { var p = String(x.date || '').split('-'), n = x.grp === 'G2' ? 0 : 3; if (p.length !== 3 || !n) return x.date; var t = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n)); return t.toISOString().slice(0, 10); }
@@ -327,9 +327,10 @@
         + fi(i, 'rawKg', 'น้ำหนักวัตถุดิบ', x.rawKg, ' inputmode="decimal"' + (c.rawStd !== '' ? ' placeholder="มาตรฐาน ' + c.rawStd + '"' : ''), 'กก.')
         + fi(i, 'fryKg', 'น้ำหนักหลังผัด', x.fryKg, null, 'กก.') + fi(i, 'coolKg', 'น้ำหนักหลังทำเย็น', x.coolKg, null, 'กก.')
         + '<div class="xcalc" data-calc="' + i + '">' + calcHtml(x, c) + '</div>'
-        + fi(i, 'actQty', 'จำนวนที่ผลิตได้จริง', x.actQty, ' inputmode="numeric"', c.unit).replace('class="xin"', 'class="xin' + (c.qtyState ? ' q-' + c.qtyState : '') + '"')
+        + fi(i, 'actQty', 'จำนวนที่ผลิตได้จริง', x.actQty, ' inputmode="numeric"').replace('class="xin"', 'class="xin' + (c.qtyState ? ' q-' + c.qtyState : '') + '"')
+        + fi(i, 'unit', 'หน่วย', x.unit, ' list="xUnits" maxlength="20" placeholder="' + esc(c.punit) + '"')
       : fi(i, 'actQty', g === 'G1' ? 'จำนวนที่บรรจุได้' : 'จำนวนที่บรรจุลงลัง', x.actQty, ' inputmode="numeric"')
-        + fi(i, 'unit', 'หน่วย', x.unit, ' list="xUnits" maxlength="20" placeholder="' + esc(c.unit) + '"') + (g === 'G3' ? fi(i, 'actCases', 'จำนวนลัง', x.actCases, ' inputmode="numeric"', 'ลัง') : '');
+        + fi(i, 'unit', 'หน่วย', x.unit, ' list="xUnits" maxlength="20" placeholder="' + esc(c.punit) + '"') + (g === 'G3' ? fi(i, 'actCases', 'จำนวนลัง', x.actCases, ' inputmode="numeric"', 'ลัง') : '');
     res += fi(i, 'lossKg', 'ของเสีย (น้ำหนัก)', x.lossKg, null, 'กก.') + fi(i, 'lossQty', 'ของเสีย (จำนวน)', x.lossQty, ' inputmode="numeric"', 'ชิ้น')
       + fi(i, 'lossNote', 'สาเหตุของเสีย', x.lossNote, ' list="xCauses" maxlength="150"') + fi(i, 'finishDate', 'วันที่เสร็จ', x.finishDate, ' type="date" min="' + esc(x.date || '') + '"')
       + '<div class="xfinw" data-fin="' + i + '">' + finHtml(i, x) + '</div>';
@@ -345,7 +346,7 @@
     var y = c.yieldPct;
     return '<div class="xyb ' + (y === '' ? '' : y >= c.target ? 'ok' : 'bad') + '"><span>Yield' + (c.usedFry ? ' (ใช้น้ำหนักหลังผัด)' : '') + '</span><b>' + (y === '' ? '–' : fmt(y) + '%') + '</b><small>เป้า ≥ ' + c.target + '%</small></div>'
       + '<div class="xyb"><span>% Lost</span><b>' + (c.lossPct === '' ? '–' : fmt(c.lossPct) + '%') + '</b><small>= 100 − Yield</small></div>'
-      + '<div class="xyb ' + (c.qtyState === 'ok' ? 'ok' : c.qtyState === 'low' ? 'bad' : c.qtyState === 'high' ? 'high' : '') + '"><span>ควรได้</span><b>' + (c.expMin === '' ? '–' : fmt(c.expMin, 0) + (c.expMax !== c.expMin ? '–' + fmt(c.expMax, 0) : '')) + '</b><small>' + (c.qtyState === 'ok' ? '✓ ได้ตามช่วง' : c.qtyState === 'low' ? '↓ ได้น้อยกว่าช่วง' : c.qtyState === 'high' ? '↑ ได้มากกว่าช่วง' : c.unit) + '</small></div>';
+      + '<div class="xyb ' + (c.qtyState === 'ok' ? 'ok' : c.qtyState === 'low' ? 'bad' : c.qtyState === 'high' ? 'high' : '') + '"><span>ควรได้</span><b>' + (c.expMin === '' ? '–' : fmt(c.expMin, 0) + (c.expMax !== c.expMin ? '–' + fmt(c.expMax, 0) : '')) + '</b><small>' + (c.qtyState === 'ok' ? '✓ ได้ตามช่วง' : c.qtyState === 'low' ? '↓ ได้น้อยกว่าช่วง' : c.qtyState === 'high' ? '↑ ได้มากกว่าช่วง' : c.punit) + '</small></div>';
   }
   function bindCards() {
     var D = H.day, root = $('dBody');
