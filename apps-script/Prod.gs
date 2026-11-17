@@ -498,9 +498,9 @@ function prdCard_(kicker, title, sub, body, alt, headColor) {
     prdBox_(body, { paddingStart: '6px', paddingEnd: '6px', paddingTop: '4px', paddingBottom: '4px' })];
   return { type: 'flex', altText: alt.slice(0, 390), contents: { type: 'bubble', size: 'giga', body: prdBox_(inner, { paddingAll: '14px', backgroundColor: '#FFFFFF' }) } };
 }
+// หัวข้อ = แถบสีเต็มแถบ ตัวอักษรขาว (ผู้ใช้ขอให้ชัดเจน 17/11/69)
 function prdSec_(label, color) {
-  return { type: 'box', layout: 'horizontal', margin: 'xl', spacing: 'sm', contents: [
-    prdBox_([], { width: '6px', backgroundColor: color, cornerRadius: '3px' }), prdT_(label, { size: 'md', weight: 'bold', color: '#0F172A', flex: 1 })] };
+  return prdBox_([prdT_(label, { size: 'md', weight: 'bold', color: '#FFFFFF' })], { margin: 'xl', backgroundColor: color, cornerRadius: '10px', paddingTop: '8px', paddingBottom: '8px', paddingStart: '12px', paddingEnd: '12px' });
 }
 // แถวรายการ: เลข · ชื่อ (+ บรรทัดรอง) · ค่าทางขวา
 function prdRow_(no, name, sub, right, rightColor) {
