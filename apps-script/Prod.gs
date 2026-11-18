@@ -186,7 +186,7 @@ function prdLoad(token, from, to) {
     plans: purRead_(ss, 'prd_plans').filter(inRange),
     reports: purRead_(ss, 'prd_reports').filter(inRange).map(function (r) { r.files = purParseFiles_(r.files); r.sections = prdSections_(r.sections); return r; }),
     breakdowns: purRead_(ss, 'prd_breakdowns').filter(inRange).map(prdBdOut_),
-    line: { token: !!p.getProperty('PROD_LINE_TOKEN'), group: !!p.getProperty('PROD_LINE_GROUP'), setupCode: hrProp_('PROD_LINE_SETUP', hrSetupCode_), webhook: ACC_WEBHOOK_URL_, botName: prdBotName_() } };
+    line: { token: !!p.getProperty('PROD_LINE_TOKEN'), group: !!p.getProperty('PROD_LINE_GROUP'), setupCode: hrProp_('PROD_LINE_SETUP', hrSetupCode_), webhook: ACC_WEBHOOK_URL_, botName: prdBotName_(), sharedAcc: !!p.getProperty('PROD_LINE_TOKEN') && p.getProperty('PROD_LINE_TOKEN') === p.getProperty('ACC_LINE_TOKEN'), accBot: !!p.getProperty('ACC_LINE_TOKEN') } };
 }
 
 // ---------- สินค้า (มาตรฐาน Yield) ----------
@@ -688,6 +688,18 @@ function prdSetLineToken(token, value) {
   CacheService.getScriptCache().remove('prd_bot_id'); CacheService.getScriptCache().remove('prd_bot_name');
   if (old && old !== v) p.deleteProperty('PROD_LINE_GROUP');   // เปลี่ยน OA → ต้องผูกกลุ่มใหม่
   return { ok: true, botName: info.displayName || '', regroup: !!(old && old !== v), line: { token: true, group: !!p.getProperty('PROD_LINE_GROUP'), setupCode: hrProp_('PROD_LINE_SETUP', hrSetupCode_), webhook: ACC_WEBHOOK_URL_ } };
+}
+// ใช้บอท LINE ตัวเดียวกับฝ่ายบัญชี (คัดลอก ACC_LINE_TOKEN ฝั่งเซิร์ฟเวอร์ ไม่ส่ง token ออกไป) → ต้องผูกกลุ่มฝ่ายผลิตใหม่ด้วยคำสั่ง "ตั้งค่ากลุ่ม ผลิต <รหัส>"
+// ในกลุ่มที่มีบอทบัญชีอยู่ (webhook แยกคำสั่งที่มีคำว่า ผลิต ไปฝ่ายผลิต)
+function prdUseAccBot(token) {
+  requirePrd_(token);
+  var p = props_(), acc = p.getProperty('ACC_LINE_TOKEN');
+  if (!acc) return { ok: false, error: 'ฝ่ายบัญชียังไม่ได้ตั้งบอท LINE' };
+  if (p.getProperty('PROD_LINE_TOKEN') === acc) return { ok: false, error: 'ใช้บอทเดียวกับฝ่ายบัญชีอยู่แล้ว' };
+  p.setProperty('PROD_LINE_TOKEN', acc);
+  p.deleteProperty('PROD_LINE_GROUP');
+  var c = CacheService.getScriptCache(); c.remove('prd_bot_id'); c.remove('prd_bot_name');
+  return { ok: true, line: { token: true, group: false, setupCode: hrProp_('PROD_LINE_SETUP', hrSetupCode_), webhook: ACC_WEBHOOK_URL_, botName: prdBotName_(), sharedAcc: true } };
 }
 function prdLineTest(token) {
   requirePrd_(token);

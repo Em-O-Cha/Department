@@ -727,6 +727,8 @@
           + (L.token ? '' : '<li>วาง Channel access token (long-lived) ของ OA ที่จะใช้ส่งรายงานผลิต แล้วกด "บันทึก token" — ระบบตรวจกับ LINE ให้ก่อนบันทึก (ใช้ OA / token เดียวกับฝ่ายบัญชีก็ได้)' + tokenBox() + '</li>')
           + '<li>ใน LINE Developers → Messaging API ของ OA นั้น: ใส่ Webhook URL ด้านล่าง แล้วเปิด Use webhook และ Allow bot to join group chats (ถ้าใช้ OA เดียวกับฝ่ายบัญชี ตั้งไว้แล้ว ข้ามได้)' + copyBox(L.webhook, 'Webhook URL') + '</li>'
           + '<li>' + bindStep(L.setupCode) + '</li></ol>')
+      + (L.sharedAcc ? '<p class="muted" style="margin:8px 0 0">ใช้บอทตัวเดียวกับฝ่ายบัญชี — คำสั่งที่มีคำว่า "ผลิต" เป็นของฝ่ายผลิต</p>'
+        : L.accBot ? '<div class="a7lineacts"><button class="btn btn-line btn-sm" id="sUseAcc">' + icon('send', 16) + ' ใช้บอทตัวเดียวกับฝ่ายบัญชี</button></div>' : '')
       + '</div>'
       + '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('chart', 18) + ' เป้าหมาย</h4><div class="pform"><div class="pf"><label for="s_target">Yield ขั้นต่ำ (%) ของทุกสินค้า</label><input id="s_target" inputmode="decimal" value="' + esc(s.target) + '"></div></div></div>'
       + '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('list', 18) + ' ตัวเลือก</h4><div class="pform">'
@@ -739,6 +741,15 @@
     if ($('sTokChg')) $('sTokChg').addEventListener('click', function () {
       wide({ icon: 'send', title: 'เปลี่ยน token / OA ของฝ่ายผลิต', noCancel: true, ok: 'ปิด', body: '<p style="margin-top:0">วาง Channel access token ใหม่ ระบบตรวจกับ LINE ก่อนบันทึก · ถ้าเป็น OA ตัวใหม่ ต้องผูกกลุ่มใหม่อีกครั้ง</p>' + tokenBox(),
         onOpen: function () { bindToken($('mBody')); }, submit: function () { closeModal(); return Promise.resolve(); } });
+    });
+    if ($('sUseAcc')) $('sUseAcc').addEventListener('click', function () {
+      ask({ title: 'ใช้บอทตัวเดียวกับฝ่ายบัญชี?', text: 'รายงานฝ่ายผลิตจะส่งด้วยบอทของฝ่ายบัญชี และต้องผูกกลุ่มใหม่: พิมพ์คำสั่งตั้งค่ากลุ่ม ผลิต ในกลุ่มที่ต้องการ (บอทบัญชีต้องอยู่ในกลุ่มนั้น)', ok: 'เปลี่ยนเลย', tone: 'info' }).then(function (yes) {
+        if (!yes) return;
+        call('prdUseAccBot', state.token).then(function (r) {
+          if (!r.ok) return toast(r.error);
+          H.data.line = r.line; toast('เปลี่ยนเป็นบอทฝ่ายบัญชีแล้ว — ผูกกลุ่มตามขั้นตอนด้านล่าง'); settings();
+        }).catch(onServerError);
+      });
     });
     if ($('sTest')) $('sTest').addEventListener('click', function () { call('prdLineTest', state.token).then(function (r) { toast(r.ok ? 'ส่งข้อความทดสอบแล้ว' : r.error); }).catch(onServerError); });
     $('sSave').addEventListener('click', function () {
@@ -769,7 +780,8 @@
   function copyBox(text, label) { return '<div class="a7copy"><input readonly value="' + esc(text) + '" aria-label="' + esc(label) + '"><button class="btn btn-line btn-sm" data-copy="' + esc(text) + '">คัดลอก</button></div>'; }
   function bindStep(code) {
     var bn = (H.data.line || {}).botName;
-    return 'เชิญบอท LINE ของฝ่ายผลิต' + (bn ? ' <b>"' + esc(bn) + '"</b>' : '') + ' เข้ากลุ่ม (ต้องเป็นบอทตัวนี้ ไม่ใช่บอทฝ่ายบัญชี) แล้วพิมพ์ข้อความนี้ในกลุ่ม รอบอทตอบ "✅ ตั้งกลุ่มนี้…" จึงเสร็จ' + copyBox('ตั้งค่ากลุ่ม ผลิต ' + (code || ''), 'คำสั่งผูกกลุ่ม')
+    return ((H.data.line || {}).sharedAcc ? 'ในกลุ่มที่มีบอท' + (bn ? ' <b>"' + esc(bn) + '"</b>' : 'ของฝ่ายบัญชี') + ' อยู่แล้ว พิมพ์ข้อความนี้'
+      : 'เชิญบอท LINE ของฝ่ายผลิต' + (bn ? ' <b>"' + esc(bn) + '"</b>' : '') + ' เข้ากลุ่ม (ต้องเป็นบอทตัวนี้ ไม่ใช่บอทฝ่ายบัญชี) แล้วพิมพ์ข้อความนี้ในกลุ่ม') + ' รอบอทตอบ "✅ ตั้งกลุ่มนี้…" จึงเสร็จ' + copyBox('ตั้งค่ากลุ่ม ผลิต ' + (code || ''), 'คำสั่งผูกกลุ่ม')
       + '<small class="muted">รหัสใช้ได้ครั้งเดียว</small>';
   }
   function bindCopy(root) {

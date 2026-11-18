@@ -48,7 +48,7 @@ function apiFunctions_() {
     rdSaveTrial: rdSaveTrial, rdDeleteTrial: rdDeleteTrial, rdUploadTrialPhoto: rdUploadTrialPhoto, rdRemoveTrialPhoto: rdRemoveTrialPhoto,
     prdLoad: prdLoad, prdSaveProduct: prdSaveProduct, prdSavePlans: prdSavePlans, prdDeletePlan: prdDeletePlan, prdSaveBreakdown: prdSaveBreakdown, prdUploadBdPhoto: prdUploadBdPhoto, prdRemoveBdPhoto: prdRemoveBdPhoto,
     prdDeleteBreakdown: prdDeleteBreakdown, prdSaveReport: prdSaveReport, prdUploadPhoto: prdUploadPhoto, prdRemovePhoto: prdRemovePhoto,
-    prdSaveSettings: prdSaveSettings, prdLog: prdLog, prdDashboard: prdDashboard, prdSendLine: prdSendLine, prdLinePreview: prdLinePreview, prdLineTest: prdLineTest, prdSetLineToken: prdSetLineToken,
+    prdSaveSettings: prdSaveSettings, prdLog: prdLog, prdDashboard: prdDashboard, prdSendLine: prdSendLine, prdLinePreview: prdLinePreview, prdLineTest: prdLineTest, prdSetLineToken: prdSetLineToken, prdUseAccBot: prdUseAccBot,
     // ผู้บริหาร (Executive.gs)
     execOverview: execOverview, execDashboard: execDashboard, execVerify: execVerify
   };
