@@ -13,10 +13,10 @@ var CP_TABLES_ = {
     ['itemCode', 'รหัสสินค้า CP Ram'], ['product', 'สินค้า'], ['deliveryDate', 'วันที่ส่ง'], ['qty', 'จำนวน'], ['unit', 'หน่วย'],
     ['price', 'ราคา/หน่วย'], ['amount', 'จำนวนเงิน'], ['vat', 'VAT 7%'], ['net', 'รวมสุทธิ'], ['shipTo', 'ส่งที่ (ตามใบสั่ง)'],
     ['wh', 'คลัง'], ['place', 'สถานที่ส่ง'], ['termDays', 'เครดิต (วัน)'], ['dueDate', 'รอบเงินเข้า'], ['status', 'สถานะ'], ['note', 'หมายเหตุ'],
-    ['history', 'ประวัติการเปลี่ยนแปลง'], ['fileName', 'ไฟล์'], ['createdAt', 'บันทึกเมื่อ'], ['updatedAt', 'แก้ไขเมื่อ']] },
+    ['history', 'ประวัติการเปลี่ยนแปลง'], ['fileName', 'ไฟล์'], ['importId', 'รหัสการนำเข้าล่าสุด'], ['createdAt', 'บันทึกเมื่อ'], ['updatedAt', 'แก้ไขเมื่อ']] },
   cp_imports: { tab: 'นำเข้า PO', cols: [
     ['id', 'รหัส'], ['fileName', 'ชื่อไฟล์'], ['poCount', 'จำนวนใบสั่ง'], ['added', 'เพิ่มใหม่'], ['changed', 'อัปเดต'], ['skipped', 'ข้าม (มีแล้ว)'],
-    ['qty', 'รวมจำนวน'], ['amount', 'มูลค่ารวม (ไม่รวม VAT)'], ['createdAt', 'นำเข้าเมื่อ']] }
+    ['qty', 'รวมจำนวน'], ['amount', 'มูลค่ารวม (ไม่รวม VAT)'], ['sentAt', 'ส่ง LINE เมื่อ'], ['imgUrl', 'ภาพตาราง (LINE)'], ['pdfUrl', 'ไฟล์ PDF'], ['xlsxUrl', 'ไฟล์ Excel'], ['sheetUrl', 'ไฟล์รายงาน (Google Sheet)'], ['createdAt', 'นำเข้าเมื่อ']] }
 };
 var CP_PRODUCTS_DEFAULT_ = [{ code: '72400524', name: 'น้ำพริกหนังไก่กรอบ' }];
 var CP_SHIPS_DEFAULT_ = [{ key: 'WD01 LLKC', wh: '-', place: 'ลาดหลุมแก้ว' }];
@@ -101,7 +101,7 @@ function cpPrepare_(map, pos, savedList) {
         if (old.deliveryDate !== r.deliveryDate) diff.push({ f: 'วันที่ส่ง', from: old.deliveryDate, to: r.deliveryDate });
         if (Number(old.qty) !== r.qty) diff.push({ f: 'จำนวน', from: old.qty, to: r.qty });
         if (Number(old.price) !== r.price) diff.push({ f: 'ราคา', from: old.price, to: r.price });
-        if (String(old.itemCode) !== r.itemCode) diff.push({ f: 'รหัสสินค้า', from: old.itemCode, to: r.itemCode });
+        if (String(old.itemCode).replace(/^'/, '') !== r.itemCode) diff.push({ f: 'รหัสสินค้า', from: String(old.itemCode).replace(/^'/, ''), to: r.itemCode });
         r.state = diff.length ? 'changed' : 'same'; r.diff = diff; r.oldId = old.id;
       }
       seen[k] = 1;
@@ -138,9 +138,10 @@ function cpLoad(token) {
   var lines = [], imports = [];
   if (ss) {
     lines = purRead_(ss, 'cp_lines').map(function (x) { delete x._row; Object.keys(x).forEach(function (k) { if (typeof x[k] === 'string') x[k] = x[k].replace(/^'/, ''); }); x.dueDate = cpDue_(x.deliveryDate) || x.dueDate; return x; });
-    imports = purRead_(ss, 'cp_imports').sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).slice(0, 30);
+    imports = purRead_(ss, 'cp_imports').map(function (x) { delete x._row; Object.keys(x).forEach(function (k) { if (typeof x[k] === 'string') x[k] = x[k].replace(/^'/, ''); }); return x; }).sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).slice(0, 30);
   }
-  return { ok: true, today: purToday_(), linked: !!ss, sheetUrl: ss ? ss.getUrl() : '', sheetName: ss ? ss.getName() : '', error: err,
+  var lp = props_();
+  return { ok: true, today: purToday_(), line: !!(lp.getProperty('ACC_LINE_TOKEN') && lp.getProperty('ACC_LINE_GROUP')), linked: !!ss, sheetUrl: ss ? ss.getUrl() : '', sheetName: ss ? ss.getName() : '', error: err,
     map: map, lines: lines, imports: imports, rounds: cpRounds_(lines) };
 }
 function cpSetSheet(token, url) {
@@ -180,7 +181,7 @@ function cpSave(token, pos, fileName) {
     savedList.forEach(function (x) { byId[x.id] = x; });
     var r = cpPrepare_(map, list, savedList);
     if (r.unmatchedProducts.length || r.unmatchedShips.length) return { ok: false, error: 'ยังมีสินค้า/สถานที่ส่งที่จับคู่ไม่ได้ — ใส่ให้ครบก่อนบันทึก' };
-    var now = purNow_(), add = r.rows.filter(function (x) { return x.state === 'new'; }), chg = r.rows.filter(function (x) { return x.state === 'changed'; });
+    var impId = purId_('CPI'), now = purNow_(), add = r.rows.filter(function (x) { return x.state === 'new'; }), chg = r.rows.filter(function (x) { return x.state === 'changed'; });
     if (!add.length && !chg.length) return { ok: false, error: 'ใบสั่งซื้อทุกใบมีในระบบแล้ว ไม่มีอะไรเปลี่ยน' };
     var sh = purSheet_(ss, 'cp_lines'), head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String), months = {};
     var fields = function (x) { return { poNo: x.poNo, lineNo: x.lineNo, poDate: x.poDate, prNo: x.prNo, itemCode: x.itemCode, product: x.product, deliveryDate: x.deliveryDate,
@@ -189,7 +190,7 @@ function cpSave(token, pos, fileName) {
     if (add.length) {
       var values = add.map(function (x) {
         months[x.deliveryDate.slice(0, 7)] = 1;
-        return purRowValues_(sh, 'cp_lines', Object.assign(fields(x), { id: purId_('CP'), status: '', note: '', history: '', createdAt: now, updatedAt: '' }), head);
+        return purRowValues_(sh, 'cp_lines', Object.assign(fields(x), { id: purId_('CP'), status: '', note: '', history: '', importId: impId, createdAt: now, updatedAt: '' }), head);
       });
       sh.getRange(sh.getLastRow() + 1, 1, values.length, values[0].length).setValues(values);
     }
@@ -198,15 +199,14 @@ function cpSave(token, pos, fileName) {
       if (old.deliveryDate) months[String(old.deliveryDate).slice(0, 7)] = 1;
       months[x.deliveryDate.slice(0, 7)] = 1;
       var h = x.diff.map(function (d) { return d.f + ' ' + cpHistVal_(d.from) + ' → ' + cpHistVal_(d.to); }).join(', ');
-      purWrite_(ss, 'cp_lines', Object.assign(old, fields(x), { history: (old.history ? old.history + ' | ' : '') + now.slice(0, 10) + ': ' + h, updatedAt: now }));
+      purWrite_(ss, 'cp_lines', Object.assign(old, fields(x), { history: (old.history ? old.history + ' | ' : '') + now.slice(0, 10) + ': ' + h, importId: impId, updatedAt: now }));
     });
     var qty = 0, amt = 0; add.concat(chg).forEach(function (x) { qty += x.qty; amt += x.amount; });
-    var impId = purId_('CPI');
     purWrite_(ss, 'cp_imports', { id: impId, fileName: accClean_(fileName, 120), poCount: list.length, added: add.length, changed: chg.length,
       skipped: r.rows.length - add.length - chg.length, qty: qty, amount: cpR2_(amt), createdAt: now });
     purLogWrite_(main, 'นำเข้า PO CP Ram', 'cp_imports', impId, (fileName || '') + ' · เพิ่ม ' + add.length + ' · อัปเดต ' + chg.length);
     cpRebuildMonths_(ss, Object.keys(months));
-    return { ok: true, added: add.length, changed: chg.length, skipped: r.rows.length - add.length - chg.length, months: Object.keys(months).sort() };
+    return { ok: true, importId: impId, added: add.length, changed: chg.length, skipped: r.rows.length - add.length - chg.length, months: Object.keys(months).sort() };
   });
 }
 function cpHistVal_(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? cpSlash_(v) : String(v); }
@@ -277,11 +277,15 @@ function cpBuildMonth_(ss, ym, rows) {
     var after = ss.getSheets().filter(function (s) { return /^เดือน \d{2}\.\d{2}$/.test(s.getName()) && cpTabYm_(s.getName()) < ym; }).length;
     sh = ss.insertSheet(name, Math.min(ss.getSheets().length, 2 + after));
   }
+  var p = ym.split('-');
+  cpDraw_(sh, rows, 'ตารางส่งสินค้า CP Ram ' + CP_MONTHS_[+p[1] - 1] + ' ' + (+p[0] + 543), true);
+}
+// วาดตารางส่งสินค้าลงแท็บ (แท็บรายเดือน = มีตารางรอบเงินเข้า · ไฟล์ PDF/Excel ที่ส่ง LINE = เฉพาะออเดอร์)
+function cpDraw_(sh, rows, title, withRounds) {
   sh.clear(); sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).breakApart();
   try { sh.setHiddenGridlines(true); } catch (e) {}
   rows.forEach(function (r) { r.dueDate = cpDue_(r.deliveryDate) || r.dueDate; });
   rows.sort(function (a, b) { return String(a.deliveryDate).localeCompare(String(b.deliveryDate)) || String(a.poNo).localeCompare(String(b.poNo)) || a.lineNo - b.lineNo; });
-  var p = ym.split('-'), title = 'ตารางส่งสินค้า CP Ram ' + CP_MONTHS_[+p[1] - 1] + ' ' + (+p[0] + 543);
   var head = ['วัน', 'วันที่', 'สินค้า', 'PO', 'คลัง', 'จำนวนสินค้า', 'หน่วย', 'Total', 'สถานที่ส่ง', 'หมายเหตุ'];
   sh.getRange('A1:J1').merge().setValue(title).setFontSize(16).setFontWeight('bold').setHorizontalAlignment('center');
   sh.getRange('A2:J2').merge().setValue('อัพเดต ' + cpSlash_(purToday_())).setFontSize(13).setFontWeight('bold').setHorizontalAlignment('center');
@@ -321,6 +325,8 @@ function cpBuildMonth_(ss, ym, rows) {
   sh.getRange(tr, 5, 1, 3).setValues([['Total', total, 'ลัง']]).setFontWeight('bold').setBackground(CP_TOTAL_BG_).setHorizontalAlignment('center');
   sh.getRange(tr + 3, 10).setValue('ผู้จัดทำ            __________________');
   sh.getRange(tr + 4, 10).setValue('ผู้ตรวจสอบ    ___________________');
+  var rt = tr;
+  if (withRounds) {
   // ตารางรอบเงินเข้า (M:R)
   var rounds = cpRounds_(rows);
   sh.getRange(5, 13, 1, 6).setValues([['รอบเงินเข้า', 'จำนวน', 'ราคา', 'ยอดเงิน', 'Vat 7%', 'Total']]).setFontWeight('bold').setBackground(CP_HEAD_BG_).setHorizontalAlignment('center');
@@ -329,12 +335,159 @@ function cpBuildMonth_(ss, ym, rows) {
     sh.getRange(6, 15, rounds.length, 4).setNumberFormat('#,##0.00');
     sh.getRange(6, 14, rounds.length, 1).setNumberFormat('#,##0');
   }
-  var rt = 6 + rounds.length;
+  rt = 6 + rounds.length;
   sh.getRange(rt, 17, 1, 2).setValues([['รวม', cpR2_(rounds.reduce(function (s, x) { return s + x.total; }, 0))]]).setFontWeight('bold').setBackground(CP_TOTAL_BG_);
   sh.getRange(rt, 18).setNumberFormat('#,##0.00');
   sh.getRange(5, 13, rounds.length + 1, 6).setBorder(true, true, true, true, true, true, '#000000', SpreadsheetApp.BorderStyle.SOLID);
+  }
   sh.getRange(1, 1, Math.max(tr + 4, rt), 18).setFontFamily('Sarabun');
   [70, 80, 170, 100, 80, 95, 50, 65, 100, 210, 20, 20, 95, 70, 70, 100, 90, 110].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
   sh.setFrozenRows(4);
 }
 function cpTabYm_(name) { var m = name.match(/(\d{2})\.(\d{2})$/); return m ? (2000 + +m[2] - 43) + '-' + m[1] : ''; }
+
+// ---------- LINE: ใบแจ้งออเดอร์ CP Ram (เฉพาะออเดอร์ — ไม่ส่งยอดเงิน / รอบเงินเข้า) ----------
+// ส่งรายการของการนำเข้าครั้งนั้น (ใหม่ + PO เดิมที่เปลี่ยน) เข้ากลุ่ม LINE เดียวกับรายงาน 7-11 (ACC_LINE_TOKEN / ACC_LINE_GROUP)
+function cpFlex_(lines, hasImg, files) {
+  var T = function (text, o) { var x = { type: 'text', text: String(text), wrap: true }; Object.keys(o || {}).forEach(function (k) { x[k] = o[k]; }); return x; };
+  var row = function (label, value) { return { type: 'box', layout: 'horizontal', margin: 'md', contents: [T(label, { size: 'sm', color: '#64748B', flex: 5 }), T(value, { size: 'sm', weight: 'bold', color: '#0F172A', flex: 6, align: 'end' })] }; };
+  var live = lines.filter(function (x) { return x.status !== 'cancel'; });
+  var pos = {}, dates = {}, poDates = {}, total = 0;
+  live.forEach(function (x) { pos[x.poNo] = 1; dates[x.deliveryDate] = 1; if (x.poDate) poDates[x.poDate] = 1; total += Number(x.qty) || 0; });
+  var dl = Object.keys(dates).sort(), pd = Object.keys(poDates).sort();
+  var body = [row('วันที่ใบสั่งซื้อ', accDotRange_(pd)), row('ลูกค้า', 'CPRAM (ซีพีแรม)'), row('วันที่ส่งสินค้า', accDotRange_(dl)), row('ใบสั่งซื้อ', Object.keys(pos).length + ' ใบ')];
+  // ตารางส่งสินค้า แยกตามวันส่ง
+  var by = {}; lines.forEach(function (x) { (by[x.deliveryDate] = by[x.deliveryDate] || []).push(x); });
+  Object.keys(by).sort().forEach(function (d) {
+    var g = by[d].sort(function (a, b) { return String(a.poNo).localeCompare(String(b.poNo)) || a.lineNo - b.lineNo; });
+    var sum = g.reduce(function (s2, x) { return s2 + (x.status === 'cancel' ? 0 : Number(x.qty) || 0); }, 0);
+    body.push({ type: 'box', layout: 'horizontal', margin: 'xl', backgroundColor: '#0F5132', cornerRadius: '10px', paddingTop: '7px', paddingBottom: '7px', paddingStart: '12px', paddingEnd: '12px', contents: [
+      T('ส่งวัน' + accDayName_(d) + ' ' + accDot_(d), { size: 'sm', weight: 'bold', color: '#FFFFFF', flex: 7 }), T(sum.toLocaleString() + ' ลัง', { size: 'sm', weight: 'bold', color: '#FFFFFF', flex: 4, align: 'end' })] });
+    g.forEach(function (x, i) {
+      var cancel = x.status === 'cancel', hist = x.history ? String(x.history).split(' | ').pop().replace(/^[\d-]+: /, '') : '';
+      var sub = [x.product || ('รหัส ' + x.itemCode), [x.wh && x.wh !== '-' ? 'คลัง' + x.wh : '', x.place].filter(String).join(' · ')].filter(String);
+      var c = [{ type: 'box', layout: 'horizontal', contents: [T('PO ' + x.poNo, { size: 'sm', weight: 'bold', color: cancel ? '#94A3B8' : '#0F172A', flex: 7, decoration: cancel ? 'line-through' : 'none' }),
+        T((Number(x.qty) || 0).toLocaleString() + ' ' + (x.unit || 'ลัง'), { size: 'sm', weight: 'bold', color: cancel ? '#94A3B8' : '#0F5132', flex: 4, align: 'end', decoration: cancel ? 'line-through' : 'none' })] },
+        T(sub.join(' · '), { size: 'xs', color: '#64748B', margin: 'xs' })];
+      if (cancel) c.push(T('ยกเลิก', { size: 'xs', color: '#DC2626', weight: 'bold', margin: 'xs' }));
+      if (hist && x._changed) c.push(T('⚠ เปลี่ยน: ' + hist, { size: 'xs', color: '#C2410C', weight: 'bold', margin: 'xs' }));
+      body.push({ type: 'box', layout: 'vertical', margin: i ? 'md' : 'sm', paddingStart: '4px', paddingEnd: '4px', contents: c });
+      if (i < g.length - 1) body.push({ type: 'separator', margin: 'md', color: '#E2E8F0' });
+    });
+  });
+  body.push({ type: 'box', layout: 'vertical', margin: 'xl', backgroundColor: '#ECFDF5', cornerRadius: '16px', paddingAll: '14px', borderColor: '#A7F3D0', borderWidth: '1px', contents: [
+    T('สินค้าจำนวนรวม', { size: 'sm', color: '#047857', align: 'center' }), T(total.toLocaleString() + ' ลัง', { size: '3xl', weight: 'bold', color: '#047857', align: 'center' })] });
+  if (hasImg) body.push(T('📊 ตารางส่งสินค้า อยู่ในข้อความถัดไป (กดที่ภาพเพื่อเปิดภาพเต็ม)', { size: 'xxs', color: '#64748B', margin: 'md', align: 'center' }));
+  if (files && files.pdfUrl) body.push({ type: 'box', layout: 'vertical', margin: 'xl', backgroundColor: '#0F5132', cornerRadius: '24px', paddingAll: '12px',
+    action: { type: 'uri', label: 'เปิดไฟล์ PDF', uri: files.pdfUrl }, contents: [T('เปิดไฟล์ PDF', { size: 'md', weight: 'bold', color: '#FFFFFF', align: 'center' })] });
+  if (files && files.xlsxUrl) body.push({ type: 'box', layout: 'vertical', margin: 'md', backgroundColor: '#FFFFFF', borderColor: '#0F5132', borderWidth: '2px', cornerRadius: '24px', paddingAll: '11px',
+    action: { type: 'uri', label: 'ดาวน์โหลด Excel', uri: accXlsxDownload_(files.xlsxUrl) }, contents: [T('ดาวน์โหลดไฟล์ Excel', { size: 'md', weight: 'bold', color: '#0F5132', align: 'center' })] });
+  var inner = [
+    { type: 'box', layout: 'vertical', backgroundColor: '#0F5132', cornerRadius: '18px', paddingAll: '18px', contents: [
+      T('ORDER CONFIRMATION · CP RAM', { size: 'xxs', color: '#A7F3D0', weight: 'bold' }),
+      T('ใบแจ้งออเดอร์ CP Ram', { size: 'xl', color: '#FFFFFF', weight: 'bold', margin: 'sm' }),
+      T('บริษัท สปังกี้ ฟู้ด จำกัด · ฝ่ายบัญชี', { size: 'xs', color: '#D1FAE5', margin: 'xs' })] },
+    { type: 'box', layout: 'vertical', paddingStart: '6px', paddingEnd: '6px', paddingTop: '6px', paddingBottom: '4px', contents: body }];
+  return { type: 'flex', altText: 'ออเดอร์ CP Ram · ' + Object.keys(pos).length + ' ใบสั่ง · ส่ง ' + accDotRange_(dl) + ' · รวม ' + total.toLocaleString() + ' ลัง',
+    contents: { type: 'bubble', size: 'giga', body: { type: 'box', layout: 'vertical', paddingAll: '14px', backgroundColor: '#FFFFFF', contents: inner } } };
+}
+function cpImportLines_(ss, imp) {
+  var lines = purRead_(ss, 'cp_lines').filter(function (x) { return x.importId === imp.id; });
+  lines.forEach(function (x) { Object.keys(x).forEach(function (k) { if (typeof x[k] === 'string') x[k] = x[k].replace(/^'/, ''); }); x._changed = !!x.history && String(x.updatedAt || '') >= String(imp.createdAt || ''); });
+  return lines;
+}
+// ภาพตารางส่งสินค้า (หน้าเว็บสร้างด้วย html2canvas) → PNG สาธารณะในโฟลเดอร์ฝ่าย / "รายงาน CP Ram"
+function cpFolder_(dept) {
+  var folderId = deptConfig_(dept.key).folderId;
+  if (!folderId) throw new Error('ผู้ดูแลระบบยังไม่ได้ตั้งโฟลเดอร์ของฝ่ายบัญชี');
+  var parent = DriveApp.getFolderById(folderId), it = parent.getFoldersByName('รายงาน CP Ram');
+  return it.hasNext() ? it.next() : parent.createFolder('รายงาน CP Ram');
+}
+// ไฟล์ PDF + Excel (+ Google Sheet ต้นทาง) ของตารางส่งสินค้า — withRounds = ใส่ตารางรอบเงินเข้า (ใช้ในระบบเท่านั้น ไม่ใช้กับ LINE)
+function cpMakeFiles_(dept, rows, title, name, withRounds) {
+  var folder = cpFolder_(dept), ss = SpreadsheetApp.create(name);
+  DriveApp.getFileById(ss.getId()).moveTo(folder);
+  var sh = ss.getSheets()[0]; sh.setName('ตารางส่งสินค้า');
+  cpDraw_(sh, rows.map(function (r) { return Object.assign({}, r); }), title, withRounds);
+  sh.setFrozenRows(0);
+  SpreadsheetApp.flush();
+  var pdf = accExportPdf_(ss, folder, name, rows.length <= 28), xlsx = accExportXlsx_(ss, folder, name);
+  return { pdfUrl: pdf.getUrl(), xlsxUrl: xlsx.getUrl(), xlsxDownload: accXlsxDownload_(xlsx.getUrl()), sheetUrl: ss.getUrl() };
+}
+function cpTrash_(urls) { urls.forEach(function (u) { var id = String(u || '').match(/[-\w]{25,}/); if (id) try { DriveApp.getFileById(id[0]).setTrashed(true); } catch (e) {} }); }
+function cpImportFiles_(dept, ss, imp, lines) {
+  cpTrash_([imp.pdfUrl, imp.xlsxUrl, imp.sheetUrl]);
+  var dates = lines.map(function (x) { return x.deliveryDate; }).filter(String).sort();
+  var rng = dates.length ? cpSlash_(dates[0]) + (dates[dates.length - 1] !== dates[0] ? ' – ' + cpSlash_(dates[dates.length - 1]) : '') : '';
+  var f = cpMakeFiles_(dept, lines, 'ใบแจ้งออเดอร์ CP Ram · ส่ง ' + rng, 'ออเดอร์ CP Ram ส่ง ' + rng.replace(/\//g, '-') + ' (' + imp.id.slice(-4) + ')', false);
+  imp.pdfUrl = f.pdfUrl; imp.xlsxUrl = f.xlsxUrl; imp.sheetUrl = f.sheetUrl;
+  purWrite_(ss, 'cp_imports', imp);
+  return f;
+}
+// API: สร้าง / สร้างใหม่ ไฟล์ของการนำเข้า (หน้าเว็บ)
+function cpMakeImportFiles(token, importId) {
+  var dept = requireAcc_(token); cpRegister_();
+  return purLocked_(function () {
+    var main = purBook_(dept), ss = cpBook_(main); cpHolInit_(main);
+    if (!ss) return { ok: false, error: 'ยังไม่ได้เชื่อมชีต CP Ram' };
+    var imp = purRead_(ss, 'cp_imports').filter(function (x) { return x.id === importId; })[0];
+    if (!imp) return { ok: false, error: 'ไม่พบการนำเข้านี้' };
+    var lines = cpImportLines_(ss, imp);
+    if (!lines.length) return { ok: false, error: 'การนำเข้านี้ไม่มีรายการ' };
+    var f = cpImportFiles_(dept, ss, imp, lines);
+    return { ok: true, pdfUrl: f.pdfUrl, xlsxUrl: f.xlsxUrl, xlsxDownload: f.xlsxDownload };
+  });
+}
+// API: ไฟล์ของทั้งเดือน (มีตารางรอบเงินเข้า เหมือนแท็บเดือน) — สร้างใหม่ทุกครั้ง ไฟล์เดือนเดียวกันรอบก่อนลงถังขยะ
+function cpMonthFiles(token, ym) {
+  var dept = requireAcc_(token); cpRegister_();
+  if (!/^\d{4}-\d{2}$/.test(String(ym || ''))) return { ok: false, error: 'เดือนไม่ถูกต้อง' };
+  return purLocked_(function () {
+    var main = purBook_(dept), ss = cpBook_(main); cpHolInit_(main);
+    if (!ss) return { ok: false, error: 'ยังไม่ได้เชื่อมชีต CP Ram' };
+    var rows = purRead_(ss, 'cp_lines').filter(function (x) { return String(x.deliveryDate).slice(0, 7) === ym; });
+    rows.forEach(function (x) { Object.keys(x).forEach(function (k) { if (typeof x[k] === 'string') x[k] = x[k].replace(/^'/, ''); }); });
+    if (!rows.length) return { ok: false, error: 'เดือนนี้ไม่มีรายการ' };
+    var key = 'cpramFiles_' + ym, row = cpSettingRow_(main, key) || { id: key }, old = {};
+    try { old = JSON.parse(row.value || '{}'); } catch (e) {}
+    cpTrash_([old.pdfUrl, old.xlsxUrl, old.sheetUrl]);
+    var p = ym.split('-'), f = cpMakeFiles_(dept, rows, 'ตารางส่งสินค้า CP Ram ' + CP_MONTHS_[+p[1] - 1] + ' ' + (+p[0] + 543), 'ตารางส่งสินค้า CP Ram ' + cpTabName_(ym), true);
+    row.value = JSON.stringify({ pdfUrl: f.pdfUrl, xlsxUrl: f.xlsxUrl, sheetUrl: f.sheetUrl });
+    purWrite_(main, 'acc_settings', row);
+    return { ok: true, pdfUrl: f.pdfUrl, xlsxUrl: f.xlsxUrl, xlsxDownload: f.xlsxDownload };
+  });
+}
+function cpSaveImage_(dept, imp, png) {
+  if (!png || typeof png !== 'string' || png.length > 6000000 || !/^[A-Za-z0-9+\/=]+$/.test(png)) return '';
+  var folderId = deptConfig_(dept.key).folderId; if (!folderId) return '';
+  var old = String(imp.imgUrl || '').match(/[-\w]{25,}/);
+  if (old) try { DriveApp.getFileById(old[0]).setTrashed(true); } catch (e) {}
+  var f = cpFolder_(dept).createFile(Utilities.newBlob(Utilities.base64Decode(png), 'image/png', 'ตารางส่งสินค้า CP Ram ' + imp.id + '.png'));
+  f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return 'https://lh3.googleusercontent.com/d/' + f.getId();
+}
+function cpSendLine(token, importId, png, ratio) {
+  var dept = requireAcc_(token); cpRegister_();
+  return purLocked_(function () {
+    var main = purBook_(dept), ss = cpBook_(main);
+    if (!ss) return { ok: false, error: 'ยังไม่ได้เชื่อมชีต CP Ram' };
+    var imp = purRead_(ss, 'cp_imports').filter(function (x) { return x.id === importId; })[0];
+    if (!imp) return { ok: false, error: 'ไม่พบการนำเข้านี้' };
+    var lines = cpImportLines_(ss, imp);
+    if (!lines.length) return { ok: false, error: 'การนำเข้านี้ไม่มีรายการ (อาจถูกนำเข้าซ้ำภายหลังแล้ว — ส่งจากการนำเข้าครั้งล่าสุดแทน)' };
+    var img = '';
+    try { img = cpSaveImage_(dept, imp, png); } catch (e) { img = ''; }
+    if (img) imp.imgUrl = img;
+    var files = null;
+    try { files = cpImportFiles_(dept, ss, imp, lines); } catch (e) { files = null; }
+    var msgs = [cpFlex_(lines, !!img, files)];
+    if (img) msgs.push({ type: 'flex', altText: 'ตารางส่งสินค้า CP Ram', contents: { type: 'bubble', size: 'giga', hero: { type: 'image', url: img, size: 'full',
+      aspectRatio: /^\d{2,5}:\d{2,5}$/.test(String(ratio)) ? String(ratio) : '20:9', aspectMode: 'fit', backgroundColor: '#FFFFFF', action: { type: 'uri', uri: img } } } });
+    var r = accLinePush_(msgs);
+    if (!r.ok) return r;
+    imp.sentAt = purNow_();
+    purWrite_(ss, 'cp_imports', imp);
+    purLogWrite_(main, 'ส่ง LINE ออเดอร์ CP Ram', 'cp_imports', importId, lines.length + ' รายการ');
+    return { ok: true, sentAt: imp.sentAt, pdfUrl: imp.pdfUrl, xlsxUrl: imp.xlsxUrl };
+  });
+}
