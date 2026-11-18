@@ -717,7 +717,7 @@
     $('main').innerHTML = '<h3>ตั้งค่า / LINE</h3><p class="lead">รายการตัวเลือก (คั่นด้วย , ) · เป้าหมาย · การเชื่อม LINE กลุ่มฝ่ายผลิต</p>'
       + '<div class="panel pbox"><h4>' + icon('send', 18) + ' LINE กลุ่มฝ่ายผลิต</h4>'
       + (L.token && L.group
-        ? '<div class="a7chk ok"><i>✓</i><span>เชื่อมต่อ LINE เรียบร้อย — แผนผลิตและสรุปงานจะส่งเข้ากลุ่มที่ผูกไว้</span></div>'
+        ? '<div class="a7chk ok"><i>✓</i><span>เชื่อมต่อ LINE เรียบร้อย' + (L.botName ? ' (บอท "' + esc(L.botName) + '")' : '') + ' — แผนผลิตและสรุปงานจะส่งเข้ากลุ่มที่ผูกไว้</span></div>'
           + '<div class="a7lineacts"><button class="btn btn-line btn-sm" id="sTest">' + icon('send', 16) + ' ส่งข้อความทดสอบเข้ากลุ่ม</button>'
           + '<button class="btn btn-line btn-sm" id="sGroup">' + icon('gear', 16) + ' เปลี่ยนกลุ่มที่รับรายงาน</button>'
           + '<button class="btn btn-line btn-sm" id="sTokChg">' + icon('gear', 16) + ' เปลี่ยน token / OA</button></div>'
@@ -768,7 +768,8 @@
   // ---- LINE: คัดลอกคำสั่ง / เปลี่ยนกลุ่ม (แบบเดียวกับฝ่ายบัญชี)
   function copyBox(text, label) { return '<div class="a7copy"><input readonly value="' + esc(text) + '" aria-label="' + esc(label) + '"><button class="btn btn-line btn-sm" data-copy="' + esc(text) + '">คัดลอก</button></div>'; }
   function bindStep(code) {
-    return 'เชิญ OA เข้ากลุ่ม LINE ของฝ่ายผลิต แล้วพิมพ์ข้อความนี้ในกลุ่ม ระบบจะจำกลุ่มให้เอง' + copyBox('ตั้งค่ากลุ่ม ผลิต ' + (code || ''), 'คำสั่งผูกกลุ่ม')
+    var bn = (H.data.line || {}).botName;
+    return 'เชิญบอท LINE ของฝ่ายผลิต' + (bn ? ' <b>"' + esc(bn) + '"</b>' : '') + ' เข้ากลุ่ม (ต้องเป็นบอทตัวนี้ ไม่ใช่บอทฝ่ายบัญชี) แล้วพิมพ์ข้อความนี้ในกลุ่ม รอบอทตอบ "✅ ตั้งกลุ่มนี้…" จึงเสร็จ' + copyBox('ตั้งค่ากลุ่ม ผลิต ' + (code || ''), 'คำสั่งผูกกลุ่ม')
       + '<small class="muted">รหัสใช้ได้ครั้งเดียว</small>';
   }
   function bindCopy(root) {

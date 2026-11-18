@@ -186,7 +186,7 @@ function prdLoad(token, from, to) {
     plans: purRead_(ss, 'prd_plans').filter(inRange),
     reports: purRead_(ss, 'prd_reports').filter(inRange).map(function (r) { r.files = purParseFiles_(r.files); r.sections = prdSections_(r.sections); return r; }),
     breakdowns: purRead_(ss, 'prd_breakdowns').filter(inRange).map(prdBdOut_),
-    line: { token: !!p.getProperty('PROD_LINE_TOKEN'), group: !!p.getProperty('PROD_LINE_GROUP'), setupCode: hrProp_('PROD_LINE_SETUP', hrSetupCode_), webhook: ACC_WEBHOOK_URL_ } };
+    line: { token: !!p.getProperty('PROD_LINE_TOKEN'), group: !!p.getProperty('PROD_LINE_GROUP'), setupCode: hrProp_('PROD_LINE_SETUP', hrSetupCode_), webhook: ACC_WEBHOOK_URL_, botName: prdBotName_() } };
 }
 
 // ---------- สินค้า (มาตรฐาน Yield) ----------
@@ -685,7 +685,7 @@ function prdSetLineToken(token, value) {
   if (res.getResponseCode() !== 200) return { ok: false, error: 'LINE ไม่ยอมรับ token นี้ (รหัส ' + res.getResponseCode() + ') — ตรวจว่าคัดลอกครบ และเป็น token ของ OA ที่ถูกต้อง' };
   var info = JSON.parse(res.getContentText() || '{}'), p = props_(), old = p.getProperty('PROD_LINE_TOKEN');
   p.setProperty('PROD_LINE_TOKEN', v);
-  CacheService.getScriptCache().remove('prd_bot_id');
+  CacheService.getScriptCache().remove('prd_bot_id'); CacheService.getScriptCache().remove('prd_bot_name');
   if (old && old !== v) p.deleteProperty('PROD_LINE_GROUP');   // เปลี่ยน OA → ต้องผูกกลุ่มใหม่
   return { ok: true, botName: info.displayName || '', regroup: !!(old && old !== v), line: { token: true, group: !!p.getProperty('PROD_LINE_GROUP'), setupCode: hrProp_('PROD_LINE_SETUP', hrSetupCode_), webhook: ACC_WEBHOOK_URL_ } };
 }
@@ -694,6 +694,19 @@ function prdLineTest(token) {
   return prdLinePush_([{ type: 'text', text: '✅ ทดสอบการเชื่อมต่อ: ระบบงานองค์กร ฝ่ายผลิต ส่งข้อความเข้ากลุ่มนี้ได้แล้ว' }]);
 }
 // webhook: บอทของ PROD_LINE_TOKEN — ผูกกลุ่มด้วย "ตั้งค่ากลุ่ม ผลิต <รหัส>"
+// ชื่อบอท LINE ของฝ่ายผลิต (แสดงในหน้าตั้งค่า ให้รู้ว่าต้องเชิญบอทตัวไหนเข้ากลุ่ม) — แคช 6 ชม.
+function prdBotName_() {
+  try {
+    var token = props_().getProperty('PROD_LINE_TOKEN'); if (!token) return '';
+    var c = CacheService.getScriptCache(), n = c.get('prd_bot_name');
+    if (n) return n;
+    var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/info', { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return '';
+    n = JSON.parse(res.getContentText()).displayName || '';
+    if (n) c.put('prd_bot_name', n, 21600);
+    return n;
+  } catch (e) { return ''; }
+}
 function prdIsMyBot_(destination) {
   try {
     var token = props_().getProperty('PROD_LINE_TOKEN');
@@ -723,6 +736,8 @@ function prdLineWebhook_(events, quietJoin) {
         if (!quietJoin) prdLineReply_(ev.replyToken, 'สวัสดีค่ะ 🙏 ถ้าต้องการให้กลุ่มนี้รับแผนผลิต / สรุปงานประจำวัน ให้พิมพ์\nตั้งค่ากลุ่ม ผลิต <รหัสตั้งค่า>\n(ดูรหัสได้ที่ระบบฝ่ายผลิต → ตั้งค่า)');
         return;
       }
+      // บอทถูกนำออกจากกลุ่มที่ผูกไว้ → ยกเลิกการผูก (หน้าตั้งค่าจะขึ้นว่ายังไม่ผูกกลุ่ม)
+      if (ev.type === 'leave' && gid && gid === props_().getProperty('PROD_LINE_GROUP')) { props_().deleteProperty('PROD_LINE_GROUP'); return; }
       if (!prdIsCommand_(ev)) return;
       var text = String(ev.message.text).trim(), m = text.match(/^ตั้งค่ากลุ่ม\s*(?:ผลิต|PROD)\s+([A-Z0-9]{8})$/i);
       if (!m) { if (/^ตั้ง(ค่า)?\s*กลุ่ม/.test(text)) prdLineReply_(ev.replyToken, 'พิมพ์ให้ตรงรูปแบบนี้ค่ะ\nตั้งค่ากลุ่ม ผลิต <รหัส 8 ตัว>\n(คัดลอกได้จากระบบฝ่ายผลิต → ตั้งค่า)'); return; }
