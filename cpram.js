@@ -232,7 +232,7 @@
       + '<div class="panel pbox a7checks"><h4>' + icon('check', 18) + ' ผลการตรวจไฟล์</h4>' + checks.join('') + '</div>'
       + fix + kpis(live)
       + '<div class="panel pbox"><h4>' + icon('table', 18) + ' ตารางส่งสินค้า (ตามกำหนดส่งในใบสั่งซื้อ)</h4>' + schedTable(live, { preview: true }) + '</div>'
-      + '<div class="panel pbox"><h4>' + icon('clock', 18) + ' รอบเงินเข้า <small class="muted">(ส่งวันที่ 1–15 → วันที่ 10 เดือนถัดไป · 16–31 → วันที่ 25)</small></h4>' + roundsTable(r.rounds) + '</div>'
+      + '<div class="panel pbox"><h4>' + icon('clock', 18) + ' รอบเงินเข้า <small class="muted">(เหมือน CP ALL: ส่งวันที่ 1–15 → วันที่ 10 เดือนถัดไป · 16–31 → วันที่ 25 · ตรงวันหยุดเลื่อนเป็นวันทำการถัดไป)</small></h4>' + roundsTable(r.rounds) + '</div>'
       + '<div id="cpMsg"></div>'
       + '<div class="a7bar"><button class="btn btn-line" id="cpBack">' + icon('back', 16) + ' เลือกไฟล์ใหม่</button>'
       + '<button class="btn btn-primary" id="cpSave"' + (canSave ? '' : ' disabled') + '>' + icon('check', 18) + (canSave ? ' ข้อมูลถูกต้อง บันทึก ' + todo + ' รายการ' : !todo ? ' ไม่มีรายการใหม่' : !linked ? ' เชื่อม Google Sheet ก่อน' : ' ตั้งค่าที่ขาดก่อน') + '</button></div>';

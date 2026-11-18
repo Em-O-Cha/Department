@@ -24,6 +24,11 @@ var CP_STATUS_ = { '': 'รอส่ง', done: 'ส่งสินค้าแ�
 var CP_MONTHS_ = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
 var CP_HEAD_BG_ = '#C6E0B4', CP_TOTAL_BG_ = '#FFFF00';
 
+// รอบเงินเข้าแบบเดียวกับ CP ALL (accDueDate_): ส่งวันที่ 1–15 → วันที่ 10 เดือนถัดไป · 16–31 → วันที่ 25 · ตรงเสาร์-อาทิตย์/วันหยุดราชการ → วันทำการถัดไป
+// วันหยุดใช้ชุดเดียวกับ 7-11 (ปฏิทินวันหยุดไทย + วันหยุดที่ตั้งเพิ่มในหน้าตั้งค่า) · คำนวณใหม่ทุกครั้งที่โหลด/สร้างแท็บเดือน
+var CP_HOL_ = null;
+function cpHolInit_(main) { try { CP_HOL_ = accHolidaySet_(accMap_(main)); } catch (e) { CP_HOL_ = {}; } }
+function cpDue_(iso) { return /^\d{4}-\d{2}-\d{2}$/.test(String(iso || '')) ? accDueDate_(String(iso), CP_HOL_ || {}) : ''; }
 function cpRegister_() {
   accRegister_();
   Object.keys(CP_TABLES_).forEach(function (k) { PUR_TABLES_[k] = CP_TABLES_[k]; });
@@ -86,7 +91,7 @@ function cpPrepare_(map, pos, savedList) {
       if (!product) { unProd[l.itemCode] = unProd[l.itemCode] || { itemCode: l.itemCode, qty: 0 }; unProd[l.itemCode].qty += l.qty; }
       var r = Object.assign({}, l, { poDate: p.poDate, shipTo: p.shipTo, termDays: p.termDays, file: p.file, product: product,
         wh: ship ? ship.wh : '', place: ship ? ship.place : '', unitTh: cpUnitTh_(l.unit),
-        vat: cpR2_(l.amount * 0.07), net: cpR2_(l.amount * 1.07), dueDate: l.deliveryDate ? accDueBase_(l.deliveryDate) : '' });
+        vat: cpR2_(l.amount * 0.07), net: cpR2_(l.amount * 1.07), dueDate: cpDue_(l.deliveryDate) });
       if (Math.abs(cpR2_(l.qty * l.price) - l.amount) > 0.01) checks.push('PO ' + p.poNo + ' รายการ ' + l.lineNo + ': จำนวน × ราคา ไม่เท่ากับจำนวนเงิน');
       sum += l.amount;
       var k = cpKey_(r), old = saved[k];
@@ -128,11 +133,11 @@ function cpRounds_(rows) {
 // ---------- API ----------
 function cpLoad(token) {
   var dept = requireAcc_(token); cpRegister_();
-  var main = purBook_(dept), map = cpMap_(main), ss = null, err = '';
+  var main = purBook_(dept), map = cpMap_(main), ss = null, err = ''; cpHolInit_(main);
   try { ss = cpBook_(main); } catch (e) { err = 'เปิดชีต CP Ram ไม่ได้ — ตรวจว่าแชร์ให้บัญชีระบบเป็นผู้แก้ไขแล้ว'; }
   var lines = [], imports = [];
   if (ss) {
-    lines = purRead_(ss, 'cp_lines').map(function (x) { delete x._row; Object.keys(x).forEach(function (k) { if (typeof x[k] === 'string') x[k] = x[k].replace(/^'/, ''); }); return x; });
+    lines = purRead_(ss, 'cp_lines').map(function (x) { delete x._row; Object.keys(x).forEach(function (k) { if (typeof x[k] === 'string') x[k] = x[k].replace(/^'/, ''); }); x.dueDate = cpDue_(x.deliveryDate) || x.dueDate; return x; });
     imports = purRead_(ss, 'cp_imports').sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).slice(0, 30);
   }
   return { ok: true, today: purToday_(), linked: !!ss, sheetUrl: ss ? ss.getUrl() : '', sheetName: ss ? ss.getName() : '', error: err,
@@ -148,7 +153,7 @@ function cpSetSheet(token, url) {
   var first = ss.getSheetByName('Sheet1') || ss.getSheetByName('ชีต1');
   if (first && first.getLastRow() === 0 && ss.getSheets().length > 1) { try { ss.deleteSheet(first); } catch (e) {} }
   return purLocked_(function () {
-    var main = purBook_(dept), row = cpSettingRow_(main, 'cpramSheet') || { id: 'cpramSheet' };
+    var main = purBook_(dept), row = cpSettingRow_(main, 'cpramSheet') || { id: 'cpramSheet' }; cpHolInit_(main);
     row.value = ss.getId();
     purWrite_(main, 'acc_settings', row);
     purLogWrite_(main, 'เชื่อมชีต CP Ram', 'acc_settings', 'cpramSheet', ss.getName());
@@ -157,7 +162,7 @@ function cpSetSheet(token, url) {
 }
 function cpPreview(token, pos) {
   var dept = requireAcc_(token); cpRegister_();
-  var main = purBook_(dept), map = cpMap_(main), ss = cpBook_(main);
+  var main = purBook_(dept), map = cpMap_(main), ss = cpBook_(main); cpHolInit_(main);
   var list = cpCleanPos_(pos);
   if (!list.length) return { ok: false, error: 'ไม่พบใบสั่งซื้อในไฟล์' };
   var r = cpPrepare_(map, list, ss ? purRead_(ss, 'cp_lines') : []);
@@ -169,7 +174,7 @@ function cpSave(token, pos, fileName) {
   var dept = requireAcc_(token); cpRegister_();
   var list = cpCleanPos_(pos);
   return purLocked_(function () {
-    var main = purBook_(dept), map = cpMap_(main), ss = cpBook_(main);
+    var main = purBook_(dept), map = cpMap_(main), ss = cpBook_(main); cpHolInit_(main);
     if (!ss) return { ok: false, error: 'ยังไม่ได้เชื่อมชีต "ตารางส่งสินค้า CP Ram"' };
     var savedList = purRead_(ss, 'cp_lines'), byId = {};
     savedList.forEach(function (x) { byId[x.id] = x; });
@@ -209,7 +214,7 @@ function cpSaveMap(token, json) {
   var dept = requireAcc_(token); cpRegister_();
   var cfg; try { cfg = JSON.parse(json || '{}'); } catch (e) { return { ok: false, error: 'ข้อมูลไม่ถูกต้อง' }; }
   return purLocked_(function () {
-    var main = purBook_(dept), cur = cpMap_(main);
+    var main = purBook_(dept), cur = cpMap_(main); cpHolInit_(main);
     var products = cur.products.slice(), ships = cur.ships.slice();
     (cfg.products || []).map(cpCleanProduct_).forEach(function (p) {
       if (!p.code || !p.name) return;
@@ -233,7 +238,7 @@ function cpUpdateLine(token, id, status, note) {
   var dept = requireAcc_(token); cpRegister_();
   if (!CP_STATUS_.hasOwnProperty(String(status || ''))) return { ok: false, error: 'สถานะไม่ถูกต้อง' };
   return purLocked_(function () {
-    var main = purBook_(dept), ss = cpBook_(main);
+    var main = purBook_(dept), ss = cpBook_(main); cpHolInit_(main);
     if (!ss) return { ok: false, error: 'ยังไม่ได้เชื่อมชีต CP Ram' };
     var row = purRead_(ss, 'cp_lines').filter(function (x) { return x.id === id; })[0];
     if (!row) return { ok: false, error: 'ไม่พบรายการ' };
@@ -247,7 +252,7 @@ function cpRebuild(token, ym) {
   var dept = requireAcc_(token); cpRegister_();
   if (!/^\d{4}-\d{2}$/.test(String(ym || ''))) return { ok: false, error: 'เดือนไม่ถูกต้อง' };
   return purLocked_(function () {
-    var ss = cpBook_(purBook_(dept));
+    var main = purBook_(dept), ss = cpBook_(main); cpHolInit_(main);
     if (!ss) return { ok: false, error: 'ยังไม่ได้เชื่อมชีต CP Ram' };
     cpRebuildMonths_(ss, [ym]);
     return { ok: true };
@@ -274,6 +279,7 @@ function cpBuildMonth_(ss, ym, rows) {
   }
   sh.clear(); sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).breakApart();
   try { sh.setHiddenGridlines(true); } catch (e) {}
+  rows.forEach(function (r) { r.dueDate = cpDue_(r.deliveryDate) || r.dueDate; });
   rows.sort(function (a, b) { return String(a.deliveryDate).localeCompare(String(b.deliveryDate)) || String(a.poNo).localeCompare(String(b.poNo)) || a.lineNo - b.lineNo; });
   var p = ym.split('-'), title = 'ตารางส่งสินค้า CP Ram ' + CP_MONTHS_[+p[1] - 1] + ' ' + (+p[0] + 543);
   var head = ['วัน', 'วันที่', 'สินค้า', 'PO', 'คลัง', 'จำนวนสินค้า', 'หน่วย', 'Total', 'สถานที่ส่ง', 'หมายเหตุ'];
