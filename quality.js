@@ -16,6 +16,7 @@
   });
   var MENUS = [
     { id: 'q_dash', label: 'ภาพรวม / Dashboard', ic: 'home' },
+    { id: 'q_cost', label: 'Dashboard ค่าใช้จ่าย', ic: 'chart' },
     { id: 'q_list', label: 'ข้อร้องเรียนลูกค้า', ic: 'msg' },
     { id: 'q_test', label: 'ตรวจวิเคราะห์ / ค่าใช้จ่าย', ic: 'flask' },
     { id: 'q_np', label: 'ผลิตภัณฑ์ใหม่', ic: 'box' },
@@ -119,7 +120,7 @@
       return;
     }
     if (page === 'q_list' && H.open) { var id = H.open; H.open = null; return caseForm(id === 'new' ? null : H.data.complaints.filter(function (c) { return c.id === id; })[0]); }
-    ({ q_dash: dash, q_list: listPage, q_test: testPage, q_np: npPage, q_rep: report, q_set: settings, q_log: logPage }[page] || dash)();
+    ({ q_dash: dash, q_cost: costDash, q_list: listPage, q_test: testPage, q_np: npPage, q_rep: report, q_set: settings, q_log: logPage }[page] || dash)();
   };
   function openCase(id) { H.open = id || 'new'; go('q_list'); }
 
@@ -487,6 +488,67 @@
   function yearChips(arr, key) {
     return '<div class="pchips" style="margin:0">' + yearsOf(arr).map(function (y) { return '<button class="chip' + (y === curYear() ? ' on' : '') + '" data-yr="' + y + '">ปี ' + (y + 543) + ' (' + y + ')</button>'; }).join('') + '</div>';
   }
+  // ==================== Dashboard ค่าใช้จ่าย (18/11/69) ====================
+  // รวม 3 ก้อน: ค่าตรวจวิเคราะห์ (qa_tests kind test) · ค่าใช้จ่ายอื่น (kind other) · ค่าชดเชยลูกค้า (remedyCost ของข้อร้องเรียน)
+  // ปีตามช่อง "ปี" ของรายการตรวจ / ปีของวันที่รับเรื่อง · เดือนตามวันที่ส่งตรวจ/จ่าย (ไม่มีวันที่ = "ยังไม่กำหนดเดือน") · ไม่นับรายการยกเลิก
+  function costDash() {
+    var y = curYear(), num = function (v) { return Number(v) || 0; };
+    var yearsT = H.data.tests.concat(H.data.complaints.filter(function (c) { return num(c.remedyCost) > 0 && c.recvDate; }).map(function (c) { return { year: +String(c.recvDate).slice(0, 4) }; }));
+    var of = function (yr) {
+      var t = H.data.tests.filter(function (x) { return +x.year === yr && x.status !== 'cancel'; });
+      var comp = H.data.complaints.filter(function (c) { return String(c.recvDate).slice(0, 4) === String(yr) && num(c.remedyCost) > 0; });
+      return { test: t.filter(function (x) { return x.kind !== 'other'; }), other: t.filter(function (x) { return x.kind === 'other'; }), comp: comp };
+    };
+    var sum = function (a, k) { return a.reduce(function (s2, x) { return s2 + num(x[k || 'price']); }, 0); };
+    var D = of(y), P = of(y - 1);
+    var tT = sum(D.test), tO = sum(D.other), tC = sum(D.comp, 'remedyCost'), all = tT + tO + tC, prev = sum(P.test) + sum(P.other) + sum(P.comp, 'remedyCost');
+    var items = D.test.concat(D.other);
+    var paid = sum(items.filter(function (x) { return x.status === 'done'; })), pend = sum(items.filter(function (x) { return x.status === 'sent'; })), plan = sum(items.filter(function (x) { return x.status === 'plan'; }));
+    var tile = function (val, label, color, sub) { return '<div class="kpi" style="--k:' + color + '"><b>' + val + '</b><span>' + label + '</span>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>'; };
+    var diff = prev ? Math.round((all - prev) / prev * 100) : null;
+    // รายเดือน
+    var M = []; for (var i = 1; i <= 12; i++) M.push({ t: 0, o: 0, c: 0 });
+    var noDate = 0, outYear = 0;
+    items.forEach(function (x) { var d = String(x.sentDate || ''); if (d.slice(0, 4) === String(y)) M[+d.slice(5, 7) - 1][x.kind === 'other' ? 'o' : 't'] += num(x.price); else if (d) outYear += num(x.price); else noDate += num(x.price); });
+    D.comp.forEach(function (c) { M[+String(c.recvDate).slice(5, 7) - 1].c += num(c.remedyCost); });
+    var mx = Math.max.apply(null, M.map(function (m) { return m.t + m.o + m.c; }).concat([1]));
+    var MS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+    var short = function (n) { return n >= 1e6 ? (Math.round(n / 1e5) / 10) + 'M' : n >= 1000 ? Math.round(n / 1000) + 'k' : n ? Math.round(n) : ''; };
+    var trend = '<div class="qctrend">' + M.map(function (m, i) {
+      var tot = m.t + m.o + m.c, h = function (v) { return Math.round(v / mx * 140); };
+      return '<div class="qcm" title="' + MS[i] + ' ' + String(y + 543).slice(2) + ': ' + baht(tot) + ' (ตรวจ ' + baht(m.t) + ' · อื่น ๆ ' + baht(m.o) + ' · ชดเชย ' + baht(m.c) + ')"><b>' + short(tot) + '</b>'
+        + '<div class="qcb"><em class="c3" style="height:' + h(m.c) + 'px"></em><em class="c2" style="height:' + h(m.o) + 'px"></em><em class="c1" style="height:' + h(m.t) + 'px"></em></div><span>' + MS[i] + '</span></div>';
+    }).join('') + '</div><div class="slegend"><i class="c1"></i>ตรวจวิเคราะห์ <i class="c2"></i>ค่าใช้จ่ายอื่น <i class="c3"></i>ชดเชยลูกค้า</div>'
+      + (noDate || outYear ? '<p class="muted" style="margin:8px 0 0;font-size:13px">' + [noDate ? 'ยังไม่ใส่วันที่ส่งตรวจ / จ่าย ' + baht(noDate) : '', outYear ? 'ส่งตรวจ / จ่ายนอกปี ' + (y + 543) + ' (งบปีนี้) ' + baht(outYear) : ''].filter(String).join(' · ') + ' — ไม่อยู่ในกราฟรายเดือน</p>' : '');
+    var group = function (arr, key, val) { var g = {}; arr.forEach(function (x) { var k = x[key] || '(ไม่ระบุ)'; g[k] = (g[k] || 0) + num(x[val || 'price']); }); return Object.keys(g).map(function (k) { return { name: k, n: g[k] }; }).filter(function (x) { return x.n > 0; }).sort(function (a, b) { return b.n - a.n; }); };
+    var bars = function (arr, color, top) {
+      if (!arr.length) return '<div class="muted">ไม่มีข้อมูล</div>';
+      var m = arr[0].n, rest = arr.slice(top || 10);
+      return arr.slice(0, top || 10).map(function (x) { return '<div class="sbar"><span>' + esc(x.name) + '</span><i><em style="width:' + Math.max(2, Math.round(x.n / m * 100)) + '%;background:' + color + '"></em></i><b>' + baht(x.n) + '</b></div>'; }).join('')
+        + (rest.length ? '<div class="muted" style="font-size:13px;margin-top:4px">และอีก ' + rest.length + ' รายการ ' + baht(rest.reduce(function (s2, x) { return s2 + x.n; }, 0)) + '</div>' : '');
+    };
+    var box = function (title, inner) { return '<div class="panel pbox"><h4>' + icon('chart', 18) + ' ' + title + '</h4>' + inner + '</div>'; };
+    var stRow = function (label, v, color) { return '<div class="sbar"><span>' + label + '</span><i><em style="width:' + (v ? Math.max(2, Math.round(v / Math.max(1, tT + tO) * 100)) : 0) + '%;background:' + color + '"></em></i><b>' + baht(v) + '</b></div>'; };
+    $('main').innerHTML = '<h3>Dashboard ค่าใช้จ่าย QA</h3><p class="lead">ค่าตรวจวิเคราะห์ ค่าใช้จ่ายอื่น และค่าชดเชยลูกค้า ปี ' + (y + 543) + ' · ไม่นับรายการที่ยกเลิก</p>'
+      + '<div class="pbar noprint">' + yearChips(yearsT) + '<button class="btn btn-sm btn-line" id="cPrint">' + icon('print', 16) + ' พิมพ์</button></div>'
+      + '<div class="kpis">' + tile(baht(all), 'ค่าใช้จ่ายรวมปี ' + (y + 543), '#7c3aed', prev ? 'ปีก่อน ' + baht(prev) + ' (' + (diff >= 0 ? '+' : '') + diff + '%)' : 'ปีก่อนไม่มีข้อมูล')
+      + tile(baht(tT), 'ค่าตรวจวิเคราะห์', '#2563eb', D.test.length + ' รายการ')
+      + tile(baht(tO), 'ค่าใช้จ่ายอื่น', '#0891b2', D.other.length + ' รายการ (อย. / สอบเทียบ ฯลฯ)')
+      + tile(baht(tC), 'ค่าชดเชยลูกค้า', tC ? '#dc2626' : '#16a34a', D.comp.length + ' เรื่องร้องเรียน')
+      + tile(baht(plan + pend), 'ยังไม่จ่าย / รอผล', plan + pend ? '#d97706' : '#16a34a', 'จ่ายแล้ว ' + baht(paid)) + '</div>'
+      + '<div class="panel pbox" style="margin-bottom:14px"><h4>' + icon('chart', 18) + ' ค่าใช้จ่ายรายเดือน ปี ' + (y + 543) + '</h4>' + trend + '</div>'
+      + '<div class="pgrid">'
+      + box('สถานะการจ่าย (ตรวจ + อื่น ๆ)', stRow('ยังไม่ส่ง / ยังไม่จ่าย', plan, '#d97706') + stRow('ส่งแล้ว รอผล', pend, '#2563eb') + stRow('ได้ผล / จ่ายแล้ว', paid, '#16a34a'))
+      + box('ค่าตรวจแยกตามรายการตรวจ', bars(group(D.test, 'testType'), '#2563eb'))
+      + box('ค่าตรวจแยกตามสินค้า / ตัวอย่าง', bars(group(D.test, 'sample'), '#7c3aed'))
+      + box('แยกตามห้องแล็บ / ผู้ให้บริการ', bars(group(items, 'lab'), '#0891b2'))
+      + box('ค่าใช้จ่ายอื่น', bars(group(D.other, 'sample'), '#0d9488'))
+      + box('ค่าชดเชยลูกค้า แยกตามสินค้า', bars(group(D.comp, 'product', 'remedyCost'), '#dc2626'))
+      + '</div>';
+    on('[data-yr]', 'click', function (el) { H.q.ty = +el.getAttribute('data-yr'); costDash(); }, $('main'));
+    $('cPrint').addEventListener('click', function () { window.print(); });
+  }
+
   function testPage() {
     var y = curYear(), f = H.q.tf || 'all', all = H.data.tests.filter(function (t) { return +t.year === y; });
     var live = all.filter(function (t) { return t.status !== 'cancel'; }), sum = function (a) { return a.reduce(function (s, t) { return s + (Number(t.price) || 0); }, 0); };
@@ -724,6 +786,7 @@
     '.qnext{display:flex;gap:8px;align-items:center;background:#f5f3ff;border:1px dashed #c4b5fd;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:14px;color:#4c1d95}',
     '.qdel{text-align:right;margin-top:6px}.qerr{outline:3px solid #dc2626!important;outline-offset:2px;border-radius:10px}',
     '.qtrend{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;align-items:end}.qtm{text-align:center;font-size:11.5px}.qtm b{display:block;font-size:13px}.qtm span{color:var(--muted)}.qtb{height:100px;display:flex;align-items:flex-end;justify-content:center;gap:3px;border-bottom:1px solid var(--line)}',
+    '.qctrend{display:grid;grid-template-columns:repeat(12,1fr);gap:6px;align-items:end}.qcm{text-align:center;font-size:11.5px;min-width:0}.qcm b{display:block;font-size:12px;white-space:nowrap}.qcm span{color:var(--muted)}.qcb{height:144px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;border-bottom:1px solid var(--line)}.qcb em{width:min(26px,70%);display:block}.qcb em:first-child{border-radius:4px 4px 0 0}.qcb .c1,.slegend .c1{background:#2563eb}.qcb .c2,.slegend .c2{background:#0891b2}.qcb .c3,.slegend .c3{background:#dc2626}@media (max-width:600px){.qcm b{font-size:10px}.qctrend{gap:2px}}',
     '.qtb em{width:12px;border-radius:3px 3px 0 0;min-height:1px}.qtb .b1{background:#7c3aed}.qtb .b2{background:#16a34a}.qtb .b3{background:#dc2626}.slegend .b1{background:#7c3aed}',
     '.qrt{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:6px}.qrt th{width:150px;text-align:left;background:#f8fafc;border:1px solid #cbd5e1;padding:5px 8px;vertical-align:top;font-weight:600}.qrt td{border:1px solid #cbd5e1;padding:5px 8px;vertical-align:top}',
     '.qrr td small{color:#475569}.qrimgs{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 8px}.qrimgs img{height:90px;border-radius:4px;border:1px solid #cbd5e1}.qsum td small{color:#64748b}',
