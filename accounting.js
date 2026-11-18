@@ -16,12 +16,15 @@
   });
 
   var MENUS = [
-    { id: 'a_imp', label: 'นำเข้าไฟล์ออเดอร์ 7-11', ic: 'upload' },
-    { id: 'a_hist', label: 'รายงาน / ประวัติการนำเข้า', ic: 'table' },
     { id: 'a_dash', label: 'Dashboard ออเดอร์ 7-11', ic: 'chart' },
+    { group: 'ออเดอร์ 7-11' },
+    { id: 'a_imp', label: 'นำเข้าไฟล์ออเดอร์ 7-11', ic: 'upload' },
+    { id: 'a_hist', label: 'รายงาน / ประวัติการนำเข้า 7-11', ic: 'table' },
+    { group: 'CP Ram' },
     { id: 'a_cp', label: 'นำเข้า PO CP Ram (PDF)', ic: 'upload' },
     { id: 'a_cpl', label: 'ตารางส่งสินค้า CP Ram', ic: 'table' },
-    { id: 'a_set', label: 'ตั้งค่าศูนย์ / สินค้า / LINE', ic: 'gear' }
+    { group: 'ตั้งค่า' },
+    { id: 'a_set', label: 'ตั้งค่าศูนย์ / สินค้า 7-11 / LINE', ic: 'gear' }
   ];
   var MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
   var TOTAL_BG = '#FEF2CB', HEAD_BG = '#FFF2CC', GRAND_BG = '#FEF2CD';   // สีตามไฟล์ต้นแบบ (เหมือน Acc.gs)
