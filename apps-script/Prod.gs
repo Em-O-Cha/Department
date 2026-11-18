@@ -27,7 +27,7 @@ var PRD_TABLES_ = {
     ['files', 'รูป'], ['sentAt', 'ส่ง LINE เมื่อ'], ['by', 'ผู้ส่ง'], ['updatedAt', 'แก้ไขล่าสุด']] },
   prd_breakdowns: { tab: 'Breakdown เครื่องจักร', cols: [
     ['id', 'รหัส'], ['date', 'วันที่'], ['grp', 'กลุ่มงาน'], ['machine', 'เครื่องจักร / อุปกรณ์'], ['start', 'เวลาเริ่ม'], ['end', 'เวลาจบ'], ['minutes', 'เวลาที่เสีย (นาที)'],
-    ['problem', 'ปัญหา'], ['fix', 'การแก้ไข'], ['by', 'ผู้บันทึก'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
+    ['problem', 'ปัญหา'], ['fix', 'การแก้ไข'], ['by', 'ผู้บันทึก'], ['files', 'รูปถ่าย'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
   prd_settings: { tab: 'ตั้งค่า', cols: [['id', 'รายการ'], ['value', 'ค่า']] }
 };
 var PRD_GROUPS_ = { G2: 'งานผัด', G1: 'งานบรรจุลงซอง/ถ้วย', G3: 'งานบรรจุลงลัง' };
@@ -185,7 +185,7 @@ function prdLoad(token, from, to) {
     products: purRead_(ss, 'prd_products').sort(function (a, b) { return (Number(a.sort) || 0) - (Number(b.sort) || 0); }),
     plans: purRead_(ss, 'prd_plans').filter(inRange),
     reports: purRead_(ss, 'prd_reports').filter(inRange).map(function (r) { r.files = purParseFiles_(r.files); r.sections = prdSections_(r.sections); return r; }),
-    breakdowns: purRead_(ss, 'prd_breakdowns').filter(inRange),
+    breakdowns: purRead_(ss, 'prd_breakdowns').filter(inRange).map(prdBdOut_),
     line: { token: !!p.getProperty('PROD_LINE_TOKEN'), group: !!p.getProperty('PROD_LINE_GROUP'), setupCode: hrProp_('PROD_LINE_SETUP', hrSetupCode_), webhook: ACC_WEBHOOK_URL_ } };
 }
 
@@ -313,12 +313,45 @@ function prdSaveBreakdown(token, b) {
   return purLocked_(function () {
     var ss = prdBook_(dept), old = b.id ? purRead_(ss, 'prd_breakdowns').filter(function (x) { return x.id === b.id; })[0] : null;
     if (b.id && !old) return { ok: false, error: 'ไม่พบรายการนี้' };
-    var now = purNow_(), o = old || { id: purId_('BD'), createdAt: now };
+    var now = purNow_(), o = old || { id: purId_('BD'), files: '[]', createdAt: now };
     o.date = date; o.grp = PRD_GROUPS_[b.grp] ? b.grp : ''; o.machine = machine; o.start = start; o.end = end; o.minutes = mins;
     o.problem = prdText_(b.problem, 800); o.fix = prdText_(b.fix, 800); o.by = purClean_(b.by, 60); o.updatedAt = now;
     purWrite_(ss, 'prd_breakdowns', o);
     purLogWrite_(ss, old ? 'แก้ Breakdown' : 'บันทึก Breakdown', 'prd_breakdowns', o.id, date + ' · ' + machine + ' · ' + start + '–' + (end || '?'));
-    return { ok: true, breakdown: purRead_(ss, 'prd_breakdowns').filter(function (x) { return x.id === o.id; })[0] };
+    return { ok: true, breakdown: prdBdOut_(purRead_(ss, 'prd_breakdowns').filter(function (x) { return x.id === o.id; })[0]) };
+  });
+}
+function prdBdOut_(b) { b.files = purParseFiles_(b.files); return b; }
+// รูปของ Breakdown (ถ่ายจากกล้อง / เลือกจากคลัง) — เก็บในโฟลเดอร์ "รูปรายงานผลิต" เดียวกับรูปสรุปเย็น
+function prdUploadBdPhoto(token, id, fileName, mimeType, base64) {
+  var dept = requirePrd_(token);
+  if (!/^image\/(jpeg|png)$/.test(mimeType)) return { ok: false, error: 'แนบได้เฉพาะรูป JPG / PNG' };
+  var bytes = Utilities.base64Decode(String(base64 || ''));
+  if (!bytes.length || bytes.length > 8 * 1024 * 1024) return { ok: false, error: 'รูปว่างหรือใหญ่เกิน 8 MB' };
+  return purLocked_(function () {
+    var ss = prdBook_(dept), o = purRead_(ss, 'prd_breakdowns').filter(function (x) { return x.id === id; })[0];
+    if (!o) return { ok: false, error: 'บันทึก Breakdown ก่อน แล้วค่อยแนบรูป' };
+    var files = purParseFiles_(o.files);
+    if (files.length >= 10) return { ok: false, error: 'แนบได้สูงสุด 10 รูปต่อรายการ' };
+    var safe = purClean_(fileName, 80).replace(/[\\/:*?"<>|]/g, '_') || 'photo.jpg';
+    var f = prdPhotoFolder_(dept).createFile(Utilities.newBlob(bytes, mimeType, 'BD_' + o.date + '_' + String(o.machine).slice(0, 30) + '_' + safe));
+    f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    files.push({ id: f.getId(), name: safe, url: 'https://lh3.googleusercontent.com/d/' + f.getId(), at: purNow_() });
+    o.files = JSON.stringify(files); o.updatedAt = purNow_();
+    purWrite_(ss, 'prd_breakdowns', o);
+    return { ok: true, files: files };
+  });
+}
+function prdRemoveBdPhoto(token, id, fileId) {
+  var dept = requirePrd_(token);
+  return purLocked_(function () {
+    var ss = prdBook_(dept), o = purRead_(ss, 'prd_breakdowns').filter(function (x) { return x.id === id; })[0];
+    if (!o) return { ok: false, error: 'ไม่พบรายการนี้' };
+    var files = purParseFiles_(o.files).filter(function (x) { return x.id !== fileId; });
+    o.files = JSON.stringify(files); o.updatedAt = purNow_();
+    purWrite_(ss, 'prd_breakdowns', o);
+    try { DriveApp.getFileById(fileId).setTrashed(true); } catch (e) {}
+    return { ok: true, files: files };
   });
 }
 function prdDeleteBreakdown(token, id) {
@@ -326,6 +359,7 @@ function prdDeleteBreakdown(token, id) {
   return purLocked_(function () {
     var ss = prdBook_(dept), row = purRead_(ss, 'prd_breakdowns').filter(function (x) { return x.id === id; })[0];
     if (!row) return { ok: false, error: 'ไม่พบรายการนี้' };
+    purParseFiles_(row.files).forEach(function (f) { try { DriveApp.getFileById(f.id).setTrashed(true); } catch (e) {} });
     purSheet_(ss, 'prd_breakdowns').deleteRow(row._row);
     purLogWrite_(ss, 'ลบ Breakdown', 'prd_breakdowns', id, row.date + ' · ' + row.machine);
     return { ok: true };

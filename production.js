@@ -591,7 +591,7 @@
       + '<div class="qtop"><button class="btn btn-primary" id="bAdd">' + icon('plus', 18) + ' บันทึก Breakdown</button><span class="muted">รวม ' + all.length + ' ครั้ง · ' + fmt(mins, 0) + ' นาที</span></div>'
       + '<div class="ptable-wrap"><table class="ptable"><thead><tr><th>วันที่</th><th>เครื่องจักร</th><th>เวลา</th><th>นาที</th><th>ปัญหา</th><th>การแก้ไข</th><th></th></tr></thead><tbody>'
       + (all.map(function (b) {
-        return '<tr><td class="nw">' + dd(b.date) + (b.grp ? '<br><small>' + esc(b.grp) + '</small>' : '') + '</td><td><b>' + esc(b.machine) + '</b></td><td class="nw">' + esc(b.start) + (b.end ? '–' + esc(b.end) : '<br><small class="neg">ยังไม่จบ</small>') + '</td><td class="r">' + (b.minutes === '' ? '-' : b.minutes) + '</td>'
+        return '<tr><td class="nw">' + dd(b.date) + (b.grp ? '<br><small>' + esc(b.grp) + '</small>' : '') + '</td><td><b>' + esc(b.machine) + '</b>' + ((b.files || []).length ? '<br><a href="' + esc(b.files[0].url) + '" target="_blank" rel="noopener" class="xbdph"><img src="' + esc(b.files[0].url) + '=w120" alt="" loading="lazy">' + (b.files.length > 1 ? '<em>+' + (b.files.length - 1) + '</em>' : '') + '</a>' : '') + '</td><td class="nw">' + esc(b.start) + (b.end ? '–' + esc(b.end) : '<br><small class="neg">ยังไม่จบ</small>') + '</td><td class="r">' + (b.minutes === '' ? '-' : b.minutes) + '</td>'
           + '<td>' + esc(b.problem) + '</td><td>' + esc(b.fix || '-') + '</td><td><button class="btn btn-line btn-sm" data-bd="' + esc(b.id) + '">แก้ไข</button></td></tr>';
       }).join('') || '<tr><td colspan="7" class="muted">ยังไม่มีรายการ</td></tr>') + '</tbody></table></div>';
     $('bAdd').addEventListener('click', function () { bdForm({ date: H.data.today }, bdPage); });
@@ -608,9 +608,34 @@
         + '<div class="pf"><label for="bStart">เวลาเริ่ม *</label><input id="bStart" type="time" value="' + esc(b.start || hhmm) + '"></div>'
         + '<div class="pf"><label for="bEnd">เวลาจบ <small class="muted">(ยังไม่จบ เว้นว่าง)</small></label><input id="bEnd" type="time" value="' + esc(b.end || '') + '"></div>'
         + '<div class="pf full"><label for="bProb">ปัญหา *</label><textarea id="bProb" rows="2" placeholder="อาการที่เกิด">' + esc(b.problem || '') + '</textarea></div>'
-        + '<div class="pf full"><label for="bFix">การแก้ไข</label><textarea id="bFix" rows="2" placeholder="ทำอะไรไป / ใครแก้">' + esc(b.fix || '') + '</textarea></div></div>'
+        + '<div class="pf full"><label for="bFix">การแก้ไข</label><textarea id="bFix" rows="2" placeholder="ทำอะไรไป / ใครแก้">' + esc(b.fix || '') + '</textarea></div>'
+        + '<div class="pf full"><label>รูปถ่าย</label>' + (H.data.hasFolder ? '<div class="xphotos" id="bPh"></div><div class="xbdbtn"><label class="btn btn-line btn-sm">' + icon('camera', 16) + ' ถ่ายรูป<input type="file" accept="image/*" capture="environment" id="bCam" hidden></label>'
+          + '<label class="btn btn-line btn-sm">' + icon('box', 16) + ' เลือกจากคลังรูป<input type="file" accept="image/*" multiple id="bLib" hidden></label></div>' : '<span class="muted">ให้ผู้ดูแลระบบตั้งโฟลเดอร์ของฝ่ายก่อน จึงจะแนบรูปได้</span>') + '</div></div>'
         + (isNew ? '' : '<button type="button" class="link-btn danger" id="bDel">' + icon('trash', 14) + ' ลบรายการนี้</button>'),
       onOpen: function () {
+        // รูป: ที่บันทึกแล้ว (ลบได้ทันที) + รูปใหม่ที่รออัปโหลดตอนกดบันทึก
+        var saved = (b.files || []).slice(), pend = [];
+        var draw = function () {
+          if (!$('bPh')) return;
+          $('bPh').innerHTML = saved.map(function (f) { return '<span class="xph"><a href="' + esc(f.url) + '" target="_blank" rel="noopener"><img src="' + esc(f.url) + '=w240" alt="" loading="lazy"></a><button type="button" data-bdf="' + esc(f.id) + '" aria-label="ลบรูป">' + icon('x', 14) + '</button></span>'; }).join('')
+            + pend.map(function (f, k) { return '<span class="xph"><img src="' + f.preview + '" alt=""><em class="xnew">ใหม่</em><button type="button" data-bdp="' + k + '" aria-label="เอารูปออก">' + icon('x', 14) + '</button></span>'; }).join('')
+            + (saved.length + pend.length ? '' : '<span class="muted" style="font-size:13px">ยังไม่มีรูป</span>');
+        };
+        var add = function (input) {
+          Array.prototype.slice.call(input.files || []).forEach(function (f) { if (saved.length + pend.length < 10) pend.push({ file: f, preview: URL.createObjectURL(f) }); });
+          input.value = ''; draw();
+        };
+        if ($('bCam')) { $('bCam').addEventListener('change', function () { add(this); }); $('bLib').addEventListener('change', function () { add(this); }); }
+        if ($('bPh')) $('bPh').addEventListener('click', function (e) {
+          var p = e.target.closest('[data-bdp]'), f = e.target.closest('[data-bdf]');
+          if (p) { pend.splice(+p.getAttribute('data-bdp'), 1); draw(); }
+          if (f) ask({ title: 'ลบรูปนี้?', ok: 'ลบ', tone: 'danger' }).then(function (ok) {
+            if (!ok) return;
+            call('prdRemoveBdPhoto', state.token, b.id, f.getAttribute('data-bdf')).then(function (r) { if (!r.ok) return toast(r.error); saved = r.files; b0.files = r.files; draw(); }).catch(onServerError);
+          });
+        });
+        draw();
+        H.bdPend = pend;
         if ($('bDel')) $('bDel').addEventListener('click', function () {
           ask({ title: 'ลบ Breakdown นี้?', text: b.machine + ' · ' + dd(b.date) }).then(function (ok) {
             if (!ok) return;
@@ -623,10 +648,23 @@
         if (!o.machine) return Promise.resolve('ใส่ชื่อเครื่องจักร / อุปกรณ์');
         if (!o.start) return Promise.resolve('ใส่เวลาเริ่ม');
         if (!o.problem) return Promise.resolve('เขียนปัญหาที่เกิด');
+        var pend = (H.bdPend || []).slice();
         return call('prdSaveBreakdown', state.token, o).then(function (r) {
           if (!r.ok) return r.error;
-          var a = H.data.breakdowns, i = a.map(function (x) { return x.id; }).indexOf(r.breakdown.id); if (i >= 0) a[i] = r.breakdown; else a.push(r.breakdown);
-          closeModal(); toast('บันทึกแล้ว'); after();
+          var bd = r.breakdown, a = H.data.breakdowns, put = function () { var i = a.map(function (x) { return x.id; }).indexOf(bd.id); if (i >= 0) a[i] = bd; else a.push(bd); };
+          put();
+          if (!pend.length) { closeModal(); toast('บันทึกแล้ว'); return after(); }
+          // อัปโหลดรูปทีละรูป (ย่อก่อนส่ง)
+          var i = 0, fails = 0;
+          var next = function () {
+            if (i >= pend.length) { put(); closeModal(); toast(fails ? 'บันทึกแล้ว · อัปโหลดรูปไม่สำเร็จ ' + fails + ' รูป' : 'บันทึกแล้ว พร้อมรูป ' + pend.length + ' รูป'); return after(); }
+            var f = pend[i++]; toast('กำลังอัปโหลดรูป ' + i + '/' + pend.length + '…');
+            return shrink(f.file).then(function (x) {
+              if (!x) { fails++; return next(); }
+              return call('prdUploadBdPhoto', state.token, bd.id, x.name, 'image/jpeg', x.b64).then(function (u) { if (u.ok) bd.files = u.files; else fails++; return next(); });
+            });
+          };
+          return next();
         });
       } });
   }
@@ -793,6 +831,7 @@
     '.xcarryh{margin:16px 0 8px;font-size:15px;color:#6d28d9}.xcarryh small{color:var(--muted);font-weight:400;font-size:12.5px}.xcarryn{background:#f5f3ff;border:1.5px solid #ddd6fe;color:#5b21b6;font-size:14px;margin-bottom:12px}',
     '.xin select.xu{flex:none;width:auto;max-width:42%;border:0;border-left:1.5px solid var(--line);background:#f8fafc;color:#334155;font:inherit;font-size:13px;padding:0 6px;align-self:stretch;cursor:pointer}',
     '.xhint{font-size:12.5px;color:#9a3412;margin:-4px 2px 8px}',
+    '.xbdbtn{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}.xbdbtn .btn{cursor:pointer}.xnew{position:absolute;left:4px;bottom:4px;font-size:10px;font-style:normal;background:#16a34a;color:#fff;border-radius:6px;padding:1px 5px}.xbdph{position:relative;display:inline-block;margin-top:4px}.xbdph img{width:54px;height:54px;object-fit:cover;border-radius:8px;display:block}.xbdph em{position:absolute;right:2px;bottom:2px;font-size:10px;font-style:normal;background:#000a;color:#fff;border-radius:6px;padding:0 4px}',
     '.xchk.xall{font-weight:700;border-right:1.5px solid var(--line);padding-right:12px;margin-right:2px}.xeve{border-top:4px solid var(--g)}.xbd{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13.5px}.xbd small{grid-column:1/-1;color:var(--muted)}',
     '.xsrw{display:grid;grid-template-columns:22px minmax(0,2fr) minmax(0,1.2fr) minmax(0,.8fr) minmax(0,.8fr) 34px;gap:6px;align-items:end;margin-bottom:6px}.xsn{font-weight:700;color:var(--muted);padding-bottom:10px}.xsrw .icon-btn{margin-bottom:6px}',
     '@media (max-width:760px){.xsrw{grid-template-columns:22px minmax(0,1fr) minmax(0,1fr) 34px;border-bottom:1px dashed var(--line);padding-bottom:8px}.xsrw .xsn{grid-row:1;grid-column:1}.xsrw .xsp{grid-row:1;grid-column:2/4}.xsrw .icon-btn{grid-row:1;grid-column:4}.xsrw .xsl{grid-row:2;grid-column:2/4}.xsrw .xsq{grid-row:3;grid-column:2}.xsrw .xsu{grid-row:3;grid-column:3}}',
