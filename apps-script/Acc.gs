@@ -581,18 +581,20 @@ function acc711SendLine(token, importId, png, ratio) {
 // ตั้ง Webhook URL ของ OA ฝ่ายบัญชี = URL /exec ของระบบนี้ · เชิญบอทเข้ากลุ่ม แล้วพิมพ์ "ตั้งค่ากลุ่ม บัญชี <รหัสตั้งค่า>"
 // (รหัสดูได้ที่ระบบฝ่ายบัญชี → ตั้งค่า) → ระบบบันทึก ACC_LINE_GROUP ให้เอง · รหัสใช้ได้ครั้งเดียว
 // doPost (Api.gs) แยก OA จากช่อง destination ของ webhook: ตรงกับบอทของ ACC_LINE_TOKEN → ฝ่ายบัญชี, ไม่ตรง → ฝ่ายบุคคล
+// คีย์แคชจาก token ทั้งเส้น (SHA-256) — ท้าย token ของ LINE มักเหมือนกันทุกตัว ใช้ท้าย token เป็นคีย์ไม่ได้
+function lineTokKey_(token) { return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(token)).slice(0, 10).map(function (b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join(''); }
 function accIsMyBot_(destination) {
   try { return accIsMyBot2_(destination); } catch (e) { accDiagLog_({ ev: 'error', result: String(e.message || e).slice(0, 150) }); return false; }
 }
 function accIsMyBot2_(destination) {
   var token = props_().getProperty('ACC_LINE_TOKEN');
   if (!token || !destination) return false;
-  var c = CacheService.getScriptCache(), id = c.get('acc_bot_id');
+  var ck = 'acc_bot_id_' + lineTokKey_(token), c = CacheService.getScriptCache(), id = c.get(ck);   // แคชตาม token (เปลี่ยน token แล้วไม่ใช้ id เก่า)
   if (!id) {
     var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/info', { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
     if (res.getResponseCode() !== 200) return false;
     id = JSON.parse(res.getContentText()).userId || '';
-    if (id) c.put('acc_bot_id', id, 21600);
+    if (id) c.put(ck, id, 21600);
   }
   return id === destination;
 }
@@ -612,6 +614,16 @@ function accDiagLog_(o) {
   } catch (e) {}
 }
 // ตรวจสถานะ LINE ฝ่ายบัญชี (ไม่มีข้อมูลลับ: ใส่ token แล้วหรือยัง / LINE ยอมรับ token ไหม / ผูกกลุ่มแล้วหรือยัง / webhook ล่าสุด)
+// ตรวจว่า webhook จะส่งเหตุการณ์ของบอทบัญชีไปถึงฝ่ายผลิตได้ไหม (คืนค่า true/false เท่านั้น)
+function accRouteCheck_(token) {
+  try {
+    if (!token) return 'no-token';
+    var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/info', { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return 'info-' + res.getResponseCode();
+    var id = JSON.parse(res.getContentText()).userId || '';
+    return { acc: accIsMyBot_(id), prd: prdIsMyBot_(id) };
+  } catch (e) { return 'error: ' + String(e.message || e).slice(0, 120); }
+}
 function accLineDiag() {
   var p = props_(), token = p.getProperty('ACC_LINE_TOKEN'), info = 0, name = '';
   if (token) {
@@ -621,7 +633,7 @@ function accLineDiag() {
   }
   var pt = p.getProperty('PROD_LINE_TOKEN'), pg = p.getProperty('PROD_LINE_GROUP'), ag = p.getProperty('ACC_LINE_GROUP');
   return { ok: true, token: !!token, tokenAccepted: info === 200, lineStatus: info, botName: name, group: !!ag,
-    prod: { token: !!pt, sameBotAsAcc: !!pt && pt === token, group: !!pg, sameGroupAsAcc: !!pg && pg === ag },
+    prod: { token: !!pt, sameBotAsAcc: !!pt && pt === token, group: !!pg, sameGroupAsAcc: !!pg && pg === ag, routeCheck: accRouteCheck_(token) },
     log: JSON.parse(p.getProperty('ACC_WEBHOOK_LOG') || '[]') };
 }
 function accLineReply_(replyToken, text) {
@@ -637,6 +649,14 @@ function accLineWebhook_(events) {
       if (ev.type === 'join' && gid) {
         accDiagLog_({ ev: 'join', group: true, result: 'บอทเข้ากลุ่ม' });
         // ไม่ทักทายเมื่อบอทเข้ากลุ่ม (ผู้ใช้ขอ 18/11/69) — ดูวิธีผูกกลุ่มในหน้าตั้งค่าแทน
+        return;
+      }
+      // บอทถูกนำออกจากกลุ่มที่ผูกไว้ → ยกเลิกการผูก (ฝ่ายผลิตด้วย ถ้าใช้บอทตัวเดียวกันและผูกกลุ่มเดียวกัน)
+      if (ev.type === 'leave' && gid) {
+        var pp = props_();
+        if (gid === pp.getProperty('ACC_LINE_GROUP')) pp.deleteProperty('ACC_LINE_GROUP');
+        if (gid === pp.getProperty('PROD_LINE_GROUP') && pp.getProperty('PROD_LINE_TOKEN') === pp.getProperty('ACC_LINE_TOKEN')) pp.deleteProperty('PROD_LINE_GROUP');
+        accDiagLog_({ ev: 'leave', group: true, result: 'บอทออกจากกลุ่ม' });
         return;
       }
       if (ev.type !== 'message' || !ev.message || ev.message.type !== 'text') return;

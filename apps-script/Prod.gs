@@ -710,7 +710,7 @@ function prdLineTest(token) {
 function prdBotName_() {
   try {
     var token = props_().getProperty('PROD_LINE_TOKEN'); if (!token) return '';
-    var nk = 'prd_bot_name_' + token.slice(-12).replace(/[^A-Za-z0-9]/g, ''), c = CacheService.getScriptCache(), n = c.get(nk);
+    var nk = 'prd_bot_name_' + lineTokKey_(token), c = CacheService.getScriptCache(), n = c.get(nk);
     if (n) return n;
     var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/info', { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
     if (res.getResponseCode() !== 200) return '';
@@ -723,7 +723,7 @@ function prdIsMyBot_(destination) {
   try {
     var token = props_().getProperty('PROD_LINE_TOKEN');
     if (!token || !destination) return false;
-    var ck = 'prd_bot_id_' + token.slice(-12).replace(/[^A-Za-z0-9]/g, ''), c = CacheService.getScriptCache(), id = c.get(ck);
+    var ck = 'prd_bot_id_' + lineTokKey_(token), c = CacheService.getScriptCache(), id = c.get(ck);
     if (!id) {
       var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/info', { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
       if (res.getResponseCode() !== 200) return false;
