@@ -19,6 +19,8 @@
     { id: 'a_imp', label: 'นำเข้าไฟล์ออเดอร์ 7-11', ic: 'upload' },
     { id: 'a_hist', label: 'รายงาน / ประวัติการนำเข้า', ic: 'table' },
     { id: 'a_dash', label: 'Dashboard ออเดอร์ 7-11', ic: 'chart' },
+    { id: 'a_cp', label: 'นำเข้า PO CP Ram (PDF)', ic: 'upload' },
+    { id: 'a_cpl', label: 'ตารางส่งสินค้า CP Ram', ic: 'table' },
     { id: 'a_set', label: 'ตั้งค่าศูนย์ / สินค้า / LINE', ic: 'gear' }
   ];
   var MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
@@ -57,7 +59,7 @@
     if (msg) toast(msg);
     return H.load().then(function () { if (String(state.page).indexOf('a_') === 0) H.render(state.page); }).catch(onServerError);
   }
-  H.reset = function () { H.data = null; H.q = {}; H.imp = null; H.cur = null; H.pendingCur = null; H.setDraft = null; landscape(false); };
+  H.reset = function () { if (window.ACCCP) ACCCP.reset(); H.data = null; H.q = {}; H.imp = null; H.cur = null; H.pendingCur = null; H.setDraft = null; landscape(false); };
   H.menus = function () { return MENUS; };
   H.render = function (page) {
     landscape(false);
@@ -69,7 +71,7 @@
       });
       return;
     }
-    ({ a_imp: importPage, a_hist: histPage, a_dash: dash, a_set: settings }[page] || importPage)();
+    ({ a_imp: importPage, a_hist: histPage, a_dash: dash, a_set: settings, a_cp: function () { window.ACCCP.importPage(); }, a_cpl: function () { window.ACCCP.listPage(); } }[page] || importPage)();
   };
 
   // ==================== ตาราง "ต้นแบบรับออเดอร์ 7-11" ====================
