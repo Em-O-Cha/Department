@@ -100,6 +100,7 @@
       var bad = pos.filter(function (p) { return !p.poNo || !p.lines.length; });
       pos = pos.filter(function (p) { return p.poNo && p.lines.length; });
       if (!pos.length) throw new Error('ไม่พบใบสั่งซื้อ CP Ram ในไฟล์นี้ (ต้องเป็น PDF ที่ดาวน์โหลดจากระบบ ไม่ใช่ภาพสแกน)');
+      C._lastPos = pos;
       C.imp = { fileName: files.map(function (f) { return f.name; }).join(', '), pos: pos, unread: bad.length };
       return runPreview();
     }).catch(function (e) { msg(icon('warn', 18) + ' ' + esc(e.message || String(e)), 'bad'); });
@@ -261,7 +262,7 @@
       if (!r.ok) { b.disabled = false; b.textContent = 'บันทึก'; msg(icon('warn', 18) + ' ' + esc(r.error), 'bad'); return; }
       C.imp = null;
       toast('บันทึกแล้ว: ใหม่ ' + r.added + ' · อัปเดต ' + r.changed);
-      C.month = r.months[0] || ''; C.data = null;
+      C.month = r.months[0] || ''; C.data = null; C.justSaved = r.importId;
       var nb = document.querySelector('#nav button[data-page="a_cpl"]');
       if (nb) nb.click(); else C.listPage();
     }).catch(onServerError);
@@ -278,14 +279,39 @@
     var rows = lines.filter(function (x) { return String(x.deliveryDate).slice(0, 7) === C.month; });
     var rounds = roundsOf(rows);
     $('main').innerHTML = '<h3>ตารางส่งสินค้า CP Ram</h3><p class="lead">แตะแถวเพื่อบันทึกว่าส่งสินค้าแล้ว / ยกเลิก / หมายเหตุ · ข้อมูลอยู่ใน <a href="' + esc(d.sheetUrl) + '" target="_blank" rel="noopener">' + esc(d.sheetName) + '</a> (แท็บรายเดือนสร้างให้อัตโนมัติ)</p>'
+      + linePanel(d)
       + '<div class="pchips cpchips">' + (months.length ? months.map(function (m) { return '<button class="chip' + (m === C.month ? ' on' : '') + '" data-cpm="' + m + '">' + monthTh(m) + '</button>'; }).join('') : '<span class="muted">ยังไม่มีข้อมูล — นำเข้า PO ก่อน</span>') + '</div>'
       + (rows.length ? kpis(rows)
         + '<div class="panel pbox"><h4>' + icon('table', 18) + ' ตารางส่งสินค้า CP Ram ' + monthTh(C.month) + '</h4>' + schedTable(rows, { edit: true }) + '</div>'
         + '<div class="panel pbox"><h4>' + icon('clock', 18) + ' รอบเงินเข้า</h4>' + roundsTable(rounds) + '</div>' : '');
     on('[data-cpm]', 'click', function (el) { C.month = el.getAttribute('data-cpm'); C.listPage(); });
+    on('[data-cpsend]', 'click', function (el) { sendLine(el.getAttribute('data-cpsend')); });
+    if (C.justSaved) { var js = C.justSaved; C.justSaved = null; if (d.line) sendLine(js, true); }
     on('[data-cpl]', 'click', function (el) { editLine(el.getAttribute('data-cpl')); });
     on('[data-cpl]', 'keydown', function (el, e) { if (e.key === 'Enter') editLine(el.getAttribute('data-cpl')); });
   };
+  // ---------- ส่ง LINE (ใบแจ้งออเดอร์ CP Ram — เฉพาะออเดอร์ ไม่มียอดเงิน) ----------
+  function linePanel(d) {
+    if (!d.imports.length) return '';
+    return '<div class="panel pbox cpline"><h4>' + icon('send', 18) + ' ส่งออเดอร์เข้ากลุ่ม LINE <small class="muted">(ส่งเฉพาะออเดอร์ ไม่มียอดเงิน / รอบเงินเข้า)</small></h4>'
+      + (d.line ? '' : '<p class="muted" style="margin:0 0 8px">ยังไม่ได้ตั้งค่า LINE ของฝ่ายบัญชี — ตั้งในเมนู "ตั้งค่าศูนย์ / สินค้า 7-11 / LINE"</p>')
+      + d.imports.slice(0, 4).map(function (x) {
+        return '<div class="cprow cpimp"><span><b>นำเข้า ' + slash(String(x.createdAt).slice(0, 10)) + ' ' + esc(String(x.createdAt).slice(11, 16)) + '</b><small>' + esc(x.fileName) + ' · ใหม่ ' + n0(x.added) + ' · อัปเดต ' + n0(x.changed) + ' · ' + n0(x.qty) + ' ลัง</small></span>'
+          + (x.sentAt ? '<span class="cptag done">ส่งแล้ว ' + esc(String(x.sentAt).slice(11, 16)) + '</span>' : '<span class="cptag">ยังไม่ส่ง</span>')
+          + (d.line && (+x.added || +x.changed) ? '<button class="btn btn-sm ' + (x.sentAt ? 'btn-line' : 'btn-primary') + '" data-cpsend="' + esc(x.id) + '">' + icon('send', 15) + (x.sentAt ? ' ส่งอีกครั้ง' : ' ส่ง LINE') + '</button>' : '') + '</div>';
+      }).join('') + '</div>';
+  }
+  function sendLine(id, afterSave) {
+    var x = C.data.imports.filter(function (i) { return i.id === id; })[0]; if (!x) return;
+    ask({ title: afterSave ? 'บันทึกแล้ว · ส่งออเดอร์เข้ากลุ่ม LINE เลยไหม?' : 'ส่งออเดอร์ CP Ram เข้ากลุ่ม LINE?', text: 'ใบแจ้งออเดอร์ ' + n0(+x.added + +x.changed) + ' รายการ · ' + n0(x.qty) + ' ลัง (ไม่มียอดเงิน)' + (x.sentAt ? ' · เคยส่งแล้วเมื่อ ' + x.sentAt : ''), ok: 'ส่ง LINE', cancel: afterSave ? 'ไว้ทีหลัง' : 'ยกเลิก', tone: 'info' }).then(function (yes) {
+      if (!yes) return;
+      toast('กำลังส่ง LINE…');
+      call('cpSendLine', state.token, id).then(function (r) {
+        if (!r.ok) { toast(r.error); return; }
+        x.sentAt = r.sentAt; toast('ส่ง LINE แล้ว'); C.listPage();
+      }).catch(onServerError);
+    });
+  }
   function roundsOf(rows) {
     var by = {};
     rows.forEach(function (r) {
@@ -329,6 +355,7 @@
     '.cpst{margin-bottom:12px}.cpst a{color:var(--c);font-weight:600}.cplink{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}.cplink input{flex:1;min-width:220px;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit}',
     '.a7fixrow.cps{flex-wrap:wrap}.a7fixrow input{padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;font:inherit;min-width:0;flex:1}.a7fixrow.cps input{flex:1 1 140px}',
     '.cpnl{display:block;font-weight:600}.cpnl textarea{display:block;width:100%;margin-top:5px;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-weight:400}.kpis.xk{grid-template-columns:repeat(4,1fr)}@media (max-width:860px){.kpis.xk{grid-template-columns:repeat(2,1fr)}}',
+    '.cpline h4{flex-wrap:wrap}.cpline h4 small{font-weight:400;font-size:12.5px;flex-basis:100%;margin-left:24px}.cpimp{align-items:center;flex-wrap:nowrap}.cpimp>span:first-child{flex:1;min-width:0}.cpimp .btn{flex:none;width:auto;white-space:nowrap}.cpimp .cptag{flex:none}.cpimp small{display:block}',
     '#cpMapSave{margin-top:10px}.cpchips{margin:4px 0 12px}',
     '.cpst3{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.cpst3 label{flex:1 1 30%}.cpst3 input{position:absolute;opacity:0}.cpst3 span{display:block;text-align:center;padding:11px 8px;border:1.5px solid var(--line);border-radius:12px;font-weight:600;cursor:pointer}',
     '.cpst3 input:checked+span{border-color:var(--c);background:color-mix(in srgb,var(--c) 12%,white);color:var(--c)}.cpst3 input:focus-visible+span{outline:2px solid var(--c)}'
