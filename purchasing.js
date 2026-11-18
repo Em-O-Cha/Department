@@ -152,10 +152,48 @@
         var over = x.dueDate && x.dueDate < t;
         return '<div class="li click" data-doc="' + x.id + '"><span>' + esc(x.docNo) + ' · ' + esc(x.vendorName) + '</span><b class="' + (over ? 'neg' : '') + '">' + baht((Number(x.total) || 0) - (Number(x.paidAmount) || 0)) + '</b><small>ครบกำหนด ' + dd(x.dueDate) + (over ? ' (เลยกำหนด)' : '') + '</small></div>';
       }), 'ไม่มียอดค้างชำระ')
-      + '</div>';
+      + '</div>'
+      + '<div class="panel pbox prise" id="pRise"></div>';
     $('main').innerHTML = html;
     on('[data-go]', 'click', function (el) { go(el.getAttribute('data-go')); }, $('main'));
     on('[data-doc]', 'click', function (el) { docModal(P.idx.doc[el.getAttribute('data-doc')]); }, $('main'));
+    priceRises();
+  }
+  // ---- Dashboard ราคาปรับขึ้น แยกตามสินค้า (จากประวัติราคา: ราคาที่มีผลในช่วง เทียบราคาก่อนหน้า) ----
+  function priceRises() {
+    var dth = function (iso) { if (!iso) return '-'; var p = String(iso).slice(0, 10).split('-'); return +p[2] + '/' + +p[1] + '/' + String(+p[0] + 543).slice(2); };
+    var t = P.data.today || todayIso(), box = $('pRise'); if (!box) return;
+    var y = +t.slice(0, 4), shift = function (n) { var d = new Date(+t.slice(0, 4), +t.slice(5, 7) - 1, +t.slice(8, 10) - n); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
+    var ranges = [['3m', '3 เดือน', shift(91)], ['y', 'ปีนี้', y + '-01-01'], ['12m', '12 เดือน', shift(365)], ['all', 'ทั้งหมด', '2000-01-01']];
+    P.q.rise = P.q.rise || '3m';
+    var cur = ranges.filter(function (r) { return r[0] === P.q.rise; })[0] || ranges[0];
+    box.innerHTML = '<div class="prh"><h4>' + icon('chart', 18) + ' ราคาปรับขึ้น แยกตามสินค้า</h4><div class="pchips" style="margin:0">' + ranges.map(function (r) { return '<button class="chip' + (r[0] === cur[0] ? ' on' : '') + '" data-rise="' + r[0] + '">' + r[1] + '</button>'; }).join('') + '</div></div>'
+      + '<div id="pRiseOut"><span class="spinner dark"></span> กำลังโหลด…</div>';
+    on('[data-rise]', 'click', function (el) { P.q.rise = el.getAttribute('data-rise'); priceRises(); }, box);
+    var my = P.riseSeq = (P.riseSeq || 0) + 1;
+    call('purPriceReport', state.token, cur[2], t).then(function (r) {
+      if (my !== P.riseSeq || !$('pRiseOut')) return;
+      if (!r.ok) { $('pRiseOut').innerHTML = '<div class="muted">' + esc(r.error) + '</div>'; return; }
+      var by = {};
+      r.rows.forEach(function (x) { if (x.change !== '' && x.change > 0) (by[x.materialId] = by[x.materialId] || { id: x.materialId, name: x.material, unit: x.unit, list: [] }).list.push(x); });
+      var mats = Object.keys(by).map(function (k) {
+        var g = by[k]; g.list.sort(function (a, b) { return b.date.localeCompare(a.date); });
+        var m = P.idx && P.idx.mat ? P.idx.mat[k] : null, first = g.list[g.list.length - 1];
+        g.last = g.list[0].date; g.price = m && m.price !== '' && m.price != null ? m.price : g.list[0].price;
+        g.base = first.prevPrice; g.total = g.base ? Math.round((g.list[0].price - g.base) / g.base * 1000) / 10 : '';
+        return g;
+      }).sort(function (a, b) { return b.last.localeCompare(a.last) || a.name.localeCompare(b.name, 'th'); });
+      $('pRiseOut').innerHTML = mats.length ? '<p class="muted" style="margin:0 0 8px;font-size:13px">' + mats.length + ' รายการที่ราคาขึ้น · ' + (cur[0] === 'all' ? 'ทุกช่วงเวลา' : dth(cur[2]) + ' – ' + dth(t)) + '</p>'
+        + '<div class="prgrid">' + mats.map(function (g) {
+          return '<div class="prc"><div class="prct"><b>' + esc(g.name) + '</b><span>ราคาปัจจุบัน <b>' + baht(g.price) + '</b>' + (g.unit ? ' / ' + esc(g.unit) : '') + '</span>'
+            + (g.total !== '' ? '<em>ขึ้นรวม +' + g.total + '%' + (g.list.length > 1 ? ' (' + g.list.length + ' ครั้ง)' : '') + '</em>' : '') + '</div>'
+            + g.list.map(function (x) {
+              return '<div class="prr"><span class="prd">' + dth(x.date) + '</span><span>' + baht(x.prevPrice) + ' → <b>' + baht(x.price) + '</b></span><b class="neg">+' + baht(x.change) + (x.pct !== '' ? ' (+' + x.pct + '%)' : '') + '</b>'
+                + (x.vendor ? '<small>' + esc(x.vendor) + '</small>' : '') + '</div>';
+            }).join('') + '</div>';
+        }).join('') + '</div>'
+        : '<div class="muted">ไม่มีสินค้าที่ราคาปรับขึ้นในช่วงนี้' + (r.rows.length ? '' : ' (ยังไม่มีการบันทึกราคาในช่วงนี้ — บันทึกราคาได้ที่เมนูวัตถุดิบ & ราคา)') + '</div>';
+    }).catch(onServerError);
   }
 
   // ==================== รับเข้า / จ่ายออก ====================
@@ -1392,6 +1430,9 @@
     '@media (max-width:560px){.pform{grid-template-columns:1fr}.prow{flex-wrap:wrap}.pbtns{width:100%}.pbtns .btn{flex:1}.hide-sm{display:none}.pitem{grid-template-columns:1fr 1fr 1fr;}.pitem .iname{grid-column:1/-1}.pupload{grid-template-columns:1fr}.dialog.wide .dialog-body{max-height:none}}',
     '@page{size:A4 portrait;margin:10mm 11mm 13mm 11mm;@bottom-right{content:"หน้า " counter(page) " / " counter(pages);font:8pt "IBM Plex Sans Thai",sans-serif;color:#64748b}}',
     '.rwrap{width:100%;border-collapse:collapse}.rwrap>thead>tr>td,.rwrap>tbody>tr>td{padding:0;border:0;background:none}.rwrap>thead>tr>td{padding-bottom:4px}',
+    '.prise{margin-top:14px}.prh{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}.prh h4{margin:0}.prgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}',
+    '.prc{border:1.5px solid var(--line);border-left:5px solid #dc2626;border-radius:12px;padding:10px 12px;background:#fff}.prct{display:flex;flex-direction:column;gap:2px;margin-bottom:6px}.prct > b{font-size:15px}.prct span{font-size:13px;color:#334155}.prct em{font-style:normal;font-size:12px;font-weight:700;color:#b91c1c;background:#fef2f2;border-radius:99px;padding:1px 8px;align-self:flex-start}',
+    '.prr{display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;align-items:center;padding:5px 0;border-top:1px dashed var(--line);font-size:13px}.prd{color:var(--muted);white-space:nowrap}.prr small{grid-column:1/-1;color:var(--muted);font-size:12px}',
     '@media print{html,body{background:#fff!important}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}.topbar,.side,.noprint,.page-head,#toast,.pbar,#modalOverlay{display:none!important}.app{display:block;min-height:0}.main{padding:0;max-width:none}',
     '.preport{box-shadow:none;padding:0;margin:0;border-radius:0}.rhead{padding-bottom:6px}.rlogo{height:38px}.rco b{font-size:13pt}.rco span{font-size:9pt}.rform{font-size:8pt}.rtitle{font-size:14pt;margin:10px 0 4px}.rinfo{font-size:9pt;margin-bottom:8px}',
     '.preport h5{font-size:10.5pt;margin:12px 0 4px;break-after:avoid}.rt{font-size:8.5pt}.rt th{padding:3px 4px}.rt td{padding:2.5px 4px}.rt thead,.rwrap>thead{display:table-header-group}.rt tr{break-inside:avoid}.rbox b{font-size:12pt}.psign{margin-top:36px;font-size:9pt}}',
