@@ -634,7 +634,7 @@ function accLineWebhook_(events) {
       var gid = (ev.source || {}).groupId || '';
       if (ev.type === 'join' && gid) {
         accDiagLog_({ ev: 'join', group: true, result: 'บอทเข้ากลุ่ม' });
-        accLineReply_(ev.replyToken, 'สวัสดีค่ะ 🙏 ถ้าต้องการให้กลุ่มนี้รับรายงานออเดอร์ 7-11 ให้พิมพ์\nตั้งค่ากลุ่ม บัญชี <รหัสตั้งค่า>\n(ดูรหัสได้ที่ระบบฝ่ายบัญชี → ตั้งค่าศูนย์ / สินค้า / LINE)');
+        // ไม่ทักทายเมื่อบอทเข้ากลุ่ม (ผู้ใช้ขอ 18/11/69) — ดูวิธีผูกกลุ่มในหน้าตั้งค่าแทน
         return;
       }
       if (ev.type !== 'message' || !ev.message || ev.message.type !== 'text') return;
