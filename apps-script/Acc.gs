@@ -619,7 +619,9 @@ function accLineDiag() {
     info = res.getResponseCode();
     if (info === 200) name = JSON.parse(res.getContentText()).displayName || '';
   }
-  return { ok: true, token: !!token, tokenAccepted: info === 200, lineStatus: info, botName: name, group: !!p.getProperty('ACC_LINE_GROUP'),
+  var pt = p.getProperty('PROD_LINE_TOKEN'), pg = p.getProperty('PROD_LINE_GROUP'), ag = p.getProperty('ACC_LINE_GROUP');
+  return { ok: true, token: !!token, tokenAccepted: info === 200, lineStatus: info, botName: name, group: !!ag,
+    prod: { token: !!pt, sameBotAsAcc: !!pt && pt === token, group: !!pg, sameGroupAsAcc: !!pg && pg === ag },
     log: JSON.parse(p.getProperty('ACC_WEBHOOK_LOG') || '[]') };
 }
 function accLineReply_(replyToken, text) {
