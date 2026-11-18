@@ -171,11 +171,11 @@
           + '<td class="cpo">' + esc(r.poNo) + '</td><td>' + esc(r.wh || (r.place ? '-' : '?')) + '</td><td class="cpq">' + n0(r.qty) + '</td><td>' + esc(r.unitTh || r.unit || 'ลัง') + '</td>'
           + (first ? '<td' + rs + ' class="cpt">' + n0(sum) + '</td>' : '')
           + (sameL ? (first ? '<td' + rs + '>' + (r.place ? esc(r.place) : '<span class="cpq0">?</span>') + '</td>' : '') : '<td>' + (r.place ? esc(r.place) : '<span class="cpq0">?</span>') + '</td>')
-          + '<td class="cpn">' + (opt.preview ? stateTag(r) : noteHtml(r)) + '</td></tr>';
+          + (opt.noNote ? '' : '<td class="cpn">' + (opt.preview ? stateTag(r) : noteHtml(r)) + '</td>') + '</tr>';
       }).join('');
     }).join('');
-    return '<div class="cpwrap"><table class="cptab"><thead><tr><th>วัน</th><th>วันที่</th><th>สินค้า</th><th>PO</th><th>คลัง</th><th>จำนวนสินค้า</th><th>หน่วย</th><th>Total</th><th>สถานที่ส่ง</th><th>' + (opt.preview ? 'สถานะ' : 'หมายเหตุ') + '</th></tr></thead>'
-      + '<tbody>' + body + '</tbody><tfoot><tr><td colspan="4"></td><td class="cpy">Total</td><td class="cpy">' + n0(total) + '</td><td class="cpy">ลัง</td><td colspan="3"></td></tr></tfoot></table></div>';
+    return '<div class="cpwrap"><table class="cptab"><thead><tr><th>วัน</th><th>วันที่</th><th>สินค้า</th><th>PO</th><th>คลัง</th><th>จำนวนสินค้า</th><th>หน่วย</th><th>Total</th><th>สถานที่ส่ง</th>' + (opt.noNote ? '' : '<th>' + (opt.preview ? 'สถานะ' : 'หมายเหตุ') + '</th>') + '</tr></thead>'
+      + '<tbody>' + body + '</tbody><tfoot><tr><td colspan="4"></td><td class="cpy">Total</td><td class="cpy">' + n0(total) + '</td><td class="cpy">ลัง</td><td colspan="' + (opt.noNote ? 2 : 3) + '"></td></tr></tfoot></table></div>';
   }
   function pname(r) { return r.product ? esc(r.product) : '<span class="cpq0">รหัส ' + esc(r.itemCode) + '</span>'; }
   function stateTag(r) {
@@ -282,10 +282,12 @@
       + linePanel(d)
       + '<div class="pchips cpchips">' + (months.length ? months.map(function (m) { return '<button class="chip' + (m === C.month ? ' on' : '') + '" data-cpm="' + m + '">' + monthTh(m) + '</button>'; }).join('') : '<span class="muted">ยังไม่มีข้อมูล — นำเข้า PO ก่อน</span>') + '</div>'
       + (rows.length ? kpis(rows)
-        + '<div class="panel pbox"><h4>' + icon('table', 18) + ' ตารางส่งสินค้า CP Ram ' + monthTh(C.month) + '</h4>' + schedTable(rows, { edit: true }) + '</div>'
+        + '<div class="panel pbox"><h4 class="cph4">' + icon('table', 18) + ' ตารางส่งสินค้า CP Ram ' + monthTh(C.month) + '<button class="btn btn-sm btn-line" id="cpMonthFiles">' + icon('pdf', 15) + ' PDF / Excel ทั้งเดือน</button></h4>' + schedTable(rows, { edit: true }) + '</div>'
         + '<div class="panel pbox"><h4>' + icon('clock', 18) + ' รอบเงินเข้า</h4>' + roundsTable(rounds) + '</div>' : '');
     on('[data-cpm]', 'click', function (el) { C.month = el.getAttribute('data-cpm'); C.listPage(); });
     on('[data-cpsend]', 'click', function (el) { sendLine(el.getAttribute('data-cpsend')); });
+    on('[data-cpfiles]', 'click', function (el) { makeFiles(el); });
+    var mf = $('cpMonthFiles'); if (mf) mf.addEventListener('click', function () { monthFiles(mf); });
     if (C.justSaved) { var js = C.justSaved; C.justSaved = null; if (d.line) sendLine(js, true); }
     on('[data-cpl]', 'click', function (el) { editLine(el.getAttribute('data-cpl')); });
     on('[data-cpl]', 'keydown', function (el, e) { if (e.key === 'Enter') editLine(el.getAttribute('data-cpl')); });
@@ -298,18 +300,60 @@
       + d.imports.slice(0, 4).map(function (x) {
         return '<div class="cprow cpimp"><span><b>นำเข้า ' + slash(String(x.createdAt).slice(0, 10)) + ' ' + esc(String(x.createdAt).slice(11, 16)) + '</b><small>' + esc(x.fileName) + ' · ใหม่ ' + n0(x.added) + ' · อัปเดต ' + n0(x.changed) + ' · ' + n0(x.qty) + ' ลัง</small></span>'
           + (x.sentAt ? '<span class="cptag done">ส่งแล้ว ' + esc(String(x.sentAt).slice(11, 16)) + '</span>' : '<span class="cptag">ยังไม่ส่ง</span>')
+          + (x.pdfUrl ? fileLinks(x.pdfUrl, x.xlsxUrl) : (+x.added || +x.changed) ? '<button class="btn btn-sm btn-line" data-cpfiles="' + esc(x.id) + '">' + icon('pdf', 15) + ' PDF / Excel</button>' : '')
           + (d.line && (+x.added || +x.changed) ? '<button class="btn btn-sm ' + (x.sentAt ? 'btn-line' : 'btn-primary') + '" data-cpsend="' + esc(x.id) + '">' + icon('send', 15) + (x.sentAt ? ' ส่งอีกครั้ง' : ' ส่ง LINE') + '</button>' : '') + '</div>';
       }).join('') + '</div>';
+  }
+  function xlsxDl(u) { var m = String(u || '').match(/[-\w]{25,}/); return m ? 'https://drive.google.com/uc?export=download&id=' + m[0] : u; }
+  function fileLinks(pdf, xlsx) {
+    return '<span class="cpfl">' + (pdf ? '<a class="btn btn-sm btn-line" href="' + esc(pdf) + '" target="_blank" rel="noopener">' + icon('pdf', 15) + ' PDF</a>' : '')
+      + (xlsx ? '<a class="btn btn-sm btn-line" href="' + esc(xlsxDl(xlsx)) + '" target="_blank" rel="noopener">' + icon('table', 15) + ' Excel</a>' : '') + '</span>';
+  }
+  function makeFiles(el) {
+    var id = el.getAttribute('data-cpfiles'), x = C.data.imports.filter(function (i) { return i.id === id; })[0];
+    el.disabled = true; el.innerHTML = '<span class="spinner dark"></span> กำลังสร้างไฟล์';
+    call('cpMakeImportFiles', state.token, id).then(function (r) {
+      if (!r.ok) { el.disabled = false; el.textContent = 'PDF / Excel'; toast(r.error); return; }
+      x.pdfUrl = r.pdfUrl; x.xlsxUrl = r.xlsxUrl; C.listPage();
+    }).catch(onServerError);
+  }
+  function monthFiles(el) {
+    el.disabled = true; el.innerHTML = '<span class="spinner dark"></span> กำลังสร้างไฟล์';
+    call('cpMonthFiles', state.token, C.month).then(function (r) {
+      if (!r.ok) { el.disabled = false; el.textContent = 'PDF / Excel ทั้งเดือน'; toast(r.error); return; }
+      el.outerHTML = fileLinks(r.pdfUrl, r.xlsxUrl);
+    }).catch(onServerError);
   }
   function sendLine(id, afterSave) {
     var x = C.data.imports.filter(function (i) { return i.id === id; })[0]; if (!x) return;
     ask({ title: afterSave ? 'บันทึกแล้ว · ส่งออเดอร์เข้ากลุ่ม LINE เลยไหม?' : 'ส่งออเดอร์ CP Ram เข้ากลุ่ม LINE?', text: 'ใบแจ้งออเดอร์ ' + n0(+x.added + +x.changed) + ' รายการ · ' + n0(x.qty) + ' ลัง (ไม่มียอดเงิน)' + (x.sentAt ? ' · เคยส่งแล้วเมื่อ ' + x.sentAt : ''), ok: 'ส่ง LINE', cancel: afterSave ? 'ไว้ทีหลัง' : 'ยกเลิก', tone: 'info' }).then(function (yes) {
       if (!yes) return;
-      toast('กำลังส่ง LINE…');
-      call('cpSendLine', state.token, id).then(function (r) {
+      toast('กำลังสร้างภาพตารางและส่ง LINE…');
+      var lines = C.data.lines.filter(function (l) { return l.importId === id; });
+      lineImage(lines).catch(function () { return null; }).then(function (img) {
+        return call('cpSendLine', state.token, id, img ? img.png : '', img ? img.ratio : '');
+      }).then(function (r) {
         if (!r.ok) { toast(r.error); return; }
-        x.sentAt = r.sentAt; toast('ส่ง LINE แล้ว'); C.listPage();
+        x.sentAt = r.sentAt; if (r.pdfUrl) { x.pdfUrl = r.pdfUrl; x.xlsxUrl = r.xlsxUrl; } toast('ส่ง LINE แล้ว'); C.listPage();
       }).catch(onServerError);
+    });
+  }
+  // ภาพตารางส่งสินค้า (หน้าตาเดียวกับในหน้าเว็บ ไม่มียอดเงิน) สำหรับส่ง LINE — html2canvas
+  var H2C_URL = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+  function lineImage(lines) {
+    if (!lines.length) return Promise.resolve(null);
+    var ready = window.html2canvas ? Promise.resolve() : new Promise(function (ok, fail) { var sc = document.createElement('script'); sc.src = H2C_URL; sc.onload = ok; sc.onerror = fail; document.head.appendChild(sc); });
+    return ready.then(function () { return document.fonts ? document.fonts.ready : null; }).then(function () {
+      var rows = lines.slice().sort(function (a, b) { return String(a.deliveryDate).localeCompare(String(b.deliveryDate)) || String(a.poNo).localeCompare(String(b.poNo)) || a.lineNo - b.lineNo; });
+      var dates = uniq(rows.map(function (r) { return r.deliveryDate; })), pos = uniq(rows.map(function (r) { return r.poNo; }));
+      var box = document.createElement('div'); box.className = 'cpimgbox';
+      box.innerHTML = '<div class="cpimg"><div class="cpimh"><b>ตารางส่งสินค้า CP Ram</b><span>ส่ง ' + slash(dates[0]) + (dates.length > 1 ? ' – ' + slash(dates[dates.length - 1]) : '') + ' · ' + pos.length + ' ใบสั่งซื้อ</span></div>' + schedTable(rows, { noNote: !rows.some(function (r) { return r.status === 'cancel' || r.note || r.history; }) }) + '</div>';
+      document.body.appendChild(box);
+      return window.html2canvas(box.firstChild, { scale: 2, backgroundColor: '#ffffff', logging: false }).then(function (cv) {
+        document.body.removeChild(box);
+        var w = cv.width, h = Math.min(cv.height, w * 3), url = cv.toDataURL('image/png');
+        return { png: url.split(',')[1], ratio: w + ':' + h };
+      }, function (e) { document.body.removeChild(box); throw e; });
     });
   }
   function roundsOf(rows) {
@@ -355,7 +399,9 @@
     '.cpst{margin-bottom:12px}.cpst a{color:var(--c);font-weight:600}.cplink{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}.cplink input{flex:1;min-width:220px;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit}',
     '.a7fixrow.cps{flex-wrap:wrap}.a7fixrow input{padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;font:inherit;min-width:0;flex:1}.a7fixrow.cps input{flex:1 1 140px}',
     '.cpnl{display:block;font-weight:600}.cpnl textarea{display:block;width:100%;margin-top:5px;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-weight:400}.kpis.xk{grid-template-columns:repeat(4,1fr)}@media (max-width:860px){.kpis.xk{grid-template-columns:repeat(2,1fr)}}',
-    '.cpline h4{flex-wrap:wrap}.cpline h4 small{font-weight:400;font-size:12.5px;flex-basis:100%;margin-left:24px}.cpimp{align-items:center;flex-wrap:nowrap}.cpimp>span:first-child{flex:1;min-width:0}.cpimp .btn{flex:none;width:auto;white-space:nowrap}.cpimp .cptag{flex:none}.cpimp small{display:block}',
+    '.cpline h4{flex-wrap:wrap}.cpline h4 small{font-weight:400;font-size:12.5px;flex-basis:100%;margin-left:24px}.cpimp{align-items:center;flex-wrap:wrap}.cpimp>span:first-child{flex:1 1 220px;min-width:0}.cpimp .btn{flex:none;width:auto;white-space:nowrap}.cpimp .cptag{flex:none}.cpimp small{display:block}',
+    '.cpimgbox{position:fixed;left:-3000px;top:0}.cpimg{display:inline-block;width:auto;min-width:640px;padding:20px;background:#fff;font-family:inherit}.cpimh{gap:24px}.cpimg .cpwrap{overflow:visible;margin:0;padding:0}.cpimg .cptab{font-size:18px;min-width:0}.cpimg .cptab th,.cpimg .cptab td{padding:8px 6px}.cpimg .cptab .cpt{font-size:20px}.cpimh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}.cpimh b{font-size:22px}.cpimh span{color:#475569;font-size:15px}',
+    '.cpfl{display:inline-flex;gap:6px;flex:none}.cpfl .btn{width:auto;text-decoration:none}.cph4{flex-wrap:wrap}.cph4 .btn,.cph4 .cpfl{margin-left:auto;width:auto}',
     '#cpMapSave{margin-top:10px}.cpchips{margin:4px 0 12px}',
     '.cpst3{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.cpst3 label{flex:1 1 30%}.cpst3 input{position:absolute;opacity:0}.cpst3 span{display:block;text-align:center;padding:11px 8px;border:1.5px solid var(--line);border-radius:12px;font-weight:600;cursor:pointer}',
     '.cpst3 input:checked+span{border-color:var(--c);background:color-mix(in srgb,var(--c) 12%,white);color:var(--c)}.cpst3 input:focus-visible+span{outline:2px solid var(--c)}'
