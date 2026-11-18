@@ -54,11 +54,24 @@ function apiFunctions_() {
   };
 }
 
+function lineFreshEvents_(events) {
+  var c = CacheService.getScriptCache();
+  return events.filter(function (ev) {
+    if (ev && ev.deliveryContext && ev.deliveryContext.isRedelivery) return false;
+    var id = ev && ev.webhookEventId;
+    if (!id) return true;
+    if (c.get('lev_' + id)) return false;
+    c.put('lev_' + id, '1', 21600);
+    return true;
+  });
+}
 function doPost(e) {
   var out;
   try {
     var req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-    if (Array.isArray(req.events)) {   // Webhook ของ LINE OA: ฝ่ายบัญชี (Acc.gs) แยกด้วย destination ไม่ใช่ = ฝ่ายบุคคล (HrPublic.gs)
+    if (Array.isArray(req.events)) {
+      // LINE ส่งเหตุการณ์ซ้ำ (redelivery) เพราะเว็บแอปตอบกลับเป็น redirect → ข้ามเหตุการณ์ที่เคยทำแล้ว ไม่ให้ตอบ/ทำซ้ำ
+      req.events = lineFreshEvents_(req.events);   // Webhook ของ LINE OA: ฝ่ายบัญชี (Acc.gs) แยกด้วย destination ไม่ใช่ = ฝ่ายบุคคล (HrPublic.gs)
       var isAcc = accIsMyBot_(req.destination), isPrd = prdIsMyBot_(req.destination);
       if (req.events.length) accDiagLog_({ ev: 'webhook', acc: isAcc, prd: isPrd, types: req.events.map(function (x) { return x.type + (x.source ? '/' + x.source.type : ''); }).join(',') });
       // ฝ่ายผลิต (Prod.gs) ใช้ OA ของตัวเอง หรือใช้ OA เดียวกับฝ่ายบัญชีก็ได้ (แยกด้วยคำว่า "ผลิต" ในคำสั่ง)
