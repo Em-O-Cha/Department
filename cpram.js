@@ -178,6 +178,7 @@
       + '<tbody>' + body + '</tbody><tfoot><tr><td colspan="4"></td><td class="cpy">Total</td><td class="cpy">' + n0(total) + '</td><td class="cpy">ลัง</td><td colspan="' + (opt.noNote ? 2 : 3) + '"></td></tr></tfoot></table></div>';
   }
   function pname(r) { return r.product ? esc(r.product) : '<span class="cpq0">รหัส ' + esc(r.itemCode) + '</span>'; }
+  function histText(h) { var t = String(h).split(' | ').pop().replace(/^[\d-]+: /, ''); return /^เลื่อนส่ง/.test(t) ? '📅 ' + t : 'เปลี่ยน: ' + t; }
   function stateTag(r) {
     if (r.state === 'new') return '<span class="cptag new">ใหม่</span>';
     if (r.state === 'dup') return '<span class="cptag same">ซ้ำในไฟล์</span>';
@@ -187,7 +188,7 @@
   function fmtV(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? slash(v) : String(v); }
   function noteHtml(r) {
     var t = r.status === 'done' ? '<span class="cptag done">*ส่งสินค้าแล้ว</span>' : r.status === 'cancel' ? '<span class="cptag cancel">ยกเลิก</span>' : '';
-    return t + (r.note ? '<small>' + esc(r.note) + '</small>' : '') + (r.history ? '<small class="cph">เปลี่ยน: ' + esc(String(r.history).split(' | ').pop().replace(/^[\d-]+: /, '')) + '</small>' : '');
+    return t + (r.note ? '<small>' + esc(r.note) + '</small>' : '') + (r.history ? '<small class="cph">' + esc(histText(r.history)) + '</small>' : '');
   }
   function roundsTable(rounds) {
     if (!rounds.length) return '';
@@ -279,13 +280,14 @@
     var rows = lines.filter(function (x) { return String(x.deliveryDate).slice(0, 7) === C.month; });
     var rounds = roundsOf(rows);
     $('main').innerHTML = '<h3>ตารางส่งสินค้า CP Ram</h3><p class="lead">แตะแถวเพื่อบันทึกว่าส่งสินค้าแล้ว / ยกเลิก / หมายเหตุ · ข้อมูลอยู่ใน <a href="' + esc(d.sheetUrl) + '" target="_blank" rel="noopener">' + esc(d.sheetName) + '</a> (แท็บรายเดือนสร้างให้อัตโนมัติ)</p>'
-      + linePanel(d)
+      + linePanel(d) + movesPanel(d)
       + '<div class="pchips cpchips">' + (months.length ? months.map(function (m) { return '<button class="chip' + (m === C.month ? ' on' : '') + '" data-cpm="' + m + '">' + monthTh(m) + '</button>'; }).join('') : '<span class="muted">ยังไม่มีข้อมูล — นำเข้า PO ก่อน</span>') + '</div>'
       + (rows.length ? kpis(rows)
         + '<div class="panel pbox"><h4 class="cph4">' + icon('table', 18) + ' ตารางส่งสินค้า CP Ram ' + monthTh(C.month) + '<button class="btn btn-sm btn-line" id="cpMonthFiles">' + icon('pdf', 15) + ' PDF / Excel ทั้งเดือน</button></h4>' + schedTable(rows, { edit: true }) + '</div>'
         + '<div class="panel pbox"><h4>' + icon('clock', 18) + ' รอบเงินเข้า</h4>' + roundsTable(rounds) + '</div>' : '');
     on('[data-cpm]', 'click', function (el) { C.month = el.getAttribute('data-cpm'); C.listPage(); });
     on('[data-cpsend]', 'click', function (el) { sendLine(el.getAttribute('data-cpsend')); });
+    on('[data-cpmv]', 'click', function (el) { sendMove(el.getAttribute('data-cpmv')); });
     on('[data-cpfiles]', 'click', function (el) { makeFiles(el); });
     var mf = $('cpMonthFiles'); if (mf) mf.addEventListener('click', function () { monthFiles(mf); });
     if (C.justSaved) { var js = C.justSaved; C.justSaved = null; if (d.line) sendLine(js, true); }
@@ -367,18 +369,57 @@
   }
   function editLine(id) {
     var r = C.data.lines.filter(function (x) { return x.id === id; })[0]; if (!r) return;
-    openModal({ color: state.dept.color, icon: 'edit', title: 'PO ' + r.poNo, sub: (r.product || '') + ' · ส่ง ' + slash(r.deliveryDate) + ' · ' + n0(r.qty) + ' ' + (r.unit || 'ลัง'),
-      body: '<div class="cpst3">' + Object.keys(STATUS).map(function (k) { return '<label><input type="radio" name="cpS" value="' + k + '"' + ((r.status || '') === k ? ' checked' : '') + '><span>' + STATUS[k] + '</span></label>'; }).join('') + '</div>'
-        + '<label class="cpnl">หมายเหตุ<textarea id="cpNote" rows="2" maxlength="200" placeholder="เช่น เลื่อนจาก 11/11/69">' + esc(r.note || '') + '</textarea></label>'
-        + (r.history ? '<p class="muted" style="font-size:13px">ประวัติ: ' + esc(r.history) + '</p>' : ''),
+    var mv = (C.data.moves || []).filter(function (m) { return m.lineId === id; });
+    openModal({ color: state.dept.color, icon: 'edit', title: 'PO ' + r.poNo, sub: (r.product || '') + ' · ' + n0(r.qty) + ' ' + (r.unit || 'ลัง') + (r.place ? ' · ' + r.place : ''),
+      body: '<label class="cpnl">วันที่ส่ง<input type="date" id="cpDate" value="' + esc(r.deliveryDate) + '"></label>'
+        + '<div id="cpMoveBox" class="cpmove" hidden><div class="cpmh">📅 เลื่อนส่งจาก <b>' + slash(r.deliveryDate) + '</b> เป็น <b id="cpNewD"></b></div>'
+        + '<label class="cpnl">เหตุผลที่เลื่อนส่ง <span class="req">*</span><input id="cpWhy" maxlength="200" list="cpWhyL" placeholder="เช่น ลูกค้าขอเลื่อน / คลังเต็ม"></label>'
+        + '<datalist id="cpWhyL"><option value="ลูกค้า (CP Ram) ขอเลื่อน"><option value="สินค้ายังผลิตไม่ทัน"><option value="คลังลูกค้าเต็ม"><option value="รถขนส่งไม่ว่าง"></datalist>'
+        + (C.data.line ? '<label class="cpchk"><input type="checkbox" id="cpNotify" checked> ส่ง LINE แจ้งเลื่อนส่งเข้ากลุ่มด้วย</label>' : '') + '</div>'
+        + '<div class="cpst3">' + Object.keys(STATUS).map(function (k) { return '<label><input type="radio" name="cpS" value="' + k + '"' + ((r.status || '') === k ? ' checked' : '') + '><span>' + STATUS[k] + '</span></label>'; }).join('') + '</div>'
+        + '<label class="cpnl">หมายเหตุ<textarea id="cpNote" rows="2" maxlength="200">' + esc(r.note || '') + '</textarea></label>'
+        + (mv.length ? '<div class="cpmh2">ประวัติเลื่อนส่ง</div>' + mv.map(function (m) {
+          return '<div class="cpmrow"><span>' + slash(m.fromDate) + ' → <b>' + slash(m.toDate) + '</b> · ' + esc(m.reason) + '</span><small>' + esc(String(m.createdAt).slice(0, 16)) + (m.sentAt ? ' · ส่ง LINE แล้ว' : '') + '</small></div>'; }).join('') : ''),
       ok: 'บันทึก',
+      onOpen: function () {
+        var d = $('cpDate'), box = $('cpMoveBox');
+        d.addEventListener('change', function () { var ch = d.value && d.value !== r.deliveryDate; box.hidden = !ch; if (ch) { $('cpNewD').textContent = slash(d.value); $('cpWhy').focus(); } });
+      },
+      check: function () {
+        var d = $('cpDate').value;
+        if (!d) return 'เลือกวันที่ส่ง';
+        if (d !== r.deliveryDate && !$('cpWhy').value.trim()) return 'ใส่เหตุผลที่เลื่อนส่ง';
+        return '';
+      },
       submit: function () {
-        var st = ($('mBody').querySelector('input[name=cpS]:checked') || {}).value || '';
-        return call('cpUpdateLine', state.token, id, st, $('cpNote').value).then(function (x) {
+        var st = ($('mBody').querySelector('input[name=cpS]:checked') || {}).value || '', d = $('cpDate').value, moved = d !== r.deliveryDate;
+        var notify = moved && $('cpNotify') && $('cpNotify').checked;
+        return call('cpUpdateLine', state.token, id, st, $('cpNote').value, moved ? d : '', moved ? $('cpWhy').value : '').then(function (x) {
           if (!x.ok) return x.error;
-          r.status = st; r.note = $('cpNote').value.trim(); closeModal(); toast('บันทึกแล้ว'); C.listPage();
+          r.status = st; r.note = $('cpNote').value.trim();
+          if (x.moveId) { r.deliveryDate = x.deliveryDate; r.dueDate = x.dueDate; r.history = x.history; C.month = String(x.deliveryDate).slice(0, 7); }
+          closeModal();
+          if (!x.moveId || !notify) { toast(x.moveId ? 'บันทึกการเลื่อนส่งแล้ว' : 'บันทึกแล้ว'); C.data = null; C.listPage(); return; }
+          toast('บันทึกแล้ว · กำลังส่ง LINE แจ้งเลื่อนส่ง…');
+          return call('cpSendMoveLine', state.token, x.moveId).then(function (y) { toast(y.ok ? 'ส่ง LINE แจ้งเลื่อนส่งแล้ว' : y.error); C.data = null; C.listPage(); });
         });
       } });
+  }
+  // กล่องประวัติเลื่อนส่งล่าสุด (หน้าตารางส่งสินค้า) — ส่ง LINE ย้อนหลังได้
+  function movesPanel(d) {
+    var mv = (d.moves || []).slice(0, 5); if (!mv.length) return '';
+    return '<div class="panel pbox cpline"><h4>📅 ประวัติเลื่อนส่งล่าสุด</h4>' + mv.map(function (m) {
+      return '<div class="cprow cpimp"><span><b>PO ' + esc(m.poNo) + ' · ' + slash(m.fromDate) + ' → ' + slash(m.toDate) + '</b><small>' + esc(m.product || '') + ' · ' + n0(m.qty) + ' ' + esc(m.unit || 'ลัง') + ' · ' + esc(m.reason) + '</small></span>'
+        + (m.sentAt ? '<span class="cptag done">ส่ง LINE แล้ว</span>' : '<span class="cptag">ยังไม่ส่ง</span>')
+        + (d.line ? '<button class="btn btn-sm ' + (m.sentAt ? 'btn-line' : 'btn-primary') + '" data-cpmv="' + esc(m.id) + '">' + icon('send', 15) + (m.sentAt ? ' ส่งอีกครั้ง' : ' ส่ง LINE') + '</button>' : '') + '</div>';
+    }).join('') + '</div>';
+  }
+  function sendMove(id) {
+    var m = C.data.moves.filter(function (x) { return x.id === id; })[0]; if (!m) return;
+    ask({ title: 'ส่ง LINE แจ้งเลื่อนส่ง?', text: 'PO ' + m.poNo + ' · ' + slash(m.fromDate) + ' → ' + slash(m.toDate), ok: 'ส่ง LINE', tone: 'info' }).then(function (yes) {
+      if (!yes) return;
+      call('cpSendMoveLine', state.token, id).then(function (r) { if (!r.ok) return toast(r.error); m.sentAt = r.sentAt; toast('ส่ง LINE แล้ว'); C.listPage(); }).catch(onServerError);
+    });
   }
 
   var css = document.createElement('style');
@@ -402,6 +443,9 @@
     '.cpline h4{flex-wrap:wrap}.cpline h4 small{font-weight:400;font-size:12.5px;flex-basis:100%;margin-left:24px}.cpimp{align-items:center;flex-wrap:wrap}.cpimp>span:first-child{flex:1 1 220px;min-width:0}.cpimp .btn{flex:none;width:auto;white-space:nowrap}.cpimp .cptag{flex:none}.cpimp small{display:block}',
     '.cpimgbox{position:fixed;left:-3000px;top:0}.cpimg{display:inline-block;width:auto;min-width:640px;padding:20px;background:#fff;font-family:inherit}.cpimh{gap:24px}.cpimg .cpwrap{overflow:visible;margin:0;padding:0}.cpimg .cptab{font-size:18px;min-width:0}.cpimg .cptab th,.cpimg .cptab td{padding:8px 6px}.cpimg .cptab .cpt{font-size:20px}.cpimh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}.cpimh b{font-size:22px}.cpimh span{color:#475569;font-size:15px}',
     '.cpfl{display:inline-flex;gap:6px;flex:none}.cpfl .btn{width:auto;text-decoration:none}.cph4{flex-wrap:wrap}.cph4 .btn,.cph4 .cpfl{margin-left:auto;width:auto}',
+    '.cpnl input{display:block;width:100%;margin-top:5px;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-weight:400}.cpnl{margin-bottom:12px}.cpnl .req{color:#dc2626}',
+    '.cpmove{border:1.5px solid #fdba74;background:#fff7ed;border-radius:12px;padding:12px;margin-bottom:12px}.cpmh{color:#9a3412;margin-bottom:8px}.cpchk{display:flex;gap:8px;align-items:center;font-weight:600;color:#9a3412}.cpchk input{width:18px;height:18px}',
+    '.cpmh2{font-weight:700;margin:6px 0 4px}.cpmrow{padding:6px 0;border-top:1px solid var(--line);font-size:14px}.cpmrow small{display:block;color:var(--muted)}',
     '#cpMapSave{margin-top:10px}.cpchips{margin:4px 0 12px}',
     '.cpst3{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.cpst3 label{flex:1 1 30%}.cpst3 input{position:absolute;opacity:0}.cpst3 span{display:block;text-align:center;padding:11px 8px;border:1.5px solid var(--line);border-radius:12px;font-weight:600;cursor:pointer}',
     '.cpst3 input:checked+span{border-color:var(--c);background:color-mix(in srgb,var(--c) 12%,white);color:var(--c)}.cpst3 input:focus-visible+span{outline:2px solid var(--c)}'
