@@ -218,10 +218,13 @@ function hrSaveLeave(token, x) {
     var f = purDate_(x.dateFrom), t = purDate_(x.dateTo) || f;
     if (!f) return 'ระบุวันที่';
     if (t < f) return 'วันที่สิ้นสุดต้องไม่ก่อนวันเริ่ม';
+    var oldDays = Number(rec.days), oldMin = Number(rec.minutes) || 0, wasLate = rec.type === 'late';
     rec.type = x.type; rec.dateFrom = f; rec.dateTo = t;
     var d = hrNum_(x.days);
-    rec.days = x.type === 'late' ? 0 : (d === '' ? hrWorkDays_(f, t, st.workDays) : Math.max(0, Math.round(d * 2) / 2));
-    rec.minutes = x.type === 'late' ? Math.max(0, Math.round(Number(x.minutes) || 0)) : '';
+    // ลาเป็นชั่วโมง (นาทีอยู่ในช่อง minutes): ถ้า HR ไม่ได้แก้จำนวนวัน คงชั่วโมงเดิมไว้
+    var keepHours = !wasLate && oldMin && x.type !== 'late' && f === t && (d === '' || Number(d) === oldDays);
+    rec.days = x.type === 'late' ? 0 : keepHours ? oldDays : (d === '' ? hrWorkDays_(f, t, st.workDays) : Math.max(0, Math.round(d * 2) / 2));
+    rec.minutes = x.type === 'late' ? Math.max(0, Math.round(Number(x.minutes) || 0)) : keepHours ? oldMin : '';
     rec.reason = hrText_(x.reason, 300); rec.status = ['อนุมัติ', 'รออนุมัติ', 'ไม่อนุมัติ'].indexOf(x.status) >= 0 ? x.status : 'อนุมัติ';
     rec.approver = hrText_(x.approver, 80);
   }, 'การลา');

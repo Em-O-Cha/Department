@@ -138,10 +138,12 @@ function hrFormBalance(key, empId) {
   if (!e || !hrActive_(e)) return { ok: false, error: 'ไม่พบชื่อพนักงาน' };
   var year = purToday_().slice(0, 4);
   var mine = purRead_(ss, 'hr_leaves').filter(function (l) { return l.empId === e.id; }).sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).slice(0, 8)
-    .map(function (l) { return { type: l.type, dateFrom: l.dateFrom, dateTo: l.dateTo, days: l.days, status: l.status, reason: l.reason }; });
+    .map(function (l) { return { type: l.type, dateFrom: l.dateFrom, dateTo: l.dateTo, days: l.days, minutes: l.type === 'late' ? '' : l.minutes, status: l.status, reason: l.reason }; });
   return { ok: true, year: year, balance: hrBalance_(ss, e, year), recent: mine, emp: hrFormEmp_(e) };
 }
 // r = { empId, type, dateFrom, dateTo, half (true = ครึ่งวัน), reason }
+var HR_HOURS_PER_DAY_ = 8;   // ลาเป็นชั่วโมง: 8 ชม. = 1 วัน (แก้ได้ถ้าบริษัทนับต่างไป)
+function hrHoursTxt_(mins) { var h = Math.floor(mins / 60), m = mins % 60; return (h ? h + ' ชม.' : '') + (m ? (h ? ' ' : '') + m + ' นาที' : ''); }
 function hrFormSubmit(key, r) {
   var dept = hrFormCheck_(key);
   r = r || {};
@@ -159,7 +161,19 @@ function hrFormSubmit(key, r) {
     if (all.some(function (l) { return l.empId === e.id && l.status !== 'ไม่อนุมัติ' && l.dateFrom <= t && (l.dateTo || l.dateFrom) >= f; })) return { ok: false, error: 'มีการลาในวันที่นี้อยู่แล้ว (รออนุมัติหรืออนุมัติแล้ว)' };
     var days = r.half === true && f === t ? 0.5 : hrWorkDays_(f, t, st.workDays);
     if (!days) return { ok: false, error: 'วันที่เลือกเป็นวันหยุด' };
-    var now = purNow_(), rec = { id: purId_('LV'), empId: e.id, type: r.type, dateFrom: f, dateTo: t, days: days, minutes: '', reason: hrText_(r.reason, 300),
+    // ลาเป็นชั่วโมง (ผู้ใช้ขอ 19/11/69): วันเดียว + เวลาเริ่ม–สิ้นสุด → เก็บนาทีในช่อง "นาที" · จำนวนวัน = ชั่วโมง ÷ 8 (HR_HOURS_PER_DAY_)
+    var mins = '', hrsTxt = '';
+    if (r.timeFrom || r.timeTo) {
+      var tm = function (v) { var m = String(v || '').match(/^(\d{1,2}):(\d{2})$/); return m ? +m[1] * 60 + +m[2] : -1; };
+      var a = tm(r.timeFrom), b = tm(r.timeTo);
+      if (f !== t) return { ok: false, error: 'ลาเป็นชั่วโมงได้ทีละ 1 วัน' };
+      if (a < 0 || b < 0 || b <= a) return { ok: false, error: 'ระบุเวลาเริ่ม–สิ้นสุดให้ถูกต้อง' };
+      mins = b - a;
+      if (mins > 12 * 60) return { ok: false, error: 'ลาเป็นชั่วโมงได้ไม่เกิน 12 ชั่วโมง' };
+      days = Math.round(mins / 60 / HR_HOURS_PER_DAY_ * 100) / 100;
+      hrsTxt = 'ลา ' + hrHoursTxt_(mins) + ' (' + r.timeFrom + '–' + r.timeTo + ')';
+    }
+    var now = purNow_(), rec = { id: purId_('LV'), empId: e.id, type: r.type, dateFrom: f, dateTo: t, days: days, minutes: mins, reason: hrText_((hrsTxt ? hrsTxt + (r.reason ? ' · ' : '') : '') + (r.reason || ''), 300),
       status: 'รออนุมัติ', approver: '', files: '[]', createdAt: now, updatedAt: now, source: 'แบบฟอร์มพนักงาน', decidedAt: '' };
     purWrite_(ss, 'hr_leaves', rec);
     purLogWrite_(ss, 'คำขอลาจากแบบฟอร์ม', 'hr_leaves', rec.id, e.fullName + ' · ' + HR_LEAVE_TYPES_[r.type] + ' ' + f + (t !== f ? '–' + t : '') + ' (' + days + ' วัน)');
@@ -216,7 +230,7 @@ function hrLeaveFlex_(l, e, bal, decided) {
   var dates = hrThDate_(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + hrThDate_(l.dateTo) : '');
   var body = [T((e.fullName || '') + (e.nickname ? ' (' + e.nickname + ')' : ''), { size: 'lg', weight: 'bold' }),
     T([e.position, e.group, e.building].filter(String).join(' · ') || ' ', { size: 'xs', color: '#64748b' }), { type: 'separator', margin: 'md' },
-    { type: 'box', layout: 'vertical', margin: 'md', spacing: 'sm', contents: [row('ประเภท', HR_LEAVE_TYPES_[l.type] || l.type), row('วันที่', dates), row('จำนวน', l.days + ' วัน')]
+    { type: 'box', layout: 'vertical', margin: 'md', spacing: 'sm', contents: [row('ประเภท', HR_LEAVE_TYPES_[l.type] || l.type), row('วันที่', dates), row('จำนวน', l.type !== 'late' && Number(l.minutes) ? hrHoursTxt_(Number(l.minutes)) + ' (' + l.days + ' วัน)' : l.days + ' วัน')]
       .concat(l.reason ? [row('เหตุผล', l.reason)] : [])
       .concat(bal && bal.quota != null ? [row('สิทธิ์คงเหลือ', bal.left + ' วัน → หลังอนุมัติ ' + (bal.left - l.days) + ' วัน', bal.left - l.days < 0 ? '#dc2626' : '#15803d')] : []) }];
   var bubble = { type: 'bubble', size: 'kilo',

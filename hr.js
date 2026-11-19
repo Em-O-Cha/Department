@@ -55,6 +55,13 @@
   function wide(cfg) { cfg.wide = true; cfg.color = cfg.color || state.dept.color; openModal(cfg); }
   function list(s) { return String(s || '').split(/[,\n]/).map(function (x) { return x.trim(); }).filter(String); }
   function opts(arr, blank) { return (blank ? [['', blank]] : []).concat(arr.map(function (x) { return [x, x]; })); }
+  // ระยะเวลาการลา: มาสาย = นาที · ลาเป็นชั่วโมง (นาทีในช่อง minutes, ผู้ใช้ขอ 19/11/69) = ชม. · อื่น ๆ = วัน
+  function lvLen(l) {
+    var m = Number(l.minutes) || 0;
+    if (l.type === 'late') return m + ' นาที';
+    if (m) { var h = Math.floor(m / 60), r = m % 60; return (h ? h + ' ชม.' : '') + (r ? (h ? ' ' : '') + r + ' นาที' : ''); }
+    return l.days + ' วัน';
+  }
   function emp(id) { return H.idx[id] || null; }
   function active() { return H.data.emps.filter(function (e) { return e.status !== 'ลาออก'; }); }
   function uniq(arr) { return arr.filter(function (x, i, a) { return x && a.indexOf(x) === i; }); }
@@ -191,7 +198,7 @@
     return '<div class="panel hpend"><h4>🔔 คำขอลารออนุมัติ (' + rows.length + ')</h4>' + rows.map(function (l) {
       var e = emp(l.empId) || { fullName: '-' }, y = String(l.dateFrom).slice(0, 4), qq = quotaOf(e, l.type, y), left = qq == null ? null : qq - usedOf(e.id, l.type, y, l.id);
       return '<div class="hpr-row">' + photo(e, 'hph sm') + '<div class="pinfo"><b>' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</b>'
-        + '<small><span class="htype ' + l.type + '">' + LT[l.type] + '</span> ' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + ' · ' + l.days + ' วัน'
+        + '<small><span class="htype ' + l.type + '">' + LT[l.type] + '</span> ' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + ' · ' + lvLen(l)
         + (left != null ? ' · <b class="' + (left - l.days < 0 ? 'neg' : 'pos') + '">คงเหลือ ' + left + ' → หลังอนุมัติ ' + (left - l.days) + '</b>' : '') + '</small>'
         + (l.reason ? '<small>เหตุผล: ' + esc(l.reason) + '</small>' : '') + (l.files.length ? '<small>' + fileLinks(l.files) + '</small>' : '') + '<small class="muted">ส่งเมื่อ ' + esc(String(l.createdAt).slice(0, 16)) + (l.source ? ' · ' + esc(l.source) : '') + '</small></div>'
         + '<div class="hpr-btns"><button class="btn btn-sm hok" data-ok="' + l.id + '">✅ อนุมัติ</button><button class="btn btn-sm hno" data-no="' + l.id + '">❌ ไม่อนุมัติ</button></div></div>';
@@ -457,7 +464,7 @@
           return '<div><span>' + LT[k] + '</span><b class="' + (qq != null && u > qq ? 'neg' : '') + '">' + u + (qq != null ? '/' + qq : '') + '</b><small>' + (k === 'late' ? 'ครั้ง' : 'วัน') + '</small>'
             + (qq != null ? '<em class="' + (qq - u < 0 ? 'neg' : '') + '">' + (qq - u < 0 ? 'เกิน ' + (u - qq) : 'เหลือ ' + (qq - u)) + '</em>' : '') + (k === 'vacation' && qq === 0 && e.startDate ? '<em>ยังไม่ครบ 1 ปี</em>' : '') + '</div>';
         }).join('') + '</div>'
-        + lv.slice(0, 12).map(function (l) { return '<div class="li click" data-lv="' + l.id + '"><span>' + LT[l.type] + (l.reason ? ' · ' + esc(l.reason) : '') + '</span><b>' + (l.type === 'late' ? (l.minutes || 0) + ' นาที' : l.days + ' วัน') + '</b><small>' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + (l.status !== 'อนุมัติ' ? ' · ' + esc(l.status) : '') + '</small></div>'; }).join('') + '</div>'
+        + lv.slice(0, 12).map(function (l) { return '<div class="li click" data-lv="' + l.id + '"><span>' + LT[l.type] + (l.reason ? ' · ' + esc(l.reason) : '') + '</span><b>' + lvLen(l) + '</b><small>' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + (l.status !== 'อนุมัติ' ? ' · ' + esc(l.status) : '') + '</small></div>'; }).join('') + '</div>'
       + '<div class="panel pbox"><h4>' + icon('idcard', 18) + ' เอกสาร <button class="btn btn-sm btn-line" style="margin-left:auto" data-new="doc">' + icon('plus', 14) + ' เพิ่มเอกสาร</button></h4>'
         + (dc.map(function (d) { var left = d.expiryDate ? days(H.data.today, d.expiryDate) : null; return '<div class="li click" data-dc="' + d.id + '"><span>' + esc(DT[d.type] || d.type) + (d.number ? ' · ' + esc(d.number) : '') + '</span><b class="' + (left != null && left < 0 ? 'neg' : left != null && left <= Number(H.data.settings.alertDays || 60) ? 'warn' : '') + '">' + (d.expiryDate ? 'หมด ' + dd(d.expiryDate) : '-') + '</b><small>' + (left != null ? (left < 0 ? 'หมดอายุแล้ว ' + (-left) + ' วัน' : 'เหลือ ' + left + ' วัน') : '') + (d.files.length ? ' · ไฟล์ ' + d.files.length : '') + '</small></div>'; }).join('') || '<div class="muted">ยังไม่มีเอกสาร</div>') + '</div>'
       + '<div class="panel pbox"><h4>' + icon('book', 18) + ' การอบรม (' + tr.length + ' หลักสูตร · ' + tr.reduce(function (s, t) { return s + (Number(t.hours) || 0); }, 0) + ' ชม.)</h4>'
@@ -549,7 +556,7 @@
       + '<div class="plist">' + (rows.map(function (l) {
         var e = emp(l.empId) || { fullName: '(ไม่พบพนักงาน)' };
         return '<button class="prow click" data-lv="' + l.id + '">' + photo(e, 'hph sm') + '<div class="pinfo"><b>' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</b><small>' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + (l.reason ? ' · ' + esc(l.reason) : '') + (l.status !== 'อนุมัติ' ? ' · <b class="warn">' + esc(l.status) + '</b>' : '') + '</small></div>'
-          + '<div class="pprice"><span class="htype ' + l.type + '">' + LT[l.type] + '</span><small>' + (l.type === 'late' ? (l.minutes || 0) + ' นาที' : l.days + ' วัน') + '</small></div></button>';
+          + '<div class="pprice"><span class="htype ' + l.type + '">' + LT[l.type] + '</span><small>' + lvLen(l) + '</small></div></button>';
       }).join('') || '<div class="panel muted">ไม่มีรายการ</div>') + '</div>';
     $('lM').addEventListener('change', function () { q.lm = v('lM'); if (q.lm && q.lm.slice(0, 4) < String(+H.data.today.slice(0, 4) - 1)) loadOld(q.lm); else leaves(); });
     $('lT').addEventListener('change', function () { q.lt = v('lT'); leaves(); });
