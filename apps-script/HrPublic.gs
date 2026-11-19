@@ -54,16 +54,29 @@ function hrLineTest(token) {
 }
 
 // ---------- หน้าแบบฟอร์มพนักงาน (เรียกด้วยรหัสแบบฟอร์ม) ----------
+// ไม่ส่งรายชื่อพนักงานทั้งหมดให้หน้าฟอร์มแล้ว (19/11/69: หน้าสแกนขอลาไม่ควรเห็นทุกคน) — ค้นด้วย hrFormFind ทีละชื่อ
+// emps: [] เผื่อหน้าเก่าที่ยังค้างในเครื่อง
 function hrFormInit(key) {
   var dept = hrFormCheck_(key), ss = hrBook_(dept), st = hrSettings_(ss);
-  return { ok: true, today: purToday_(), workDays: st.workDays,
-    emps: purRead_(ss, 'hr_emps').filter(hrActive_).sort(function (a, b) { return (Number(a.seq) || 9999) - (Number(b.seq) || 9999); })
-      .map(function (e) { return { id: e.id, name: e.fullName, nick: e.nickname, building: e.building, group: e.group, position: e.position }; }) };
+  return { ok: true, today: purToday_(), workDays: st.workDays, emps: [], search: true };
 }
-function hrFormPhotos(key) {
-  var dept = hrFormCheck_(key), ss = hrBook_(dept), out = {};
-  purRead_(ss, 'hr_emps').forEach(function (e) { if (hrActive_(e) && /^data:image\//.test(String(e.photoThumb))) out[e.id] = e.photoThumb; });
-  return { ok: true, photos: out };
+function hrFormEmp_(e) {
+  return { id: e.id, name: e.fullName, nick: e.nickname, building: e.building, group: e.group, position: e.position,
+    photo: /^data:image\//.test(String(e.photoThumb)) ? e.photoThumb : '' };
+}
+// ค้นชื่อ / ชื่อเล่น (พิมพ์แล้วค่อยขึ้น) — คืนไม่เกิน 8 คน
+function hrFormFind(key, q) {
+  var dept = hrFormCheck_(key), s = String(q || '').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 40);
+  if (!s) return { ok: true, emps: [] };
+  hrRate_('hrfind', 400, 600);
+  var ss = hrBook_(dept);
+  return { ok: true, emps: purRead_(ss, 'hr_emps').filter(function (e) {
+    return hrActive_(e) && (String(e.fullName || '') + ' ' + String(e.nickname || '')).toLowerCase().indexOf(s) >= 0;
+  }).slice(0, 8).map(hrFormEmp_) };
+}
+function hrFormPhotos(key) {   // เลิกส่งรูปทุกคน (รูปมากับผลค้นหาแทน) — คงไว้ให้หน้าเก่าไม่ error
+  hrFormCheck_(key);
+  return { ok: true, photos: {} };
 }
 function hrQuota_(st, e, k, year, today) {
   var q = (st.quotaMap || {})[k];
@@ -89,7 +102,7 @@ function hrFormBalance(key, empId) {
   var year = purToday_().slice(0, 4);
   var mine = purRead_(ss, 'hr_leaves').filter(function (l) { return l.empId === e.id; }).sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).slice(0, 8)
     .map(function (l) { return { type: l.type, dateFrom: l.dateFrom, dateTo: l.dateTo, days: l.days, status: l.status, reason: l.reason }; });
-  return { ok: true, year: year, balance: hrBalance_(ss, e, year), recent: mine };
+  return { ok: true, year: year, balance: hrBalance_(ss, e, year), recent: mine, emp: hrFormEmp_(e) };
 }
 // r = { empId, type, dateFrom, dateTo, half (true = ครึ่งวัน), reason }
 function hrFormSubmit(key, r) {

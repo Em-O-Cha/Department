@@ -146,6 +146,7 @@
     if (H.loading) return H.loading;
     H.loading = call('hrLoad', state.token).then(function (d) {
       H.data = d; H.idx = {}; d.emps.forEach(function (e) { H.idx[e.id] = e; }); H.loading = null;
+      if (!H.pollT) H.pollT = setInterval(function () { pollLeaves(false); }, 60000);
       if (!H.photosLoaded) { H.photosLoaded = true; call('hrPhotos', state.token).then(function (r) { if (r.ok) { H.photos = r.photos; if (String(state.page).indexOf('h_') === 0) H.render(state.page); } }).catch(function () { H.photosLoaded = false; }); }
       return d;
     }, function (e) { H.loading = null; throw e; });
@@ -155,7 +156,27 @@
     if (msg) toast(msg);
     return H.load().then(function () { if (String(state.page).indexOf('h_') === 0) H.render(state.page); }).catch(onServerError);
   }
-  H.reset = function () { if (window.HRDAILY) HRDAILY.reset(); H.data = null; H.q = {}; H.photos = {}; H.photosLoaded = false; pageSize(''); };
+  // คำขอลาใหม่จากแบบฟอร์มพนักงาน (สแกน QR): เช็คเองทุก 1 นาที + ตอนเปิดหน้าภาพรวม / การลา — ไม่ต้องรีเฟรชหน้า (19/11/69)
+  function addDays(iso, n) { var d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  function pollLeaves(now) {
+    if (!H.data || !state.token || String(state.page).indexOf('h_') !== 0 || (document.hidden && !now) || H.polling) return;
+    var from = addDays(H.data.today, -60), to = addDays(H.data.today, 400), inWin = function (l) { return l.dateFrom <= to && (l.dateTo || l.dateFrom) >= from; };
+    H.polling = true;
+    call('hrLeaves', state.token, from, to).then(function (r) {
+      H.polling = false;
+      if (!r.ok || !H.data) return;
+      var sig = function (arr) { return arr.filter(inWin).map(function (l) { return l.id + ':' + l.status; }).sort().join(','); };
+      if (sig(H.data.leaves) === sig(r.leaves)) return;
+      var had = {}; H.data.leaves.forEach(function (l) { had[l.id] = 1; });
+      var fresh = r.leaves.filter(function (l) { return !had[l.id] && l.status === 'รออนุมัติ'; }).length;
+      H.data.leaves = H.data.leaves.filter(function (l) { return !inWin(l); }).concat(r.leaves);
+      if (fresh) toast('🔔 มีคำขอลาใหม่ ' + fresh + ' รายการ');
+      renderNav();
+      var busy = !$('modalOverlay').classList.contains('hidden') || /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '');
+      if (!busy && (state.page === 'h_leave' || state.page === 'h_dash')) H.render(state.page);
+    }, function (e) { H.polling = false; if (String(e && e.message).indexOf('SESSION_EXPIRED') >= 0) { clearInterval(H.pollT); H.pollT = null; } });
+  }
+  H.reset = function () { if (H.pollT) { clearInterval(H.pollT); H.pollT = null; } if (window.HRDAILY) HRDAILY.reset(); H.data = null; H.q = {}; H.photos = {}; H.photosLoaded = false; pageSize(''); };
   H.menus = function () {   // เมนูการลาโชว์จำนวนคำขอที่รออนุมัติ
     var n = H.data ? pendingLeaves().length : 0;
     return MENUS.map(function (m) { return m.id === 'h_leave' && n ? Object.assign({}, m, { label: m.label + ' 🔴 ' + n }) : m; });
@@ -193,6 +214,7 @@
       });
       return;
     }
+    if ((page === 'h_leave' || page === 'h_dash') && !H.justPolled) { H.justPolled = true; setTimeout(function () { H.justPolled = false; pollLeaves(true); }, 300); }
     ({ h_dash: dash, h_day: function () { window.HRDAILY.page(); }, h_emp: emps, h_leave: leaves, h_doc: docs, h_train: trainings, h_disc: discs, h_rep: report, h_set: settings, h_log: logPage }[page] || dash)();
   };
   function pageSize(sz) {   // ขนาดกระดาษตอนพิมพ์ (แนวนอน/แนวตั้ง) ของรายงานที่เปิดอยู่

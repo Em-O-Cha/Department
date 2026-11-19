@@ -25,6 +25,7 @@
   .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
   .chips button { border: 1.5px solid var(--line); background: #fff; border-radius: 99px; padding: 6px 12px; font: inherit; font-size: 14px; }
   .chips button.on { background: var(--c); border-color: var(--c); color: #fff; }
+  .hint { color: var(--muted); text-align: center; margin: 14px 0 4px; } .spin.dark { border-color: rgba(0,0,0,.15); border-top-color: var(--c); }
   .people { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
   .person { border: 2px solid var(--line); background: #fff; border-radius: 14px; padding: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; font: inherit; text-align: center; color: inherit; }
   .person:active { transform: scale(.98); } .person:hover { border-color: var(--c); }
@@ -72,18 +73,18 @@
       bal: 'สิทธิ์ลาคงเหลือปีนี้', left: 'เหลือ', days: 'วัน', pending: 'รออนุมัติ', type: 'ประเภทการลา', from: 'ตั้งแต่วันที่', to: 'ถึงวันที่', half: 'ลาครึ่งวัน',
       reason: 'เหตุผล', reasonPh: 'เช่น ไม่สบาย มีไข้ / ธุระที่บ้าน', file: 'รูปใบรับรองแพทย์ / เอกสาร (ถ้ามี)', cam: 'ถ่ายรูป', lib: 'เลือกรูป', send: 'ส่งคำขอลา',
       total: 'รวม', overQ: 'เกินสิทธิ์', willLeft: 'หลังอนุมัติจะเหลือ', sent: 'ส่งคำขอลาแล้ว', sentSub: 'รอฝ่ายบุคคลอนุมัติ — ดูสถานะได้ที่หน้านี้', again: 'ขอลาอีกครั้ง',
-      recent: 'คำขอล่าสุดของฉัน', none: 'ยังไม่มี', badLink: 'ลิงก์ไม่ถูกต้อง — สแกน QR ที่ฝ่ายบุคคลติดไว้อีกครั้ง', needType: 'เลือกประเภทการลา', needDate: 'เลือกวันที่',
+      recent: 'คำขอล่าสุดของฉัน', none: 'ยังไม่มี', hint: 'พิมพ์ชื่อหรือชื่อเล่นของคุณ แล้วแตะชื่อตัวเอง', notFound: 'ไม่พบชื่อนี้ — ลองพิมพ์ใหม่ (ชื่อจริงหรือชื่อเล่น)', myReq: 'คำขอที่เพิ่งส่ง', badLink: 'ลิงก์ไม่ถูกต้อง — สแกน QR ที่ฝ่ายบุคคลติดไว้อีกครั้ง', needType: 'เลือกประเภทการลา', needDate: 'เลือกวันที่',
       st: { 'รออนุมัติ': 'รออนุมัติ', 'อนุมัติ': 'อนุมัติแล้ว', 'ไม่อนุมัติ': 'ไม่อนุมัติ' },
       types: { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', maternity: 'ลาคลอด', ordain: 'ลาบวช', other: 'ลาอื่นๆ' } },
     my: { title: 'ခွင့်တောင်းရန်', sub: 'Spunky Food Co., Ltd. · HR', pick: 'သင့်နာမည်ကို ရွေးပါ', search: 'နာမည် ရှာရန်', all: 'အားလုံး', notMe: 'ကျွန်ုပ် မဟုတ်ပါ / နာမည်ပြောင်းရန်',
       bal: 'ယခုနှစ် ကျန်ရှိသော ခွင့်ရက်', left: 'ကျန်', days: 'ရက်', pending: 'အတည်ပြုရန် စောင့်ဆဲ', type: 'ခွင့်အမျိုးအစား', from: 'စတင်သည့်ရက်', to: 'ပြီးဆုံးသည့်ရက်', half: 'နေ့တစ်ဝက် ခွင့်',
       reason: 'အကြောင်းပြချက်', reasonPh: 'ဥပမာ - နေမကောင်း၊ ဖျား', file: 'ဆရာဝန်လက်မှတ် / စာရွက်စာတမ်း ဓာတ်ပုံ (ရှိလျှင်)', cam: 'ဓာတ်ပုံရိုက်', lib: 'ဓာတ်ပုံရွေး', send: 'ခွင့်တောင်းခံချက် ပို့ရန်',
       total: 'စုစုပေါင်း', overQ: 'ခွင့်ရက်ထက် ကျော်နေသည်', willLeft: 'အတည်ပြုပြီးနောက် ကျန်မည်', sent: 'ခွင့်တောင်းခံချက် ပို့ပြီးပါပြီ', sentSub: 'HR အတည်ပြုရန် စောင့်ပါ — ဤစာမျက်နှာတွင် အခြေအနေ ကြည့်နိုင်သည်', again: 'ထပ်မံ ခွင့်တောင်းရန်',
-      recent: 'ကျွန်ုပ်၏ နောက်ဆုံး ခွင့်တောင်းခံချက်များ', none: 'မရှိသေးပါ', badLink: 'လင့်ခ် မမှန်ပါ — HR ကပ်ထားသော QR ကို ပြန်စကင်ဖတ်ပါ', needType: 'ခွင့်အမျိုးအစား ရွေးပါ', needDate: 'ရက်စွဲ ရွေးပါ',
+      recent: 'ကျွန်ုပ်၏ နောက်ဆုံး ခွင့်တောင်းခံချက်များ', none: 'မရှိသေးပါ', hint: 'သင့်နာမည် (သို့) အမည်ပြောင်ကို ရိုက်ပြီး သင့်နာမည်ကို နှိပ်ပါ', notFound: 'ဤနာမည် မတွေ့ပါ — ထပ်ရိုက်ကြည့်ပါ', myReq: 'ယခုပို့လိုက်သော ခွင့်တောင်းခံချက်', badLink: 'လင့်ခ် မမှန်ပါ — HR ကပ်ထားသော QR ကို ပြန်စကင်ဖတ်ပါ', needType: 'ခွင့်အမျိုးအစား ရွေးပါ', needDate: 'ရက်စွဲ ရွေးပါ',
       st: { 'รออนุมัติ': 'စောင့်ဆဲ', 'อนุมัติ': 'ခွင့်ပြုပြီး', 'ไม่อนุมัติ': 'ခွင့်မပြုပါ' },
       types: { sick: 'ဖျားနာခွင့်', personal: 'ကိစ္စခွင့်', vacation: 'နှစ်စဉ်ခွင့်', maternity: 'မီးဖွားခွင့်', ordain: 'ရဟန်းခံခွင့်', other: 'အခြားခွင့်' } }
   };
-  var S = { lang: get('lang') || 'th', data: null, photos: {}, me: get('me') || '', bal: null, f: { type: '', from: '', to: '', half: false, reason: '', files: [] }, grp: '' };
+  var S = { lang: get('lang') || 'th', data: null, photos: {}, me: get('me') || '', emp: null, found: null, bal: null, f: { type: '', from: '', to: '', half: false, reason: '', files: [] }, grp: '' };
   function get(k) { try { return localStorage.getItem('leave_' + k) || ''; } catch (e) { return ''; } }
   function set(k, v) { try { localStorage.setItem('leave_' + k, v); } catch (e) {} }
   function t(k) { return TX[S.lang][k]; }
@@ -95,8 +96,8 @@
       .then(function (r) { return r.json(); }).then(function (r) { if (!r.ok) throw new Error(r.err || 'error'); return r.val; });
   }
   function dmy(iso) { if (!iso) return ''; var p = iso.split('-'); return +p[2] + '/' + +p[1] + '/' + (+p[0] + 543); }
-  function ph(e, cls) { var src = S.photos[e.id]; return src ? '<img class="ph ' + (cls || '') + '" src="' + src + '" alt="">' : '<span class="ph ' + (cls || '') + '">' + esc(String(e.nick || e.name).replace(/^(นาย|นางสาว|นาง|MISS\.?|MR\.?|MRS\.?)\s*/i, '').slice(0, 1)) + '</span>'; }
-  function me() { return S.data && S.data.emps.filter(function (e) { return e.id === S.me; })[0]; }
+  function ph(e, cls) { var src = e.photo || S.photos[e.id]; return src ? '<img class="ph ' + (cls || '') + '" src="' + src + '" alt="">' : '<span class="ph ' + (cls || '') + '">' + esc(String(e.nick || e.name).replace(/^(นาย|นางสาว|นาง|MISS\.?|MR\.?|MRS\.?)\s*/i, '').slice(0, 1)) + '</span>'; }
+  function me() { return S.emp; }
   function texts() {
     document.body.classList.toggle('my', S.lang === 'my'); document.documentElement.lang = S.lang === 'my' ? 'my' : 'th';
     Array.prototype.forEach.call(document.querySelectorAll('[data-t]'), function (el) { el.textContent = t(el.getAttribute('data-t')); });
@@ -104,22 +105,53 @@
   }
   Array.prototype.forEach.call(document.querySelectorAll('[data-lang]'), function (b) { b.addEventListener('click', function () { S.lang = b.getAttribute('data-lang'); set('lang', S.lang); texts(); render(); }); });
 
-  function render() { if (!S.data) return; if (S.done) return doneView(); if (!me()) return pickView(); formView(); }
+  function render() {
+    if (!S.data) return;
+    if (S.done) return doneView();
+    if (S.me && !S.emp) return loadMe();
+    if (!S.emp) return pickView();
+    formView();
+  }
+  // ชื่อที่จำไว้ในเครื่อง: ดึงข้อมูลคนนี้คนเดียว (ไม่โหลดรายชื่อทุกคน)
+  function loadMe() {
+    $('app').innerHTML = '<div class="msg"><span class="spin"></span></div>';
+    call('hrFormBalance', KEY, S.me).then(function (r) {
+      if (!r.ok || !r.emp) { S.me = ''; set('me', ''); S.emp = null; render(); return; }
+      S.emp = r.emp; S.bal = r; render();
+    }).catch(function (e) { $('app').innerHTML = '<div class="msg">' + esc(e.message) + '</div>'; });
+  }
+  // เลือกชื่อ: พิมพ์ก่อนแล้วค่อยขึ้น (ไม่แสดงรายชื่อทุกคน) — ค้นที่เซิร์ฟเวอร์
   function pickView() {
-    var q = String(S.q || '').toLowerCase(), grps = S.data.emps.map(function (e) { return e.building || e.group; }).filter(function (x, i, a) { return x && a.indexOf(x) === i; });
-    var list = S.data.emps.filter(function (e) { return (!S.grp || (e.building || e.group) === S.grp) && (!q || (e.name + ' ' + e.nick).toLowerCase().indexOf(q) >= 0); });
-    $('app').innerHTML = '<div class="card"><h2>' + t('pick') + '</h2><input class="search" id="q" type="search" placeholder="' + esc(t('search')) + '" value="' + esc(S.q || '') + '">'
-      + '<div class="chips"><button data-g=""' + (S.grp ? '' : ' class="on"') + '>' + t('all') + '</button>' + grps.map(function (g) { return '<button data-g="' + esc(g) + '"' + (S.grp === g ? ' class="on"' : '') + '>' + esc(g) + '</button>'; }).join('') + '</div>'
-      + '<div class="people">' + list.map(function (e) { return '<button class="person" data-id="' + e.id + '">' + ph(e) + '<b>' + esc(e.nick || e.name) + '</b><small>' + esc(e.nick ? e.name : (e.position || '')) + '</small></button>'; }).join('') + '</div></div>';
-    $('q').addEventListener('input', function () { S.q = $('q').value; clearTimeout(S.qt); S.qt = setTimeout(function () { pickView(); var i = $('q'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }, 200); });
-    Array.prototype.forEach.call(document.querySelectorAll('[data-g]'), function (b) { b.addEventListener('click', function () { S.grp = b.getAttribute('data-g'); pickView(); }); });
-    Array.prototype.forEach.call(document.querySelectorAll('[data-id]'), function (b) { b.addEventListener('click', function () { S.me = b.getAttribute('data-id'); set('me', S.me); S.bal = null; render(); window.scrollTo(0, 0); }); });
+    $('app').innerHTML = '<div class="card"><h2>' + t('pick') + '</h2><input class="search" id="q" type="search" autocomplete="off" placeholder="' + esc(t('search')) + '" value="' + esc(S.q || '') + '">'
+      + '<div id="res"></div></div>';
+    var inp = $('q');
+    inp.addEventListener('input', function () { S.q = inp.value; clearTimeout(S.qt); S.qt = setTimeout(find, 350); showRes(); });
+    showRes(); if (S.q && !S.found) find();
+  }
+  function find() {
+    var q = String(S.q || '').trim();
+    if (!q) { S.found = null; return showRes(); }
+    var seq = S.fseq = (S.fseq || 0) + 1;
+    call('hrFormFind', KEY, q).then(function (r) { if (seq !== S.fseq) return; S.found = { q: q, emps: r.emps || [] }; showRes(); })
+      .catch(function (e) { if (seq === S.fseq && $('res')) $('res').innerHTML = '<p class="hint">' + esc(e.message) + '</p>'; });
+  }
+  function showRes() {
+    var box = $('res'); if (!box) return;
+    var q = String(S.q || '').trim();
+    if (!q) { box.innerHTML = '<p class="hint">' + t('hint') + '</p>'; return; }
+    if (!S.found || S.found.q !== q) { box.innerHTML = '<p class="hint"><span class="spin dark"></span></p>'; return; }
+    if (!S.found.emps.length) { box.innerHTML = '<p class="hint">' + t('notFound') + '</p>'; return; }
+    box.innerHTML = '<div class="people">' + S.found.emps.map(function (e, i) { return '<button class="person" data-i="' + i + '">' + ph(e) + '<b>' + esc(e.nick || e.name) + '</b><small>' + esc(e.nick ? e.name : (e.position || '')) + '</small></button>'; }).join('') + '</div>';
+    Array.prototype.forEach.call(box.querySelectorAll('[data-i]'), function (b) { b.addEventListener('click', function () {
+      var e = S.found.emps[+b.getAttribute('data-i')];
+      S.me = e.id; S.emp = e; set('me', S.me); S.bal = null; S.q = ''; S.found = null; render(); window.scrollTo(0, 0);
+    }); });
   }
   function workDays(f, to) { var n = 0, d = new Date(f + 'T00:00:00'), e = new Date(to + 'T00:00:00'); while (d <= e) { var w = d.getDay(); if (w !== 0 && !(S.data.workDays === 'จ-ศ' && w === 6)) n++; d.setDate(d.getDate() + 1); } return n; }
   function formView() {
     var e = me(), F = S.f, today = S.data.today;
     if (!F.from) { F.from = today; F.to = today; }
-    if (!S.bal) { S.bal = 'loading'; call('hrFormBalance', KEY, e.id).then(function (r) { S.bal = r.ok ? r : null; if (!S.done) formView(); }).catch(function () { S.bal = null; }); }
+    if (!S.bal) { S.bal = 'loading'; call('hrFormBalance', KEY, e.id).then(function (r) { S.bal = r.ok ? r : null; if (r.emp) S.emp = r.emp; if (!S.done) formView(); }).catch(function () { S.bal = null; }); }
     var B = S.bal && S.bal.balance;
     var n = F.half && F.from === F.to ? 0.5 : (F.from && F.to && F.to >= F.from ? workDays(F.from, F.to) : 0);
     var sum = '';
@@ -128,7 +160,7 @@
       sum = '<div class="sum' + (after != null && after < 0 ? ' bad' : '') + '">' + t('total') + ' <b>' + n + '</b> ' + t('days') + (after != null ? ' · ' + (after < 0 ? t('overQ') + ' <b>' + (-after) + '</b> ' + t('days') : t('willLeft') + ' <b>' + after + '</b> ' + t('days')) : '') + '</div>';
     }
     $('app').innerHTML = '<div class="card"><div class="me">' + ph(e) + '<div><b>' + esc(e.name) + '</b><small>' + esc([e.nick, e.position].filter(String).join(' · ')) + '</small><button class="link" id="notMe">' + t('notMe') + '</button></div></div>'
-      + '<div class="bal">' + ['sick', 'personal', 'vacation'].map(function (k) { var b = B && B[k]; return '<div><span>' + t('types')[k] + '</span><b>' + (b && b.quota != null ? b.left : (S.bal === 'loading' ? '…' : '–')) + '</b><small>' + t('left') + ' (' + t('days') + ')' + (b && b.pending ? ' · ' + t('pending') + ' ' + b.pending : '') + '</small></div>'; }).join('') + '</div></div>'
+      + balHtml() + '</div>'
       + '<div class="card"><h2>' + t('type') + '</h2><div class="types">' + ['sick', 'personal', 'vacation', 'maternity', 'ordain', 'other'].map(function (k) { return '<button data-type="' + k + '"' + (F.type === k ? ' class="on"' : '') + '>' + t('types')[k] + '</button>'; }).join('') + '</div>'
       + '<div class="row2"><div><label>' + t('from') + '</label><input type="date" id="fFrom" value="' + F.from + '"></div><div><label>' + t('to') + '</label><input type="date" id="fTo" value="' + F.to + '" min="' + F.from + '"></div></div>'
       + (F.from === F.to ? '<label class="half"><input type="checkbox" id="fHalf"' + (F.half ? ' checked' : '') + '> ' + t('half') + '</label>' : '')
@@ -136,7 +168,7 @@
       + '<label>' + t('file') + '</label><div class="files">' + F.files.map(function (x, i) { return '<img src="' + x.url + '" data-rm="' + i + '" alt="">'; }).join('') + (F.files.length < 3 ? '<button class="fbtn" data-pick="cam">📷<br>' + t('cam') + '</button><button class="fbtn" data-pick="lib">🖼️<br>' + t('lib') + '</button>' : '') + '</div>'
       + sum + '<div class="err" id="err"></div><button class="send" id="send">' + t('send') + '</button></div>'
       + recentHtml();
-    $('notMe').addEventListener('click', function () { S.me = ''; set('me', ''); S.bal = null; render(); });
+    $('notMe').addEventListener('click', function () { S.me = ''; S.emp = null; set('me', ''); S.bal = null; S.q = ''; S.found = null; render(); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-type]'), function (b) { b.addEventListener('click', function () { F.type = b.getAttribute('data-type'); formView(); }); });
     $('fFrom').addEventListener('change', function () { F.from = $('fFrom').value; if (!F.to || F.to < F.from) F.to = F.from; formView(); });
     $('fTo').addEventListener('change', function () { F.to = $('fTo').value; formView(); });
@@ -145,6 +177,10 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-pick]'), function (b) { b.addEventListener('click', function () { pick(b.getAttribute('data-pick') === 'cam'); }); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-rm]'), function (im) { im.addEventListener('click', function () { F.files.splice(+im.getAttribute('data-rm'), 1); formView(); }); });
     $('send').addEventListener('click', submit);
+  }
+  function balHtml() {
+    var B = S.bal && S.bal.balance;
+    return '<div class="bal">' + ['sick', 'personal', 'vacation'].map(function (k) { var b = B && B[k]; return '<div><span>' + t('types')[k] + '</span><b>' + (b && b.quota != null ? b.left : (S.bal === 'loading' ? '…' : '–')) + '</b><small>' + t('left') + ' (' + t('days') + ')' + (b && b.pending ? ' · ' + t('pending') + ' ' + b.pending : '') + '</small></div>'; }).join('') + '</div>';
   }
   function recentHtml() {
     var r = S.bal && S.bal.recent; if (!r) return '';
@@ -179,19 +215,29 @@
     call('hrFormSubmit', KEY, { empId: S.me, type: F.type, dateFrom: F.from, dateTo: F.to || F.from, half: F.half && F.from === F.to, reason: F.reason }).then(function (r) {
       var i = 0;
       function next() { if (i >= F.files.length) return Promise.resolve(); var x = F.files[i++]; return call('hrFormUpload', KEY, r.id, r.sig, x.name, x.mime, x.b64).catch(function () {}).then(next); }
-      return next().then(function () { S.done = { days: r.days }; S.f = { type: '', from: '', to: '', half: false, reason: '', files: [] }; S.bal = null; render(); window.scrollTo(0, 0); });
+      return next().then(function () {
+        S.done = { days: r.days, type: F.type, from: F.from, to: F.to || F.from, reason: F.reason };
+        S.f = { type: '', from: '', to: '', half: false, reason: '', files: [] }; S.bal = 'loading'; render(); window.scrollTo(0, 0);
+        // ดึงสิทธิ์คงเหลือ + คำขอล่าสุดทันที (ไม่ต้องรีเฟรชหน้า)
+        call('hrFormBalance', KEY, S.me).then(function (b) { S.bal = b.ok ? b : null; render(); }).catch(function () { S.bal = null; render(); });
+      });
     }).catch(function (e) { btn.disabled = false; btn.textContent = t('send'); err.textContent = e.message; });
   }
   function doneView() {
-    $('app').innerHTML = '<div class="card done"><div class="big">✅</div><b>' + t('sent') + '</b><p>' + t('sentSub') + '</p><button class="send" id="again">' + t('again') + '</button></div>';
-    $('again').addEventListener('click', function () { S.done = null; render(); });
+    var d = S.done, e = me();
+    $('app').innerHTML = '<div class="card done"><div class="big">✅</div><b>' + t('sent') + '</b><p>' + t('sentSub') + '</p></div>'
+      + '<div class="card"><h2>' + t('myReq') + '</h2>' + (e ? '<div class="me">' + ph(e) + '<div><b>' + esc(e.name) + '</b><small>' + esc([e.nick, e.position].filter(String).join(' · ')) + '</small></div></div>' : '')
+      + '<div class="recent"><div><span>' + esc(t('types')[d.type] || d.type) + ' · ' + dmy(d.from) + (d.to && d.to !== d.from ? '–' + dmy(d.to) : '') + ' (' + d.days + ' ' + t('days') + ')' + (d.reason ? '<br><small>' + esc(d.reason) + '</small>' : '') + '</span><span class="st wait">' + esc(t('st')['รออนุมัติ']) + '</span></div></div>'
+      + '<h2 style="margin-top:14px">' + t('bal') + '</h2>' + balHtml() + '</div>'
+      + recentHtml()
+      + '<button class="send" id="again">' + t('again') + '</button>';
+    $('again').addEventListener('click', function () { S.done = null; render(); window.scrollTo(0, 0); });
   }
 
   texts();
   if (!KEY) { $('app').innerHTML = '<div class="msg">' + t('badLink') + '</div>'; return; }
   call('hrFormInit', KEY).then(function (d) {
     S.data = d; render();
-    call('hrFormPhotos', KEY).then(function (p) { S.photos = p.photos || {}; render(); }).catch(function () {});
   }).catch(function (e) { $('app').innerHTML = '<div class="msg">' + esc(e.message) + '</div>'; });
 })();
 </script>
