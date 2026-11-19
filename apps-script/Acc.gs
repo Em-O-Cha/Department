@@ -680,6 +680,7 @@ function accLineWebhook_(events) {
       if (ev.type === 'leave' && gid) {
         var pp = props_();
         if (gid === pp.getProperty('ACC_LINE_GROUP')) pp.deleteProperty('ACC_LINE_GROUP');
+        if (gid === pp.getProperty('HR_DAILY_GROUP')) pp.deleteProperty('HR_DAILY_GROUP');
         if (gid === pp.getProperty('PROD_LINE_GROUP') && pp.getProperty('PROD_LINE_TOKEN') === pp.getProperty('ACC_LINE_TOKEN')) pp.deleteProperty('PROD_LINE_GROUP');
         accDiagLog_({ ev: 'leave', group: true, result: 'บอทออกจากกลุ่ม' });
         return;
