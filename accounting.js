@@ -16,7 +16,8 @@
   });
 
   var MENUS = [
-    { id: 'a_dash', label: 'Dashboard ออเดอร์ 7-11', ic: 'chart' },
+    { id: 'a_dash', label: 'Dashboard ฝ่ายบัญชี', ic: 'chart' },
+    { id: 'a_mon', label: 'รายงานสรุปรายเดือน (ทุกบริษัท)', ic: 'table' },
     { group: 'ออเดอร์ 7-11' },
     { id: 'a_imp', label: 'นำเข้าไฟล์ออเดอร์ 7-11', ic: 'upload' },
     { id: 'a_hist', label: 'รายงาน / ประวัติการนำเข้า 7-11', ic: 'table' },
@@ -77,8 +78,9 @@
       });
       return;
     }
-    if (page !== 'a_dash') H.cmp = null;   // กลับมาหน้า Dashboard = คำนวณเปรียบเทียบใหม่ (อาจมีออเดอร์ใหม่)
-    ({ a_imp: importPage, a_hist: histPage, a_dash: dash, a_set: settings, a_cp: function () { window.ACCCP.importPage(); }, a_cpl: function () { window.ACCCP.listPage(); }, a_ex: function () { window.ACCEX.importPage(); }, a_exl: function () { window.ACCEX.listPage(); } }[page] || importPage)();
+    if (page !== 'a_dash') H.cmp = null;
+    if (page !== 'a_mon') H.mon = null;   // กลับมาหน้า Dashboard = คำนวณเปรียบเทียบใหม่ (อาจมีออเดอร์ใหม่)
+    ({ a_imp: importPage, a_hist: histPage, a_dash: dash, a_mon: monthly, a_set: settings, a_cp: function () { window.ACCCP.importPage(); }, a_cpl: function () { window.ACCCP.listPage(); }, a_ex: function () { window.ACCEX.importPage(); }, a_exl: function () { window.ACCEX.listPage(); } }[page] || importPage)();
   };
 
   // ==================== ตาราง "ต้นแบบรับออเดอร์ 7-11" ====================
@@ -515,7 +517,7 @@
   function monthTh(ym) { if (!ym) return '-'; var p = ym.split('-'); return MONTHS[+p[1] - 1] + ' ' + String(+p[0] + 543).slice(2); }
   function cmpRender() {
     var box = $('cmpOut'); if (!box || !H.cmp) return;
-    var cs = H.cmp.companies.filter(function (c) { return c.error || c.count; });
+    var cs = (H.cmp.companies || []).filter(function (c) { return c.error || c.count; });
     if (!cs.length) { box.innerHTML = '<p class="muted">ยังไม่มีข้อมูลออเดอร์</p>'; return; }
     if (!H.cmpSel || !cs.some(function (c) { return c.key === H.cmpSel; })) H.cmpSel = cs[0].key;
     var c = cs.filter(function (x) { return x.key === H.cmpSel; })[0];
@@ -545,6 +547,65 @@
         + '<h5 class="cmh">เดือนล่าสุด เทียบเดือนก่อน</h5>' + table('m', 'เดือนก่อน<small>' + monthTh(c.month.prev) + '</small>', 'เดือนล่าสุด<small>' + monthTh(c.month.last) + '</small>'));
     on('[data-cmp]', 'click', function (el) { H.cmpSel = el.getAttribute('data-cmp'); cmpRender(); }, box);
     $('cmpRe').addEventListener('click', function () { box.innerHTML = '<span class="spinner dark"></span> กำลังคำนวณ…'; cmpLoad(true); });
+  }
+  // ---------- รายงานสรุปรายเดือน ทุกบริษัท (accMonthly ใน AccCompare.gs) ----------
+  function monthly() {
+    if (!H.mon) {
+      $('main').innerHTML = '<h3>รายงานสรุปรายเดือน (ทุกบริษัท)</h3><div class="panel"><span class="spinner dark"></span> กำลังสรุป…</div>';
+      call('accMonthly', state.token).then(function (r) { if (!r.ok) throw new Error(r.error); H.mon = r; if (state.page === 'a_mon') monthly(); }).catch(onServerError);
+      return;
+    }
+    var r = H.mon, cs = (r.companies || []).filter(function (c) { return c.error || Object.keys(c.months || {}).length; });
+    var all = {}; cs.forEach(function (c) { Object.keys(c.months || {}).forEach(function (k) { all[k] = 1; }); });
+    var yms = Object.keys(all).sort(), years = []; yms.forEach(function (k) { var y = k.slice(0, 4); if (years.indexOf(y) < 0) years.push(y); });
+    if (!H.monY || (H.monY !== 'all' && years.indexOf(H.monY) < 0)) H.monY = years.indexOf(r.today.slice(0, 4)) >= 0 ? r.today.slice(0, 4) : (years[years.length - 1] || 'all');
+    var Y = H.monY, list = Y === 'all' ? yms : ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map(function (m) { return Y + '-' + m; });
+    var cur = r.today.slice(0, 7);
+    var mny = function (c, v) { var n = Number(v || 0); return c.currency === 'บาท' ? '฿' + n.toLocaleString('th-TH', { maximumFractionDigits: 0 }) : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+    var qn = function (c, v) { return Number(v || 0).toLocaleString('th-TH', { maximumFractionDigits: 2 }) + (c.unit ? ' ' + c.unit : ''); };
+    var cell = function (c, q, a, extra) { return (q || a) ? '<b>' + qn(c, q) + '</b><small>' + mny(c, a) + (extra || '') + '</small>' : '<span class="muted">–</span>'; };
+    var cname = function (c) { return esc(c.name) + (c.currency !== 'บาท' && c.currency ? ' <small>(' + esc(c.currency) + ')</small>' : ''); };
+    var ok = cs.filter(function (c) { return !c.error; }), thb = ok.filter(function (c) { return c.currency === 'บาท'; });
+    // ตาราง 1: เดือน × บริษัท
+    var tot = {}; ok.forEach(function (c) { tot[c.key] = [0, 0, 0]; }); var gt = [0, 0];
+    var rows = list.map(function (ym) {
+      var tq = 0, ta = 0, fut = ym > cur;
+      var tds = ok.map(function (c) {
+        var x = c.months[ym]; if (!x) return '<td><span class="muted">–</span></td>';
+        tot[c.key][0] += x.qty; tot[c.key][1] += x.amt; tot[c.key][2] += x.docs;
+        if (c.currency === 'บาท') { tq += x.qty; ta += x.amt; }
+        return '<td>' + cell(c, x.qty, x.amt, ' · ' + x.docs + (c.export ? ' ใบ' : ' PO')) + (fut && c.future ? '<em class="mfut">ตามกำหนดส่ง</em>' : '') + '</td>';
+      }).join('');
+      gt[0] += tq; gt[1] += ta;
+      return '<tr><td class="cmn"><b>' + monthTh(ym) + '</b></td>' + tds + '<td class="mtot">' + (ta || tq ? '<b>' + n0(tq) + ' ลัง</b><small>' + baht(ta) + '</small>' : '<span class="muted">–</span>') + '</td></tr>';
+    }).join('');
+    var t1 = '<div class="cpwrap"><table class="cptab cmtab mtab"><thead><tr><th>เดือน</th>' + ok.map(function (c) { return '<th>' + cname(c) + '</th>'; }).join('') + '<th>รวม (บาท)</th></tr></thead><tbody>' + rows + '</tbody>'
+      + '<tfoot><tr class="cmt"><td class="cmn">รวม' + (Y === 'all' ? 'ทั้งหมด' : 'ปี ' + (+Y + 543)) + '</td>' + ok.map(function (c) { return '<td>' + cell(c, tot[c.key][0], tot[c.key][1], ' · ' + tot[c.key][2] + (c.export ? ' ใบ' : ' PO')) + '</td>'; }).join('')
+      + '<td class="mtot"><b>' + n0(gt[0]) + ' ลัง</b><small>' + baht(gt[1]) + '</small></td></tr></tfoot></table></div>';
+    // ตาราง 2: แต่ละบริษัท สินค้า × เดือน
+    var per = ok.map(function (c) {
+      var ms = list.filter(function (ym) { return c.months[ym]; });
+      if (!ms.length) return '';
+      var body = c.products.filter(function (p) { return ms.some(function (ym) { return p.m[ym]; }); }).map(function (p) {
+        var sq = 0, sa = 0;
+        return '<tr><td class="cmn">' + (p.color ? '<i class="a7sw" style="background:' + p.color + '"></i>' : '') + esc(p.name) + '</td>' + ms.map(function (ym) { var x = p.m[ym]; if (!x) return '<td><span class="muted">–</span></td>'; sq += x[0]; sa += x[1]; return '<td>' + cell(c, x[0], x[1]) + '</td>'; }).join('')
+          + '<td class="mtot">' + cell(c, sq, sa) + '</td></tr>';
+      }).join('');
+      var ft = ms.map(function (ym) { return '<td>' + cell(c, c.months[ym].qty, c.months[ym].amt) + '</td>'; }).join(''), fq = 0, fa = 0;
+      ms.forEach(function (ym) { fq += c.months[ym].qty; fa += c.months[ym].amt; });
+      return '<div class="panel pbox"><h4>' + icon('table', 18) + ' ' + cname(c) + '</h4><p class="muted cmnote">นับ' + esc(c.basis) + ' · ' + esc(c.note) + '</p>'
+        + '<div class="cpwrap"><table class="cptab cmtab mtab"><thead><tr><th>สินค้า</th>' + ms.map(function (ym) { return '<th>' + monthTh(ym) + (ym > cur && c.future ? '<small>ตามกำหนดส่ง</small>' : '') + '</th>'; }).join('') + '<th>รวม</th></tr></thead><tbody>' + body + '</tbody>'
+        + '<tfoot><tr class="cmt"><td class="cmn">รวม</td>' + ft + '<td class="mtot">' + cell(c, fq, fa) + '</td></tr></tfoot></table></div></div>';
+    }).join('');
+    $('main').innerHTML = '<h3>รายงานสรุปรายเดือน (ทุกบริษัท)</h3><p class="lead">ยอดสั่งซื้อทุกเดือนของแต่ละบริษัท · จำนวน / ยอดเงิน (ไม่รวม VAT) / จำนวนใบสั่ง · ไม่นับรายการที่ยกเลิก</p>'
+      + '<div class="pchips cmchips noprint">' + years.map(function (y) { return '<button class="chip' + (Y === y ? ' on' : '') + '" data-my="' + y + '">ปี ' + (+y + 543) + '</button>'; }).join('')
+      + '<button class="chip' + (Y === 'all' ? ' on' : '') + '" data-my="all">ทั้งหมด</button><button class="btn btn-sm btn-line" id="monRe">↻ คำนวณใหม่</button></div>'
+      + cs.filter(function (c) { return c.error; }).map(function (c) { return '<div class="a7msg bad">' + esc(c.name) + ': ' + esc(c.error) + '</div>'; }).join('')
+      + (ok.length ? '<div class="panel pbox"><h4>' + icon('chart', 18) + ' ภาพรวมทุกบริษัท ' + (Y === 'all' ? '(ทุกเดือน)' : 'ปี ' + (+Y + 543)) + '</h4>'
+        + '<p class="muted cmnote">CP ALL นับตามวันที่สั่ง · CP Ram ตามวันส่งสินค้า (เดือนหลังจากนี้ = ตามกำหนดส่ง) · ต่างประเทศตามวันที่ Invoice · ช่อง "รวม (บาท)" รวมเฉพาะบริษัทที่เป็นเงินบาท</p>' + t1 + '</div>' + per
+        : '<div class="panel pbox muted">ยังไม่มีข้อมูลออเดอร์</div>');
+    on('[data-my]', 'click', function (el) { H.monY = el.getAttribute('data-my'); monthly(); }, $('main'));
+    $('monRe').addEventListener('click', function () { H.mon = null; monthly(); });
   }
   // ใช้ร่วมกับหน้า Dashboard ผู้บริหาร (executive.js) — ข้อมูลจาก accDashboard_
   H.dashHtml = function (r, interactive) {
@@ -742,6 +803,7 @@
     '.a7fix{margin-top:12px;border-color:#fca5a5}.a7fix p{margin:0 0 6px}.a7fixrow{display:grid;grid-template-columns:1fr minmax(180px,260px);gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--line);font-size:14px}.a7fixrow small{color:var(--muted)}',
     '.a7fixrow select,.a7filter select,.a7lb input{padding:8px 10px;border:1.5px solid var(--line);border-radius:9px;font:inherit;font-size:14px;background:#fff}.a7lb{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);margin:0}',
     '.a7cmp{margin-bottom:18px}.a7h4{display:flex;gap:6px;align-items:center;margin:6px 0 8px}.cmchips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.cmchips #cmpRe{margin-left:auto}',
+    '.cptab.mtab{min-width:0}.mtab td{min-width:92px}.mtab td.mtot{background:#f8fafc}.mtab .cmt td.mtot{background:#fde68a}.mfut{display:block;font-style:normal;font-size:11px;color:#c2410c;margin-top:2px}.mtab th small{color:#475569}',
     '.cptab.cmtab{min-width:0}.cmnote{font-size:12.5px;margin:6px 0 0}.cmh{margin:14px 0 6px;font-size:14.5px}.cmtab th small{display:block;font-weight:400;font-size:12px}.cmtab td{vertical-align:top}.cmtab td b,.cmtab td small{display:block;white-space:nowrap}.cmtab td small{color:var(--muted);font-size:12.5px;margin-top:2px}',
     '@media (max-width:700px){.cptab.cmtab{font-size:12.5px}.cmtab th,.cmtab td{padding:6px 4px}.cmtab th{white-space:normal}.cmtab td.cmn{min-width:0!important;max-width:96px;font-size:12px}.cmtab td small{font-size:11px}.a7cmp .cpwrap{overflow-x:auto}}',
     '.cmtab td.cmn{text-align:left;white-space:normal;min-width:130px}.cmtab .cmt td{background:#fef9c3;font-weight:700}.cmu{color:#15803d}.cmd{color:#dc2626}.cmz{color:var(--muted)}.cmtab td small .cmu,.cmtab td small .cmd{color:inherit}.cmtab td small .cmu{color:#15803d}.cmtab td small .cmd{color:#dc2626}',

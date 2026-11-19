@@ -6,37 +6,68 @@
 //   ต่างประเทศ (แยกลูกค้า) → ครั้ง = วันที่ Invoice · ไม่นับที่ยกเลิก · สกุลเงินตาม Invoice
 // เดือนล่าสุด = เดือนล่าสุดที่มีข้อมูล (ไม่เกินเดือนนี้) · เดือนก่อน = เดือนปฏิทินก่อนหน้า (ไม่มีข้อมูล = 0)
 
-function accCompare(token) {
-  var dept = requireAcc_(token); accRegister_();
-  var ss = purBook_(dept), map = accMap_(ss), today = purToday_(), out = [];
+// ข้อมูลรายการสั่งซื้อของทุกบริษัท (ใช้ร่วมกัน: เปรียบเทียบใน Dashboard + รายงานสรุปรายเดือน)
+function accSources_(dept) {
+  accRegister_();
+  var ss = purBook_(dept), map = accMap_(ss), out = [];
   var pn = {}, pc = {};
   map.products.forEach(function (p) { pn[p.key] = (p.l1 || '') + (p.l2 ? ' ' + p.l2 : ''); pc[p.key] = p.color || ''; });
   var l711 = purRead_(ss, 'acc_711').map(function (l) {
-    return { date: String(l.poDate || '').slice(0, 10), name: pn[l.product] || l.itemName || l.product || '-', color: pc[l.product] || '', qty: Number(l.cases) || 0, amt: Number(l.amount) || 0 };
+    return { date: String(l.poDate || '').slice(0, 10), name: pn[l.product] || l.itemName || l.product || '-', color: pc[l.product] || '', qty: Number(l.cases) || 0, amt: Number(l.amount) || 0, doc: String(l.poNo || '') };
   });
-  out.push(accCmp_({ key: 'cpall', name: 'CP ALL (7-Eleven)', unit: 'ลัง', currency: 'บาท', basis: 'ตามวันที่สั่ง', note: 'ยอดเงินไม่รวม VAT' }, l711, today, false));
+  out.push({ meta: { key: 'cpall', name: 'CP ALL (7-Eleven)', unit: 'ลัง', currency: 'บาท', basis: 'ตามวันที่สั่ง', note: 'ยอดเงินไม่รวม VAT', order: map.products.map(function (p) { return pn[p.key]; }) }, rows: l711, capToday: false });
   try {
     cpRegister_();
     var cs = cpBook_(ss);
     if (cs) {
       var cp = purRead_(cs, 'cp_lines').filter(function (l) { return l.status !== 'cancel'; }).map(function (l) {
-        return { date: String(l.deliveryDate || '').slice(0, 10), name: l.product || ('รหัส ' + String(l.itemCode || '').replace(/^'/, '')), color: '', qty: Number(l.qty) || 0, amt: Number(l.amount) || 0 };
+        return { date: String(l.deliveryDate || '').slice(0, 10), name: l.product || ('รหัส ' + String(l.itemCode || '').replace(/^'/, '')), color: '', qty: Number(l.qty) || 0, amt: Number(l.amount) || 0, doc: String(l.poNo || '').replace(/^'/, '') };
       });
-      out.push(accCmp_({ key: 'cpram', name: 'CP Ram', unit: 'ลัง', currency: 'บาท', basis: 'ตามวันส่งสินค้า (ครั้ง = วันส่งล่าสุดถึงวันนี้ · เดือน = ทั้งเดือนตามตารางส่ง)', note: 'ยอดเงินไม่รวม VAT · ไม่นับรายการที่ยกเลิก' }, cp, today, true));
+      out.push({ meta: { key: 'cpram', name: 'CP Ram', unit: 'ลัง', currency: 'บาท', basis: 'ตามวันส่งสินค้า (ครั้ง = วันส่งล่าสุดถึงวันนี้ · เดือน = ทั้งเดือนตามตารางส่ง)', note: 'ยอดเงินไม่รวม VAT · ไม่นับรายการที่ยกเลิก' }, rows: cp, capToday: true });
     }
-  } catch (e) { out.push({ key: 'cpram', name: 'CP Ram', error: 'เปิดชีต CP Ram ไม่ได้' }); }
+  } catch (e) { out.push({ meta: { key: 'cpram', name: 'CP Ram' }, error: 'เปิดชีต CP Ram ไม่ได้' }); }
   try {
     exRegister_();
     var by = {};
     exOrders_(ss).filter(function (o) { return o.status !== 'cancel'; }).forEach(function (o) {
       var c = String(o.customer || 'ไม่ระบุลูกค้า').trim(), g = by[c] = by[c] || { rows: [], cur: o.currency || 'USD' };
-      (o.items || []).forEach(function (it) { g.rows.push({ date: String(o.issueDate || '').slice(0, 10), name: it.name || it.code || '-', color: '', qty: Number(it.qty) || 0, amt: Number(it.amount) || 0 }); });
+      (o.items || []).forEach(function (it) { g.rows.push({ date: String(o.issueDate || '').slice(0, 10), name: it.name || it.code || '-', color: '', qty: Number(it.qty) || 0, amt: Number(it.amount) || 0, doc: String(o.invNo || '') }); });
     });
     Object.keys(by).sort().forEach(function (c, i) {
-      out.push(accCmp_({ key: 'ex' + i, name: c, unit: '', currency: by[c].cur, basis: 'ตามวันที่ Invoice', note: 'ออเดอร์ต่างประเทศ · ไม่นับที่ยกเลิก', export: true }, by[c].rows, today, false));
+      out.push({ meta: { key: 'ex' + i, name: c, unit: '', currency: by[c].cur, basis: 'ตามวันที่ Invoice', note: 'ออเดอร์ต่างประเทศ · ไม่นับที่ยกเลิก', export: true }, rows: by[c].rows, capToday: false });
     });
   } catch (e) {}
-  return { ok: true, today: today, companies: out };
+  return out;
+}
+function accCompare(token) {
+  var dept = requireAcc_(token), today = purToday_();
+  return { ok: true, today: today, companies: accSources_(dept).map(function (s) {
+    return s.error ? { key: s.meta.key, name: s.meta.name, error: s.error } : accCmp_(s.meta, s.rows, today, s.capToday);
+  }) };
+}
+// รายงานสรุปรายเดือน ทุกบริษัท (ผู้ใช้ขอ 19/11/69): ทุกเดือนที่มีข้อมูล · ต่อบริษัท: จำนวน / ยอดเงิน / จำนวนเอกสาร ต่อเดือน + แยกสินค้า
+// CP Ram นับตามวันส่ง (รวมวันส่งที่กำหนดไว้ในอนาคต → หน้าเว็บแสดงว่าเป็นยอดตามกำหนดส่ง)
+function accMonthly(token) {
+  var dept = requireAcc_(token), today = purToday_();
+  return { ok: true, today: today, companies: accSources_(dept).map(function (s) {
+    var m = s.meta;
+    if (s.error) return { key: m.key, name: m.name, error: s.error };
+    var months = {}, prods = {}, order = [];
+    s.rows.forEach(function (r) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date)) return;
+      var ym = r.date.slice(0, 7), x = months[ym] = months[ym] || { qty: 0, amt: 0, docs: {} };
+      x.qty += r.qty; x.amt += r.amt; if (r.doc) x.docs[r.doc] = 1;
+      var p = prods[r.name];
+      if (!p) { p = prods[r.name] = { name: r.name, color: r.color, m: {} }; order.push(r.name); }
+      var pm = p.m[ym] = p.m[ym] || [0, 0]; pm[0] += r.qty; pm[1] += r.amt;
+    });
+    var r2 = function (v) { return Math.round(v * 100) / 100; };
+    var mo = {}; Object.keys(months).forEach(function (k) { mo[k] = { qty: r2(months[k].qty), amt: r2(months[k].amt), docs: Object.keys(months[k].docs).length }; });
+    var rank = m.order || [];
+    var products = order.map(function (k) { var p = prods[k]; Object.keys(p.m).forEach(function (ym) { p.m[ym] = [r2(p.m[ym][0]), r2(p.m[ym][1])]; }); return p; })
+      .sort(function (a, b) { var ia = rank.indexOf(a.name), ib = rank.indexOf(b.name); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.name.localeCompare(b.name); });
+    return { key: m.key, name: m.name, unit: m.unit, currency: m.currency, basis: m.basis, note: m.note, export: !!m.export, future: !!s.capToday, months: mo, products: products };
+  }) };
 }
 function accCmpMonthBefore_(ym) { var y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1; if (!m) { y--; m = 12; } return y + '-' + ('0' + m).slice(-2); }
 function accCmp_(meta, rows, today, capToday) {
