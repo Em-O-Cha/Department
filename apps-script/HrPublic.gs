@@ -247,6 +247,8 @@ function hrLineWebhook_(events) {
         hrLineReply_(ev.replyToken, [{ type: 'text', text: 'สวัสดีค่ะ 🙏 ถ้าต้องการให้กลุ่มนี้รับแจ้งเตือนคำขอลา ให้พิมพ์\nตั้งค่ากลุ่ม HR <รหัสตั้งค่า>\n(ดูรหัสได้ที่ระบบฝ่ายบุคคล → ตั้งค่า)' }]);
         return;
       }
+      // บอทถูกนำออกจากกลุ่มที่ผูกไว้ → ยกเลิกการผูก (หน้าตั้งค่าจะขึ้นว่ายังไม่ผูกกลุ่ม)
+      if (ev.type === 'leave' && gid && gid === props_().getProperty('HR_LINE_GROUP')) { props_().deleteProperty('HR_LINE_GROUP'); return; }
       if (ev.type === 'message' && ev.message && ev.message.type === 'text' && gid) {
         var m = String(ev.message.text).trim().match(/^ตั้งค่ากลุ่ม\s*HR\s+([A-Z0-9]{8})$/i);
         if (!m) return;
