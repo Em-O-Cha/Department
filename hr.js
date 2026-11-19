@@ -15,6 +15,7 @@
 
   var MENUS = [
     { id: 'h_dash', label: 'ภาพรวม / Dashboard', ic: 'home' },
+    { id: 'h_day', label: 'เช็คพนักงานรายวัน (ส่ง LINE)', ic: 'users' },
     { id: 'h_emp', label: 'ทะเบียนพนักงาน', ic: 'users' },
     { id: 'h_leave', label: 'การลา / ขาด / มาสาย', ic: 'cal' },
     { id: 'h_doc', label: 'เอกสาร & วันหมดอายุ', ic: 'idcard' },
@@ -154,7 +155,7 @@
     if (msg) toast(msg);
     return H.load().then(function () { if (String(state.page).indexOf('h_') === 0) H.render(state.page); }).catch(onServerError);
   }
-  H.reset = function () { H.data = null; H.q = {}; H.photos = {}; H.photosLoaded = false; pageSize(''); };
+  H.reset = function () { if (window.HRDAILY) HRDAILY.reset(); H.data = null; H.q = {}; H.photos = {}; H.photosLoaded = false; pageSize(''); };
   H.menus = function () {   // เมนูการลาโชว์จำนวนคำขอที่รออนุมัติ
     var n = H.data ? pendingLeaves().length : 0;
     return MENUS.map(function (m) { return m.id === 'h_leave' && n ? Object.assign({}, m, { label: m.label + ' 🔴 ' + n }) : m; });
@@ -192,7 +193,7 @@
       });
       return;
     }
-    ({ h_dash: dash, h_emp: emps, h_leave: leaves, h_doc: docs, h_train: trainings, h_disc: discs, h_rep: report, h_set: settings, h_log: logPage }[page] || dash)();
+    ({ h_dash: dash, h_day: function () { window.HRDAILY.page(); }, h_emp: emps, h_leave: leaves, h_doc: docs, h_train: trainings, h_disc: discs, h_rep: report, h_set: settings, h_log: logPage }[page] || dash)();
   };
   function pageSize(sz) {   // ขนาดกระดาษตอนพิมพ์ (แนวนอน/แนวตั้ง) ของรายงานที่เปิดอยู่
     var el = document.getElementById('hrPage');
