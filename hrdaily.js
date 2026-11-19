@@ -6,6 +6,7 @@
   var D = window.HRDAILY = { data: null, date: '', day: null, dirty: false };
   var H2C_URL = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
   var C_HEAD = '#D9E1F2', C_ROLE = '#E2EFDA', C_FOOT = '#FBE5D6';
+  var COMPANY_TH = 'บริษัท สปังกี้ ฟู้ด จำกัด', COMPANY_EN = 'Spunky Food Co., Ltd.';
 
   function th(iso) { var p = String(iso).split('-'); return p[2] + '/' + p[1] + '/' + (+p[0] + 543); }
   function n0(v) { return Number(v || 0).toLocaleString('th-TH'); }
@@ -30,6 +31,11 @@
   D.page = function () { if (!D.data) return load(''); render(); };
 
   // ---------- ตาราง (หน้าจอ + ภาพ LINE ใช้ตัวเดียวกัน) ----------
+  // หัวภาพ: โลโก้ (ตัวเดียวกับหัวเว็บ) + ชื่อบริษัท — อยู่ในภาพที่ส่ง LINE ด้วย
+  function brandHtml() {
+    var l = document.querySelector('.brand-logo');
+    return '<div class="hdbrand">' + (l ? '<img class="hdlogo" src="' + l.src + '" alt="Spunky Food">' : '') + '<div><b>' + COMPANY_TH + '</b><span>' + COMPANY_EN + '</span></div></div>';
+  }
   function leaveText(l) { return l.name + ' (' + l.type + (l.reason ? ' · ' + l.reason : '') + ')'; }
   function tableHtml(day, date) {
     var total = 0, lv = 0;
@@ -40,7 +46,7 @@
       return '<tr><td class="hdr">' + esc(r.role) + '</td><td class="hdn">' + esc(working.join(', ')) + '</td><td class="hdc">' + n0(r.count) + '</td>'
         + '<td class="hdn">' + esc(r.note || '') + '</td><td class="hdl">' + r.leaves.map(function (l, i) { return '<div>' + (i + 1) + '.' + esc(leaveText(l)) + '</div>'; }).join('') + '</td></tr>';
     }).join('');
-    return '<div class="hdimg"><div class="hdt">จำนวนพนักงาน วันที่ ' + th(date) + '</div><table class="hdtab"><thead><tr><th>ฝ่ายงาน</th><th>ชื่อ</th><th>จำนวนพนักงาน</th><th>หมายเหตุ</th><th>การลา</th></tr></thead><tbody>' + rows + '</tbody>'
+    return '<div class="hdimg">' + brandHtml() + '<div class="hdt">จำนวนพนักงาน วันที่ ' + th(date) + '</div><table class="hdtab"><thead><tr><th>ฝ่ายงาน</th><th>ชื่อ</th><th>จำนวนพนักงาน</th><th>หมายเหตุ</th><th>การลา</th></tr></thead><tbody>' + rows + '</tbody>'
       + '<tfoot><tr><td class="hdr hdf1" colspan="2">รวมพนักงานทั้งหมด</td><td class="hdf hdc"><b>' + n0(total) + '</b></td><td class="hdf">ลาออกทั้งหมด <b>' + n0(day.resign) + '</b> คน</td><td class="hdf">ลางานทั้งหมด <b>' + n0(lv) + '</b> คน</td></tr></tfoot></table></div>';
   }
 
@@ -178,6 +184,7 @@
     '.hdtypes{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}.hdtypes input{position:absolute;opacity:0}.hdtypes span{display:block;padding:8px 12px;border:1.5px solid var(--line);border-radius:99px;cursor:pointer;font-weight:600}.hdtypes input:checked+span{border-color:var(--c);background:color-mix(in srgb,var(--c) 12%,white);color:var(--c)}.hdtypes input:focus-visible+span{outline:2px solid var(--c)}',
     '.hdprev{overflow-x:auto}.hdimgbox{position:fixed;left:-4000px;top:0}',
     '.hdimg{display:inline-block;min-width:720px;padding:18px;background:#fff;color:#000}.hdt{text-align:center;font-size:24px;font-weight:700;margin-bottom:12px}',
+    '.hdbrand{display:flex;align-items:center;gap:12px;padding-bottom:10px;margin-bottom:12px;border-bottom:2px solid #e2e8f0}.hdlogo{height:56px;width:auto}.hdbrand b{display:block;font-size:20px}.hdbrand span{display:block;font-size:14px;color:#475569}',
     '.hdtab{border-collapse:collapse;width:100%;font-size:15px}.hdtab th{background:' + C_HEAD + ';border:1px solid #000;padding:8px;font-size:16px;white-space:nowrap}.hdtab td{border:1px solid #000;padding:6px 8px;vertical-align:top}',
     '.hdtab .hdr{background:' + C_ROLE + ';font-weight:700;white-space:nowrap}.hdtab .hdc{text-align:center;font-weight:700}.hdtab .hdn{max-width:260px}.hdtab .hdl{color:#b91c1c;min-width:200px}.hdtab .hdl div{white-space:nowrap}',
     '.hdtab tfoot td{background:' + C_FOOT + ';font-size:15px}.hdtab tfoot .hdf1{background:' + C_ROLE + ';font-size:17px}'
