@@ -27,6 +27,11 @@
       };
       if (!Array.isArray(D.day.resignNames)) D.day.resignNames = [];
       D.day.roles.forEach(function (r) { if (!Array.isArray(r.resigns)) r.resigns = []; });
+      // วันที่บันทึกแล้ว (วันนี้ / วันต่อไป): ตามรายชื่อล่าสุดทุกครั้งที่เปิด — ลบชื่อที่ตั้งค่าแล้วหายเอง ไม่ต้องทำอะไรเพิ่ม
+      if (r.day && r.date >= r.today) {
+        var synced = syncRoles(D.day.roles, r.roles);
+        if (JSON.stringify(synced) !== JSON.stringify(D.day.roles)) { D.day.roles = synced; D.dirty = true; render(); return save().then(function (ok) { if (ok) render(); }); }
+      }
       render();
     }).catch(onServerError);
   }
