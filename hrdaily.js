@@ -53,7 +53,7 @@
       + '<div class="pbar hdbar"><label class="hdlb">วันที่ <input type="date" id="hdDate" value="' + D.date + '"></label>'
       + '<span class="hdsum">ทั้งหมด <b>' + n0(total) + '</b> คน · ลา <b class="neg">' + lv + '</b> คน</span>'
       + (sent ? '<span class="hdtag ok">ส่ง LINE แล้ว ' + esc(String(d.sentAt).slice(11, 16)) + '</span>' : d.day ? '<span class="hdtag">บันทึกแล้ว · ยังไม่ส่ง LINE</span>' : '<span class="hdtag">ยังไม่บันทึก</span>')
-      + (L.token && L.group ? '<button class="btn btn-sm btn-line" id="hdGroup">' + icon('send', 15) + ' เปลี่ยนกลุ่ม LINE</button>' : '')
+      + (L.token && L.group ? '<span class="hdtag">ส่งเข้ากลุ่มเดียวกับฝ่ายบัญชี / ฝ่ายผลิต</span>' : '')
       + '<button class="btn btn-sm btn-line" id="hdRoles">' + icon('gear', 15) + ' แก้ฝ่ายงาน / รายชื่อ</button></div>'
       + (L.token && L.group ? '' : lineSetup(L))
       + '<div class="hdgrid">' + day.roles.map(function (r, i) {
@@ -82,29 +82,12 @@
     on('[data-note]', 'change', function (el) { day.roles[+el.getAttribute('data-note')].note = el.value.trim(); D.dirty = true; $('hdPrev').innerHTML = tableHtml(day, D.date); });
     $('hdResign').addEventListener('change', function () { day.resign = Math.max(0, Math.round(Number(this.value) || 0)); D.dirty = true; $('hdPrev').innerHTML = tableHtml(day, D.date); });
     $('hdRoles').addEventListener('click', rolesDialog);
-    if ($('hdGroup')) $('hdGroup').addEventListener('click', function () {
-      var cmd = 'ตั้งค่ากลุ่ม HR ' + L.setupCode;
-      openModal({ color: state.dept.color, icon: 'send', title: 'เปลี่ยนกลุ่ม LINE ที่รับตาราง', noCancel: true, ok: 'ปิด',
-        body: '<p style="margin-top:0">เชิญบอท "SpunkyFood Report" เข้ากลุ่มใหม่ แล้วพิมพ์ข้อความนี้ในกลุ่มใหม่ รอบอทตอบ "✅ ตั้งกลุ่มนี้…" ตารางครั้งต่อไปจะส่งเข้ากลุ่มใหม่แทน</p>'
-          + '<div class="hdcode"><code>' + esc(cmd) + '</code><button type="button" class="btn btn-sm btn-line" data-copycmd="' + esc(cmd) + '">คัดลอก</button></div><p class="muted" style="font-size:13px">รหัสใช้ได้ครั้งเดียว</p>',
-        onOpen: function () { bindCopyCode($('mBody')); }, submit: function () { closeModal(); return Promise.resolve(); } });
-    });
     $('hdSave').addEventListener('click', function () { save().then(function (ok) { if (ok) { toast('บันทึกแล้ว'); render(); } }); });
     $('hdSend').addEventListener('click', sendFlow);
-    bindCopyCode();
   }
   function lineSetup(L) {
-    if (!L.token) return '<div class="panel status off"><div class="dot">' + icon('warn', 20) + '</div><div><b>ยังไม่มีบอท LINE</b><span>ระบบใช้บอทของฝ่ายบัญชี — ให้ฝ่ายบัญชีตั้งค่า LINE ก่อน</span></div></div>';
-    var cmd = 'ตั้งค่ากลุ่ม HR ' + L.setupCode;
-    return '<div class="panel status off"><div class="dot">' + icon('warn', 20) + '</div><div><b>ยังไม่ได้ผูกกลุ่ม LINE ที่รับตารางนี้</b>'
-      + '<span>เชิญบอท "SpunkyFood Report" (บอทฝ่ายบัญชี) เข้ากลุ่มที่ต้องการ แล้วพิมพ์ข้อความนี้ในกลุ่ม รอบอทตอบ "✅ ตั้งกลุ่มนี้…" แล้วกดรีเฟรชหน้านี้</span>'
-      + '<div class="hdcode"><code>' + esc(cmd) + '</code><button class="btn btn-sm btn-line" data-copycmd="' + esc(cmd) + '">คัดลอก</button></div></div></div>';
-  }
-  function bindCopyCode(root) {
-    on('[data-copycmd]', 'click', function (el) {
-      var t = el.getAttribute('data-copycmd');
-      (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { toast('คัดลอกแล้ว'); }, function () { toast(t); });
-    }, root);
+    return '<div class="panel status off"><div class="dot">' + icon('warn', 20) + '</div><div><b>' + (L.token ? 'ฝ่ายบัญชียังไม่ได้ผูกกลุ่ม LINE' : 'ยังไม่มีบอท LINE') + '</b>'
+      + '<span>ตารางนี้ส่งเข้ากลุ่ม LINE เดียวกับฝ่ายบัญชีและฝ่ายผลิต — ให้ฝ่ายบัญชีตั้งค่า LINE / ผูกกลุ่มก่อน แล้วกดรีเฟรชหน้านี้</span></div></div>';
   }
   function chip(i, name) {
     var r = D.day.roles[i], j = r.leaves.map(function (l) { return l.name; }).indexOf(name);
@@ -192,7 +175,6 @@
     '.hdlv{margin-top:8px;border-top:1px dashed var(--line);padding-top:6px}.hdlv div{display:flex;justify-content:space-between;gap:8px;font-size:14px;color:#991b1b;padding:2px 0}',
     '.hdfoot{display:flex;gap:8px;align-items:center;margin-top:8px}.hdnote{flex:1;min-width:0;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px}',
     '.hdresign{padding:10px 14px;margin-bottom:12px}.hdresign input{width:80px;margin-left:8px;padding:6px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit}',
-    '.hdcode{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}.hdcode code{background:#f1f5f9;padding:6px 10px;border-radius:8px;font-size:15px}',
     '.hdtypes{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}.hdtypes input{position:absolute;opacity:0}.hdtypes span{display:block;padding:8px 12px;border:1.5px solid var(--line);border-radius:99px;cursor:pointer;font-weight:600}.hdtypes input:checked+span{border-color:var(--c);background:color-mix(in srgb,var(--c) 12%,white);color:var(--c)}.hdtypes input:focus-visible+span{outline:2px solid var(--c)}',
     '.hdprev{overflow-x:auto}.hdimgbox{position:fixed;left:-4000px;top:0}',
     '.hdimg{display:inline-block;min-width:720px;padding:18px;background:#fff;color:#000}.hdt{text-align:center;font-size:24px;font-weight:700;margin-bottom:12px}',
