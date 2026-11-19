@@ -131,7 +131,7 @@
   // แก้ฝ่ายงาน / รายชื่อ: 1 บรรทัด = 1 ฝ่ายงาน · "ฝ่ายงาน: ชื่อ, ชื่อ" หรือ "ฝ่ายงาน = จำนวน" (ไม่มีรายชื่อ)
   function rolesDialog() {
     var txt = D.data.roles.map(function (x) { return x.names ? x.role + ': ' + x.names : x.role + ' = ' + x.count; }).join('\n');
-    openModal({ color: state.dept.color, icon: 'gear', wide: true, title: 'แก้ฝ่ายงาน / รายชื่อตั้งต้น', sub: 'ใช้กับวันที่ยังไม่บันทึก (วันที่บันทึกแล้วไม่เปลี่ยน)',
+    openModal({ color: state.dept.color, icon: 'gear', wide: true, title: 'แก้ฝ่ายงาน / รายชื่อตั้งต้น', sub: 'ใช้กับวันที่เปิดอยู่และวันต่อไป (วันที่ผ่านมาแล้วไม่เปลี่ยน)',
       body: '<p class="muted" style="margin-top:0">1 บรรทัด = 1 ฝ่ายงาน · มีรายชื่อ: <code>QC: แป้ง, ลูกศร, จอย</code> · ไม่มีรายชื่อ (กรอกจำนวนเอง): <code>job = 23</code></p>'
         + '<textarea id="hdRolesTxt" rows="16" style="width:100%;font:inherit;padding:10px;border:1.5px solid var(--line);border-radius:10px">' + esc(txt) + '</textarea>',
       ok: 'บันทึก',
@@ -142,10 +142,28 @@
         });
         return call('hrDailySaveRoles', state.token, list).then(function (r) {
           if (!r.ok) return r.error;
-          closeModal(); toast('บันทึกรายชื่อแล้ว');
-          if (!D.data.day) { D.data = null; load(D.date); } else { D.data.roles = r.roles; render(); }
+          closeModal(); D.data.roles = r.roles;
+          // หน้าจอวันที่เปิดอยู่ตามรายชื่อใหม่ (ลบชื่อ = หายจากการ์ดและตาราง) · วันที่ผ่านมาแล้วคงตามที่บันทึกไว้
+          if (D.date < D.data.today) { toast('บันทึกรายชื่อแล้ว (มีผลกับวันนี้และวันต่อไป)'); render(); return; }
+          D.day.roles = syncRoles(D.day.roles, r.roles); D.dirty = true;
+          if (!D.data.day) { toast('บันทึกรายชื่อแล้ว'); render(); return; }
+          return save().then(function (ok) { toast(ok ? 'บันทึกรายชื่อแล้ว' : 'บันทึกรายชื่อแล้ว — กดบันทึกวันนี้อีกครั้ง'); render(); });
         });
       } });
+  }
+  // รวมรายชื่อใหม่เข้ากับวันที่เปิดอยู่: คงการลา / ลาออก / หมายเหตุ ของคนที่ยังอยู่ · ฝ่ายที่กรอกจำนวนคงจำนวนที่กรอกไว้
+  // จับคู่ด้วยชื่อฝ่ายงาน + ลำดับ (ชื่อฝ่ายซ้ำได้ เช่น ผู้บริหาร 2 แถว)
+  function syncRoles(oldRoles, roles) {
+    var seen = {}, key = function (role) { seen[role] = (seen[role] || 0) + 1; return role + '#' + seen[role]; }, prev = {};
+    oldRoles.forEach(function (r) { prev[key(r.role)] = r; });
+    seen = {};
+    return roles.map(function (x) {
+      var o = prev[key(x.role)], names = splitNames(x.names);
+      var keep = function (l) { return names.indexOf(l.name) >= 0; };
+      if (names.length) return { role: x.role, names: names, count: names.length, leaves: o ? o.leaves.filter(keep) : [], resigns: o ? (o.resigns || []).filter(keep) : [], note: o ? o.note || '' : '' };
+      var wasCount = o && !o.names.length;
+      return { role: x.role, names: [], count: wasCount ? o.count : x.count, leaves: wasCount ? o.leaves : [], resigns: wasCount ? (o.resigns || []) : [], note: o ? o.note || '' : '' };
+    });
   }
   function save() {
     var b = $('hdSave'); if (b) { b.disabled = true; b.innerHTML = '<span class="spinner dark"></span> กำลังบันทึก'; }
