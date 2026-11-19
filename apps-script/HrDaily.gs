@@ -56,11 +56,13 @@ function hrDailyLoad(token, date) {
   var row = all.filter(function (x) { return x.d === d; })[0], day = null;
   if (row) { try { day = JSON.parse(row.data || 'null'); } catch (e) { day = null; } }
   var prev = all.filter(function (x) { return x.d < d; })[0], lastCounts = {};
-  if (prev) { try { (JSON.parse(prev.data || '{}').roles || []).forEach(function (r) { if (!r.names || !r.names.length) lastCounts[r.role] = r.count; }); } catch (e) {} }
+  if (prev) { try { (JSON.parse(prev.data || '{}').roles || []).forEach(function (r) { if (!r.names || !r.names.length) lastCounts[r.role] = hrdNet_(r); }); } catch (e) {} }
   return { ok: true, today: purToday_(), date: d, roles: hrdRoles_(ss), day: day, sentAt: row ? row.sentAt : '', lastCounts: lastCounts,
     days: all.slice(0, 14).map(function (x) { return { date: x.d, total: x.total, leaveCount: x.leaveCount, sentAt: x.sentAt }; }),
     leaveTypes: HRD_LEAVE_TYPES_, line: hrdLineInfo_() };
 }
+// จำนวนพนักงานของฝ่าย = จำนวนตั้งต้น − คนลาออก (หักออก 19/11/69) · คนลายังนับรวม · วันถัดไปฝ่ายที่กรอกจำนวนตั้งต้นจากยอดหลังหัก
+function hrdNet_(r) { return Math.max(0, (Number(r.count) || 0) - ((r.resigns && r.resigns.length) || 0)); }
 function hrdCleanDay_(day) {
   day = day || {};
   var roles = (Array.isArray(day.roles) ? day.roles : []).slice(0, 60).map(function (r) {
@@ -89,7 +91,7 @@ function hrDailySave(token, date, day) {
     var ss = hrdBook_(dept), row = purRead_(ss, 'hr_daily').filter(function (x) { return x.id === 'D' + d; })[0] || { id: 'D' + d };
     row.day = cpSlash_(d);
     row.data = JSON.stringify(c);
-    row.total = c.roles.reduce(function (s, r) { return s + r.count; }, 0);
+    row.total = c.roles.reduce(function (s, r) { return s + hrdNet_(r); }, 0);
     row.leaveCount = c.roles.reduce(function (s, r) { return s + r.leaves.length; }, 0);
     row.resign = c.resign; row.updatedAt = purNow_();
     purWrite_(ss, 'hr_daily', row);

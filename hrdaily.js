@@ -42,6 +42,8 @@
   // ลาออก: แตะชื่อในฝ่ายงาน → เลือก "ลาออก" ชื่อไปอยู่ช่องหมายเหตุของฝ่ายนั้น (เหมือนการลา) · จำนวน = จำนวนชื่อ
   // (ข้อมูลเก่า: resignNames รวมทั้งวัน / ตัวเลขอย่างเดียว ยังนับให้)
   function resignText(x) { return x.name + ' (ลาออก' + (x.reason ? ' · ' + x.reason : '') + ')'; }
+  // จำนวนพนักงานของฝ่าย = จำนวนตั้งต้น − คนลาออก (หักออก ผู้ใช้เลือก 19/11/69) · คนลายังนับรวม
+  function net(r) { return Math.max(0, (Number(r.count) || 0) - (r.resigns || []).length); }
   function resignCount(day) {
     var n = day.roles.reduce(function (s, r) { return s + (r.resigns || []).length; }, 0) + (day.resignNames || []).length;
     return n || (Number(day.resign) || 0);
@@ -51,8 +53,8 @@
     var rows = day.roles.map(function (r) {
       var off = r.leaves.concat(r.resigns || []).map(function (l) { return l.name; });
       var working = r.names.filter(function (n) { return off.indexOf(n) < 0; });
-      total += Number(r.count) || 0; lv += r.leaves.length;
-      return '<tr><td class="hdr">' + esc(r.role) + '</td><td class="hdn">' + esc(working.join(', ')) + '</td><td class="hdc">' + n0(r.count) + '</td>'
+      total += net(r); lv += r.leaves.length;
+      return '<tr><td class="hdr">' + esc(r.role) + '</td><td class="hdn">' + esc(working.join(', ')) + '</td><td class="hdc">' + n0(net(r)) + '</td>'
         + '<td class="hdn">' + (r.note ? '<div>' + esc(r.note) + '</div>' : '') + (r.resigns || []).map(function (x, k) { return '<div class="hdrn">' + (k + 1) + '.' + esc(resignText(x)) + '</div>'; }).join('') + '</td><td class="hdl">' + r.leaves.map(function (l, i) { return '<div>' + (i + 1) + '.' + esc(leaveText(l)) + '</div>'; }).join('') + '</td></tr>';
     }).join('');
     return '<div class="hdimg">' + brandHtml() + '<div class="hdt">จำนวนพนักงาน วันที่ ' + th(date) + '</div><table class="hdtab"><thead><tr><th>ฝ่ายงาน</th><th>ชื่อ</th><th>จำนวนพนักงาน</th><th>หมายเหตุ</th><th>การลา</th></tr></thead><tbody>' + rows + '</tbody>'
@@ -62,7 +64,7 @@
   // ---------- หน้า ----------
   function render() {
     var d = D.data, day = D.day, L = d.line;
-    var total = day.roles.reduce(function (s, r) { return s + (Number(r.count) || 0); }, 0), lv = day.roles.reduce(function (s, r) { return s + r.leaves.length; }, 0);
+    var total = day.roles.reduce(function (s, r) { return s + net(r); }, 0), lv = day.roles.reduce(function (s, r) { return s + r.leaves.length; }, 0);
     var sent = d.date === D.date && d.sentAt;
     $('main').innerHTML = '<h3>เช็คพนักงานรายวัน</h3><p class="lead">แตะชื่อคนที่ลา → เลือกประเภทและเหตุผล ชื่อจะย้ายไปช่อง "การลา" · ดูภาพตารางก่อนส่งเข้า LINE</p>'
       + '<div class="pbar hdbar"><label class="hdlb">วันที่ <input type="date" id="hdDate" value="' + D.date + '"></label>'
@@ -73,10 +75,10 @@
       + (L.token && L.group ? '' : lineSetup(L))
       + '<div class="hdgrid">' + day.roles.map(function (r, i) {
         var off = r.leaves.map(function (l) { return l.name; }), gone = r.resigns.map(function (x) { return x.name; });
-        return '<div class="panel hdcard"><div class="hdch"><b>' + esc(r.role) + '</b><span>' + n0(r.count) + ' คน' + (r.leaves.length ? ' · <em>ลา ' + r.leaves.length + '</em>' : '') + (r.resigns.length ? ' · <em>ลาออก ' + r.resigns.length + '</em>' : '') + '</span></div>'
+        return '<div class="panel hdcard"><div class="hdch"><b>' + esc(r.role) + '</b><span>' + n0(net(r)) + ' คน' + (r.leaves.length ? ' · <em>ลา ' + r.leaves.length + '</em>' : '') + (r.resigns.length ? ' · <em>ลาออก ' + r.resigns.length + '</em>' : '') + '</span></div>'
           + (r.names.length
             ? '<div class="hdchips">' + r.names.map(function (n) { var isOff = off.indexOf(n) >= 0, isGone = gone.indexOf(n) >= 0; return '<button class="hdchip' + (isGone ? ' gone' : isOff ? ' off' : '') + '" data-ri="' + i + '" data-nm="' + esc(n) + '">' + esc(n) + '</button>'; }).join('') + '</div>'
-            : '<label class="hdcnt">จำนวน <input type="number" min="0" inputmode="numeric" data-cnt="' + i + '" value="' + (Number(r.count) || 0) + '"> คน</label>')
+            : '<label class="hdcnt">จำนวน <input type="number" min="0" inputmode="numeric" data-cnt="' + i + '" value="' + (Number(r.count) || 0) + '"> คน' + (r.resigns.length ? ' <small class="muted">(หักลาออก ' + r.resigns.length + ' เหลือ ' + n0(net(r)) + ')</small>' : '') + '</label>')
           + (r.leaves.length ? '<div class="hdlv">' + r.leaves.map(function (l, j) { return '<div><span>' + esc(leaveText(l)) + '</span><button class="link-btn danger" data-unlv="' + i + ':' + j + '" aria-label="ยกเลิกการลา">ยกเลิก</button></div>'; }).join('') + '</div>' : '')
           + (r.resigns.length ? '<div class="hdlv hdrs">' + r.resigns.map(function (x, j) { return '<div><span>' + esc(resignText(x)) + '</span><button class="link-btn danger" data-unrs="' + i + ':' + j + '" aria-label="ยกเลิกลาออก">ยกเลิก</button></div>'; }).join('') + '</div>' : '')
           + '<div class="hdfoot">' + (r.names.length ? '' : '<button class="link-btn" data-addlv="' + i + '">+ เพิ่มคนลา / ลาออก</button>')
