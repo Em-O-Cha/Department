@@ -91,10 +91,13 @@ function hrLineTest(token) {
 // emps: [] เผื่อหน้าเก่าที่ยังค้างในเครื่อง
 function hrFormInit(key) {
   var dept = hrFormCheck_(key), ss = hrBook_(dept), st = hrSettings_(ss);
-  return { ok: true, today: purToday_(), workDays: st.workDays, emps: [], search: true };
+  // รายชื่อให้เลือก (พร้อมรูปจาก hrFormPhotos) — กลับมาแสดงรายชื่อตามที่ผู้ใช้ขอ 19/11/69 · รวมพนักงาน Job
+  return { ok: true, today: purToday_(), workDays: st.workDays,
+    emps: hrPeople_(ss).filter(hrActive_).sort(function (a, b) { return (Number(a.seq) || 9999) - (Number(b.seq) || 9999); })
+      .map(function (e) { var o = hrFormEmp_(e); delete o.photo; return o; }) };
 }
 function hrFormEmp_(e) {
-  return { id: e.id, name: e.fullName, nick: e.nickname, building: e.building, group: e.group, position: e.position,
+  return { id: e.id, name: e.fullName, nick: e.nickname, building: e.building, group: e.group, position: e.position, job: !!e.isJob,
     photo: /^data:image\//.test(String(e.photoThumb)) ? e.photoThumb : '' };
 }
 // ค้นชื่อ / ชื่อเล่น (พิมพ์แล้วค่อยขึ้น) — คืนไม่เกิน 8 คน
@@ -103,13 +106,14 @@ function hrFormFind(key, q) {
   if (!s) return { ok: true, emps: [] };
   hrRate_('hrfind', 400, 600);
   var ss = hrBook_(dept);
-  return { ok: true, emps: purRead_(ss, 'hr_emps').filter(function (e) {
+  return { ok: true, emps: hrPeople_(ss).filter(function (e) {
     return hrActive_(e) && (String(e.fullName || '') + ' ' + String(e.nickname || '')).toLowerCase().indexOf(s) >= 0;
   }).slice(0, 8).map(hrFormEmp_) };
 }
-function hrFormPhotos(key) {   // เลิกส่งรูปทุกคน (รูปมากับผลค้นหาแทน) — คงไว้ให้หน้าเก่าไม่ error
-  hrFormCheck_(key);
-  return { ok: true, photos: {} };
+function hrFormPhotos(key) {   // รูปย่อทุกคน (พนักงาน + Job) สำหรับหน้าเลือกชื่อ
+  var dept = hrFormCheck_(key), ss = hrBook_(dept), out = {};
+  hrPeople_(ss).forEach(function (e) { if (hrActive_(e) && /^data:image\//.test(String(e.photoThumb))) out[e.id] = e.photoThumb; });
+  return { ok: true, photos: out };
 }
 function hrQuota_(st, e, k, year, today) {
   var q = (st.quotaMap || {})[k];
@@ -130,7 +134,7 @@ function hrBalance_(ss, e, year) {
   return out;
 }
 function hrFormBalance(key, empId) {
-  var dept = hrFormCheck_(key), ss = hrBook_(dept), e = hrById_(purRead_(ss, 'hr_emps'), empId);
+  var dept = hrFormCheck_(key), ss = hrBook_(dept), e = hrById_(hrPeople_(ss), empId);
   if (!e || !hrActive_(e)) return { ok: false, error: 'ไม่พบชื่อพนักงาน' };
   var year = purToday_().slice(0, 4);
   var mine = purRead_(ss, 'hr_leaves').filter(function (l) { return l.empId === e.id; }).sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).slice(0, 8)
@@ -149,7 +153,7 @@ function hrFormSubmit(key, r) {
   if (f < hrAddDays_(today, -30) || t > hrAddDays_(today, 365)) return { ok: false, error: 'วันที่ลาต้องอยู่ในช่วง 30 วันที่ผ่านมา ถึง 1 ปีข้างหน้า' };
   if (hrDays_(f, t) > 120) return { ok: false, error: 'ลาได้ครั้งละไม่เกิน 120 วัน' };
   var res = purLocked_(function () {
-    var ss = hrBook_(dept), st = hrSettings_(ss), emps = purRead_(ss, 'hr_emps'), e = hrById_(emps, r.empId);
+    var ss = hrBook_(dept), st = hrSettings_(ss), emps = hrPeople_(ss), e = hrById_(emps, r.empId);
     if (!e || !hrActive_(e)) return { ok: false, error: 'ไม่พบชื่อพนักงาน' };
     var all = purRead_(ss, 'hr_leaves');
     if (all.some(function (l) { return l.empId === e.id && l.status !== 'ไม่อนุมัติ' && l.dateFrom <= t && (l.dateTo || l.dateFrom) >= f; })) return { ok: false, error: 'มีการลาในวันที่นี้อยู่แล้ว (รออนุมัติหรืออนุมัติแล้ว)' };
@@ -180,7 +184,7 @@ function hrFormUpload(key, leaveId, sig, fileName, mimeType, base64) {
     if (!row || row.source !== 'แบบฟอร์มพนักงาน' || row.status !== 'รออนุมัติ') return { ok: false, error: 'แนบไฟล์ไม่ได้' };
     var files = purParseFiles_(row.files);
     if (files.length >= 3) return { ok: false, error: 'แนบได้ไม่เกิน 3 ไฟล์' };
-    var emp = hrById_(purRead_(ss, 'hr_emps'), row.empId);
+    var emp = hrById_(hrPeople_(ss), row.empId);
     var safe = purClean_(fileName, 80).replace(/[\\/:*?"<>|]/g, '_') || 'file.jpg';
     var f = DriveApp.getFolderById(folderId).createFile(Utilities.newBlob(bytes, mimeType, (emp ? emp.fullName : '') + '_ใบลา_' + row.dateFrom + '_' + safe));
     files.push({ id: f.getId(), name: safe, mime: mimeType, url: 'https://drive.google.com/file/d/' + f.getId() + '/view', at: purNow_() });

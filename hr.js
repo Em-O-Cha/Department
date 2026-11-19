@@ -78,12 +78,12 @@
   function loadedYear(y) { return y >= String(+H.data.today.slice(0, 4) - 1); }
   function empLabel(e) { return (e.code ? e.code + ' · ' : '') + e.fullName + (e.nickname ? ' (' + e.nickname + ')' : ''); }
   // ช่องเลือกพนักงาน (พิมพ์ค้นชื่อ/ชื่อเล่น/รหัส)
-  function empField(id, label, empId) {
-    var e = emp(empId);
+  function empField(id, label, empId, withJobs) {
+    var e = emp(empId), jobs = withJobs ? (H.data.jobs || []).filter(function (x) { return x.status !== 'ลาออก'; }) : [];
     return '<div class="pf"><label for="' + id + '">' + label + '</label><input id="' + id + '" list="' + id + 'L" value="' + esc(e ? empLabel(e) : '') + '" placeholder="พิมพ์ชื่อ / ชื่อเล่น / รหัส">'
-      + '<datalist id="' + id + 'L">' + active().concat(e && e.status === 'ลาออก' ? [e] : []).map(function (x) { return '<option value="' + esc(empLabel(x)) + '">'; }).join('') + '</datalist></div>';
+      + '<datalist id="' + id + 'L">' + active().concat(jobs).concat(e && e.status === 'ลาออก' ? [e] : []).map(function (x) { return '<option value="' + esc(empLabel(x)) + '">'; }).join('') + '</datalist></div>';
   }
-  function empIdOf(id) { var val = v(id), hit = H.data.emps.filter(function (x) { return empLabel(x) === val; })[0]; return hit ? hit.id : ''; }
+  function empIdOf(id) { var val = v(id), hit = H.data.emps.concat(H.data.jobs || []).filter(function (x) { return empLabel(x) === val; })[0]; return hit ? hit.id : ''; }
   function fileLinks(files, kind, ownerId) {
     return (files || []).map(function (f) {
       return '<span class="hfile"><a href="' + esc(f.url) + '" target="_blank" rel="noopener">' + icon('clip', 14) + esc(f.name) + '</a>'
@@ -146,7 +146,7 @@
   H.load = function () {
     if (H.loading) return H.loading;
     H.loading = call('hrLoad', state.token).then(function (d) {
-      H.data = d; H.idx = {}; d.emps.forEach(function (e) { H.idx[e.id] = e; }); H.loading = null;
+      H.data = d; H.idx = {}; d.emps.concat(d.jobs || []).forEach(function (e) { H.idx[e.id] = e; }); H.loading = null;   // jobs = พนักงาน Job (ใช้ในการลาเท่านั้น)
       if (!H.pollT) H.pollT = setInterval(function () { pollLeaves(false); }, 60000);
       if (!H.photosLoaded) { H.photosLoaded = true; call('hrPhotos', state.token).then(function (r) { if (r.ok) { H.photos = r.photos; if (String(state.page).indexOf('h_') === 0) H.render(state.page); } }).catch(function () { H.photosLoaded = false; }); }
       return d;
@@ -595,7 +595,7 @@
     };
     wide({
       icon: 'cal', title: isNew ? 'บันทึกการลา' : 'แก้ไขการลา', sub: (emp(l.empId) || {}).fullName || 'การลา / ขาดงาน / มาสาย',
-      body: '<div class="pform">' + empField('lEmp', 'พนักงาน *', l.empId) + S('lType', 'ประเภท *', Object.keys(LT).map(function (k) { return [k, LT[k]]; }), l.type)
+      body: '<div class="pform">' + empField('lEmp', 'พนักงาน * (รวมพนักงาน Job)', l.empId, true) + S('lType', 'ประเภท *', Object.keys(LT).map(function (k) { return [k, LT[k]]; }), l.type)
         + F('lFrom', 'ตั้งแต่วันที่ *', l.dateFrom, 'date') + F('lTo', 'ถึงวันที่', l.dateTo || l.dateFrom, 'date')
         + F('lDays', 'จำนวนวัน (ครึ่งวัน = 0.5)', l.days === '' || l.days == null ? '' : l.days, 'number', ' step="0.5" min="0"') + F('lMin', 'มาสาย (นาที)', l.minutes, 'number', ' min="0"')
         + S('lSt', 'สถานะ', [['อนุมัติ', 'อนุมัติ'], ['รออนุมัติ', 'รออนุมัติ'], ['ไม่อนุมัติ', 'ไม่อนุมัติ']], l.status) + F('lAppr', 'ผู้อนุมัติ', l.approver)

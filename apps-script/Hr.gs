@@ -81,6 +81,14 @@ function hrEmpOut_(e) { delete e.photoThumb; e.photo = sheJsonOr_(e.photo); e.fi
 function sheJsonOr_(v) { try { var o = typeof v === 'string' ? JSON.parse(v || 'null') : v; return o && typeof o === 'object' ? o : null; } catch (e) { return null; } }
 function hrFilesOut_(x) { x.files = purParseFiles_(x.files); return x; }
 function hrActive_(e) { return e.status !== 'ลาออก'; }
+// พนักงาน Job (แท็บ "พนักงาน Job", HrJob.gs) ใช้ระบบการลาร่วมกัน (ผู้ใช้ขอ 19/11/69) — แปลงเป็นรูปแบบเดียวกับพนักงาน
+// ใช้เฉพาะงานการลา / แบบฟอร์ม QR / เช็คพนักงานรายวัน · ทะเบียนพนักงานและ Dashboard ยังนับเฉพาะแท็บ "พนักงาน"
+function hrJobAsEmp_(j) {
+  return { id: j.id, fullName: j.name, nickname: j.nickname, building: j.building, group: 'Job', position: 'พนักงาน Job', empType: 'Job', startDate: j.startDate,
+    status: j.status === 'ลาออก' ? 'ลาออก' : 'ทำงาน', photoThumb: j.photoThumb, seq: 10000 + (Number(j.seq) || 0), isJob: true };
+}
+function hrJobsAsEmps_(ss) { PUR_TABLES_.hr_jobs = HRJ_TABLE_; PUR_NUM_KEYS_.seq = 1; return purRead_(ss, 'hr_jobs').map(hrJobAsEmp_); }
+function hrPeople_(ss) { return purRead_(ss, 'hr_emps').concat(hrJobsAsEmps_(ss)); }
 // วันลา (นับวันทำงาน): ไม่นับวันอาทิตย์ (ตั้งค่า workDays = 'จ-ศ' ไม่นับเสาร์ด้วย)
 function hrWorkDays_(from, to, workDays) {
   var n = 0, d = purToDate_(from), end = purToDate_(to);
@@ -97,13 +105,14 @@ function hrLoad(token) {
     docs: purRead_(ss, 'hr_docs').map(hrFilesOut_),
     leaves: purRead_(ss, 'hr_leaves').filter(function (l) { return String(l.dateTo || l.dateFrom) >= since; }).map(hrFilesOut_),
     trainings: purRead_(ss, 'hr_trainings').map(function (t) { t.attendees = sheJson_(t.attendees, []); return hrFilesOut_(t); }),
-    disc: purRead_(ss, 'hr_disc').map(hrFilesOut_)
+    disc: purRead_(ss, 'hr_disc').map(hrFilesOut_),
+    jobs: hrJobsAsEmps_(ss).map(function (j) { delete j.photoThumb; return j; })   // ไว้แสดงชื่อในรายการลา
   };
 }
 // รูปย่อพนักงานทั้งหมด { empId: dataUrl } — แยกจาก hrLoad เพราะขนาดใหญ่ (โหลดครั้งเดียว)
 function hrPhotos(token) {
   var dept = requireHr_(token), ss = hrBook_(dept), out = {};
-  purRead_(ss, 'hr_emps').forEach(function (e) { if (/^data:image\//.test(String(e.photoThumb))) out[e.id] = e.photoThumb; });
+  hrPeople_(ss).forEach(function (e) { if (/^data:image\//.test(String(e.photoThumb))) out[e.id] = e.photoThumb; });
   return { ok: true, photos: out };
 }
 
@@ -155,7 +164,7 @@ function hrDeleteEmp(token, id) {
 function hrSaveRow_(token, table, x, build, label) {
   var dept = requireHr_(token);
   return purLocked_(function () {
-    var ss = hrBook_(dept), now = purNow_(), emps = purRead_(ss, 'hr_emps');
+    var ss = hrBook_(dept), now = purNow_(), emps = hrPeople_(ss);
     var row = x.id ? hrById_(purRead_(ss, table), x.id) : null;
     if (x.id && !row) return { ok: false, error: 'ไม่พบรายการ' };
     var rec = row || { id: purId_({ hr_docs: 'DC', hr_leaves: 'LV', hr_trainings: 'TR', hr_disc: 'DS' }[table]), createdAt: now, files: '[]' };
@@ -232,7 +241,7 @@ function hrDecideLeave_(dept, id, approve, who) {
     if (row.status !== 'รออนุมัติ') return { ok: false, already: true, status: row.status, approver: row.approver, error: 'คำขอนี้' + row.status + 'ไปแล้ว' + (row.approver ? ' โดย ' + row.approver : '') };
     row.status = approve ? 'อนุมัติ' : 'ไม่อนุมัติ'; row.approver = hrText_(who, 80); row.decidedAt = purNow_(); row.updatedAt = purNow_();
     purWrite_(ss, 'hr_leaves', row);
-    var emp = hrById_(purRead_(ss, 'hr_emps'), row.empId);
+    var emp = hrById_(hrPeople_(ss), row.empId);
     purLogWrite_(ss, row.status + 'คำขอลา', 'hr_leaves', id, (emp ? emp.fullName : '') + ' · ' + (HR_LEAVE_TYPES_[row.type] || row.type) + ' ' + row.dateFrom + ' · โดย ' + row.approver);
     return { ok: true, status: row.status, leave: hrFilesOut_(row), emp: emp ? { fullName: emp.fullName, nickname: emp.nickname } : null };
   });

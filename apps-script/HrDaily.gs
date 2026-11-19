@@ -65,10 +65,10 @@ function hrDailyLoad(token, date) {
 function hrdNet_(r) { return Math.max(0, (Number(r.count) || 0) - ((r.resigns && r.resigns.length) || 0)); }
 // ขาด / ลา / มาสาย ของวันนั้นจากระบบการลา (รวมคำขอที่ยังรออนุมัติ — ผู้ใช้ขอ 19/11/69) → หน้าเว็บใส่ในตารางเช็คพนักงานให้เอง
 function hrdRecords_(ss, d) {
-  var emps = {}; purRead_(ss, 'hr_emps').forEach(function (e) { emps[e.id] = e; });
+  var emps = {}; hrPeople_(ss).forEach(function (e) { emps[e.id] = e; });   // รวมพนักงาน Job
   return purRead_(ss, 'hr_leaves').filter(function (l) { return l.status !== 'ไม่อนุมัติ' && l.dateFrom <= d && (l.dateTo || l.dateFrom) >= d; }).map(function (l) {
     var e = emps[l.empId] || {};
-    return { id: l.id, nick: String(e.nickname || ''), full: String(e.fullName || ''), type: HR_LEAVE_TYPES_[l.type] || l.type, late: l.type === 'late',
+    return { id: l.id, job: !!e.isJob, nick: String(e.nickname || ''), full: String(e.fullName || ''), type: HR_LEAVE_TYPES_[l.type] || l.type, late: l.type === 'late',
       minutes: Number(l.minutes) || 0, reason: String(l.reason || ''), pending: l.status === 'รออนุมัติ' };
   }).filter(function (x) { return x.nick || x.full; });
 }

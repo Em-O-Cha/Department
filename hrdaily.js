@@ -55,7 +55,7 @@
   function lvCount(r) { return r.leaves.filter(function (l) { return !isLate(l); }).length; }   // มาสายไม่นับเป็นลา
   function first(n) { return String(n || '').trim().split(/[\s(]/)[0]; }
   function bare(n) { return String(n || '').replace(/^(นาย|นางสาว|นาง|คุณ|MISS\.?|MR\.?|MRS\.?)\s*/i, '').trim(); }
-  function recReason(x) { return [x.late && x.minutes ? x.minutes + ' นาที' : '', x.reason, x.pending ? 'รออนุมัติ' : ''].filter(String).join(' · '); }
+  function recReason(x) { return [x.late && x.minutes ? x.minutes + ' นาที' : '', x.reason].filter(String).join(' · '); }   // ไม่แสดง "รออนุมัติ" (ผู้ใช้ขอ 19/11/69)
   // ใส่บันทึกของวันนั้นลงชื่อในตาราง (จับคู่ชื่อเล่น / ชื่อจริง) · ที่จับคู่ไม่ได้ไปอยู่ใน D.unmatched ให้เลือกฝ่ายเอง
   // บันทึกที่ถูกยกเลิก / ไม่อนุมัติ → เอาออก · ที่ผู้ใช้กดเอาออกเอง (skipSrc) ไม่ใส่กลับ
   function applyRecords(day, recs) {
@@ -73,6 +73,10 @@
         if (n) hit = { r: r, n: n };
         return !!n;
       });
+      if (!hit && x.job) {   // พนักงาน Job → แถว "job" (ฝ่ายงานที่กรอกเป็นจำนวน)
+        var jr = day.roles.filter(function (r) { return !r.names.length && /^job$/i.test(String(r.role).trim()); })[0];
+        if (jr) hit = { r: jr, n: x.nick || bare(x.full) };
+      }
       if (!hit) { D.unmatched.push(x); return; }
       if (hit.r.leaves.some(function (l) { return l.name === hit.n; })) return;   // HR ใส่เองไว้แล้ว
       hit.r.leaves.push({ name: hit.n, type: x.type, reason: recReason(x), src: x.id });

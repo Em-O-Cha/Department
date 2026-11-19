@@ -73,7 +73,7 @@
       bal: 'สิทธิ์ลาคงเหลือปีนี้', left: 'เหลือ', days: 'วัน', pending: 'รออนุมัติ', type: 'ประเภทการลา', from: 'ตั้งแต่วันที่', to: 'ถึงวันที่', half: 'ลาครึ่งวัน',
       reason: 'เหตุผล', reasonPh: 'เช่น ไม่สบาย มีไข้ / ธุระที่บ้าน', file: 'รูปใบรับรองแพทย์ / เอกสาร (ถ้ามี)', cam: 'ถ่ายรูป', lib: 'เลือกรูป', send: 'ส่งคำขอลา',
       total: 'รวม', overQ: 'เกินสิทธิ์', willLeft: 'หลังอนุมัติจะเหลือ', sent: 'ส่งคำขอลาแล้ว', sentSub: 'รอฝ่ายบุคคลอนุมัติ — ดูสถานะได้ที่หน้านี้', again: 'ขอลาอีกครั้ง',
-      recent: 'คำขอล่าสุดของฉัน', none: 'ยังไม่มี', hint: 'พิมพ์ชื่อหรือชื่อเล่นของคุณ แล้วแตะชื่อตัวเอง', notFound: 'ไม่พบชื่อนี้ — ลองพิมพ์ใหม่ (ชื่อจริงหรือชื่อเล่น)', myReq: 'คำขอที่เพิ่งส่ง', badLink: 'ลิงก์ไม่ถูกต้อง — สแกน QR ที่ฝ่ายบุคคลติดไว้อีกครั้ง', needType: 'เลือกประเภทการลา', needDate: 'เลือกวันที่',
+      recent: 'คำขอล่าสุดของฉัน', none: 'ยังไม่มี', hint: 'พิมพ์ชื่อหรือชื่อเล่นของคุณ แล้วแตะชื่อตัวเอง', notFound: 'ไม่พบชื่อ — ลองพิมพ์ใหม่ หรือเลือก "ทั้งหมด"', myReq: 'คำขอที่เพิ่งส่ง', badLink: 'ลิงก์ไม่ถูกต้อง — สแกน QR ที่ฝ่ายบุคคลติดไว้อีกครั้ง', needType: 'เลือกประเภทการลา', needDate: 'เลือกวันที่',
       st: { 'รออนุมัติ': 'รออนุมัติ', 'อนุมัติ': 'อนุมัติแล้ว', 'ไม่อนุมัติ': 'ไม่อนุมัติ' },
       types: { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', maternity: 'ลาคลอด', ordain: 'ลาบวช', other: 'ลาอื่นๆ' } },
     my: { title: 'ခွင့်တောင်းရန်', sub: 'Spunky Food Co., Ltd. · HR', pick: 'သင့်နာမည်ကို ရွေးပါ', search: 'နာမည် ရှာရန်', all: 'အားလုံး', notMe: 'ကျွန်ုပ် မဟုတ်ပါ / နာမည်ပြောင်းရန်',
@@ -120,31 +120,28 @@
       S.emp = r.emp; S.bal = r; render();
     }).catch(function (e) { $('app').innerHTML = '<div class="msg">' + esc(e.message) + '</div>'; });
   }
-  // เลือกชื่อ: พิมพ์ก่อนแล้วค่อยขึ้น (ไม่แสดงรายชื่อทุกคน) — ค้นที่เซิร์ฟเวอร์
+  // เลือกชื่อ: รายชื่อพร้อมรูปให้แตะเลือก (พนักงาน + พนักงาน Job) · ค้นหา / กรองตามอาคารได้ — ผู้ใช้ขอกลับเป็นแบบเดิม 19/11/69
   function pickView() {
+    var grps = S.data.emps.map(function (e) { return e.building || e.group; }).filter(function (x, i, a) { return x && a.indexOf(x) === i; });
     $('app').innerHTML = '<div class="card"><h2>' + t('pick') + '</h2><input class="search" id="q" type="search" autocomplete="off" placeholder="' + esc(t('search')) + '" value="' + esc(S.q || '') + '">'
-      + '<div id="res"></div></div>';
-    var inp = $('q');
-    inp.addEventListener('input', function () { S.q = inp.value; clearTimeout(S.qt); S.qt = setTimeout(find, 350); showRes(); });
-    showRes(); if (S.q && !S.found) find();
-  }
-  function find() {
-    var q = String(S.q || '').trim();
-    if (!q) { S.found = null; return showRes(); }
-    var seq = S.fseq = (S.fseq || 0) + 1;
-    call('hrFormFind', KEY, q).then(function (r) { if (seq !== S.fseq) return; S.found = { q: q, emps: r.emps || [] }; showRes(); })
-      .catch(function (e) { if (seq === S.fseq && $('res')) $('res').innerHTML = '<p class="hint">' + esc(e.message) + '</p>'; });
+      + '<div class="chips"><button data-g=""' + (S.grp ? '' : ' class="on"') + '>' + t('all') + '</button>' + grps.map(function (g) { return '<button data-g="' + esc(g) + '"' + (S.grp === g ? ' class="on"' : '') + '>' + esc(g) + '</button>'; }).join('')
+      + (S.data.emps.some(function (e) { return e.job; }) ? '<button data-g="__job"' + (S.grp === '__job' ? ' class="on"' : '') + '>Job</button>' : '') + '</div><div id="res"></div></div>';
+    $('q').addEventListener('input', function () { S.q = $('q').value; clearTimeout(S.qt); S.qt = setTimeout(showRes, 150); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-g]'), function (b) { b.addEventListener('click', function () { S.grp = b.getAttribute('data-g'); pickView(); }); });
+    showRes();
   }
   function showRes() {
     var box = $('res'); if (!box) return;
-    var q = String(S.q || '').trim();
-    if (!q) { box.innerHTML = '<p class="hint">' + t('hint') + '</p>'; return; }
-    if (!S.found || S.found.q !== q) { box.innerHTML = '<p class="hint"><span class="spin dark"></span></p>'; return; }
-    if (!S.found.emps.length) { box.innerHTML = '<p class="hint">' + t('notFound') + '</p>'; return; }
-    box.innerHTML = '<div class="people">' + S.found.emps.map(function (e, i) { return '<button class="person" data-i="' + i + '">' + ph(e) + '<b>' + esc(e.nick || e.name) + '</b><small>' + esc(e.nick ? e.name : (e.position || '')) + '</small></button>'; }).join('') + '</div>';
+    var q = String(S.q || '').trim().toLowerCase();
+    var list = S.data.emps.filter(function (e) {
+      if (S.grp === '__job' ? !e.job : (S.grp && (e.building || e.group) !== S.grp)) return false;
+      return !q || (e.name + ' ' + (e.nick || '')).toLowerCase().indexOf(q) >= 0;
+    });
+    box.innerHTML = list.length ? '<div class="people">' + list.map(function (e, i) { return '<button class="person" data-i="' + i + '">' + ph(e) + '<b>' + esc(e.nick || e.name) + '</b><small>' + esc(e.nick ? e.name : (e.position || '')) + '</small></button>'; }).join('') + '</div>'
+      : '<p class="hint">' + t('notFound') + '</p>';
     Array.prototype.forEach.call(box.querySelectorAll('[data-i]'), function (b) { b.addEventListener('click', function () {
-      var e = S.found.emps[+b.getAttribute('data-i')];
-      S.me = e.id; S.emp = e; set('me', S.me); S.bal = null; S.q = ''; S.found = null; render(); window.scrollTo(0, 0);
+      var e = list[+b.getAttribute('data-i')];
+      S.me = e.id; S.emp = e; set('me', S.me); S.bal = null; S.q = ''; render(); window.scrollTo(0, 0);
     }); });
   }
   function workDays(f, to) { var n = 0, d = new Date(f + 'T00:00:00'), e = new Date(to + 'T00:00:00'); while (d <= e) { var w = d.getDay(); if (w !== 0 && !(S.data.workDays === 'จ-ศ' && w === 6)) n++; d.setDate(d.getDate() + 1); } return n; }
@@ -237,7 +234,8 @@
   texts();
   if (!KEY) { $('app').innerHTML = '<div class="msg">' + t('badLink') + '</div>'; return; }
   call('hrFormInit', KEY).then(function (d) {
-    S.data = d; render();
+    S.data = d; d.emps = d.emps || []; render();
+    call('hrFormPhotos', KEY).then(function (p) { S.photos = p.photos || {}; if (!S.done && !S.emp) render(); else if (S.emp && !S.done) formView(); }).catch(function () {});
   }).catch(function (e) { $('app').innerHTML = '<div class="msg">' + esc(e.message) + '</div>'; });
 })();
 </script>
