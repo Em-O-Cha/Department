@@ -255,7 +255,7 @@
     var natTable = function (rows) {   // สัญชาติ × ชาย / หญิง (ผู้ใช้ขอ 19/11/69)
       var t = { m: 0, f: 0, u: 0, n: 0 }, anyU = rows.some(function (x) { return x.u; });
       rows.forEach(function (x) { t.m += x.m; t.f += x.f; t.u += x.u; t.n += x.n; });
-      var tr = function (x, b) { return '<tr' + (b ? ' class="tot"' : '') + '><td>' + esc(x.name) + '</td><td class="m">' + x.m + '</td><td class="f">' + x.f + '</td>' + (anyU ? '<td class="u">' + x.u + '</td>' : '') + '<td><b>' + x.n + '</b></td></tr>'; };
+      var tr = function (x, b) { return '<tr' + (b ? ' class="tot"' : x.job ? ' class="job"' : '') + '><td>' + esc(x.name) + '</td><td class="m">' + x.m + '</td><td class="f">' + x.f + '</td>' + (anyU ? '<td class="u">' + x.u + '</td>' : '') + '<td><b>' + x.n + '</b></td></tr>'; };
       return '<table class="hnat"><thead><tr><th>สัญชาติ</th><th class="m">ชาย</th><th class="f">หญิง</th>' + (anyU ? '<th class="u">ไม่ระบุเพศ</th>' : '') + '<th>รวม</th></tr></thead><tbody>'
         + rows.map(function (x) { return tr(x); }).join('') + tr({ name: 'รวมทั้งหมด', m: t.m, f: t.f, u: t.u, n: t.n }, true) + '</tbody></table>';
     };
@@ -263,8 +263,11 @@
     var html = '<div class="kpis">'
       + tile(h.active, 'พนักงานปัจจุบัน', '#2563eb', 'ต่างด้าว ' + h.foreign + ' · ทั้งหมดในทะเบียน ' + h.total)
       + (h.natSplit ? (function (n) {   // คนไทย / พม่า (รวมพนักงาน Job) — ผู้ใช้ขอ 19/11/69
+        var sexTxt = function (g) { return '<span class="hsex">ชาย ' + g.m + ' · หญิง ' + g.f + (g.u ? ' · ไม่ระบุ ' + g.u : '') + '</span>'; };
         var sub2 = function (x) { return (x.m != null ? '<span class="hsex">ชาย ' + x.m + ' · หญิง ' + x.f + (x.u ? ' · ไม่ระบุ ' + x.u : '') + '</span>' : '') + 'พนักงาน ' + x.staff + (x.job ? ' + Job ' + x.job : ''); };
-        return tile(n.thai.staff + n.thai.job, 'คนไทย', '#16a34a', sub2(n.thai)) + tile(n.mm.staff + n.mm.job, 'พม่า (เมียนมา)', '#b45309', sub2(n.mm))
+        return tile(n.thai.staff + n.thai.job, 'คนไทย', '#16a34a', sub2(n.thai)) + (n.mm.s && n.mm.job   // พม่า: แยกกล่องพนักงานประจำ กับ Job (ผู้ใช้ขอ 19/11/69)
+          ? tile(n.mm.staff, 'พม่า · พนักงาน', '#b45309', sexTxt(n.mm.s) + 'พนักงานประจำ') + tile(n.mm.job, 'พม่า · Job', '#ea580c', sexTxt(n.mm.j) + 'พนักงาน Job')
+          : tile(n.mm.staff + n.mm.job, 'พม่า (เมียนมา)', '#b45309', sub2(n.mm)))
           + (n.other.staff + n.other.job ? tile(n.other.staff + n.other.job, 'สัญชาติอื่น / ไม่ระบุ', '#64748b', sub2(n.other)) : '');
       })(h.natSplit) : '')
       + tile('+' + h.hires + ' / −' + h.exits, 'เข้าใหม่ / ลาออก (ช่วงนี้)', h.exits > h.hires ? '#dc2626' : '#16a34a', h.turnover == null ? '' : 'อัตราลาออก ' + h.turnover + '%')
@@ -1018,7 +1021,7 @@
   css.textContent = [
     '.hsex{display:block;font-weight:600;color:var(--ink)}.hnat{width:100%;border-collapse:collapse;font-size:14.5px}.hnat th,.hnat td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right}.hnat th:first-child,.hnat td:first-child{text-align:left}',
     '.hnat th{font-size:13px;color:var(--muted);font-weight:600}.hnat .m{color:#2563eb}.hnat .f{color:#db2777}.hnat .u{color:#64748b}.hnat tr.tot td{border-bottom:0;border-top:2px solid var(--line);font-weight:700}',
-    '.hlgnow{padding:10px 12px;border-radius:10px;font-weight:600;margin-bottom:12px}.hlgnow.ok{background:#dcfce7;color:#15803d}.hlgnow.bad{background:#fee2e2;color:#991b1b}.hlgol{margin:6px 0 12px;padding-left:22px;line-height:1.6}.hlgol li{margin-bottom:6px}',
+    '.hnat tr.job td:first-child{color:#c2410c}.hlgnow{padding:10px 12px;border-radius:10px;font-weight:600;margin-bottom:12px}.hlgnow.ok{background:#dcfce7;color:#15803d}.hlgnow.bad{background:#fee2e2;color:#991b1b}.hlgol{margin:6px 0 12px;padding-left:22px;line-height:1.6}.hlgol li{margin-bottom:6px}',
     '.hlgcode{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 2px}.hlgcode code{background:#f1f5f9;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:15px;font-weight:700;user-select:all}',
     '.hgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}.hcard{display:flex;gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px;text-align:left;box-shadow:var(--shadow);color:inherit}.hcard:hover{border-color:var(--c)}.hcard.off{opacity:.55}.hjb{margin:18px 0 8px;padding:6px 12px;border-radius:10px;background:color-mix(in srgb,var(--c) 12%,white);color:var(--c)}.hjb span{font-weight:600;font-size:14px;color:#475569;margin-left:6px}',
     '.hph{width:64px;height:80px;object-fit:cover;border-radius:10px;flex:none;background:#e2e8f0;display:inline-grid;place-items:center;font-weight:700;font-size:22px;color:#64748b}.hph.sm{width:40px;height:50px;font-size:15px;border-radius:8px}.hph.xs{width:28px;height:35px;font-size:12px;border-radius:6px}',

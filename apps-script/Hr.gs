@@ -93,15 +93,17 @@ function hrNatOf_(e) { var n = String(e.nationality || ''); return /ไทย|th
 // แยกชาย / หญิง ด้วย (ผู้ใช้ขอ 19/11/69) — m / f / u (ไม่ระบุเพศ) นับรวมพนักงาน + Job
 function hrSexOf_(e) { var g = String(e.gender || ''); return /หญิง|^f/i.test(g) ? 'f' : /ชาย|^m/i.test(g) ? 'm' : 'u'; }
 function hrNatSplit_(staff, jobs) {
-  var mk = function () { return { staff: 0, job: 0, m: 0, f: 0, u: 0 }; }, o = { thai: mk(), mm: mk(), other: mk() };
-  staff.forEach(function (e) { var x = o[hrNatOf_(e)]; x.staff++; x[hrSexOf_(e)]++; });
-  jobs.forEach(function (e) { var x = o[hrNatOf_(e)]; x.job++; x[hrSexOf_(e)]++; });
+  // s / j = ชาย-หญิง แยกพนักงานประจำ / Job (กล่องพม่าแยกพนักงานกับ Job — ผู้ใช้ขอ 19/11/69)
+  var mk = function () { return { staff: 0, job: 0, m: 0, f: 0, u: 0, s: { m: 0, f: 0, u: 0 }, j: { m: 0, f: 0, u: 0 } }; }, o = { thai: mk(), mm: mk(), other: mk() };
+  staff.forEach(function (e) { var x = o[hrNatOf_(e)], g = hrSexOf_(e); x.staff++; x[g]++; x.s[g]++; });
+  jobs.forEach(function (e) { var x = o[hrNatOf_(e)], g = hrSexOf_(e); x.job++; x[g]++; x.j[g]++; });
   return o;
 }
 // ตาราง สัญชาติ × เพศ (พนักงาน + Job)
 function hrNatGender_(people) {
   var m = {};
-  people.forEach(function (e) { var k = String(e.nationality || '').trim() || 'ไม่ระบุ', x = m[k] = m[k] || { name: k, m: 0, f: 0, u: 0, n: 0 }; x[hrSexOf_(e)]++; x.n++; });
+  // แถวพนักงาน Job แยกจากพนักงานประจำ เช่น "เมียนมา" กับ "เมียนมา (Job)"
+  people.forEach(function (e) { var k = (String(e.nationality || '').trim() || 'ไม่ระบุ') + (e.isJob ? ' (Job)' : ''), x = m[k] = m[k] || { name: k, job: !!e.isJob, m: 0, f: 0, u: 0, n: 0 }; x[hrSexOf_(e)]++; x.n++; });
   return Object.keys(m).map(function (k) { return m[k]; }).sort(function (a, b) { return b.n - a.n; });
 }
 function hrPeople_(ss) { return purRead_(ss, 'hr_emps').concat(hrJobsAsEmps_(ss)); }
