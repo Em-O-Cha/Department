@@ -402,7 +402,7 @@ function cpFlex_(lines, hasImg, files) {
   if (files && files.pdfUrl) body.push({ type: 'box', layout: 'vertical', margin: 'xl', backgroundColor: '#0F5132', cornerRadius: '24px', paddingAll: '12px',
     action: { type: 'uri', label: 'เปิดไฟล์ PDF', uri: files.pdfUrl }, contents: [T('เปิดไฟล์ PDF', { size: 'md', weight: 'bold', color: '#FFFFFF', align: 'center' })] });
   if (files && files.xlsxUrl) body.push({ type: 'box', layout: 'vertical', margin: 'md', backgroundColor: '#FFFFFF', borderColor: '#0F5132', borderWidth: '2px', cornerRadius: '24px', paddingAll: '11px',
-    action: { type: 'uri', label: 'ดาวน์โหลด Excel', uri: accXlsxDownload_(files.xlsxUrl) }, contents: [T('ดาวน์โหลดไฟล์ Excel', { size: 'md', weight: 'bold', color: '#0F5132', align: 'center' })] });
+    action: { type: 'uri', label: 'ดาวน์โหลด Excel', uri: accXlsxDownload_(files.xlsxUrl, true) }, contents: [T('ดาวน์โหลดไฟล์ Excel', { size: 'md', weight: 'bold', color: '#0F5132', align: 'center' })] });
   var inner = [
     { type: 'box', layout: 'vertical', backgroundColor: '#0F5132', cornerRadius: '18px', paddingAll: '18px', contents: [
       T('ORDER CONFIRMATION · CP RAM', { size: 'xxs', color: '#A7F3D0', weight: 'bold' }),

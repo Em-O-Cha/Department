@@ -147,6 +147,8 @@
       + '<span class="a7f"><b>' + n0(x.cases) + ' ลัง</b><small>' + n0(x.poCount) + ' ใบสั่ง · ' + baht(x.amount) + ' · ' + esc(x.fileName || '') + '</small></span>'
       + (x.sentAt ? '<span class="a7tag ok">ส่ง LINE แล้ว</span>' : '<span class="a7tag">ยังไม่ส่ง LINE</span>') + '</button>';
   }
+  // ลิงก์ดาวน์โหลดไฟล์ .xlsx ตรง ๆ (ไม่เปิดในหน้าแสดงตัวอย่างของ Drive / Google Sheets)
+  function xlsxDl(u) { var m = String(u || '').match(/[-\w]{25,}/); return m ? 'https://drive.google.com/uc?export=download&id=' + m[0] : u; }
   function msg(html, kind) { var el = $('aMsg'); if (el) el.innerHTML = html ? '<div class="a7msg ' + (kind || '') + '">' + html + '</div>' : ''; }
 
   function loadXlsx() {
@@ -347,7 +349,7 @@
       + '<button class="btn btn-line btn-sm" id="aPdf">' + icon('pdf', 16) + (x.pdfUrl && x.xlsxUrl ? ' เปิด PDF' : x.pdfUrl ? ' สร้าง PDF / Excel ใหม่ (ใส่รูปสินค้า)' : ' สร้าง PDF / Excel') + '</button>'
       + '<button class="btn btn-primary btn-sm a7line" id="aLine">' + icon('send', 16) + (x.sentAt ? ' ส่ง LINE อีกครั้ง' : ' ส่ง LINE เข้ากลุ่ม') + '</button></div>'
       + '<div class="a7status noprint">' + (x.sentAt ? '<span class="a7tag ok">ส่ง LINE แล้ว ' + esc(x.sentAt) + '</span>' : '<span class="a7tag">ยังไม่ได้ส่ง LINE</span>')
-      + (x.xlsxUrl ? ' <a class="flink" href="' + esc(x.xlsxUrl) + '" target="_blank" rel="noopener">' + icon('sheet', 14) + ' ไฟล์ Excel</a>' : '')
+      + (x.xlsxUrl ? ' <a class="flink" href="' + esc(xlsxDl(x.xlsxUrl)) + '" target="_blank" rel="noopener" download>' + icon('sheet', 14) + ' ดาวน์โหลด Excel (.xlsx)</a>' : '')
       + (x.sheetUrl ? ' <a class="flink" href="' + esc(x.sheetUrl) + '" target="_blank" rel="noopener">' + icon('sheet', 14) + ' Google Sheet</a>' : '')
       + (x.pdfUrl && x.xlsxUrl ? ' <button type="button" class="flink" id="aRebuild" title="สร้างไฟล์ใหม่จากข้อมูลและการตั้งค่าล่าสุด (ไฟล์เดิมย้ายลงถังขยะ)">↻ สร้างไฟล์ใหม่</button>' : '') + '</div>'
       + '<div id="aRep"><div class="panel"><span class="spinner dark"></span> กำลังโหลดรายงาน…</div></div>'

@@ -476,10 +476,13 @@ function accExportXlsx_(ss, folder, name) {
   try { f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
   return f;
 }
-function accXlsxDownload_(url) {
+// ลิงก์ดาวน์โหลดไฟล์ .xlsx ตรง ๆ · line=true → เปิดด้วยเบราว์เซอร์ของเครื่อง (openExternalBrowser) ไม่ใช่เบราว์เซอร์ในแอป LINE
+// ไฟล์จะโหลดลงเครื่องเป็น .xlsx แล้วเปิดด้วย Excel ได้เลย (ไม่เปิดในหน้าแสดงตัวอย่างของ Drive / Google Sheets)
+function accXlsxDownload_(url, line) {
   var id = String(url || '').match(/[-\w]{25,}/);
-  return id ? 'https://drive.google.com/uc?export=download&id=' + id[0] : '';
+  return id ? 'https://drive.google.com/uc?export=download&id=' + id[0] + (line ? '&openExternalBrowser=1' : '') : '';
 }
+
 function accExportPdf_(ss, folder, name, onePage) {
   // scale=4 = ย่อให้พอดี 1 หน้า · scale=2 = พอดีความกว้าง (หลายหน้า) + fzr=true พิมพ์แถวหัวที่แช่แข็งซ้ำทุกหน้า
   var url = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=pdf&size=A4&portrait=false&scale=' + (onePage === false ? 2 : 4) + '&gridlines=false'
@@ -588,7 +591,7 @@ function acc711SendLine(token, importId, png, ratio) {
     if (!pdfUrl || !imp.xlsxUrl) { var made = accMakePdf_(dept, importId); if (!made.ok) return made; pdfUrl = made.pdfUrl; imp = purRead_(ss, 'acc_imports').filter(function (x) { return x.id === importId; })[0]; }
     if (png) { imp.imgUrl = accSaveLineImage_(dept, imp, png); imp.imgRatio = /^\d{2,5}:\d{2,5}$/.test(String(ratio)) ? String(ratio) : '20:13'; }
     var m = accMatrix_(map, accReportLines_(ss, { importId: importId }));
-    var msgs = [accFlex_(m, pdfUrl, imp.imgUrl ? { url: imp.imgUrl } : null, accXlsxDownload_(imp.xlsxUrl))];
+    var msgs = [accFlex_(m, pdfUrl, imp.imgUrl ? { url: imp.imgUrl } : null, accXlsxDownload_(imp.xlsxUrl, true))];
     // ภาพตารางเป็นการ์ด Flex ขนาด giga (กว้างเท่าการ์ดสรุป = ใหญ่สุดที่ LINE แสดงได้)
     if (imp.imgUrl) msgs.push(accImageFlex_(m, imp.imgUrl, imp.imgRatio));
     var r = accLinePush_(msgs);

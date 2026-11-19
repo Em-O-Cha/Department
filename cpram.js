@@ -307,7 +307,7 @@
   function xlsxDl(u) { var m = String(u || '').match(/[-\w]{25,}/); return m ? 'https://drive.google.com/uc?export=download&id=' + m[0] : u; }
   function fileLinks(pdf, xlsx) {
     return '<span class="cpfl">' + (pdf ? '<a class="btn btn-sm btn-line" href="' + esc(pdf) + '" target="_blank" rel="noopener">' + icon('pdf', 15) + ' PDF</a>' : '')
-      + (xlsx ? '<a class="btn btn-sm btn-line" href="' + esc(xlsxDl(xlsx)) + '" target="_blank" rel="noopener">' + icon('table', 15) + ' Excel</a>' : '') + '</span>';
+      + (xlsx ? '<a class="btn btn-sm btn-line" href="' + esc(xlsxDl(xlsx)) + '" target="_blank" rel="noopener" download>' + icon('table', 15) + ' Excel</a>' : '') + '</span>';
   }
   function makeFiles(el) {
     var id = el.getAttribute('data-cpfiles'), x = C.data.imports.filter(function (i) { return i.id === id; })[0];
