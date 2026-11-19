@@ -32,7 +32,7 @@ function apiFunctions_() {
     // ฝ่ายบุคคล (Hr.gs)
     hrLoad: hrLoad, hrPhotos: hrPhotos, hrSaveEmp: hrSaveEmp, hrDeleteEmp: hrDeleteEmp, hrSaveDoc: hrSaveDoc, hrSaveLeave: hrSaveLeave,
     hrSaveTraining: hrSaveTraining, hrSaveDisc: hrSaveDisc, hrDeleteRow: hrDeleteRow, hrUploadFile: hrUploadFile, hrRemoveFile: hrRemoveFile,
-    hrSaveSettings: hrSaveSettings, hrDailyLoad: hrDailyLoad, hrDailySave: hrDailySave, hrDailySaveRoles: hrDailySaveRoles, hrDailySendLine: hrDailySendLine, hrLeaves: hrLeaves, hrLog: hrLog, hrDashboard: hrDashboard, hrDecideLeave: hrDecideLeave,
+    hrSaveSettings: hrSaveSettings, hrDailyLoad: hrDailyLoad, hrDailySave: hrDailySave, hrDailySaveRoles: hrDailySaveRoles, hrDailySendLine: hrDailySendLine, hrDailyLineInfo: hrDailyLineInfo, hrDailyLineTest: hrDailyLineTest, hrLeaves: hrLeaves, hrLog: hrLog, hrDashboard: hrDashboard, hrDecideLeave: hrDecideLeave,
     hrFormInfo: hrFormInfo, hrSetLineToken: hrSetLineToken, hrFormNewKey: hrFormNewKey, hrLineTest: hrLineTest,
     // แบบฟอร์มขอลาของพนักงาน (HrPublic.gs) — ใช้รหัสแบบฟอร์มแทนตั๋ว
     hrJobs: hrJobs, hrSaveJob: hrSaveJob, hrDeleteJob: hrDeleteJob, hrFormInit: hrFormInit, hrFormFind: hrFormFind, hrFormPhotos: hrFormPhotos, hrFormBalance: hrFormBalance, hrFormSubmit: hrFormSubmit, hrFormUpload: hrFormUpload,

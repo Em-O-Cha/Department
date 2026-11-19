@@ -938,8 +938,9 @@
         + '<div class="' + (L.token ? 'ok' : '') + '">2. วาง Channel access token ของ OA ใหม่ ' + (L.token ? '✅ ' + (L.botName ? 'บอท "' + esc(L.botName) + '"' : 'ใส่แล้ว') : '⏳ ยังไม่ได้ใส่') + '</div>'
         + '<div class="pfoot"><input id="fTok" type="password" autocomplete="off" placeholder="' + (L.token ? 'วาง token ใหม่ถ้าต้องการเปลี่ยน OA' : 'วาง Channel access token (long-lived)') + '" style="flex:1;min-width:200px;padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit">'
         + '<button class="btn btn-sm btn-primary" id="fTokSave">บันทึก token</button><button class="btn btn-sm btn-line" id="fHookCopy">' + icon('copy', 16) + ' คัดลอก Webhook URL</button></div>'
-        + '<div class="' + (L.group ? 'ok' : '') + '">3. ผูกกลุ่ม LINE ' + (L.group ? '✅ ผูกแล้ว' : '⏳ เชิญบอท' + (L.botName ? ' "' + esc(L.botName) + '"' : 'ใหม่') + ' เข้ากลุ่ม HR (คนละกลุ่มกับกลุ่มรายงาน) แล้วพิมพ์ในกลุ่ม: <b>ตั้งค่ากลุ่ม HR ' + esc(L.setupCode) + '</b> แล้วกดรีเฟรชหน้านี้') + '</div>'
-        + (L.token && L.group ? '<div><button class="btn btn-sm btn-line" id="fTest">ส่งข้อความทดสอบเข้ากลุ่ม</button></div>' : '') + '</div>';
+        + '<div class="' + (L.group ? 'ok' : '') + '">3. ผูกกลุ่ม LINE ที่รับแจ้งการลา ' + (L.group ? '✅ ผูกแล้ว — คำขอลาจะส่งเข้ากลุ่มนี้' : '⏳ ยังไม่ได้ผูก') + '</div>'
+        + (L.token ? '<div class="pfoot">' + (L.group ? '<button class="btn btn-sm btn-line" id="fTest">' + icon('send', 15) + ' ส่งข้อความทดสอบเข้ากลุ่ม</button>' : '')
+          + '<button class="btn btn-sm ' + (L.group ? 'btn-line' : 'btn-primary') + '" id="fGroup">' + icon('gear', 15) + ' ' + (L.group ? 'เปลี่ยนกลุ่มที่รับแจ้งการลา' : 'ผูกกลุ่ม LINE') + '</button></div>' : '') + '</div>';
       loadQr(function () { if (window.QRCode) new window.QRCode($('qrBox'), { text: r.url, width: 160, height: 160, correctLevel: window.QRCode.CorrectLevel.M }); });
       $('fCopy').addEventListener('click', function () { var i = $('fUrl'); i.select(); try { navigator.clipboard.writeText(r.url); } catch (e) { document.execCommand('copy'); } toast('คัดลอกลิงก์แล้ว'); });
       $('fNew').addEventListener('click', function () { ask({ title: 'เปลี่ยนลิงก์ใหม่?', text: 'QR ที่ติดไว้เดิมจะใช้ไม่ได้ ต้องพิมพ์ป้ายใหม่', ok: 'เปลี่ยนลิงก์' }).then(function (ok) { if (!ok) return; call('hrFormNewKey', state.token).then(function () { formSettings(); toast('เปลี่ยนลิงก์แล้ว'); }).catch(onServerError); }); });
@@ -955,6 +956,32 @@
         }).catch(function (e) { b.disabled = false; onServerError(e); });
       });
       if ($('fTest')) $('fTest').addEventListener('click', function () { call('hrLineTest', state.token).then(function (x) { toast(x.ok ? 'ส่งข้อความทดสอบแล้ว' : x.error); }).catch(onServerError); });
+      if ($('fGroup')) $('fGroup').addEventListener('click', lineGroupDialog);
+    }).catch(onServerError);
+  }
+  // ผูก / เปลี่ยนกลุ่ม LINE ที่รับแจ้งคำขอลา (OA ฝ่ายบุคคล) — ดึงรหัสล่าสุดทุกครั้ง (รหัสใช้ได้ครั้งเดียว)
+  function lineGroupDialog() {
+    openModal({ color: state.dept.color, icon: 'send', wide: true, title: 'กลุ่ม LINE ที่รับแจ้งคำขอลา', noCancel: true, ok: 'ปิด',
+      body: '<div id="lgBody"><span class="spinner dark"></span> กำลังโหลด…</div>',
+      onOpen: function () { lineGroupBody(); }, submit: function () { closeModal(); formSettings(); return Promise.resolve(); } });
+  }
+  function lineGroupBody(msg) {
+    return call('hrFormInfo', state.token).then(function (r) {
+      var L = r.line, g = $('lgBody'); if (!g) return;
+      var cmd = 'ตั้งค่ากลุ่ม HR ' + L.setupCode, bot = L.botName ? '"' + L.botName + '"' : 'ของฝ่ายบุคคล';
+      g.innerHTML = '<div class="hlgnow ' + (L.group ? 'ok' : 'bad') + '">' + (L.group ? '✓ ตอนนี้คำขอลาส่งเข้ากลุ่มที่ผูกไว้' : '✕ ยังไม่ได้ผูกกลุ่ม') + '</div>'
+        + (msg ? '<p class="muted" style="margin:0 0 10px;font-size:13px">' + esc(msg) + '</p>' : '')
+        + '<b>' + (L.group ? 'เปลี่ยนไปส่งเข้ากลุ่มอื่น' : 'ผูกกลุ่ม') + '</b><ol class="hlgol"><li>เชิญบอท ' + esc(bot) + ' เข้ากลุ่ม LINE ที่ต้องการ (ถ้ายังไม่อยู่ในกลุ่ม)</li>'
+        + '<li>พิมพ์ข้อความนี้ในกลุ่มนั้น<div class="hlgcode"><code>' + esc(cmd) + '</code><button type="button" class="btn btn-sm btn-line" id="lgCopy">คัดลอก</button></div><small class="muted">รหัสใช้ได้ครั้งเดียว · กลุ่มเดิมจะไม่ได้รับแจ้งอีก</small></li>'
+        + '<li>รอบอทตอบ "✅ ตั้งกลุ่มนี้…" แล้วกด "ตรวจสอบ"</li></ol>'
+        + '<div class="pfoot"><button type="button" class="btn btn-sm btn-line" id="lgCheck">↻ ตรวจสอบ</button>'
+        + (L.group ? '<button type="button" class="btn btn-sm btn-line" id="lgTest">' + icon('send', 15) + ' ส่งข้อความทดสอบเข้ากลุ่ม</button>' : '') + '</div>';
+      $('lgCopy').addEventListener('click', function () { (navigator.clipboard ? navigator.clipboard.writeText(cmd) : Promise.reject()).then(function () { toast('คัดลอกแล้ว'); }, function () { toast(cmd); }); });
+      $('lgCheck').addEventListener('click', function () { this.disabled = true; lineGroupBody('ตรวจสอบแล้ว ' + new Date().toTimeString().slice(0, 5) + ' น.'); });
+      if ($('lgTest')) $('lgTest').addEventListener('click', function () {
+        var b = this; b.disabled = true;
+        call('hrLineTest', state.token).then(function (x) { b.disabled = false; toast(x.ok ? 'ส่งข้อความทดสอบแล้ว ดูในกลุ่ม LINE' : (x.error || 'ส่งไม่สำเร็จ')); }).catch(function (e) { b.disabled = false; onServerError(e); });
+      });
     }).catch(onServerError);
   }
   function loadQr(cb) {
@@ -981,6 +1008,8 @@
   // ---------- CSS ของโมดูล ----------
   var css = document.createElement('style');
   css.textContent = [
+    '.hlgnow{padding:10px 12px;border-radius:10px;font-weight:600;margin-bottom:12px}.hlgnow.ok{background:#dcfce7;color:#15803d}.hlgnow.bad{background:#fee2e2;color:#991b1b}.hlgol{margin:6px 0 12px;padding-left:22px;line-height:1.6}.hlgol li{margin-bottom:6px}',
+    '.hlgcode{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 2px}.hlgcode code{background:#f1f5f9;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:15px;font-weight:700;user-select:all}',
     '.hgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}.hcard{display:flex;gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px;text-align:left;box-shadow:var(--shadow);color:inherit}.hcard:hover{border-color:var(--c)}.hcard.off{opacity:.55}.hjb{margin:18px 0 8px;padding:6px 12px;border-radius:10px;background:color-mix(in srgb,var(--c) 12%,white);color:var(--c)}.hjb span{font-weight:600;font-size:14px;color:#475569;margin-left:6px}',
     '.hph{width:64px;height:80px;object-fit:cover;border-radius:10px;flex:none;background:#e2e8f0;display:inline-grid;place-items:center;font-weight:700;font-size:22px;color:#64748b}.hph.sm{width:40px;height:50px;font-size:15px;border-radius:8px}.hph.xs{width:28px;height:35px;font-size:12px;border-radius:6px}',
     '.hinfo{min-width:0;display:flex;flex-direction:column;gap:2px;font-size:13.5px}.hinfo b{font-size:14.5px}.hinfo span{color:#334155}.hinfo small{font-size:12px}',
