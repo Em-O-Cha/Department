@@ -117,6 +117,13 @@
   .topbar .spacer { flex: 1; }
   .topbar .lock { font-size: 12px; opacity: .9; display: flex; align-items: center; gap: 6px; }
   .topbar .lock svg.ic { width: 16px; height: 16px; }
+  .topbar .dl { padding: 8px 12px; font-size: 13px; gap: 5px; white-space: nowrap; }
+  .topbar .dl svg.ic { width: 16px; height: 16px; }
+  .topbar .dl.busy { opacity: .6; pointer-events: none; }
+  .xp-box { position: fixed; left: -30000px; top: 0; background: #fff; padding: 20px 24px; color: var(--ink); }
+  .xp-box .noprint, .xp-box input[type=file], .xp-box .btn, .xp-box .xp-empty { display: none !important; }
+  .xp-head { border-bottom: 2px solid var(--c); padding-bottom: 8px; margin-bottom: 14px; }
+  .xp-head b { font-size: 18px; } .xp-head small { color: var(--muted); font-size: 12px; display: block; margin-top: 2px; }
   .btn-out { background: rgba(255, 255, 255, .16); color: #fff; border: 1px solid rgba(255, 255, 255, .35); }
   .btn-out:hover { background: rgba(255, 255, 255, .26); }
   .side { background: var(--surface); border-right: 1px solid var(--line); padding: 18px 12px; }
@@ -222,6 +229,8 @@
     .btn-out .lbl { display: none; }
     .btn-out { padding: 10px; }
     .topbar .lock { display: none; }
+    .topbar .dl { padding: 8px 9px; font-size: 12px; gap: 3px; }
+    .topbar .dl svg.ic { width: 14px; height: 14px; }
   }
 </style>
 </head>
@@ -300,6 +309,8 @@
     </div>
     <div class="spacer"></div>
     <div class="lock"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>ไม่ใช้งาน 30 นาที ออกจากระบบอัตโนมัติ</div>
+    <button class="btn btn-out dl" id="xlsBtn" title="โหลดหน้านี้เป็นไฟล์ Excel"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>Excel</button>
+    <button class="btn btn-out dl" id="pdfBtn" title="โหลดหน้านี้เป็นไฟล์ PDF"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>PDF</button>
     <button class="btn btn-out" id="logoutBtn" aria-label="ออกจากระบบ" title="ออกจากระบบ"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg><span class="lbl">ออกจากระบบ</span></button>
   </header>
   <aside class="side">
@@ -486,6 +497,7 @@
   function deptModule() { var m = state.dept && state.dept.module; return (m === 'purchasing' && window.PUR) || (m === 'safety' && window.SHE) || (m === 'hr' && window.HRM) || (m === 'accounting' && window.ACC) || (m === 'quality' && window.QAM) || (m === 'production' && window.PRDM) || (m === 'rd' && window.RDM) || (m === 'executive' && window.EXEC) || null; }
 
   function renderPage() {
+    xpShow();
     if (state.admin) { renderAdminPage(); return; }
     var d = state.dept, html;
     if (state.page === 'pw') { renderChangePw(); return; }
@@ -534,6 +546,200 @@
     var t = state.token; backToHome('ออกจากระบบแล้ว');
     call('logout', t).catch(function () {});
   });
+
+  // ---------- โหลดหน้าที่เปิดอยู่เป็น Excel / PDF (ทุกฝ่าย ทุกเมนู) ----------
+  // Excel: โมดูลให้ข้อมูลเต็มเองได้ด้วย exportData(page) → { sheets: [{ name, rows: [[...]] }] } (คืน null = ใช้แบบอ่านจากหน้าจอ)
+  //        ไม่งั้นอ่านจากหน้าจอ: ตารางทุกตาราง (แยกชีต) + กล่องตัวเลขสรุป (.kpi) + รายการแบบการ์ด
+  // PDF: ถ่ายภาพหน้าจอ (html2canvas) ตัดเป็นหน้า A4 ไม่ตัดกลางแถว แล้วรวมเป็น PDF (jsPDF)
+  var XP_LIB = { xlsx: 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', h2c: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', pdf: 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js' };
+  function xpLoad(url, ready) {
+    if (ready()) return Promise.resolve();
+    return new Promise(function (ok, fail) { var s = document.createElement('script'); s.src = url; s.onload = ok; s.onerror = function () { fail(new Error('โหลดตัวสร้างไฟล์ไม่ได้ — ตรวจอินเทอร์เน็ตแล้วลองใหม่')); }; document.head.appendChild(s); });
+  }
+  function xpPageLabel() {
+    var b = $('nav').querySelector('button.active');
+    return b ? b.textContent.trim() : (($('main').querySelector('h3') || {}).textContent || '').trim();
+  }
+  function xpFileName(ext) {
+    var t = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
+    var name = [state.dept.name, xpPageLabel()].filter(Boolean).join(' - ') + ' ' + p(t.getDate()) + '-' + p(t.getMonth() + 1) + '-' + String(t.getFullYear() + 543).slice(2);
+    return name.replace(/[\\\/:*?"<>|\n\r]+/g, ' ').replace(/\s+/g, ' ').trim() + '.' + ext;
+  }
+  function xpVisible(el) { return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length); }
+  function xpText(el) {
+    if (!el) return '';
+    if (/^(INPUT|TEXTAREA)$/.test(el.tagName)) return el.type === 'checkbox' ? (el.checked ? '✓' : '') : el.value;
+    if (el.tagName === 'SELECT') return el.selectedIndex >= 0 ? el.options[el.selectedIndex].text : '';
+    var txt;
+    if (!el.querySelector('input, select, textarea, .noprint')) txt = el.innerText;
+    else {   // มีช่องกรอก / ส่วนที่ไม่พิมพ์ — ใช้สำเนาที่วางไว้นอกจอ (innerText ต้องอยู่ในหน้าเว็บถึงจะแบ่งบรรทัดถูก)
+      var c = el.cloneNode(true), src = el.querySelectorAll('input, select, textarea');
+      Array.prototype.forEach.call(c.querySelectorAll('input, select, textarea'), function (x, i) { x.parentNode.replaceChild(document.createTextNode(src[i] && src[i].type !== 'hidden' ? ' ' + xpText(src[i]) + ' ' : ''), x); });
+      Array.prototype.forEach.call(c.querySelectorAll('.noprint, script, style'), function (x) { if (x.parentNode) x.parentNode.removeChild(x); });
+      var hold = document.createElement('div'); hold.style.cssText = 'position:fixed;left:-30000px;top:0;width:' + Math.max(200, el.offsetWidth) + 'px';
+      hold.appendChild(c); document.body.appendChild(hold); txt = c.innerText; document.body.removeChild(hold);
+    }
+    return String(txt || '').replace(/[ \t\u00a0]+/g, ' ').replace(/\s*\n\s*/g, ' · ').replace(/^ · | · $/g, '').trim();
+  }
+  function xpVal(t) {   // ตัวเลขล้วนให้เป็นตัวเลขใน Excel (คำนวณต่อได้) — วันที่ / รหัสคงเป็นข้อความ
+    var s = String(t).trim();
+    if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$|^-?\d+(\.\d+)?$/.test(s) && !/^0\d/.test(s) && s.replace(/[^\d]/g, '').length < 15) return Number(s.replace(/,/g, ''));
+    return s;
+  }
+  function xpTitleOf(el) {   // หัวข้อที่อยู่ก่อนหน้าตาราง / รายการ — ใช้ตั้งชื่อชีต
+    for (var n = el, up = 0; n && n !== $('main') && up < 6; n = n.parentElement, up++) {
+      for (var p = n.previousElementSibling, k = 0; p && k < 4; p = p.previousElementSibling, k++) {
+        var h = /^H[1-6]$/.test(p.tagName) ? p : p.querySelector && p.querySelector('h3, h4, h5');
+        if (h && h.textContent.trim()) return h.textContent.trim();
+      }
+      var own = n.querySelector && n.parentElement && n.parentElement.querySelector(':scope > h3, :scope > h4, :scope > h5');
+      if (own && own.textContent.trim()) return own.textContent.trim();
+    }
+    return '';
+  }
+  function xpTableRows(tb) {
+    var rows = [], fill = [];
+    Array.prototype.forEach.call(tb.rows, function (tr, r) {
+      if (!xpVisible(tr) || tr.closest('.noprint')) return;
+      var row = rows.length; rows[row] = rows[row] || []; var c = 0;
+      Array.prototype.forEach.call(tr.cells, function (td) {
+        if (td.classList.contains('noprint')) return;
+        while (rows[row][c] !== undefined) c++;
+        var v = xpVal(xpText(td)), cs = Math.min(td.colSpan || 1, 50), rs = Math.min(td.rowSpan || 1, 50);
+        for (var i = 0; i < rs; i++) { rows[row + i] = rows[row + i] || []; for (var j = 0; j < cs; j++) rows[row + i][c + j] = (i || j) ? '' : v; }
+        if (cs > 1 || rs > 1) fill.push({ s: { r: row, c: c }, e: { r: row + rs - 1, c: c + cs - 1 } });
+        c += cs;
+      });
+    });
+    for (var i = 0; i < rows.length; i++) { rows[i] = rows[i] || []; for (var j = 0; j < rows[i].length; j++) if (rows[i][j] === undefined) rows[i][j] = ''; }
+    return { rows: rows, merges: fill };
+  }
+  var XP_ITEMS = '.prow, .hcard, .qcard, .rcard, .xcard, .vcard, .cprow, .sitem, .pitem, .card';
+  function xpScreenSheets() {
+    var main = $('main'), sheets = [];
+    var kpis = Array.prototype.filter.call(main.querySelectorAll('.kpi'), xpVisible).map(function (k) {
+      var b = k.querySelector('b'), v = b ? xpText(b) : '', l = xpText(k); if (v && l.indexOf(v) === 0) l = l.slice(v.length).replace(/^ · /, '');
+      return [l, xpVal(v)];
+    });
+    if (kpis.length) sheets.push({ name: 'สรุป', rows: [['หัวข้อ', 'จำนวน']].concat(kpis) });
+    Array.prototype.forEach.call(main.querySelectorAll('table'), function (tb) {
+      if (!xpVisible(tb) || tb.closest('.noprint') || tb.parentElement.closest('table')) return;
+      var t = xpTableRows(tb); if (!t.rows.length) return;
+      sheets.push({ name: xpTitleOf(tb) || 'ตาราง', rows: t.rows, merges: t.merges });
+    });
+    var groups = [];
+    Array.prototype.forEach.call(main.querySelectorAll(XP_ITEMS), function (it) {
+      if (!xpVisible(it) || it.closest('table') || it.closest('.noprint') || (it.parentElement && it.parentElement.closest(XP_ITEMS))) return;
+      var g = groups.filter(function (x) { return x.parent === it.parentElement; })[0];
+      if (!g) groups.push(g = { parent: it.parentElement, items: [] });
+      g.items.push(it);
+    });
+    groups.forEach(function (g) {
+      var rows = g.items.map(function (it) {
+        var h = it.querySelector('b, strong, h4, .t'), t = h ? xpText(h) : '', all = xpText(it);
+        var at = t ? all.indexOf(t) : -1;   // ข้อความก่อนชื่อที่สั้นมาก = ตัวอักษรแทนรูป → ตัดทิ้ง
+        var rest = at >= 0 && at <= 4 ? all.slice(at + t.length).replace(/^ · /, '') : at > 4 ? all.replace(t, '').replace(/ ·  · /, ' · ') : all;
+        return t ? [t, rest] : [all, ''];
+      });
+      sheets.push({ name: xpTitleOf(g.parent) || 'รายการ', rows: [['รายการ', 'รายละเอียด']].concat(rows) });
+    });
+    if (!sheets.length) {
+      var lines = String(main.innerText || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean);
+      sheets.push({ name: xpPageLabel() || 'ข้อมูล', rows: lines.map(function (x) { return [xpVal(x)]; }) });
+    }
+    return sheets;
+  }
+  function xpBook(sheets) {
+    var wb = XLSX.utils.book_new(), used = {};
+    sheets.forEach(function (sh) {
+      var ws = XLSX.utils.aoa_to_sheet(sh.rows);
+      if (sh.merges && sh.merges.length) ws['!merges'] = sh.merges;
+      var w = [];   // กว้างคอลัมน์ตามข้อความ (ไม่เกิน 60 ตัวอักษร)
+      sh.rows.forEach(function (r) { r.forEach(function (v, i) { w[i] = Math.max(w[i] || 6, Math.min(60, String(v == null ? '' : v).length + 2)); }); });
+      ws['!cols'] = w.map(function (x) { return { wch: x }; });
+      var base = String(sh.name || 'ข้อมูล').replace(/[\[\]:*?\/\\]/g, ' ').trim().replace(/\s+/g, ' ').slice(0, 28) || 'ข้อมูล', name = base, n = 2;
+      while (used[name]) name = base.slice(0, 26) + ' ' + (n++);
+      used[name] = 1;
+      XLSX.utils.book_append_sheet(wb, ws, name);
+    });
+    return wb;
+  }
+  function xpBusy(btn, on) { btn.classList.toggle('busy', on); }
+  function exportExcel() {
+    var btn = $('xlsBtn'), mod = deptModule(), page = state.page; xpBusy(btn, true);
+    xpLoad(XP_LIB.xlsx, function () { return !!window.XLSX; }).then(function () {
+      var data = mod && mod.exportData ? mod.exportData(page) : null;
+      return Promise.resolve(data).then(function (d) {
+        var sheets = d && d.sheets && d.sheets.length ? d.sheets : xpScreenSheets();
+        XLSX.writeFile(xpBook(sheets), xpFileName('xlsx'));
+        toast('ดาวน์โหลดไฟล์ Excel แล้ว');
+      });
+    }).catch(function (e) { toast('สร้างไฟล์ Excel ไม่ได้: ' + (e && e.message || e)); }).then(function () { xpBusy(btn, false); });
+  }
+  function exportPdf() {
+    var btn = $('pdfBtn'), main = $('main'), box; xpBusy(btn, true);
+    Promise.all([xpLoad(XP_LIB.h2c, function () { return !!window.html2canvas; }), xpLoad(XP_LIB.pdf, function () { return !!(window.jspdf && window.jspdf.jsPDF); })]).then(function () {
+      var t = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
+      box = document.createElement('div'); box.className = 'xp-box';
+      box.style.setProperty('--c', getComputedStyle($('app')).getPropertyValue('--c'));
+      var inner = document.createElement('div'); inner.style.position = 'relative';
+      inner.innerHTML = '<div class="xp-head"><b>' + esc(state.dept.name) + (xpPageLabel() ? ' — ' + esc(xpPageLabel()) : '') + '</b><small>พิมพ์เมื่อ ' + p(t.getDate()) + '/' + p(t.getMonth() + 1) + '/' + String(t.getFullYear() + 543).slice(2) + ' ' + p(t.getHours()) + ':' + p(t.getMinutes()) + ' น.</small></div>';
+      var clone = main.cloneNode(true); clone.removeAttribute('id'); clone.style.cssText = 'max-width:none;width:auto;padding:0';
+      // ค่าที่พิมพ์ในช่อง / ภาพกราฟ (canvas) ไม่ติดไปกับ cloneNode — คัดลอกเอง
+      var si = main.querySelectorAll('input, select, textarea'), di = clone.querySelectorAll('input, select, textarea');
+      Array.prototype.forEach.call(di, function (x, i) { var s = si[i]; if (!s) return; if (s.type === 'checkbox' || s.type === 'radio') x.checked = s.checked; else x.value = s.value; if (x.tagName === 'SELECT') x.selectedIndex = s.selectedIndex; });
+      var sc = main.querySelectorAll('canvas'), dc = clone.querySelectorAll('canvas');
+      Array.prototype.forEach.call(dc, function (x, i) { try { var img = new Image(); img.src = sc[i].toDataURL(); img.style.cssText = 'width:' + sc[i].offsetWidth + 'px;height:' + sc[i].offsetHeight + 'px'; x.parentNode.replaceChild(img, x); } catch (e) {} });
+      Array.prototype.forEach.call(clone.querySelectorAll('input[type=search], input[type=text], input:not([type])'), function (x) { if (!x.value) x.classList.add('xp-empty'); });   // ช่องค้นหาที่ว่าง ไม่ต้องพิมพ์
+      inner.appendChild(clone); box.appendChild(inner); $('app').appendChild(box);
+      box.style.width = '1000px';
+      // ตารางที่เลื่อนซ้ายขวาได้ → กางออกให้เห็นครบทุกคอลัมน์
+      Array.prototype.forEach.call(clone.querySelectorAll('*'), function (el) { if (el.scrollWidth > el.clientWidth + 2) { var cs = getComputedStyle(el); if (/auto|scroll|hidden/.test(cs.overflowX)) { el.style.overflow = 'visible'; el.style.maxWidth = 'none'; } } });
+      var W = Math.min(2400, Math.max(1000, box.scrollWidth, inner.scrollWidth + 48)); box.style.width = W + 'px';
+      var land = W > 1150, pw = land ? 297 : 210, ph = land ? 210 : 297, m = 8;
+      var cssW = W, pageCss = Math.floor((ph - m * 2 - 6) * cssW / (pw - m * 2));
+      var top0 = inner.getBoundingClientRect().top, total = Math.ceil(inner.scrollHeight) + 4;
+      var cuts = [];
+      Array.prototype.forEach.call(inner.querySelectorAll('tr, .prow, .kpis, .panel, h3, h4, .hcard, .qcard, .rcard, .xcard, .vcard, .cprow, .card, .sitem, .pitem'), function (el) {
+        var r = el.getBoundingClientRect(); if (!r.height) return;
+        cuts.push(Math.round(r.bottom - top0) + 1);
+        if (/^H[34]$/.test(el.tagName)) cuts.push(Math.round(r.top - top0) - 4);
+      });
+      cuts.sort(function (a, b) { return a - b; });
+      var pages = [], y = 0;
+      while (y < total - 2) {
+        var lim = y + pageCss;
+        if (lim >= total) { pages.push([y, total - y]); break; }
+        var cut = 0; cuts.forEach(function (c) { if (c > y + pageCss * 0.45 && c <= lim) cut = c; });
+        if (!cut) cut = lim;
+        pages.push([y, cut - y]); y = cut;
+      }
+      if (pages.length > 60) throw new Error('หน้านี้ยาวเกิน 60 หน้า — กรองข้อมูลให้น้อยลงก่อน');
+      var view = document.createElement('div'); view.style.cssText = 'position:relative;overflow:hidden;background:#fff';
+      box.insertBefore(view, inner); view.appendChild(inner); box.style.padding = '0 24px';
+      var pdf = new window.jspdf.jsPDF({ orientation: land ? 'l' : 'p', unit: 'mm', format: 'a4' });
+      var scale = Math.min(2, 5200 / W);
+      var chain = Promise.resolve();
+      pages.forEach(function (pg, i) {
+        chain = chain.then(function () {
+          view.style.height = pg[1] + 'px'; inner.style.top = (-pg[0]) + 'px';
+          return window.html2canvas(view, { scale: scale, backgroundColor: '#ffffff', useCORS: true, logging: false });
+        }).then(function (cv) {
+          if (i) pdf.addPage();
+          var wmm = pw - m * 2, hmm = cv.height * wmm / cv.width;
+          pdf.addImage(cv.toDataURL('image/jpeg', 0.9), 'JPEG', m, m, wmm, hmm);
+          pdf.setFontSize(8); pdf.setTextColor(120); pdf.text((i + 1) + ' / ' + pages.length, pw - m, ph - 4, { align: 'right' });
+        });
+      });
+      return chain.then(function () { pdf.save(xpFileName('pdf')); toast('ดาวน์โหลดไฟล์ PDF แล้ว'); });
+    }).catch(function (e) { toast('สร้างไฟล์ PDF ไม่ได้: ' + (e && e.message || e)); }).then(function () {
+      if (box && box.parentNode) box.parentNode.removeChild(box);
+      xpBusy(btn, false);
+    });
+  }
+  $('xlsBtn').addEventListener('click', exportExcel);
+  $('pdfBtn').addEventListener('click', exportPdf);
+  function xpShow() { var on = !state.admin && !!state.dept && state.page !== 'pw'; $('xlsBtn').classList.toggle('hidden', !on); $('pdfBtn').classList.toggle('hidden', !on); }
 
   // ---------- กล่องทั่วไป ----------
   var modalCfg = null;
@@ -812,7 +1018,7 @@
 </script>
 <script src="purchasing.js?v=24"></script>
 <script src="safety.js?v=9"></script>
-<script src="hr.js?v=16"></script>
+<script src="hr.js?v=17"></script>
 <script src="hrdaily.js?v=13"></script>
 <script src="hrtime.js?v=2"></script>
 <script src="accounting.js?v=19"></script>

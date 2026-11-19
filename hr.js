@@ -187,6 +187,29 @@
   }
   H.dirtyLeaves = function () { pollLeaves(true); };   // หน้าลงเวลานำเข้าแล้ว → ดึงการลาใหม่ (มาสาย / ขาดงานจากเครื่องสแกน)
   H.reset = function () { if (window.HRTIME) HRTIME.reset(); H.jobs = null; if (H.pollT) { clearInterval(H.pollT); H.pollT = null; } if (window.HRDAILY) HRDAILY.reset(); H.data = null; H.q = {}; H.photos = {}; H.photosLoaded = false; pageSize(''); };
+  // ปุ่ม "Excel" บนแถบด้านบน: ทะเบียนพนักงาน / พนักงาน Job ส่งข้อมูลครบทุกช่อง (หน้าอื่นอ่านจากหน้าจอ)
+  var XP_EMP = [['code', 'รหัสพนักงาน'], ['seq', 'ลำดับ'], ['fullName', 'ชื่อ-นามสกุล'], ['nickname', 'ชื่อเล่น'], ['gender', 'เพศ'], ['nationality', 'สัญชาติ'], ['religion', 'ศาสนา'],
+    ['birthDate', 'วันเกิด'], ['idNo', 'เลขบัตรประชาชน / พาสปอร์ต'], ['phone', 'เบอร์โทร'], ['addrReg', 'ที่อยู่ตามทะเบียนบ้าน'], ['addrNow', 'ที่อยู่ปัจจุบัน'], ['building', 'อาคาร'],
+    ['position', 'ตำแหน่ง'], ['group', 'แผนก'], ['empType', 'ประเภทการจ้าง'], ['startDate', 'วันเริ่มงาน'], ['status', 'สถานะ'], ['endDate', 'วันที่ออก'], ['endReason', 'เหตุผลที่ออก'],
+    ['emergencyName', 'ผู้ติดต่อฉุกเฉิน'], ['emergencyPhone', 'เบอร์ผู้ติดต่อฉุกเฉิน'], ['education', 'วุฒิการศึกษา'], ['note', 'หมายเหตุ']];
+  var XP_JOB = [['seq', 'ลำดับ'], ['name', 'ชื่อ'], ['nickname', 'ชื่อเล่น'], ['gender', 'เพศ'], ['nationality', 'สัญชาติ'], ['building', 'อาคาร'], ['startDate', 'วันเริ่มงาน'],
+    ['religion', 'ศาสนา'], ['agent', 'ผู้แนะนำ / ผู้ดูแล'], ['phone', 'เบอร์โทร'], ['status', 'สถานะ'], ['endDate', 'วันที่ออก'], ['note', 'หมายเหตุ']];
+  function xpRows(cols, list) {
+    return [cols.map(function (c) { return c[1]; })].concat(list.map(function (r) {
+      return cols.map(function (c) { var v = r[c[0]]; if (v == null) return ''; if (/Date$/.test(c[0])) return v ? dd(v) : ''; return c[0] === 'seq' && v !== '' && !isNaN(v) ? Number(v) : String(v); });
+    }));
+  }
+  H.exportData = function (page) {
+    if (page === 'h_emp' && H.data) {
+      var e = H.data.emps.slice().sort(function (a, b) { return (Number(a.seq) || 9999) - (Number(b.seq) || 9999); });
+      return { sheets: [{ name: 'ทำงานอยู่', rows: xpRows(XP_EMP, e.filter(function (x) { return x.status !== 'ลาออก'; })) }, { name: 'ลาออกแล้ว', rows: xpRows(XP_EMP, e.filter(function (x) { return x.status === 'ลาออก'; })) }] };
+    }
+    if (page === 'h_job' && H.jobs) {
+      var j = H.jobs.jobs;
+      return { sheets: [{ name: 'พนักงาน Job ทำงานอยู่', rows: xpRows(XP_JOB, j.filter(function (x) { return x.status !== 'ลาออก'; })) }, { name: 'พนักงาน Job ลาออก', rows: xpRows(XP_JOB, j.filter(function (x) { return x.status === 'ลาออก'; })) }] };
+    }
+    return null;
+  };
   H.menus = function () {   // เมนูการลาโชว์จำนวนคำขอที่รออนุมัติ
     var n = H.data ? pendingLeaves().length : 0;
     return MENUS.map(function (m) { return m.id === 'h_leave' && n ? Object.assign({}, m, { label: m.label + ' 🔴 ' + n }) : m; });
