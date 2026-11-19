@@ -19,6 +19,7 @@
     { id: 'h_emp', label: 'ทะเบียนพนักงาน', ic: 'users' },
     { id: 'h_job', label: 'ทะเบียนพนักงาน Job', ic: 'users' },
     { id: 'h_leave', label: 'การลา / ขาด / มาสาย', ic: 'cal' },
+    { id: 'h_time', label: 'ลงเวลา (เครื่องสแกน)', ic: 'cal' },
     { id: 'h_doc', label: 'เอกสาร & วันหมดอายุ', ic: 'idcard' },
     { id: 'h_train', label: 'การอบรม', ic: 'book' },
     { id: 'h_disc', label: 'วินัย / ใบเตือน', ic: 'gavel' },
@@ -165,7 +166,7 @@
     H.polling = true;
     call('hrLeaves', state.token, from, to).then(function (r) {
       H.polling = false;
-      if (!r.ok || !H.data) return;
+      if (!r.ok || !H.data || !r.leaves) return;
       var sig = function (arr) { return arr.filter(inWin).map(function (l) { return l.id + ':' + l.status; }).sort().join(','); };
       if (sig(H.data.leaves) === sig(r.leaves)) return;
       var had = {}; H.data.leaves.forEach(function (l) { had[l.id] = 1; });
@@ -177,7 +178,8 @@
       if (!busy && (state.page === 'h_leave' || state.page === 'h_dash')) H.render(state.page);
     }, function (e) { H.polling = false; if (String(e && e.message).indexOf('SESSION_EXPIRED') >= 0) { clearInterval(H.pollT); H.pollT = null; } });
   }
-  H.reset = function () { H.jobs = null; if (H.pollT) { clearInterval(H.pollT); H.pollT = null; } if (window.HRDAILY) HRDAILY.reset(); H.data = null; H.q = {}; H.photos = {}; H.photosLoaded = false; pageSize(''); };
+  H.dirtyLeaves = function () { pollLeaves(true); };   // หน้าลงเวลานำเข้าแล้ว → ดึงการลาใหม่ (มาสาย / ขาดงานจากเครื่องสแกน)
+  H.reset = function () { if (window.HRTIME) HRTIME.reset(); H.jobs = null; if (H.pollT) { clearInterval(H.pollT); H.pollT = null; } if (window.HRDAILY) HRDAILY.reset(); H.data = null; H.q = {}; H.photos = {}; H.photosLoaded = false; pageSize(''); };
   H.menus = function () {   // เมนูการลาโชว์จำนวนคำขอที่รออนุมัติ
     var n = H.data ? pendingLeaves().length : 0;
     return MENUS.map(function (m) { return m.id === 'h_leave' && n ? Object.assign({}, m, { label: m.label + ' 🔴 ' + n }) : m; });
@@ -216,7 +218,7 @@
       return;
     }
     if ((page === 'h_leave' || page === 'h_dash') && !H.justPolled) { H.justPolled = true; setTimeout(function () { H.justPolled = false; pollLeaves(true); }, 300); }
-    ({ h_dash: dash, h_day: function () { window.HRDAILY.page(); }, h_emp: emps, h_job: jobs, h_leave: leaves, h_doc: docs, h_train: trainings, h_disc: discs, h_rep: report, h_set: settings, h_log: logPage }[page] || dash)();
+    ({ h_dash: dash, h_day: function () { window.HRDAILY.page(); }, h_emp: emps, h_job: jobs, h_time: function () { window.HRTIME.page(); }, h_leave: leaves, h_doc: docs, h_train: trainings, h_disc: discs, h_rep: report, h_set: settings, h_log: logPage }[page] || dash)();
   };
   function pageSize(sz) {   // ขนาดกระดาษตอนพิมพ์ (แนวนอน/แนวตั้ง) ของรายงานที่เปิดอยู่
     var el = document.getElementById('hrPage');
