@@ -7,8 +7,8 @@
 var HRJ_TABLE_ = { tab: 'พนักงาน Job', cols: [
   ['id', 'รหัส'], ['seq', 'ลำดับ'], ['name', 'ชื่อ'], ['nickname', 'ชื่อเล่น'], ['building', 'อาคาร'], ['startDate', 'วันเริ่มงาน'],
   ['religion', 'ศาสนา'], ['agent', 'ผู้แนะนำ / ผู้ดูแล'], ['phone', 'เบอร์โทร'], ['status', 'สถานะ'], ['endDate', 'วันที่ออก'],
-  ['note', 'หมายเหตุ'], ['photoThumb', 'รูปย่อ'], ['nationality', 'สัญชาติ'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] };
-var HRJ_FIELDS_ = { name: 120, nickname: 60, building: 40, religion: 40, nationality: 40, agent: 80, phone: 40, status: 20, note: 300 };
+  ['note', 'หมายเหตุ'], ['photoThumb', 'รูปย่อ'], ['nationality', 'สัญชาติ'], ['gender', 'เพศ'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] };
+var HRJ_FIELDS_ = { name: 120, nickname: 60, building: 40, religion: 40, nationality: 40, gender: 10, agent: 80, phone: 40, status: 20, note: 300 };
 
 function hrjBook_(dept) { var ss = hrBook_(dept); PUR_TABLES_.hr_jobs = HRJ_TABLE_; PUR_NUM_KEYS_.seq = 1; hrjInitNat_(ss); return ss; }
 // สัญชาติ (เพิ่ม 19/11/69 เพื่อ Dashboard คนไทย / พม่า): ครั้งแรกตั้งคนที่ยังว่างเป็น "เมียนมา" (นำเข้าจากไฟล์ JOB แรงงานพม่า) — HR แก้รายคนได้
@@ -38,6 +38,7 @@ function hrSaveJob(token, j) {
     if (j.id && !row) return { ok: false, error: 'ไม่พบรายชื่อ' };
     var rec = row || { id: purId_('JB'), createdAt: now, seq: all.reduce(function (m, x) { return Math.max(m, Number(x.seq) || 0); }, 0) + 1 };
     Object.keys(HRJ_FIELDS_).forEach(function (k) { if (j[k] !== undefined) rec[k] = hrText_(j[k], HRJ_FIELDS_[k]); });
+    if (rec.gender && rec.gender !== 'ชาย' && rec.gender !== 'หญิง') rec.gender = '';
     rec.startDate = purDate_(j.startDate);
     rec.endDate = purDate_(j.endDate);
     if (!rec.status) rec.status = 'ทำงานอยู่';

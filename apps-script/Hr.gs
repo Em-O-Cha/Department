@@ -84,17 +84,25 @@ function hrActive_(e) { return e.status !== 'ลาออก'; }
 // พนักงาน Job (แท็บ "พนักงาน Job", HrJob.gs) ใช้ระบบการลาร่วมกัน (ผู้ใช้ขอ 19/11/69) — แปลงเป็นรูปแบบเดียวกับพนักงาน
 // ใช้เฉพาะงานการลา / แบบฟอร์ม QR / เช็คพนักงานรายวัน · ทะเบียนพนักงานและ Dashboard ยังนับเฉพาะแท็บ "พนักงาน"
 function hrJobAsEmp_(j) {
-  return { id: j.id, fullName: j.name, nickname: j.nickname, building: j.building, group: 'Job', position: 'พนักงาน Job', empType: 'Job', startDate: j.startDate, nationality: j.nationality,
+  return { id: j.id, fullName: j.name, nickname: j.nickname, building: j.building, group: 'Job', position: 'พนักงาน Job', empType: 'Job', startDate: j.startDate, nationality: j.nationality, gender: j.gender,
     status: j.status === 'ลาออก' ? 'ลาออก' : 'ทำงาน', photoThumb: j.photoThumb, seq: 10000 + (Number(j.seq) || 0), isJob: true };
 }
 function hrJobsAsEmps_(ss) { PUR_TABLES_.hr_jobs = HRJ_TABLE_; PUR_NUM_KEYS_.seq = 1; hrjInitNat_(ss); return purRead_(ss, 'hr_jobs').map(hrJobAsEmp_); }
 // คนไทย / พม่า / อื่น ๆ — แยกพนักงานประจำกับพนักงาน Job (Dashboard, ผู้ใช้ขอ 19/11/69)
 function hrNatOf_(e) { var n = String(e.nationality || ''); return /ไทย|thai/i.test(n) ? 'thai' : /พม่า|เมียนมา|myanmar|burm/i.test(n) ? 'mm' : 'other'; }
+// แยกชาย / หญิง ด้วย (ผู้ใช้ขอ 19/11/69) — m / f / u (ไม่ระบุเพศ) นับรวมพนักงาน + Job
+function hrSexOf_(e) { var g = String(e.gender || ''); return /หญิง|^f/i.test(g) ? 'f' : /ชาย|^m/i.test(g) ? 'm' : 'u'; }
 function hrNatSplit_(staff, jobs) {
-  var o = { thai: { staff: 0, job: 0 }, mm: { staff: 0, job: 0 }, other: { staff: 0, job: 0 } };
-  staff.forEach(function (e) { o[hrNatOf_(e)].staff++; });
-  jobs.forEach(function (e) { o[hrNatOf_(e)].job++; });
+  var mk = function () { return { staff: 0, job: 0, m: 0, f: 0, u: 0 }; }, o = { thai: mk(), mm: mk(), other: mk() };
+  staff.forEach(function (e) { var x = o[hrNatOf_(e)]; x.staff++; x[hrSexOf_(e)]++; });
+  jobs.forEach(function (e) { var x = o[hrNatOf_(e)]; x.job++; x[hrSexOf_(e)]++; });
   return o;
+}
+// ตาราง สัญชาติ × เพศ (พนักงาน + Job)
+function hrNatGender_(people) {
+  var m = {};
+  people.forEach(function (e) { var k = String(e.nationality || '').trim() || 'ไม่ระบุ', x = m[k] = m[k] || { name: k, m: 0, f: 0, u: 0, n: 0 }; x[hrSexOf_(e)]++; x.n++; });
+  return Object.keys(m).map(function (k) { return m[k]; }).sort(function (a, b) { return b.n - a.n; });
 }
 function hrPeople_(ss) { return purRead_(ss, 'hr_emps').concat(hrJobsAsEmps_(ss)); }
 // วันลา (นับวันทำงาน): ไม่นับวันอาทิตย์ (ตั้งค่า workDays = 'จ-ศ' ไม่นับเสาร์ด้วย)
@@ -429,12 +437,13 @@ function hrDashboard_(dept, from, to) {
   if (disc.length) insights.push({ level: 'warn', text: 'มีการลงโทษทางวินัย ' + disc.length + ' ครั้ง' });
   if (trains.length) insights.push({ level: 'ok', text: 'อบรม ' + trains.length + ' หลักสูตร · ' + Object.keys(trained).length + ' คน · รวม ' + trainHours + ' ชั่วโมง-คน' });
   else insights.push({ level: 'warn', text: 'ยังไม่มีการอบรมในช่วงนี้' });
+  var jobsActive = hrJobsAsEmps_(ss).filter(hrActive_);
   return {
     from: from, to: to, today: today, kind: 'hr',
     head: { active: active.length, total: emps.length, foreign: foreign.length, hires: hires.length, exits: exits.length,
       turnover: avgHead ? Math.round(exits.length / avgHead * 1000) / 10 : null,
       byGroup: cnt(active, function (e) { return e.group; }), byBuilding: cnt(active, function (e) { return e.building; }),
-      byNationality: cnt(active, function (e) { return e.nationality; }), natSplit: hrNatSplit_(active, hrJobsAsEmps_(ss).filter(hrActive_)), byGender: cnt(active, function (e) { return e.gender; }),
+      byNationality: cnt(active, function (e) { return e.nationality; }), natSplit: hrNatSplit_(active, jobsActive), natGender: hrNatGender_(active.concat(jobsActive)), byGender: cnt(active, function (e) { return e.gender; }),
       byPosition: cnt(active, function (e) { return e.position; }).slice(0, 10),
       avgTenure: ten.length ? Math.round(ten.reduce(function (s, x) { return s + x; }, 0) / ten.length * 10) / 10 : null,
       tenure: band(ten, [1, 3, 5, 10], ['ต่ำกว่า 1 ปี', '1–3 ปี', '3–5 ปี', '5–10 ปี', '10 ปีขึ้นไป']), tenureKnown: ten.length,

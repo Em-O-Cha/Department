@@ -252,11 +252,18 @@
     var tile = function (val, label, color, sub) { return '<div class="kpi" style="--k:' + color + '"><b>' + val + '</b><span>' + label + '</span>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>'; };
     var box = function (title, rows, empty) { return '<div class="panel pbox"><h4>' + title + '</h4>' + (rows.length ? rows.join('') : '<div class="muted">' + empty + '</div>') + '</div>'; };
     var bar = function (label, n, max, color, right) { return '<div class="sbar"><span>' + esc(label) + '</span><i><em style="width:' + Math.max(2, Math.round(n / Math.max(1, max) * 100)) + '%;background:' + (color || 'var(--c)') + '"></em></i><b>' + (right != null ? right : n) + '</b></div>'; };
+    var natTable = function (rows) {   // สัญชาติ × ชาย / หญิง (ผู้ใช้ขอ 19/11/69)
+      var t = { m: 0, f: 0, u: 0, n: 0 }, anyU = rows.some(function (x) { return x.u; });
+      rows.forEach(function (x) { t.m += x.m; t.f += x.f; t.u += x.u; t.n += x.n; });
+      var tr = function (x, b) { return '<tr' + (b ? ' class="tot"' : '') + '><td>' + esc(x.name) + '</td><td class="m">' + x.m + '</td><td class="f">' + x.f + '</td>' + (anyU ? '<td class="u">' + x.u + '</td>' : '') + '<td><b>' + x.n + '</b></td></tr>'; };
+      return '<table class="hnat"><thead><tr><th>สัญชาติ</th><th class="m">ชาย</th><th class="f">หญิง</th>' + (anyU ? '<th class="u">ไม่ระบุเพศ</th>' : '') + '<th>รวม</th></tr></thead><tbody>'
+        + rows.map(function (x) { return tr(x); }).join('') + tr({ name: 'รวมทั้งหมด', m: t.m, f: t.f, u: t.u, n: t.n }, true) + '</tbody></table>';
+    };
     var bars = function (arr, color, unit) { var m = arr.length ? Math.max.apply(null, arr.map(function (x) { return x.n; })) : 1; return arr.map(function (x) { return bar(x.name, x.n, m, color, x.n + (unit || '')); }); };
     var html = '<div class="kpis">'
       + tile(h.active, 'พนักงานปัจจุบัน', '#2563eb', 'ต่างด้าว ' + h.foreign + ' · ทั้งหมดในทะเบียน ' + h.total)
       + (h.natSplit ? (function (n) {   // คนไทย / พม่า (รวมพนักงาน Job) — ผู้ใช้ขอ 19/11/69
-        var sub2 = function (x) { return 'พนักงาน ' + x.staff + (x.job ? ' + Job ' + x.job : ''); };
+        var sub2 = function (x) { return (x.m != null ? '<span class="hsex">ชาย ' + x.m + ' · หญิง ' + x.f + (x.u ? ' · ไม่ระบุ ' + x.u : '') + '</span>' : '') + 'พนักงาน ' + x.staff + (x.job ? ' + Job ' + x.job : ''); };
         return tile(n.thai.staff + n.thai.job, 'คนไทย', '#16a34a', sub2(n.thai)) + tile(n.mm.staff + n.mm.job, 'พม่า (เมียนมา)', '#b45309', sub2(n.mm))
           + (n.other.staff + n.other.job ? tile(n.other.staff + n.other.job, 'สัญชาติอื่น / ไม่ระบุ', '#64748b', sub2(n.other)) : '');
       })(h.natSplit) : '')
@@ -270,7 +277,8 @@
     var maxLd = Math.max.apply(null, r.trend.map(function (m) { return m.leaveDays; }).concat([1]));
     html += '<div class="pgrid">'
       + box(icon('users', 18) + ' พนักงานแยกแผนก / อาคาร', bars(h.byGroup, '#2563eb', ' คน').concat(['<div class="xsep"></div>']).concat(bars(h.byBuilding, '#0891b2', ' คน')), 'ยังไม่มีข้อมูล')
-      + box(icon('users', 18) + ' สัญชาติ / เพศ', bars(h.byNationality, '#7c3aed', ' คน').concat(['<div class="xsep"></div>']).concat(bars(h.byGender, '#db2777', ' คน')), 'ยังไม่มีข้อมูล')
+      + (h.natGender ? box(icon('users', 18) + ' สัญชาติ แยกชาย / หญิง <small class="muted">(รวม Job)</small>', h.natGender.length ? [natTable(h.natGender)] : [], 'ยังไม่มีข้อมูล')
+        : box(icon('users', 18) + ' สัญชาติ / เพศ', bars(h.byNationality, '#7c3aed', ' คน').concat(['<div class="xsep"></div>']).concat(bars(h.byGender, '#db2777', ' คน')), 'ยังไม่มีข้อมูล'))
       + box(icon('cal', 18) + ' การลาแยกประเภท (ช่วงนี้)', L.byType.map(function (x) { return bar(x.name, x.name === 'มาสาย' ? x.times : x.days, Math.max.apply(null, L.byType.map(function (y) { return y.name === 'มาสาย' ? y.times : y.days; }).concat([1])), x.name === 'ขาดงาน' ? '#dc2626' : '#d97706', x.name === 'มาสาย' ? x.times + ' ครั้ง' + (x.minutes ? ' · ' + x.minutes + ' นาที' : '') : x.days + ' วัน · ' + x.times + ' ครั้ง'); }), 'ไม่มีการลาในช่วงนี้')
       + box(icon('warn', 18) + ' ลา / ขาด / สาย มากที่สุด', L.top.map(function (x) { return '<div class="li click" data-emp="' + esc(x.id) + '"><span>' + esc(x.name) + '</span><b>' + (x.sick + x.personal + x.absent) + ' วัน</b><small>ป่วย ' + x.sick + ' · กิจ ' + x.personal + ' · ขาด ' + x.absent + ' · สาย ' + x.late + ' ครั้ง</small></div>'; }), 'ไม่มีข้อมูล')
       + box(icon('idcard', 18) + ' เอกสารหมดอายุ / ใกล้หมดอายุ', D.expiring.map(function (x) { return '<div class="li click" data-emp="' + esc(x.empId) + '"><span>' + esc(x.name) + '</span><b class="' + (x.left < 0 ? 'neg' : 'warn') + '">' + (x.left < 0 ? 'หมดแล้ว ' + (-x.left) + ' วัน' : 'อีก ' + x.left + ' วัน') + '</b><small>' + esc(x.type) + (x.number ? ' ' + esc(x.number) : '') + ' · หมด ' + dd(x.expiryDate) + '</small></div>'; }), 'ไม่มีเอกสารที่หมดอายุใน ' + D.alertDays + ' วัน')
@@ -321,7 +329,7 @@
         var gr = rows.filter(function (j) { return (j.building || '— ไม่ระบุอาคาร —') === g; });
         return '<h4 class="hjb">' + esc(g) + ' <span>' + gr.length + ' คน</span></h4><div class="hgrid">' + gr.map(function (j) {
           return '<button class="hcard' + (j.status === 'ลาออก' ? ' off' : '') + '" data-job="' + j.id + '">' + jph(j) + '<div class="hinfo"><b>' + esc(j.name) + '</b>'
-            + '<span>' + esc([j.nickname, j.nationality, j.religion].filter(String).join(' · ')) + '</span>'
+            + '<span>' + esc([j.nickname, j.gender, j.nationality, j.religion].filter(String).join(' · ')) + '</span>'
             + '<small>เริ่มงาน ' + (j.startDate ? thDate(j.startDate) + ' · ' + yrs(j.startDate) : '-') + '</small>'
             + '<small class="muted">' + esc(j.agent ? 'ผู้ดูแล: ' + j.agent : '') + (j.status === 'ลาออก' ? ' <b class="neg">ออกแล้ว' + (j.endDate ? ' ' + thDate(j.endDate) : '') + '</b>' : '') + '</small></div></button>';
         }).join('') + '</div>';
@@ -343,7 +351,7 @@
         + (j.photoThumb ? '<button type="button" class="link-btn danger" id="jRmPh">ลบรูป</button>' : '') + '</div>'
         + '<div class="pform">' + F('jName', 'ชื่อ *', j.name) + F('jNick', 'ชื่อเล่น', j.nickname)
         + S('jBld', 'อาคาร', opts(blds, '— ไม่ระบุ —'), j.building) + F('jStart', 'วันเริ่มงาน', j.startDate, 'date')
-        + F('jNat', 'สัญชาติ', j.nationality, 'text', ' list="hNatJ"') + '<datalist id="hNatJ"><option value="เมียนมา"><option value="ไทย"><option value="กัมพูชา"><option value="ลาว"></datalist>'
+        + S('jSex', 'เพศ', opts(['ชาย', 'หญิง'], '— ไม่ระบุ —'), j.gender) + F('jNat', 'สัญชาติ', j.nationality, 'text', ' list="hNatJ"') + '<datalist id="hNatJ"><option value="เมียนมา"><option value="ไทย"><option value="กัมพูชา"><option value="ลาว"></datalist>'
         + F('jRel', 'ศาสนา', j.religion, 'text', ' list="jRelL"') + '<datalist id="jRelL"><option value="พุทธ"><option value="อิสลาม"><option value="คริสต์"></datalist>'
         + F('jAgent', 'ผู้แนะนำ / ผู้ดูแล', j.agent, 'text', ' list="jAgL"') + '<datalist id="jAgL">' + uniq(all.map(function (x) { return x.agent; })).map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist>'
         + F('jPhone', 'เบอร์โทร', j.phone, 'tel') + S('jSt', 'สถานะ', opts(['ทำงานอยู่', 'ลาออก']), j.status || 'ทำงานอยู่')
@@ -371,7 +379,7 @@
         });
       },
       submit: function () {
-        var rec = { id: j.id || '', name: v('jName'), nickname: v('jNick'), building: v('jBld'), startDate: v('jStart'), nationality: v('jNat'), religion: v('jRel'), agent: v('jAgent'),
+        var rec = { id: j.id || '', name: v('jName'), nickname: v('jNick'), building: v('jBld'), startDate: v('jStart'), nationality: v('jNat'), gender: v('jSex'), religion: v('jRel'), agent: v('jAgent'),
           phone: v('jPhone'), status: v('jSt'), endDate: v('jEnd'), note: v('jNote'), photoThumb: thumb || '', removePhoto: removed };
         if (!rec.name) return Promise.resolve('ระบุชื่อ');
         return call('hrSaveJob', state.token, rec).then(function (r) {
@@ -1008,6 +1016,8 @@
   // ---------- CSS ของโมดูล ----------
   var css = document.createElement('style');
   css.textContent = [
+    '.hsex{display:block;font-weight:600;color:var(--ink)}.hnat{width:100%;border-collapse:collapse;font-size:14.5px}.hnat th,.hnat td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right}.hnat th:first-child,.hnat td:first-child{text-align:left}',
+    '.hnat th{font-size:13px;color:var(--muted);font-weight:600}.hnat .m{color:#2563eb}.hnat .f{color:#db2777}.hnat .u{color:#64748b}.hnat tr.tot td{border-bottom:0;border-top:2px solid var(--line);font-weight:700}',
     '.hlgnow{padding:10px 12px;border-radius:10px;font-weight:600;margin-bottom:12px}.hlgnow.ok{background:#dcfce7;color:#15803d}.hlgnow.bad{background:#fee2e2;color:#991b1b}.hlgol{margin:6px 0 12px;padding-left:22px;line-height:1.6}.hlgol li{margin-bottom:6px}',
     '.hlgcode{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 2px}.hlgcode code{background:#f1f5f9;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:15px;font-weight:700;user-select:all}',
     '.hgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}.hcard{display:flex;gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px;text-align:left;box-shadow:var(--shadow);color:inherit}.hcard:hover{border-color:var(--c)}.hcard.off{opacity:.55}.hjb{margin:18px 0 8px;padding:6px 12px;border-radius:10px;background:color-mix(in srgb,var(--c) 12%,white);color:var(--c)}.hjb span{font-weight:600;font-size:14px;color:#475569;margin-left:6px}',
