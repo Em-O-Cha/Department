@@ -27,10 +27,17 @@
       };
       if (!Array.isArray(D.day.resignNames)) D.day.resignNames = [];
       D.day.roles.forEach(function (r) { if (!Array.isArray(r.resigns)) r.resigns = []; });
-      // วันที่บันทึกแล้ว (วันนี้ / วันต่อไป): ตามรายชื่อล่าสุดทุกครั้งที่เปิด — ลบชื่อที่ตั้งค่าแล้วหายเอง ไม่ต้องทำอะไรเพิ่ม
-      if (r.day && r.date >= r.today) {
-        var synced = syncRoles(D.day.roles, r.roles);
-        if (JSON.stringify(synced) !== JSON.stringify(D.day.roles)) { D.day.roles = synced; D.dirty = true; render(); return save().then(function (ok) { if (ok) render(); }); }
+      if (!Array.isArray(D.day.skipSrc)) D.day.skipSrc = [];
+      D.unmatched = [];
+      // วันนี้ / วันต่อไป (หรือวันที่ยังไม่บันทึก): ตามรายชื่อล่าสุด + ใส่ขาด/ลา/มาสายจากระบบการลาให้เอง (รวมคำขอรออนุมัติ)
+      if (r.date >= r.today || !r.day) {
+        var before = JSON.stringify(D.day.roles);
+        if (r.day) D.day.roles = syncRoles(D.day.roles, r.roles);
+        applyRecords(D.day, r.records || []);
+        if (JSON.stringify(D.day.roles) !== before) {
+          D.dirty = true;
+          if (r.day) { render(); return save().then(function (ok) { if (ok) render(); }); }
+        }
       }
       render();
     }).catch(onServerError);
@@ -42,6 +49,42 @@
   function brandHtml() {
     var l = document.querySelector('.brand-logo');
     return '<div class="hdbrand">' + (l ? '<img class="hdlogo" src="' + l.src + '" alt="Spunky Food">' : '') + '<div><b>' + COMPANY_TH + '</b><span>' + COMPANY_EN + '</span></div></div>';
+  }
+  // ---------- ขาด / ลา / มาสาย จากระบบการลา ----------
+  function isLate(l) { return l.type === 'มาสาย'; }
+  function lvCount(r) { return r.leaves.filter(function (l) { return !isLate(l); }).length; }   // มาสายไม่นับเป็นลา
+  function first(n) { return String(n || '').trim().split(/[\s(]/)[0]; }
+  function bare(n) { return String(n || '').replace(/^(นาย|นางสาว|นาง|คุณ|MISS\.?|MR\.?|MRS\.?)\s*/i, '').trim(); }
+  function recReason(x) { return [x.late && x.minutes ? x.minutes + ' นาที' : '', x.reason, x.pending ? 'รออนุมัติ' : ''].filter(String).join(' · '); }
+  // ใส่บันทึกของวันนั้นลงชื่อในตาราง (จับคู่ชื่อเล่น / ชื่อจริง) · ที่จับคู่ไม่ได้ไปอยู่ใน D.unmatched ให้เลือกฝ่ายเอง
+  // บันทึกที่ถูกยกเลิก / ไม่อนุมัติ → เอาออก · ที่ผู้ใช้กดเอาออกเอง (skipSrc) ไม่ใส่กลับ
+  function applyRecords(day, recs) {
+    var ids = recs.map(function (x) { return x.id; });
+    day.roles.forEach(function (r) { r.leaves = r.leaves.filter(function (l) { return !l.src || ids.indexOf(l.src) >= 0; }); });
+    D.unmatched = [];
+    recs.forEach(function (x) {
+      if (day.skipSrc.indexOf(x.id) >= 0) return;
+      var have = null;
+      day.roles.forEach(function (r) { r.leaves.forEach(function (l) { if (l.src === x.id) have = l; }); });
+      if (have) { have.type = x.type; have.reason = recReason(x); return; }
+      var keys = [x.nick, bare(x.full), x.full].filter(String), hit = null;
+      day.roles.some(function (r) {
+        var n = r.names.filter(function (n) { return keys.indexOf(n) >= 0 || keys.indexOf(first(n)) >= 0 || (x.nick && first(n) === x.nick); })[0];
+        if (n) hit = { r: r, n: n };
+        return !!n;
+      });
+      if (!hit) { D.unmatched.push(x); return; }
+      if (hit.r.leaves.some(function (l) { return l.name === hit.n; })) return;   // HR ใส่เองไว้แล้ว
+      hit.r.leaves.push({ name: hit.n, type: x.type, reason: recReason(x), src: x.id });
+    });
+  }
+  function unmatchedHtml() {
+    if (!D.unmatched || !D.unmatched.length) return '';
+    var ro = D.day.roles.map(function (r, i) { return '<option value="' + i + '">' + esc(r.role) + '</option>'; }).join('');
+    return '<div class="panel hdun"><h4>📋 มีบันทึกขาด/ลา/มาสายในระบบ แต่ไม่พบชื่อในตาราง — เลือกฝ่ายงานให้</h4>' + D.unmatched.map(function (x, k) {
+      return '<div class="hdunr"><span><b>' + esc(x.nick || bare(x.full)) + '</b> ' + esc(x.type) + (recReason(x) ? ' · ' + esc(recReason(x)) : '') + '</span>'
+        + '<select data-unsel="' + k + '">' + ro + '</select><button class="btn btn-sm btn-line" data-unadd="' + k + '">ใส่ในฝ่ายนี้</button><button class="link-btn" data-unskip="' + k + '">ไม่ใส่</button></div>';
+    }).join('') + '</div>';
   }
   function leaveText(l) { return l.name + ' (' + l.type + (l.reason ? ' · ' + l.reason : '') + ')'; }
   // ลาออก: แตะชื่อในฝ่ายงาน → เลือก "ลาออก" ชื่อไปอยู่ช่องหมายเหตุของฝ่ายนั้น (เหมือนการลา) · จำนวน = จำนวนชื่อ
@@ -56,9 +99,9 @@
   function tableHtml(day, date) {
     var total = 0, lv = 0;
     var rows = day.roles.map(function (r) {
-      var off = r.leaves.concat(r.resigns || []).map(function (l) { return l.name; });
+      var off = r.leaves.filter(function (l) { return !isLate(l); }).concat(r.resigns || []).map(function (l) { return l.name; });
       var working = r.names.filter(function (n) { return off.indexOf(n) < 0; });
-      total += net(r); lv += r.leaves.length;
+      total += net(r); lv += lvCount(r);
       return '<tr><td class="hdr">' + esc(r.role) + '</td><td class="hdn">' + esc(working.join(', ')) + '</td><td class="hdc">' + n0(net(r)) + '</td>'
         + '<td class="hdn">' + (r.note ? '<div>' + esc(r.note) + '</div>' : '') + (r.resigns || []).map(function (x, k) { return '<div class="hdrn">' + (k + 1) + '.' + esc(resignText(x)) + '</div>'; }).join('') + '</td><td class="hdl">' + r.leaves.map(function (l, i) { return '<div>' + (i + 1) + '.' + esc(leaveText(l)) + '</div>'; }).join('') + '</td></tr>';
     }).join('');
@@ -69,7 +112,7 @@
   // ---------- หน้า ----------
   function render() {
     var d = D.data, day = D.day, L = d.line;
-    var total = day.roles.reduce(function (s, r) { return s + net(r); }, 0), lv = day.roles.reduce(function (s, r) { return s + r.leaves.length; }, 0);
+    var total = day.roles.reduce(function (s, r) { return s + net(r); }, 0), lv = day.roles.reduce(function (s, r) { return s + lvCount(r); }, 0);
     var sent = d.date === D.date && d.sentAt;
     $('main').innerHTML = '<h3>เช็คพนักงานรายวัน</h3><p class="lead">แตะชื่อคนที่ลา → เลือกประเภทและเหตุผล ชื่อจะย้ายไปช่อง "การลา" · ดูภาพตารางก่อนส่งเข้า LINE</p>'
       + '<div class="pbar hdbar"><label class="hdlb">วันที่ <input type="date" id="hdDate" value="' + D.date + '"></label>'
@@ -78,13 +121,14 @@
       + (L.token && L.group ? '<span class="hdtag">ส่งเข้ากลุ่มเดียวกับฝ่ายบัญชี / ฝ่ายผลิต</span>' : '')
       + '<button class="btn btn-sm btn-line" id="hdRoles">' + icon('gear', 15) + ' แก้ฝ่ายงาน / รายชื่อ</button></div>'
       + (L.token && L.group ? '' : lineSetup(L))
+      + unmatchedHtml()
       + '<div class="hdgrid">' + day.roles.map(function (r, i) {
-        var off = r.leaves.map(function (l) { return l.name; }), gone = r.resigns.map(function (x) { return x.name; });
-        return '<div class="panel hdcard"><div class="hdch"><b>' + esc(r.role) + '</b><span>' + n0(net(r)) + ' คน' + (r.leaves.length ? ' · <em>ลา ' + r.leaves.length + '</em>' : '') + (r.resigns.length ? ' · <em>ลาออก ' + r.resigns.length + '</em>' : '') + '</span></div>'
+        var off = r.leaves.filter(function (l) { return !isLate(l); }).map(function (l) { return l.name; }), late = r.leaves.filter(isLate).map(function (l) { return l.name; }), gone = r.resigns.map(function (x) { return x.name; });
+        return '<div class="panel hdcard"><div class="hdch"><b>' + esc(r.role) + '</b><span>' + n0(net(r)) + ' คน' + (lvCount(r) ? ' · <em>ลา ' + lvCount(r) + '</em>' : '') + (r.leaves.length - lvCount(r) ? ' · <em class="lt">สาย ' + (r.leaves.length - lvCount(r)) + '</em>' : '') + (r.resigns.length ? ' · <em>ลาออก ' + r.resigns.length + '</em>' : '') + '</span></div>'
           + (r.names.length
-            ? '<div class="hdchips">' + r.names.map(function (n) { var isOff = off.indexOf(n) >= 0, isGone = gone.indexOf(n) >= 0; return '<button class="hdchip' + (isGone ? ' gone' : isOff ? ' off' : '') + '" data-ri="' + i + '" data-nm="' + esc(n) + '">' + esc(n) + '</button>'; }).join('') + '</div>'
+            ? '<div class="hdchips">' + r.names.map(function (n) { var isOff = off.indexOf(n) >= 0, isGone = gone.indexOf(n) >= 0, isLt = late.indexOf(n) >= 0; return '<button class="hdchip' + (isGone ? ' gone' : isOff ? ' off' : isLt ? ' lt' : '') + '" data-ri="' + i + '" data-nm="' + esc(n) + '">' + esc(n) + '</button>'; }).join('') + '</div>'
             : '<label class="hdcnt">จำนวน <input type="number" min="0" inputmode="numeric" data-cnt="' + i + '" value="' + (Number(r.count) || 0) + '"> คน' + (r.resigns.length ? ' <small class="muted">(หักลาออก ' + r.resigns.length + ' เหลือ ' + n0(net(r)) + ')</small>' : '') + '</label>')
-          + (r.leaves.length ? '<div class="hdlv">' + r.leaves.map(function (l, j) { return '<div><span>' + esc(leaveText(l)) + '</span><button class="link-btn danger" data-unlv="' + i + ':' + j + '" aria-label="ยกเลิกการลา">ยกเลิก</button></div>'; }).join('') + '</div>' : '')
+          + (r.leaves.length ? '<div class="hdlv">' + r.leaves.map(function (l, j) { return '<div' + (isLate(l) ? ' class="lt"' : '') + '><span>' + esc(leaveText(l)) + (l.src ? ' <small class="hdauto">จากระบบการลา</small>' : '') + '</span><button class="link-btn danger" data-unlv="' + i + ':' + j + '" aria-label="ยกเลิกการลา">ยกเลิก</button></div>'; }).join('') + '</div>' : '')
           + (r.resigns.length ? '<div class="hdlv hdrs">' + r.resigns.map(function (x, j) { return '<div><span>' + esc(resignText(x)) + '</span><button class="link-btn danger" data-unrs="' + i + ':' + j + '" aria-label="ยกเลิกลาออก">ยกเลิก</button></div>'; }).join('') + '</div>' : '')
           + '<div class="hdfoot">' + (r.names.length ? '' : '<button class="link-btn" data-addlv="' + i + '">+ เพิ่มคนลา / ลาออก</button>')
           + '<input class="hdnote" data-note="' + i + '" placeholder="หมายเหตุ" value="' + esc(r.note || '') + '"></div></div>';
@@ -99,7 +143,12 @@
     });
     on('[data-nm]', 'click', function (el) { chip(+el.getAttribute('data-ri'), el.getAttribute('data-nm')); });
     on('[data-addlv]', 'click', function (el) { leaveDialog(+el.getAttribute('data-addlv'), ''); });
-    on('[data-unlv]', 'click', function (el) { var p = el.getAttribute('data-unlv').split(':'); day.roles[+p[0]].leaves.splice(+p[1], 1); D.dirty = true; render(); });
+    on('[data-unlv]', 'click', function (el) { var p = el.getAttribute('data-unlv').split(':'), x = day.roles[+p[0]].leaves.splice(+p[1], 1)[0]; if (x && x.src) day.skipSrc.push(x.src); D.dirty = true; render(); });
+    on('[data-unadd]', 'click', function (el) {
+      var k = +el.getAttribute('data-unadd'), x = D.unmatched[k], r = day.roles[+$('main').querySelector('[data-unsel="' + k + '"]').value];
+      r.leaves.push({ name: x.nick || bare(x.full), type: x.type, reason: recReason(x), src: x.id }); D.unmatched.splice(k, 1); D.dirty = true; render();
+    });
+    on('[data-unskip]', 'click', function (el) { var k = +el.getAttribute('data-unskip'); day.skipSrc.push(D.unmatched[k].id); D.unmatched.splice(k, 1); D.dirty = true; render(); });
     on('[data-cnt]', 'change', function (el) { day.roles[+el.getAttribute('data-cnt')].count = Math.max(0, Math.round(Number(el.value) || 0)); D.dirty = true; render(); });
     on('[data-note]', 'change', function (el) { day.roles[+el.getAttribute('data-note')].note = el.value.trim(); D.dirty = true; $('hdPrev').innerHTML = tableHtml(day, D.date); });
     on('[data-unrs]', 'click', function (el) { var p = el.getAttribute('data-unrs').split(':'); day.roles[+p[0]].resigns.splice(+p[1], 1); D.dirty = true; render(); });
@@ -113,7 +162,7 @@
   }
   function chip(i, name) {
     var r = D.day.roles[i], j = r.leaves.map(function (l) { return l.name; }).indexOf(name);
-    if (j >= 0) { r.leaves.splice(j, 1); D.dirty = true; render(); return; }   // แตะคนที่ลาอยู่ = ยกเลิกการลา
+    if (j >= 0) { var x = r.leaves.splice(j, 1)[0]; if (x.src) D.day.skipSrc.push(x.src); D.dirty = true; render(); return; }   // แตะคนที่ลาอยู่ = ยกเลิกการลา (ที่มาจากระบบ: จำไว้ไม่ใส่กลับ)
     var g = r.resigns.map(function (x) { return x.name; }).indexOf(name);
     if (g >= 0) { r.resigns.splice(g, 1); D.dirty = true; render(); return; }   // แตะคนที่ลาออก = ยกเลิก
     leaveDialog(i, name);
@@ -219,6 +268,8 @@
     '.hdgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:12px}.hdcard{padding:12px 14px}.hdch{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px}.hdch span{color:var(--muted);white-space:nowrap}.hdch em{color:#dc2626;font-style:normal;font-weight:700}',
     '.hdchips{display:flex;flex-wrap:wrap;gap:6px}.hdchip{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:6px 12px;font:inherit;font-size:14px;cursor:pointer}.hdchip:hover{border-color:var(--c)}.hdchip.off{background:#fee2e2;border-color:#fca5a5;color:#991b1b;text-decoration:line-through}',
     '.hdcnt{display:flex;gap:8px;align-items:center}.hdcnt input{width:90px;padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit}',
+    '.hdchip.lt{border-color:#f59e0b;background:#fffbeb;color:#92400e}.hdlv div.lt{color:#b45309}.hdcard em.lt{color:#b45309}.hdauto{font-size:11px;color:#64748b;background:#f1f5f9;border-radius:6px;padding:1px 6px;margin-left:4px}',
+    '.hdun{border:2px dashed #f59e0b;margin-bottom:12px}.hdun h4{margin:0 0 8px}.hdunr{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}.hdunr span{flex:1;min-width:180px}.hdunr select{padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;font:inherit}',
     '.hdlv{margin-top:8px;border-top:1px dashed var(--line);padding-top:6px}.hdlv div{display:flex;justify-content:space-between;gap:8px;font-size:14px;color:#991b1b;padding:2px 0}',
     '.hdfoot{display:flex;gap:8px;align-items:center;margin-top:8px}.hdnote{flex:1;min-width:0;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px}',
     '.hdchip.gone{background:#e2e8f0;border-color:#94a3b8;color:#334155;text-decoration:line-through}.hdtypes .hdtrs span{border-style:dashed}.hdtypes .hdtrs input:checked+span{border-color:#334155;background:#e2e8f0;color:#0f172a}',

@@ -39,7 +39,40 @@ function hrRate_(name, max, sec) {   // จำกัดจำนวนครั�
 function hrFormInfo(token) {
   requireHr_(token);
   return { ok: true, key: hrFormKey_(), url: HR_FORM_URL_ + '?k=' + hrFormKey_(),
-    line: { token: !!props_().getProperty('HR_LINE_TOKEN'), group: !!props_().getProperty('HR_LINE_GROUP'), setupCode: hrProp_('HR_LINE_SETUP', hrSetupCode_), webhook: (function () { try { return ScriptApp.getService().getUrl(); } catch (e) { return ''; } })() } };
+    line: hrLineInfo_() };
+}
+// LINE OA แจ้งเตือนการลา: ต้องเป็นคนละ OA กับบอทรายงาน (ฝ่ายบัญชี/ผลิต) และคนละกลุ่ม (ผู้ใช้ขอ 19/11/69)
+// webhook URL เดียวกับระบบ — doPost แยกด้วย destination: ไม่ใช่บอทบัญชี/ผลิต = บอท HR
+function hrLineInfo_() {
+  var p = props_();
+  return { token: !!p.getProperty('HR_LINE_TOKEN'), group: !!p.getProperty('HR_LINE_GROUP'), setupCode: hrProp_('HR_LINE_SETUP', hrSetupCode_), webhook: ACC_WEBHOOK_URL_, botName: hrBotName_() };
+}
+function hrBotName_() {
+  try {
+    var token = props_().getProperty('HR_LINE_TOKEN'); if (!token) return '';
+    var nk = 'hr_bot_name_' + lineTokKey_(token), c = CacheService.getScriptCache(), n = c.get(nk);
+    if (n) return n;
+    var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/info', { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return '';
+    n = JSON.parse(res.getContentText()).displayName || '';
+    if (n) c.put(nk, n, 21600);
+    return n;
+  } catch (e) { return ''; }
+}
+// วาง Channel access token ของ OA ฝ่ายบุคคลในหน้าเว็บ (ตรวจกับ LINE ก่อนบันทึก · ไม่ส่ง token กลับ · ห้ามเป็นบอทเดียวกับรายงาน)
+function hrSetLineToken(token, value) {
+  requireHr_(token);
+  var v = String(value || '').replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9+\/=]{100,400}$/.test(v)) return { ok: false, error: 'รูปแบบ token ไม่ถูกต้อง — คัดลอก Channel access token (long-lived) จาก LINE Developers มาวางทั้งหมด' };
+  hrRate_('hrtoken', 10, 3600);
+  var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/info', { headers: { Authorization: 'Bearer ' + v }, muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) return { ok: false, error: 'LINE ไม่ยอมรับ token นี้ (รหัส ' + res.getResponseCode() + ') — ตรวจว่าคัดลอกครบ และเป็น token ของ OA ที่ถูกต้อง' };
+  var info = JSON.parse(res.getContentText() || '{}');
+  if (info.userId && (accIsMyBot_(info.userId) || prdIsMyBot_(info.userId))) return { ok: false, error: 'นี่คือบอทเดียวกับที่ใช้ส่งรายงาน (' + (info.displayName || '') + ') — การแจ้งเตือนการลาต้องใช้ LINE OA อีกตัวหนึ่ง' };
+  var p = props_(), old = p.getProperty('HR_LINE_TOKEN');
+  p.setProperty('HR_LINE_TOKEN', v);
+  if (old && old !== v) p.deleteProperty('HR_LINE_GROUP');   // เปลี่ยน OA → ต้องผูกกลุ่มใหม่
+  return { ok: true, botName: info.displayName || '', regroup: !!(old && old !== v), line: hrLineInfo_() };
 }
 function hrFormNewKey(token) {
   var dept = requireHr_(token);

@@ -59,16 +59,25 @@ function hrDailyLoad(token, date) {
   if (prev) { try { (JSON.parse(prev.data || '{}').roles || []).forEach(function (r) { if (!r.names || !r.names.length) lastCounts[r.role] = hrdNet_(r); }); } catch (e) {} }
   return { ok: true, today: purToday_(), date: d, roles: hrdRoles_(ss), day: day, sentAt: row ? row.sentAt : '', lastCounts: lastCounts,
     days: all.slice(0, 14).map(function (x) { return { date: x.d, total: x.total, leaveCount: x.leaveCount, sentAt: x.sentAt }; }),
-    leaveTypes: HRD_LEAVE_TYPES_, line: hrdLineInfo_() };
+    leaveTypes: HRD_LEAVE_TYPES_, line: hrdLineInfo_(), records: hrdRecords_(ss, d) };
 }
 // จำนวนพนักงานของฝ่าย = จำนวนตั้งต้น − คนลาออก (หักออก 19/11/69) · คนลายังนับรวม · วันถัดไปฝ่ายที่กรอกจำนวนตั้งต้นจากยอดหลังหัก
 function hrdNet_(r) { return Math.max(0, (Number(r.count) || 0) - ((r.resigns && r.resigns.length) || 0)); }
+// ขาด / ลา / มาสาย ของวันนั้นจากระบบการลา (รวมคำขอที่ยังรออนุมัติ — ผู้ใช้ขอ 19/11/69) → หน้าเว็บใส่ในตารางเช็คพนักงานให้เอง
+function hrdRecords_(ss, d) {
+  var emps = {}; purRead_(ss, 'hr_emps').forEach(function (e) { emps[e.id] = e; });
+  return purRead_(ss, 'hr_leaves').filter(function (l) { return l.status !== 'ไม่อนุมัติ' && l.dateFrom <= d && (l.dateTo || l.dateFrom) >= d; }).map(function (l) {
+    var e = emps[l.empId] || {};
+    return { id: l.id, nick: String(e.nickname || ''), full: String(e.fullName || ''), type: HR_LEAVE_TYPES_[l.type] || l.type, late: l.type === 'late',
+      minutes: Number(l.minutes) || 0, reason: String(l.reason || ''), pending: l.status === 'รออนุมัติ' };
+  }).filter(function (x) { return x.nick || x.full; });
+}
 function hrdCleanDay_(day) {
   day = day || {};
   var roles = (Array.isArray(day.roles) ? day.roles : []).slice(0, 60).map(function (r) {
     var names = (Array.isArray(r.names) ? r.names : []).slice(0, 80).map(function (n) { return hrdClean_(n, 60); }).filter(String);
     var leaves = (Array.isArray(r.leaves) ? r.leaves : []).slice(0, 80).map(function (l) {
-      return { name: hrdClean_(l.name, 60), type: hrdClean_(l.type, 30) || 'ลา', reason: hrdClean_(l.reason, 120) };
+      return { name: hrdClean_(l.name, 60), type: hrdClean_(l.type, 30) || 'ลา', reason: hrdClean_(l.reason, 120), src: hrdClean_(l.src, 40) };
     }).filter(function (l) { return l.name; });
     var resigns = (Array.isArray(r.resigns) ? r.resigns : []).slice(0, 80).map(function (x) {
       return { name: hrdClean_(x && x.name, 60), reason: hrdClean_(x && x.reason, 120) };
@@ -80,7 +89,8 @@ function hrdCleanDay_(day) {
   // ข้อมูลเก่า: resignNames (รวมทั้งวัน) / ตัวเลขอย่างเดียว ยังนับให้
   var resignNames = (Array.isArray(day.resignNames) ? day.resignNames : []).slice(0, 80).map(function (n) { return hrdClean_(n, 60); }).filter(String);
   var named = roles.reduce(function (s, r) { return s + r.resigns.length; }, 0) + resignNames.length;
-  return { roles: roles, resignNames: resignNames, resign: named || Math.max(0, Math.round(Number(day.resign) || 0)) };
+  var skipSrc = (Array.isArray(day.skipSrc) ? day.skipSrc : []).slice(0, 200).map(function (x) { return hrdClean_(x, 40); }).filter(String);   // บันทึกการลาที่ HR เอาออกจากตาราง (ไม่ใส่กลับ)
+  return { roles: roles, resignNames: resignNames, skipSrc: skipSrc, resign: named || Math.max(0, Math.round(Number(day.resign) || 0)) };
 }
 function hrDailySave(token, date, day) {
   var dept = requireHr_(token), d = accDate_(date);
@@ -92,7 +102,7 @@ function hrDailySave(token, date, day) {
     row.day = cpSlash_(d);
     row.data = JSON.stringify(c);
     row.total = c.roles.reduce(function (s, r) { return s + hrdNet_(r); }, 0);
-    row.leaveCount = c.roles.reduce(function (s, r) { return s + r.leaves.length; }, 0);
+    row.leaveCount = c.roles.reduce(function (s, r) { return s + r.leaves.filter(function (l) { return l.type !== 'มาสาย'; }).length; }, 0);   // มาสายไม่นับเป็นลา
     row.resign = c.resign; row.updatedAt = purNow_();
     purWrite_(ss, 'hr_daily', row);
     purLogWrite_(ss, 'บันทึกเช็คพนักงานรายวัน', 'hr_daily', d, 'ทั้งหมด ' + row.total + ' · ลา ' + row.leaveCount);

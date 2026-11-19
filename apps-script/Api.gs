@@ -33,9 +33,9 @@ function apiFunctions_() {
     hrLoad: hrLoad, hrPhotos: hrPhotos, hrSaveEmp: hrSaveEmp, hrDeleteEmp: hrDeleteEmp, hrSaveDoc: hrSaveDoc, hrSaveLeave: hrSaveLeave,
     hrSaveTraining: hrSaveTraining, hrSaveDisc: hrSaveDisc, hrDeleteRow: hrDeleteRow, hrUploadFile: hrUploadFile, hrRemoveFile: hrRemoveFile,
     hrSaveSettings: hrSaveSettings, hrDailyLoad: hrDailyLoad, hrDailySave: hrDailySave, hrDailySaveRoles: hrDailySaveRoles, hrDailySendLine: hrDailySendLine, hrLeaves: hrLeaves, hrLog: hrLog, hrDashboard: hrDashboard, hrDecideLeave: hrDecideLeave,
-    hrFormInfo: hrFormInfo, hrFormNewKey: hrFormNewKey, hrLineTest: hrLineTest,
+    hrFormInfo: hrFormInfo, hrSetLineToken: hrSetLineToken, hrFormNewKey: hrFormNewKey, hrLineTest: hrLineTest,
     // แบบฟอร์มขอลาของพนักงาน (HrPublic.gs) — ใช้รหัสแบบฟอร์มแทนตั๋ว
-    hrFormInit: hrFormInit, hrFormFind: hrFormFind, hrFormPhotos: hrFormPhotos, hrFormBalance: hrFormBalance, hrFormSubmit: hrFormSubmit, hrFormUpload: hrFormUpload,
+    hrJobs: hrJobs, hrSaveJob: hrSaveJob, hrDeleteJob: hrDeleteJob, hrFormInit: hrFormInit, hrFormFind: hrFormFind, hrFormPhotos: hrFormPhotos, hrFormBalance: hrFormBalance, hrFormSubmit: hrFormSubmit, hrFormUpload: hrFormUpload,
     // ฝ่ายบัญชี — รายงานรับออเดอร์ 7-11 (Acc.gs)
     accLoad: accLoad, cpLoad: cpLoad, cpSetSheet: cpSetSheet, cpPreview: cpPreview, cpSave: cpSave, cpSaveMap: cpSaveMap, cpUpdateLine: cpUpdateLine, cpRebuild: cpRebuild, cpSendLine: cpSendLine, cpSendMoveLine: cpSendMoveLine, cpMakeImportFiles: cpMakeImportFiles, cpMonthFiles: cpMonthFiles, acc711Preview: acc711Preview, acc711Save: acc711Save, acc711DeleteImport: acc711DeleteImport, acc711Report: acc711Report,
     acc711Pdf: acc711Pdf, acc711SendLine: acc711SendLine, accLineTest: accLineTest, accLineDiag: accLineDiag, accSaveMap: accSaveMap, accUploadProductImage: accUploadProductImage, accDashboard: accDashboard,

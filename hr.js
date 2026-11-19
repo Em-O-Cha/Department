@@ -17,6 +17,7 @@
     { id: 'h_dash', label: 'ภาพรวม / Dashboard', ic: 'home' },
     { id: 'h_day', label: 'เช็คพนักงานรายวัน (ส่ง LINE)', ic: 'users' },
     { id: 'h_emp', label: 'ทะเบียนพนักงาน', ic: 'users' },
+    { id: 'h_job', label: 'ทะเบียนพนักงาน Job', ic: 'users' },
     { id: 'h_leave', label: 'การลา / ขาด / มาสาย', ic: 'cal' },
     { id: 'h_doc', label: 'เอกสาร & วันหมดอายุ', ic: 'idcard' },
     { id: 'h_train', label: 'การอบรม', ic: 'book' },
@@ -176,7 +177,7 @@
       if (!busy && (state.page === 'h_leave' || state.page === 'h_dash')) H.render(state.page);
     }, function (e) { H.polling = false; if (String(e && e.message).indexOf('SESSION_EXPIRED') >= 0) { clearInterval(H.pollT); H.pollT = null; } });
   }
-  H.reset = function () { if (H.pollT) { clearInterval(H.pollT); H.pollT = null; } if (window.HRDAILY) HRDAILY.reset(); H.data = null; H.q = {}; H.photos = {}; H.photosLoaded = false; pageSize(''); };
+  H.reset = function () { H.jobs = null; if (H.pollT) { clearInterval(H.pollT); H.pollT = null; } if (window.HRDAILY) HRDAILY.reset(); H.data = null; H.q = {}; H.photos = {}; H.photosLoaded = false; pageSize(''); };
   H.menus = function () {   // เมนูการลาโชว์จำนวนคำขอที่รออนุมัติ
     var n = H.data ? pendingLeaves().length : 0;
     return MENUS.map(function (m) { return m.id === 'h_leave' && n ? Object.assign({}, m, { label: m.label + ' 🔴 ' + n }) : m; });
@@ -215,7 +216,7 @@
       return;
     }
     if ((page === 'h_leave' || page === 'h_dash') && !H.justPolled) { H.justPolled = true; setTimeout(function () { H.justPolled = false; pollLeaves(true); }, 300); }
-    ({ h_dash: dash, h_day: function () { window.HRDAILY.page(); }, h_emp: emps, h_leave: leaves, h_doc: docs, h_train: trainings, h_disc: discs, h_rep: report, h_set: settings, h_log: logPage }[page] || dash)();
+    ({ h_dash: dash, h_day: function () { window.HRDAILY.page(); }, h_emp: emps, h_job: jobs, h_leave: leaves, h_doc: docs, h_train: trainings, h_disc: discs, h_rep: report, h_set: settings, h_log: logPage }[page] || dash)();
   };
   function pageSize(sz) {   // ขนาดกระดาษตอนพิมพ์ (แนวนอน/แนวตั้ง) ของรายงานที่เปิดอยู่
     var el = document.getElementById('hrPage');
@@ -283,6 +284,99 @@
   };
 
   // ==================== ทะเบียนพนักงาน ====================
+  // ==================== ทะเบียนพนักงาน Job (แยกจากทะเบียนพนักงาน — แท็บ "พนักงาน Job", HrJob.gs) ====================
+  function jph(j, cls) {
+    return j && j.photoThumb ? '<img class="' + (cls || 'hph') + '" src="' + j.photoThumb + '" alt="">'
+      : '<span class="' + (cls || 'hph') + ' none">' + esc(String((j && (j.nickname || j.name)) || '?').slice(0, 1)) + '</span>';
+  }
+  function jobs() {
+    if (!H.jobs) {
+      $('main').innerHTML = '<h3>ทะเบียนพนักงาน Job</h3><div class="panel"><span class="spinner dark"></span> กำลังโหลด</div>';
+      call('hrJobs', state.token).then(function (r) { H.jobs = r; if (state.page === 'h_job') jobs(); }).catch(onServerError);
+      return;
+    }
+    var q = H.q, all = H.jobs.jobs, act = all.filter(function (j) { return j.status !== 'ลาออก'; });
+    q.jst = q.jst || 'active';
+    var rows = all.filter(function (j) {
+      if (q.jst === 'active' && j.status === 'ลาออก') return false;
+      if (q.jst === 'out' && j.status !== 'ลาออก') return false;
+      if (q.jb && j.building !== q.jb) return false;
+      var s = String(q.jq || '').toLowerCase();
+      return !s || [j.name, j.nickname, j.agent, j.phone].join(' ').toLowerCase().indexOf(s) >= 0;
+    });
+    var blds = uniq(list(H.jobs.buildings).concat(all.map(function (j) { return j.building; })));
+    var groups = uniq(rows.map(function (j) { return j.building || '— ไม่ระบุอาคาร —'; })).sort(function (a, b) { var ia = blds.indexOf(a), ib = blds.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); });
+    $('main').innerHTML = '<h3>ทะเบียนพนักงาน Job</h3><p class="lead">แยกจากทะเบียนพนักงานประจำ · ทำงานอยู่ ' + act.length + ' คน'
+      + (act.length ? ' (' + uniq(act.map(function (j) { return j.building; })).map(function (b) { return esc(b) + ' ' + act.filter(function (j) { return j.building === b; }).length; }).join(' · ') + ')' : '') + ' · แตะการ์ดเพื่อแก้ไข / เปลี่ยนรูป</p>'
+      + '<div class="pchips">' + [['active', 'ทำงานอยู่'], ['out', 'ออกแล้ว'], ['all', 'ทั้งหมด']].map(function (c) { return '<button class="chip' + (q.jst === c[0] ? ' on' : '') + '" data-jst="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>'
+      + '<div class="pbar"><div class="psearch">' + icon('search', 18) + '<input id="jq" type="search" placeholder="ค้นหา ชื่อ / ชื่อเล่น / ผู้ดูแล" value="' + esc(q.jq || '') + '"></div>'
+      + '<select id="jB"><option value="">ทุกอาคาร</option>' + blds.map(function (b) { return '<option' + (b === q.jb ? ' selected' : '') + '>' + esc(b) + '</option>'; }).join('') + '</select>'
+      + '<button class="btn btn-sm btn-primary" id="jNew">' + icon('plus', 16) + ' เพิ่มพนักงาน Job</button></div>'
+      + (groups.map(function (g) {
+        var gr = rows.filter(function (j) { return (j.building || '— ไม่ระบุอาคาร —') === g; });
+        return '<h4 class="hjb">' + esc(g) + ' <span>' + gr.length + ' คน</span></h4><div class="hgrid">' + gr.map(function (j) {
+          return '<button class="hcard' + (j.status === 'ลาออก' ? ' off' : '') + '" data-job="' + j.id + '">' + jph(j) + '<div class="hinfo"><b>' + esc(j.name) + '</b>'
+            + '<span>' + esc([j.nickname, j.religion].filter(String).join(' · ')) + '</span>'
+            + '<small>เริ่มงาน ' + (j.startDate ? thDate(j.startDate) + ' · ' + yrs(j.startDate) : '-') + '</small>'
+            + '<small class="muted">' + esc(j.agent ? 'ผู้ดูแล: ' + j.agent : '') + (j.status === 'ลาออก' ? ' <b class="neg">ออกแล้ว' + (j.endDate ? ' ' + thDate(j.endDate) : '') + '</b>' : '') + '</small></div></button>';
+        }).join('') + '</div>';
+      }).join('') || '<div class="panel muted">ไม่พบรายชื่อ</div>');
+    on('[data-jst]', 'click', function (el) { q.jst = el.getAttribute('data-jst'); jobs(); }, $('main'));
+    $('jq').addEventListener('input', function () { q.jq = $('jq').value; clearTimeout(H.jt); H.jt = setTimeout(function () { jobs(); var e = $('jq'); e.focus(); e.setSelectionRange(e.value.length, e.value.length); }, 250); });
+    $('jB').addEventListener('change', function () { q.jb = $('jB').value; jobs(); });
+    $('jNew').addEventListener('click', function () { jobModal(null); });
+    on('[data-job]', 'click', function (el) { jobModal(all.filter(function (j) { return j.id === el.getAttribute('data-job'); })[0]); }, $('main'));
+  }
+  function jobModal(j) {
+    var isNew = !j, all = H.jobs.jobs, thumb = null, removed = false;
+    j = j || { status: 'ทำงานอยู่', startDate: H.jobs.today };
+    var blds = uniq(list(H.jobs.buildings).concat(all.map(function (x) { return x.building; })).concat([j.building]));
+    wide({
+      icon: 'users', title: isNew ? 'เพิ่มพนักงาน Job' : j.name, sub: 'ทะเบียนพนักงาน Job',
+      body: '<div class="hnewph"><span id="jPrev">' + jph(j) + '</span><button type="button" class="btn btn-sm btn-line" data-jp="cam">' + icon('camera', 16) + ' ถ่ายรูป</button>'
+        + '<button type="button" class="btn btn-sm btn-line" data-jp="lib">' + icon('clip', 16) + ' เลือกรูป</button>'
+        + (j.photoThumb ? '<button type="button" class="link-btn danger" id="jRmPh">ลบรูป</button>' : '') + '</div>'
+        + '<div class="pform">' + F('jName', 'ชื่อ *', j.name) + F('jNick', 'ชื่อเล่น', j.nickname)
+        + S('jBld', 'อาคาร', opts(blds, '— ไม่ระบุ —'), j.building) + F('jStart', 'วันเริ่มงาน', j.startDate, 'date')
+        + F('jRel', 'ศาสนา', j.religion, 'text', ' list="jRelL"') + '<datalist id="jRelL"><option value="พุทธ"><option value="อิสลาม"><option value="คริสต์"></datalist>'
+        + F('jAgent', 'ผู้แนะนำ / ผู้ดูแล', j.agent, 'text', ' list="jAgL"') + '<datalist id="jAgL">' + uniq(all.map(function (x) { return x.agent; })).map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist>'
+        + F('jPhone', 'เบอร์โทร', j.phone, 'tel') + S('jSt', 'สถานะ', opts(['ทำงานอยู่', 'ลาออก']), j.status || 'ทำงานอยู่')
+        + F('jEnd', 'วันที่ออก (ถ้าออกแล้ว)', j.endDate, 'date') + T('jNote', 'หมายเหตุ', j.note) + '</div>',
+      foot: isNew ? '' : '<div class="pfoot"><button type="button" class="link-btn danger" id="jDel">' + icon('trash', 16) + ' ลบรายชื่อ (ใช้กรณีบันทึกผิด)</button></div>',
+      ok: 'บันทึก',
+      onOpen: function () {
+        $('jSt').addEventListener('change', function () { if ($('jSt').value === 'ลาออก' && !v('jEnd')) $('jEnd').value = H.jobs.today; });
+        on('[data-jp]', 'click', function (el) {
+          pick(function (f) {
+            if (!f[0]) return;
+            loadImg(f[0]).then(function (x) { thumb = canvasOf(x.im, 240, 300, true).toDataURL('image/jpeg', 0.75); URL.revokeObjectURL(x.u); removed = false; $('jPrev').innerHTML = '<img class="hph" src="' + thumb + '" alt="">'; })
+              .catch(function () { toast('เปิดรูปไม่ได้'); });
+          }, el.getAttribute('data-jp') === 'cam');
+        }, $('mBody'));
+        if ($('jRmPh')) $('jRmPh').addEventListener('click', function () { thumb = null; removed = true; $('jPrev').innerHTML = jph(null); });
+        if (!isNew) $('jDel').addEventListener('click', function () {
+          ask({ title: 'ลบ ' + j.name + ' ออกจากทะเบียน Job?', text: 'ถ้าออกจากงาน ให้เปลี่ยนสถานะเป็น "ลาออก" แทน จะได้เก็บประวัติไว้', ok: 'ลบ', tone: 'danger' }).then(function (y) {
+            if (!y) return;
+            call('hrDeleteJob', state.token, j.id).then(function (r) {
+              if (!r.ok) return toast(r.error);
+              H.jobs.jobs = all.filter(function (x) { return x.id !== j.id; }); closeModal(); toast('ลบแล้ว'); jobs();
+            }).catch(onServerError);
+          });
+        });
+      },
+      submit: function () {
+        var rec = { id: j.id || '', name: v('jName'), nickname: v('jNick'), building: v('jBld'), startDate: v('jStart'), religion: v('jRel'), agent: v('jAgent'),
+          phone: v('jPhone'), status: v('jSt'), endDate: v('jEnd'), note: v('jNote'), photoThumb: thumb || '', removePhoto: removed };
+        if (!rec.name) return Promise.resolve('ระบุชื่อ');
+        return call('hrSaveJob', state.token, rec).then(function (r) {
+          if (!r.ok) return r.error;
+          var i = all.map(function (x) { return x.id; }).indexOf(r.job.id);
+          if (i >= 0) all[i] = r.job; else all.push(r.job);
+          closeModal(); toast('บันทึกแล้ว'); jobs();
+        });
+      }
+    });
+  }
   function emps() {
     var q = H.q, all = H.data.emps;
     q.est = q.est || 'active';
@@ -827,19 +921,33 @@
       var box = $('formBox'); if (!box || !r.ok) return;
       var L = r.line;
       box.innerHTML = '<h4 style="margin-top:0">📝 แบบฟอร์มขอลาของพนักงาน (ไม่ต้องเข้าระบบ)</h4>'
-        + '<p class="muted" style="margin:0 0 8px">พนักงานสแกน QR → เลือกชื่อตัวเอง → กรอกการลา → คำขอเข้าระบบเป็น "รออนุมัติ" ทันที · ภาษาไทย / ภาษาเมียนมา</p>'
+        + '<p class="muted" style="margin:0 0 8px">พนักงานสแกน QR → พิมพ์ชื่อค้นหาตัวเอง → กรอกการลา → คำขอเข้าระบบเป็น "รออนุมัติ" ทันที · ภาษาไทย / ภาษาเมียนมา</p>'
         + '<div class="hform"><div id="qrBox" class="hqr"></div><div style="flex:1;min-width:220px"><div class="pf"><label>ลิงก์แบบฟอร์ม</label><input id="fUrl" readonly value="' + esc(r.url) + '"></div>'
         + '<div class="pfoot"><button class="btn btn-sm btn-line" id="fCopy">' + icon('copy', 16) + ' คัดลอกลิงก์</button><a class="btn btn-sm btn-line" href="' + esc(r.url) + '" target="_blank" rel="noopener">เปิดดูแบบฟอร์ม</a>'
         + '<button class="btn btn-sm btn-line" id="fPoster">' + icon('print', 16) + ' พิมพ์ป้าย QR</button><button class="btn btn-sm btn-line" id="fNew">เปลี่ยนลิงก์ใหม่</button></div>'
         + '<small class="muted">เปลี่ยนลิงก์ใหม่ = QR เดิมใช้ไม่ได้ทันที (ใช้เมื่อลิงก์หลุดไปนอกบริษัท)</small></div></div>'
-        + '<h4>🔔 แจ้งเตือนคำขอลาเข้า LINE กลุ่ม</h4>'
-        + '<div class="hline"><div class="' + (L.token ? 'ok' : '') + '">1. ใส่รหัส LINE OA ของฝ่ายบุคคลในระบบ ' + (L.token ? '✅' : '⏳ ยังไม่ได้ใส่') + '</div>'
-        + '<div class="' + (L.group ? 'ok' : '') + '">2. ผูกกลุ่ม LINE ' + (L.group ? '✅ ผูกแล้ว' : '⏳ เชิญบอทเข้ากลุ่ม HR แล้วพิมพ์ในกลุ่ม: <b>ตั้งค่ากลุ่ม HR ' + esc(L.setupCode) + '</b>') + '</div>'
+        + '<h4>🔔 แจ้งเตือนคำขอลาเข้า LINE กลุ่ม (ใช้ LINE OA แยก ไม่ใช่บอทส่งรายงาน)</h4>'
+        + '<div class="hline"><div class="' + (L.token ? 'ok' : '') + '">1. สร้าง LINE OA ใหม่ของฝ่ายบุคคล + เปิด Messaging API · ใน LINE Developers ใส่ Webhook URL ด้านล่าง เปิด Use webhook และอนุญาตให้บอทเข้ากลุ่มได้</div>'
+        + '<div class="pf"><label>Webhook URL (คัดลอกไปใส่ใน LINE Developers)</label><input id="fHook" readonly value="' + esc(L.webhook) + '"></div>'
+        + '<div class="' + (L.token ? 'ok' : '') + '">2. วาง Channel access token ของ OA ใหม่ ' + (L.token ? '✅ ' + (L.botName ? 'บอท "' + esc(L.botName) + '"' : 'ใส่แล้ว') : '⏳ ยังไม่ได้ใส่') + '</div>'
+        + '<div class="pfoot"><input id="fTok" type="password" autocomplete="off" placeholder="' + (L.token ? 'วาง token ใหม่ถ้าต้องการเปลี่ยน OA' : 'วาง Channel access token (long-lived)') + '" style="flex:1;min-width:200px;padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit">'
+        + '<button class="btn btn-sm btn-primary" id="fTokSave">บันทึก token</button><button class="btn btn-sm btn-line" id="fHookCopy">' + icon('copy', 16) + ' คัดลอก Webhook URL</button></div>'
+        + '<div class="' + (L.group ? 'ok' : '') + '">3. ผูกกลุ่ม LINE ' + (L.group ? '✅ ผูกแล้ว' : '⏳ เชิญบอท' + (L.botName ? ' "' + esc(L.botName) + '"' : 'ใหม่') + ' เข้ากลุ่ม HR (คนละกลุ่มกับกลุ่มรายงาน) แล้วพิมพ์ในกลุ่ม: <b>ตั้งค่ากลุ่ม HR ' + esc(L.setupCode) + '</b> แล้วกดรีเฟรชหน้านี้') + '</div>'
         + (L.token && L.group ? '<div><button class="btn btn-sm btn-line" id="fTest">ส่งข้อความทดสอบเข้ากลุ่ม</button></div>' : '') + '</div>';
       loadQr(function () { if (window.QRCode) new window.QRCode($('qrBox'), { text: r.url, width: 160, height: 160, correctLevel: window.QRCode.CorrectLevel.M }); });
       $('fCopy').addEventListener('click', function () { var i = $('fUrl'); i.select(); try { navigator.clipboard.writeText(r.url); } catch (e) { document.execCommand('copy'); } toast('คัดลอกลิงก์แล้ว'); });
       $('fNew').addEventListener('click', function () { ask({ title: 'เปลี่ยนลิงก์ใหม่?', text: 'QR ที่ติดไว้เดิมจะใช้ไม่ได้ ต้องพิมพ์ป้ายใหม่', ok: 'เปลี่ยนลิงก์' }).then(function (ok) { if (!ok) return; call('hrFormNewKey', state.token).then(function () { formSettings(); toast('เปลี่ยนลิงก์แล้ว'); }).catch(onServerError); }); });
       $('fPoster').addEventListener('click', function () { poster(r.url); });
+      $('fHookCopy').addEventListener('click', function () { var i = $('fHook'); i.select(); try { navigator.clipboard.writeText(L.webhook); } catch (e) { document.execCommand('copy'); } toast('คัดลอก Webhook URL แล้ว'); });
+      $('fTokSave').addEventListener('click', function () {
+        var b = this, val = $('fTok').value.trim(); if (!val) { toast('วาง token ก่อน'); return; }
+        b.disabled = true;
+        call('hrSetLineToken', state.token, val).then(function (x) {
+          b.disabled = false;
+          if (!x.ok) { toast(x.error); return; }
+          toast('บันทึกแล้ว · บอท "' + (x.botName || '') + '"' + (x.regroup ? ' — เปลี่ยน OA แล้ว ต้องผูกกลุ่มใหม่' : '')); formSettings();
+        }).catch(function (e) { b.disabled = false; onServerError(e); });
+      });
       if ($('fTest')) $('fTest').addEventListener('click', function () { call('hrLineTest', state.token).then(function (x) { toast(x.ok ? 'ส่งข้อความทดสอบแล้ว' : x.error); }).catch(onServerError); });
     }).catch(onServerError);
   }
@@ -867,7 +975,7 @@
   // ---------- CSS ของโมดูล ----------
   var css = document.createElement('style');
   css.textContent = [
-    '.hgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}.hcard{display:flex;gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px;text-align:left;box-shadow:var(--shadow);color:inherit}.hcard:hover{border-color:var(--c)}.hcard.off{opacity:.55}',
+    '.hgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}.hcard{display:flex;gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px;text-align:left;box-shadow:var(--shadow);color:inherit}.hcard:hover{border-color:var(--c)}.hcard.off{opacity:.55}.hjb{margin:18px 0 8px;padding:6px 12px;border-radius:10px;background:color-mix(in srgb,var(--c) 12%,white);color:var(--c)}.hjb span{font-weight:600;font-size:14px;color:#475569;margin-left:6px}',
     '.hph{width:64px;height:80px;object-fit:cover;border-radius:10px;flex:none;background:#e2e8f0;display:inline-grid;place-items:center;font-weight:700;font-size:22px;color:#64748b}.hph.sm{width:40px;height:50px;font-size:15px;border-radius:8px}.hph.xs{width:28px;height:35px;font-size:12px;border-radius:6px}',
     '.hinfo{min-width:0;display:flex;flex-direction:column;gap:2px;font-size:13.5px}.hinfo b{font-size:14.5px}.hinfo span{color:#334155}.hinfo small{font-size:12px}',
     '.hprof{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px}.hprof-ph{display:flex;flex-direction:column;gap:6px;align-items:center}.hbig{width:150px;height:188px;object-fit:cover;border-radius:14px;background:#e2e8f0;display:inline-grid;place-items:center;font-size:48px;font-weight:700;color:#64748b}',
