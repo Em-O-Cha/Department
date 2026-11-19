@@ -45,7 +45,46 @@ function hrFormInfo(token) {
 // webhook URL เดียวกับระบบ — doPost แยกด้วย destination: ไม่ใช่บอทบัญชี/ผลิต = บอท HR
 function hrLineInfo_() {
   var p = props_();
-  return { token: !!p.getProperty('HR_LINE_TOKEN'), group: !!p.getProperty('HR_LINE_GROUP'), setupCode: hrProp_('HR_LINE_SETUP', hrSetupCode_), webhook: ACC_WEBHOOK_URL_, botName: hrBotName_() };
+  return { token: !!p.getProperty('HR_LINE_TOKEN'), group: !!p.getProperty('HR_LINE_GROUP'), setupCode: hrProp_('HR_LINE_SETUP', hrSetupCode_), webhook: ACC_WEBHOOK_URL_, botName: hrBotName_(), approvers: hrApproversOut_() };
+}
+// ผู้มีสิทธิ์กดอนุมัติ / ไม่อนุมัติในการ์ด LINE (ผู้ใช้ขอ 19/11/69) — กำหนดด้วยบัญชี LINE (userId) ไม่ใช่ชื่อ
+// Script Property HR_LINE_APPROVERS = [{ userId, name, addedAt }] · ว่าง = ทุกคนในกลุ่มที่ผูกไว้กดได้ (แบบเดิม)
+// เพิ่มคน: HR ขอรหัสในหน้าตั้งค่า (ใช้ได้ครั้งเดียว อายุ 30 นาที, HR_LINE_APPR_CODE) → คนนั้นพิมพ์ "ขอสิทธิ์อนุมัติ <รหัส>" ในกลุ่มที่ผูกไว้
+function hrApprovers_() { try { var a = JSON.parse(props_().getProperty('HR_LINE_APPROVERS') || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+function hrApproversOut_() { return hrApprovers_().map(function (a) { return { id: a.userId, name: a.name, addedAt: a.addedAt }; }); }
+function hrIsApprover_(userId) { var a = hrApprovers_(); return !a.length || a.some(function (x) { return x.userId === userId; }); }
+function hrApproverCode(token) {
+  var dept = requireHr_(token), code = hrSetupCode_(), exp = Date.now() + 30 * 60000;
+  props_().setProperty('HR_LINE_APPR_CODE', JSON.stringify({ code: code, exp: exp }));
+  return { ok: true, code: code, expires: Utilities.formatDate(new Date(exp), 'Asia/Bangkok', 'HH:mm'), approvers: hrApproversOut_() };
+}
+function hrApproverList(token) { requireHr_(token); return { ok: true, approvers: hrApproversOut_() }; }
+function hrRemoveApprover(token, userId) {
+  var dept = requireHr_(token);
+  return purLocked_(function () {
+    var a = hrApprovers_(), gone = a.filter(function (x) { return x.userId === userId; })[0];
+    if (!gone) return { ok: false, error: 'ไม่พบรายชื่อนี้' };
+    props_().setProperty('HR_LINE_APPROVERS', JSON.stringify(a.filter(function (x) { return x.userId !== userId; })));
+    try { purLogWrite_(hrBook_(dept), 'ลบผู้มีสิทธิ์อนุมัติใน LINE', 'hr_settings', '', gone.name); } catch (e) {}
+    return { ok: true, approvers: hrApproversOut_() };
+  });
+}
+function hrAddApproverFromLine_(ev, gid, codeIn) {
+  var src = ev.source || {}, p = props_(), c = {};
+  try { c = JSON.parse(p.getProperty('HR_LINE_APPR_CODE') || '{}'); } catch (e) {}
+  if (!c.code || c.code !== String(codeIn).toUpperCase() || Date.now() > c.exp) { hrLineReply_(ev.replyToken, [{ type: 'text', text: 'รหัสขอสิทธิ์ไม่ถูกต้อง หรือหมดอายุแล้ว — ให้ฝ่ายบุคคลกด "เพิ่มผู้อนุมัติ" เพื่อขอรหัสใหม่' }]); return; }
+  if (!src.userId) return;
+  var name = hrLineName_(gid, src.userId);
+  var res = purLocked_(function () {
+    var a = hrApprovers_();
+    p.deleteProperty('HR_LINE_APPR_CODE');   // ใช้ครั้งเดียว
+    if (a.some(function (x) { return x.userId === src.userId; })) return 'มีสิทธิ์อยู่แล้ว';
+    a.push({ userId: src.userId, name: name, addedAt: purNow_() });
+    p.setProperty('HR_LINE_APPROVERS', JSON.stringify(a));
+    try { purLogWrite_(hrBook_(findDept_('HR')), 'เพิ่มผู้มีสิทธิ์อนุมัติใน LINE', 'hr_settings', '', name); } catch (e) {}
+    return '';
+  });
+  hrLineReply_(ev.replyToken, [{ type: 'text', text: res ? '✅ ' + name + ' ' + res : '✅ เพิ่ม ' + name + ' เป็นผู้มีสิทธิ์อนุมัติการลาแล้ว\nตั้งแต่นี้เฉพาะคนในรายชื่อเท่านั้นที่กดอนุมัติ / ไม่อนุมัติในกลุ่มนี้ได้' }]);
 }
 function hrBotName_() {
   try {
@@ -264,6 +303,13 @@ function hrLineWebhook_(events) {
       // บอทถูกนำออกจากกลุ่มที่ผูกไว้ → ยกเลิกการผูก (หน้าตั้งค่าจะขึ้นว่ายังไม่ผูกกลุ่ม)
       if (ev.type === 'leave' && gid && gid === props_().getProperty('HR_LINE_GROUP')) { props_().deleteProperty('HR_LINE_GROUP'); return; }
       if (ev.type === 'message' && ev.message && ev.message.type === 'text' && gid) {
+        var ma = String(ev.message.text).trim().match(/^ขอสิทธิ์อนุมัติ\s*([A-Z0-9]{8})$/i);
+        if (ma) {
+          if (gid !== props_().getProperty('HR_LINE_GROUP')) return;   // ขอสิทธิ์ได้เฉพาะในกลุ่มแจ้งการลาที่ผูกไว้
+          hrRate_('appr', 10, 3600);
+          hrAddApproverFromLine_(ev, gid, ma[1]);
+          return;
+        }
         var m = String(ev.message.text).trim().match(/^ตั้งค่ากลุ่ม\s*HR\s+([A-Z0-9]{8})$/i);
         if (!m) return;
         hrRate_('bind', 10, 3600);
@@ -277,6 +323,10 @@ function hrLineWebhook_(events) {
         var p = String(ev.postback.data || '').split('|');
         if (p[0] !== 'hr' || (p[1] !== 'ok' && p[1] !== 'no') || !p[2]) return;
         if (gid !== props_().getProperty('HR_LINE_GROUP') || p[3] !== hrSign_(p[1] + '|' + p[2])) return;
+        if (!hrIsApprover_(src.userId)) {
+          hrLineReply_(ev.replyToken, [{ type: 'text', text: '⛔ ' + hrLineName_(gid, src.userId) + ' ไม่มีสิทธิ์อนุมัติการลา — คำขอนี้ยังรออนุมัติอยู่\n(ฝ่ายบุคคลเพิ่มสิทธิ์ได้ที่ ตั้งค่า → ผู้มีสิทธิ์อนุมัติใน LINE)' }]);
+          return;
+        }
         var dept = findDept_('HR'), who = hrLineName_(gid, src.userId) + ' (LINE)';
         var r = hrDecideLeave_(dept, p[2], p[1] === 'ok', who);
         if (r.ok) hrLineReply_(ev.replyToken, [hrLeaveFlex_(r.leave, r.emp || {}, null, true)]);

@@ -33,7 +33,7 @@ function apiFunctions_() {
     hrLoad: hrLoad, hrPhotos: hrPhotos, hrSaveEmp: hrSaveEmp, hrDeleteEmp: hrDeleteEmp, hrSaveDoc: hrSaveDoc, hrSaveLeave: hrSaveLeave,
     hrSaveTraining: hrSaveTraining, hrSaveDisc: hrSaveDisc, hrDeleteRow: hrDeleteRow, hrUploadFile: hrUploadFile, hrRemoveFile: hrRemoveFile,
     hrSaveSettings: hrSaveSettings, hrDailyLoad: hrDailyLoad, hrDailySave: hrDailySave, hrDailySaveRoles: hrDailySaveRoles, hrDailySendLine: hrDailySendLine, hrDailyLineInfo: hrDailyLineInfo, hrDailyLineTest: hrDailyLineTest, hrLeaves: hrLeaves, hrLog: hrLog, hrDashboard: hrDashboard, hrDecideLeave: hrDecideLeave,
-    hrFormInfo: hrFormInfo, hrSetLineToken: hrSetLineToken, hrFormNewKey: hrFormNewKey, hrLineTest: hrLineTest,
+    hrFormInfo: hrFormInfo, hrSetLineToken: hrSetLineToken, hrApproverCode: hrApproverCode, hrApproverList: hrApproverList, hrRemoveApprover: hrRemoveApprover, hrFormNewKey: hrFormNewKey, hrLineTest: hrLineTest,
     // แบบฟอร์มขอลาของพนักงาน (HrPublic.gs) — ใช้รหัสแบบฟอร์มแทนตั๋ว
     hrTimeInit: hrTimeInit, hrTimeList: hrTimeList, hrTimeSave: hrTimeSave, hrTimeEdit: hrTimeEdit, hrJobs: hrJobs, hrSaveJob: hrSaveJob, hrDeleteJob: hrDeleteJob, hrFormInit: hrFormInit, hrFormFind: hrFormFind, hrFormPhotos: hrFormPhotos, hrFormBalance: hrFormBalance, hrFormSubmit: hrFormSubmit, hrFormUpload: hrFormUpload,
     // ฝ่ายบัญชี — รายงานรับออเดอร์ 7-11 (Acc.gs)

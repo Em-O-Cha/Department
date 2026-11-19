@@ -986,7 +986,8 @@
         + '<button class="btn btn-sm btn-primary" id="fTokSave">บันทึก token</button><button class="btn btn-sm btn-line" id="fHookCopy">' + icon('copy', 16) + ' คัดลอก Webhook URL</button></div>'
         + '<div class="' + (L.group ? 'ok' : '') + '">3. ผูกกลุ่ม LINE ที่รับแจ้งการลา ' + (L.group ? '✅ ผูกแล้ว — คำขอลาจะส่งเข้ากลุ่มนี้' : '⏳ ยังไม่ได้ผูก') + '</div>'
         + (L.token ? '<div class="pfoot">' + (L.group ? '<button class="btn btn-sm btn-line" id="fTest">' + icon('send', 15) + ' ส่งข้อความทดสอบเข้ากลุ่ม</button>' : '')
-          + '<button class="btn btn-sm ' + (L.group ? 'btn-line' : 'btn-primary') + '" id="fGroup">' + icon('gear', 15) + ' ' + (L.group ? 'เปลี่ยนกลุ่มที่รับแจ้งการลา' : 'ผูกกลุ่ม LINE') + '</button></div>' : '') + '</div>';
+          + '<button class="btn btn-sm ' + (L.group ? 'btn-line' : 'btn-primary') + '" id="fGroup">' + icon('gear', 15) + ' ' + (L.group ? 'เปลี่ยนกลุ่มที่รับแจ้งการลา' : 'ผูกกลุ่ม LINE') + '</button></div>' : '')
+        + (L.group ? '<div class="ok">4. ผู้มีสิทธิ์กดอนุมัติ / ไม่อนุมัติใน LINE</div><div id="apprBox">' + apprHtml(L.approvers || []) + '</div>' : '') + '</div>';
       loadQr(function () { if (window.QRCode) new window.QRCode($('qrBox'), { text: r.url, width: 160, height: 160, correctLevel: window.QRCode.CorrectLevel.M }); });
       $('fCopy').addEventListener('click', function () { var i = $('fUrl'); i.select(); try { navigator.clipboard.writeText(r.url); } catch (e) { document.execCommand('copy'); } toast('คัดลอกลิงก์แล้ว'); });
       $('fNew').addEventListener('click', function () { ask({ title: 'เปลี่ยนลิงก์ใหม่?', text: 'QR ที่ติดไว้เดิมจะใช้ไม่ได้ ต้องพิมพ์ป้ายใหม่', ok: 'เปลี่ยนลิงก์' }).then(function (ok) { if (!ok) return; call('hrFormNewKey', state.token).then(function () { formSettings(); toast('เปลี่ยนลิงก์แล้ว'); }).catch(onServerError); }); });
@@ -1003,7 +1004,55 @@
       });
       if ($('fTest')) $('fTest').addEventListener('click', function () { call('hrLineTest', state.token).then(function (x) { toast(x.ok ? 'ส่งข้อความทดสอบแล้ว' : x.error); }).catch(onServerError); });
       if ($('fGroup')) $('fGroup').addEventListener('click', lineGroupDialog);
+      apprBind();
     }).catch(onServerError);
+  }
+  // ผู้มีสิทธิ์อนุมัติในการ์ด LINE — กำหนดด้วยบัญชี LINE ของแต่ละคน (เพิ่มด้วยรหัสครั้งเดียวที่คนนั้นพิมพ์ในกลุ่ม)
+  function apprHtml(list) {
+    return (list.length
+      ? '<p class="muted" style="margin:4px 0 6px">เฉพาะคนในรายชื่อนี้ที่กดปุ่มในการ์ดคำขอลาได้ · คนอื่นกดแล้วบอทจะตอบว่าไม่มีสิทธิ์</p><div class="happr">' + list.map(function (a) {
+          return '<div class="happr-i"><span>👤 <b>' + esc(a.name || 'LINE') + '</b><small class="muted"> · เพิ่มเมื่อ ' + dd(a.addedAt) + '</small></span><button type="button" class="btn btn-sm btn-line" data-apdel="' + esc(a.id) + '" data-apname="' + esc(a.name || '') + '">ลบสิทธิ์</button></div>';
+        }).join('') + '</div>'
+      : '<p class="muted" style="margin:4px 0 6px">⚠️ ยังไม่ได้กำหนด — ตอนนี้<b>ทุกคนในกลุ่ม</b>กดอนุมัติได้ · เพิ่มอย่างน้อย 1 คน แล้วจะเหลือเฉพาะคนในรายชื่อ</p>')
+      + '<div class="pfoot"><button type="button" class="btn btn-sm btn-primary" id="apAdd">+ เพิ่มผู้อนุมัติ</button></div>';
+  }
+  function apprBind() {
+    var box = $('apprBox'); if (!box) return;
+    $('apAdd').addEventListener('click', apprDialog);
+    Array.prototype.forEach.call(box.querySelectorAll('[data-apdel]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-apdel'), nm = b.getAttribute('data-apname');
+        ask({ title: 'ลบสิทธิ์อนุมัติของ ' + nm + '?', text: 'คนนี้จะกดอนุมัติ / ไม่อนุมัติในกลุ่ม LINE ไม่ได้อีก (ถ้าลบจนไม่เหลือใคร ทุกคนในกลุ่มจะกดได้)', ok: 'ลบสิทธิ์', tone: 'danger' }).then(function (ok) {
+          if (!ok) return;
+          call('hrRemoveApprover', state.token, id).then(function (r) { if (!r.ok) return toast(r.error); box.innerHTML = apprHtml(r.approvers); apprBind(); toast('ลบสิทธิ์แล้ว'); }).catch(onServerError);
+        });
+      });
+    });
+  }
+  function apprDialog() {
+    openModal({ color: state.dept.color, icon: 'send', wide: true, title: 'เพิ่มผู้มีสิทธิ์อนุมัติใน LINE', noCancel: true, ok: 'เสร็จแล้ว',
+      body: '<div id="apBody"><span class="spinner dark"></span> กำลังสร้างรหัส…</div>',
+      onOpen: function () {
+        call('hrApproverCode', state.token).then(function (r) {
+          var g = $('apBody'); if (!g || !r.ok) return;
+          var cmd = 'ขอสิทธิ์อนุมัติ ' + r.code, n0 = r.approvers.length;
+          g.innerHTML = '<ol class="hlgol"><li>ให้คนที่จะได้สิทธิ์ (ต้องอยู่ในกลุ่ม LINE แจ้งการลา) พิมพ์ข้อความนี้ในกลุ่ม<div class="hlgcode"><code>' + esc(cmd) + '</code><button type="button" class="btn btn-sm btn-line" id="apCopy">คัดลอก</button></div>'
+            + '<small class="muted">รหัสใช้ได้ 1 คน ครั้งเดียว ถึง ' + esc(r.expires) + ' น. · ระบบจำบัญชี LINE ของคนที่พิมพ์ ไม่ใช่ชื่อ</small></li>'
+            + '<li>รอบอทตอบ "✅ เพิ่ม … เป็นผู้มีสิทธิ์อนุมัติ" แล้วกด "ตรวจสอบ" · เพิ่มคนต่อไปให้กด "+ เพิ่มผู้อนุมัติ" ใหม่</li></ol>'
+            + '<div id="apNow" class="muted" style="font-size:13px"></div><div class="pfoot"><button type="button" class="btn btn-sm btn-line" id="apCheck">↻ ตรวจสอบ</button></div>';
+          $('apCopy').addEventListener('click', function () { (navigator.clipboard ? navigator.clipboard.writeText(cmd) : Promise.reject()).then(function () { toast('คัดลอกแล้ว'); }, function () { toast(cmd); }); });
+          $('apCheck').addEventListener('click', function () {
+            var b = this; b.disabled = true;
+            call('hrApproverList', state.token).then(function (x) {
+              b.disabled = false;
+              var add = x.approvers.length > n0 ? x.approvers[x.approvers.length - 1] : null;
+              $('apNow').innerHTML = add ? '✅ เพิ่ม <b>' + esc(add.name) + '</b> แล้ว' : 'ยังไม่มีคนใหม่ (ตรวจเมื่อ ' + new Date().toTimeString().slice(0, 5) + ' น.)';
+              var box = $('apprBox'); if (box) { box.innerHTML = apprHtml(x.approvers); apprBind(); }
+            }).catch(function (e) { b.disabled = false; onServerError(e); });
+          });
+        }).catch(onServerError);
+      },
+      submit: function () { closeModal(); formSettings(); return Promise.resolve(); } });
   }
   // ผูก / เปลี่ยนกลุ่ม LINE ที่รับแจ้งคำขอลา (OA ฝ่ายบุคคล) — ดึงรหัสล่าสุดทุกครั้ง (รหัสใช้ได้ครั้งเดียว)
   function lineGroupDialog() {
@@ -1057,6 +1106,7 @@
     '.hsex{display:block;font-weight:600;color:var(--ink)}.hnat{width:100%;border-collapse:collapse;font-size:14.5px}.hnat th,.hnat td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right}.hnat th:first-child,.hnat td:first-child{text-align:left}',
     '.hnat th{font-size:13px;color:var(--muted);font-weight:600}.hnat .m{color:#2563eb}.hnat .f{color:#db2777}.hnat .u{color:#64748b}.hnat tr.tot td{border-bottom:0;border-top:2px solid var(--line);font-weight:700}',
     '.hnat tr.job td:first-child{color:#c2410c}.hred{color:#dc2626 !important}.hlgnow{padding:10px 12px;border-radius:10px;font-weight:600;margin-bottom:12px}.hlgnow.ok{background:#dcfce7;color:#15803d}.hlgnow.bad{background:#fee2e2;color:#991b1b}.hlgol{margin:6px 0 12px;padding-left:22px;line-height:1.6}.hlgol li{margin-bottom:6px}',
+    '.happr{display:flex;flex-direction:column;gap:6px;margin-bottom:4px}.happr-i{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:var(--surface,#fff);border:1px solid var(--line);border-radius:10px;padding:8px 10px}',
     '.hlgcode{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 2px}.hlgcode code{background:#f1f5f9;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:15px;font-weight:700;user-select:all}',
     '.hgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}.hcard{display:flex;gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px;text-align:left;box-shadow:var(--shadow);color:inherit}.hcard:hover{border-color:var(--c)}.hcard.off{opacity:.55}.hjb{margin:18px 0 8px;padding:6px 12px;border-radius:10px;background:color-mix(in srgb,var(--c) 12%,white);color:var(--c)}.hjb span{font-weight:600;font-size:14px;color:#475569;margin-left:6px}',
     '.hph{width:64px;height:80px;object-fit:cover;border-radius:10px;flex:none;background:#e2e8f0;display:inline-grid;place-items:center;font-weight:700;font-size:22px;color:#64748b}.hph.sm{width:40px;height:50px;font-size:15px;border-radius:8px}.hph.xs{width:28px;height:35px;font-size:12px;border-radius:6px}',
