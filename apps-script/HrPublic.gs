@@ -49,14 +49,14 @@ function hrLineInfo_() {
 }
 // ผู้มีสิทธิ์กดอนุมัติ / ไม่อนุมัติในการ์ด LINE (ผู้ใช้ขอ 19/11/69) — กำหนดด้วยบัญชี LINE (userId) ไม่ใช่ชื่อ
 // Script Property HR_LINE_APPROVERS = [{ userId, name, addedAt }] · ว่าง = ทุกคนในกลุ่มที่ผูกไว้กดได้ (แบบเดิม)
-// เพิ่มคน: HR ขอรหัสในหน้าตั้งค่า (ใช้ได้ครั้งเดียว อายุ 30 นาที, HR_LINE_APPR_CODE) → คนนั้นพิมพ์ "ขอสิทธิ์อนุมัติ <รหัส>" ในกลุ่มที่ผูกไว้
+// เพิ่มคน: HR ขอรหัสในหน้าตั้งค่า (ใช้ได้ครั้งเดียว อายุ 1 นาที, HR_LINE_APPR_CODE · ขอใหม่ได้ทันที รหัสเก่าใช้ไม่ได้) → คนนั้นพิมพ์ "ขอสิทธิ์อนุมัติ <รหัส>" ในกลุ่มที่ผูกไว้
 function hrApprovers_() { try { var a = JSON.parse(props_().getProperty('HR_LINE_APPROVERS') || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
 function hrApproversOut_() { return hrApprovers_().map(function (a) { return { id: a.userId, name: a.name, addedAt: a.addedAt }; }); }
 function hrIsApprover_(userId) { var a = hrApprovers_(); return !a.length || a.some(function (x) { return x.userId === userId; }); }
 function hrApproverCode(token) {
-  var dept = requireHr_(token), code = hrSetupCode_(), exp = Date.now() + 30 * 60000;
+  var dept = requireHr_(token), code = hrSetupCode_(), exp = Date.now() + 60000;   // ผู้ใช้ขอให้รหัสหมดอายุใน 1 นาที (19/11/69) — ขอรหัสใหม่ได้ทันทีไม่ต้องรอ
   props_().setProperty('HR_LINE_APPR_CODE', JSON.stringify({ code: code, exp: exp }));
-  return { ok: true, code: code, expires: Utilities.formatDate(new Date(exp), 'Asia/Bangkok', 'HH:mm'), approvers: hrApproversOut_() };
+  return { ok: true, code: code, sec: 60, approvers: hrApproversOut_() };
 }
 function hrApproverList(token) { requireHr_(token); return { ok: true, approvers: hrApproversOut_() }; }
 function hrRemoveApprover(token, userId) {
@@ -72,7 +72,7 @@ function hrRemoveApprover(token, userId) {
 function hrAddApproverFromLine_(ev, gid, codeIn) {
   var src = ev.source || {}, p = props_(), c = {};
   try { c = JSON.parse(p.getProperty('HR_LINE_APPR_CODE') || '{}'); } catch (e) {}
-  if (!c.code || c.code !== String(codeIn).toUpperCase() || Date.now() > c.exp) { hrLineReply_(ev.replyToken, [{ type: 'text', text: 'รหัสขอสิทธิ์ไม่ถูกต้อง หรือหมดอายุแล้ว — ให้ฝ่ายบุคคลกด "เพิ่มผู้อนุมัติ" เพื่อขอรหัสใหม่' }]); return; }
+  if (!c.code || c.code !== String(codeIn).toUpperCase() || Date.now() > c.exp) { hrLineReply_(ev.replyToken, [{ type: 'text', text: 'รหัสขอสิทธิ์ไม่ถูกต้อง หรือหมดอายุแล้ว (รหัสใช้ได้ 1 นาที) — ให้ฝ่ายบุคคลกด "ขอรหัสใหม่" แล้วพิมพ์อีกครั้ง' }]); return; }
   if (!src.userId) return;
   var name = hrLineName_(gid, src.userId);
   var res = purLocked_(function () {

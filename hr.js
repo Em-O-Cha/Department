@@ -1032,27 +1032,37 @@
   function apprDialog() {
     openModal({ color: state.dept.color, icon: 'send', wide: true, title: 'เพิ่มผู้มีสิทธิ์อนุมัติใน LINE', noCancel: true, ok: 'เสร็จแล้ว',
       body: '<div id="apBody"><span class="spinner dark"></span> กำลังสร้างรหัส…</div>',
-      onOpen: function () {
-        call('hrApproverCode', state.token).then(function (r) {
-          var g = $('apBody'); if (!g || !r.ok) return;
-          var cmd = 'ขอสิทธิ์อนุมัติ ' + r.code, n0 = r.approvers.length;
-          g.innerHTML = '<ol class="hlgol"><li>ให้คนที่จะได้สิทธิ์ (ต้องอยู่ในกลุ่ม LINE แจ้งการลา) พิมพ์ข้อความนี้ในกลุ่ม<div class="hlgcode"><code>' + esc(cmd) + '</code><button type="button" class="btn btn-sm btn-line" id="apCopy">คัดลอก</button></div>'
-            + '<small class="muted">รหัสใช้ได้ 1 คน ครั้งเดียว ถึง ' + esc(r.expires) + ' น. · ระบบจำบัญชี LINE ของคนที่พิมพ์ ไม่ใช่ชื่อ</small></li>'
-            + '<li>รอบอทตอบ "✅ เพิ่ม … เป็นผู้มีสิทธิ์อนุมัติ" แล้วกด "ตรวจสอบ" · เพิ่มคนต่อไปให้กด "+ เพิ่มผู้อนุมัติ" ใหม่</li></ol>'
-            + '<div id="apNow" class="muted" style="font-size:13px"></div><div class="pfoot"><button type="button" class="btn btn-sm btn-line" id="apCheck">↻ ตรวจสอบ</button></div>';
-          $('apCopy').addEventListener('click', function () { (navigator.clipboard ? navigator.clipboard.writeText(cmd) : Promise.reject()).then(function () { toast('คัดลอกแล้ว'); }, function () { toast(cmd); }); });
-          $('apCheck').addEventListener('click', function () {
-            var b = this; b.disabled = true;
-            call('hrApproverList', state.token).then(function (x) {
-              b.disabled = false;
-              var add = x.approvers.length > n0 ? x.approvers[x.approvers.length - 1] : null;
-              $('apNow').innerHTML = add ? '✅ เพิ่ม <b>' + esc(add.name) + '</b> แล้ว' : 'ยังไม่มีคนใหม่ (ตรวจเมื่อ ' + new Date().toTimeString().slice(0, 5) + ' น.)';
-              var box = $('apprBox'); if (box) { box.innerHTML = apprHtml(x.approvers); apprBind(); }
-            }).catch(function (e) { b.disabled = false; onServerError(e); });
-          });
-        }).catch(onServerError);
-      },
-      submit: function () { closeModal(); formSettings(); return Promise.resolve(); } });
+      onOpen: function () { apprCode(); },
+      submit: function () { clearInterval(H.apT); closeModal(); formSettings(); return Promise.resolve(); } });
+  }
+  function apprCode() {   // รหัสใช้ได้ 1 นาที · กด "ขอรหัสใหม่" ได้ทันที (รหัสเก่าใช้ไม่ได้)
+    clearInterval(H.apT);
+    call('hrApproverCode', state.token).then(function (r) {
+      var g = $('apBody'); if (!g || !r.ok) return;
+      var cmd = 'ขอสิทธิ์อนุมัติ ' + r.code, n0 = r.approvers.length, end = Date.now() + (r.sec || 60) * 1000;
+      g.innerHTML = '<ol class="hlgol"><li>ให้คนที่จะได้สิทธิ์ (ต้องอยู่ในกลุ่ม LINE แจ้งการลา) พิมพ์ข้อความนี้ในกลุ่ม<div class="hlgcode"><code>' + esc(cmd) + '</code><button type="button" class="btn btn-sm btn-line" id="apCopy">คัดลอก</button></div>'
+        + '<small id="apLeft" class="muted"></small></li>'
+        + '<li>รอบอทตอบ "✅ เพิ่ม … เป็นผู้มีสิทธิ์อนุมัติ" แล้วกด "ตรวจสอบ" · เพิ่มคนต่อไปให้กด "ขอรหัสใหม่"</li></ol>'
+        + '<div id="apNow" class="muted" style="font-size:13px"></div><div class="pfoot"><button type="button" class="btn btn-sm btn-line" id="apCheck">↻ ตรวจสอบ</button><button type="button" class="btn btn-sm btn-line" id="apNew">ขอรหัสใหม่</button></div>';
+      var tick = function () {
+        var el = $('apLeft'); if (!el) { clearInterval(H.apT); return; }
+        var left = Math.max(0, Math.round((end - Date.now()) / 1000));
+        el.innerHTML = left ? 'รหัสใช้ได้ 1 คน ครั้งเดียว · หมดอายุใน <b>' + left + '</b> วินาที' : '<b style="color:#dc2626">รหัสหมดอายุแล้ว</b> — กด "ขอรหัสใหม่" ได้เลย';
+        if (!left) clearInterval(H.apT);
+      };
+      tick(); H.apT = setInterval(tick, 1000);
+      $('apCopy').addEventListener('click', function () { (navigator.clipboard ? navigator.clipboard.writeText(cmd) : Promise.reject()).then(function () { toast('คัดลอกแล้ว'); }, function () { toast(cmd); }); });
+      $('apNew').addEventListener('click', function () { this.disabled = true; apprCode(); });
+      $('apCheck').addEventListener('click', function () {
+        var b = this; b.disabled = true;
+        call('hrApproverList', state.token).then(function (x) {
+          b.disabled = false;
+          var add = x.approvers.length > n0 ? x.approvers[x.approvers.length - 1] : null;
+          $('apNow').innerHTML = add ? '✅ เพิ่ม <b>' + esc(add.name) + '</b> แล้ว' : 'ยังไม่มีคนใหม่ (ตรวจเมื่อ ' + new Date().toTimeString().slice(0, 5) + ' น.)';
+          var box = $('apprBox'); if (box) { box.innerHTML = apprHtml(x.approvers); apprBind(); }
+        }).catch(function (e) { b.disabled = false; onServerError(e); });
+      });
+    }).catch(onServerError);
   }
   // ผูก / เปลี่ยนกลุ่ม LINE ที่รับแจ้งคำขอลา (OA ฝ่ายบุคคล) — ดึงรหัสล่าสุดทุกครั้ง (รหัสใช้ได้ครั้งเดียว)
   function lineGroupDialog() {
