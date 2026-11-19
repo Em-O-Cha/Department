@@ -296,7 +296,8 @@ function cpBuildMonth_(ss, ym, rows) {
   if (!sh) {
     // เรียงแท็บเดือนต่อจากแท็บข้อมูล ตามลำดับเดือน
     var after = ss.getSheets().filter(function (s) { return /^เดือน \d{2}\.\d{2}$/.test(s.getName()) && cpTabYm_(s.getName()) < ym; }).length;
-    sh = ss.insertSheet(name, Math.min(ss.getSheets().length, 2 + after));
+    var data = ss.getSheets().filter(function (s) { return !/^เดือน \d{2}\.\d{2}$/.test(s.getName()); }).length;   // แท็บข้อมูล (PO / นำเข้า / ประวัติเลื่อนส่ง) อยู่หน้าสุด
+    sh = ss.insertSheet(name, Math.min(ss.getSheets().length, data + after));
   }
   var p = ym.split('-');
   cpDraw_(sh, rows, 'ตารางส่งสินค้า CP Ram ' + CP_MONTHS_[+p[1] - 1] + ' ' + (+p[0] + 543), true);
@@ -320,7 +321,7 @@ function cpDraw_(sh, rows, title, withRounds) {
       var cancel = r.status === 'cancel', note = [cancel ? 'ยกเลิก' : r.status === 'done' ? '*ส่งสินค้าแล้ว' : '', r.note, r.history ? cpHistLast_(r.history) : ''].filter(String).join(' · ');
       if (!cancel) sum += Number(r.qty) || 0;
       if (cancel) cancelRows.push(row + i);
-      vals.push([i ? '' : CP_DAYS_[new Date(gr.date + 'T00:00:00').getDay()], i ? '' : cpSlash_(gr.date), r.product, "'" + String(r.poNo).replace(/^'/, ''), String(r.wh || '-').replace(/^'/, ''), Number(r.qty) || 0,
+      vals.push([i ? '' : CP_DAYS_[new Date(gr.date + 'T00:00:00').getDay()], i ? '' : "'" + cpSlash_(gr.date), r.product, "'" + String(r.poNo).replace(/^'/, ''), String(r.wh || '-').replace(/^'/, ''), Number(r.qty) || 0,
         r.unit || 'ลัง', '', r.place, note]);
     });
     total += sum;
@@ -352,7 +353,7 @@ function cpDraw_(sh, rows, title, withRounds) {
   var rounds = cpRounds_(rows);
   sh.getRange(5, 13, 1, 6).setValues([['รอบเงินเข้า', 'จำนวน', 'ราคา', 'ยอดเงิน', 'Vat 7%', 'Total']]).setFontWeight('bold').setBackground(CP_HEAD_BG_).setHorizontalAlignment('center');
   if (rounds.length) {
-    sh.getRange(6, 13, rounds.length, 6).setValues(rounds.map(function (x) { return [cpSlash_(x.dueDate), x.qty, x.price, x.amount, x.vat, x.total]; }));
+    sh.getRange(6, 13, rounds.length, 6).setValues(rounds.map(function (x) { return ["'" + cpSlash_(x.dueDate), x.qty, x.price, x.amount, x.vat, x.total]; }));
     sh.getRange(6, 15, rounds.length, 4).setNumberFormat('#,##0.00');
     sh.getRange(6, 14, rounds.length, 1).setNumberFormat('#,##0');
   }
