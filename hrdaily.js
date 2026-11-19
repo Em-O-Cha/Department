@@ -53,6 +53,7 @@
       + '<div class="pbar hdbar"><label class="hdlb">วันที่ <input type="date" id="hdDate" value="' + D.date + '"></label>'
       + '<span class="hdsum">ทั้งหมด <b>' + n0(total) + '</b> คน · ลา <b class="neg">' + lv + '</b> คน</span>'
       + (sent ? '<span class="hdtag ok">ส่ง LINE แล้ว ' + esc(String(d.sentAt).slice(11, 16)) + '</span>' : d.day ? '<span class="hdtag">บันทึกแล้ว · ยังไม่ส่ง LINE</span>' : '<span class="hdtag">ยังไม่บันทึก</span>')
+      + (L.token && L.group ? '<button class="btn btn-sm btn-line" id="hdGroup">' + icon('send', 15) + ' เปลี่ยนกลุ่ม LINE</button>' : '')
       + '<button class="btn btn-sm btn-line" id="hdRoles">' + icon('gear', 15) + ' แก้ฝ่ายงาน / รายชื่อ</button></div>'
       + (L.token && L.group ? '' : lineSetup(L))
       + '<div class="hdgrid">' + day.roles.map(function (r, i) {
@@ -81,6 +82,13 @@
     on('[data-note]', 'change', function (el) { day.roles[+el.getAttribute('data-note')].note = el.value.trim(); D.dirty = true; $('hdPrev').innerHTML = tableHtml(day, D.date); });
     $('hdResign').addEventListener('change', function () { day.resign = Math.max(0, Math.round(Number(this.value) || 0)); D.dirty = true; $('hdPrev').innerHTML = tableHtml(day, D.date); });
     $('hdRoles').addEventListener('click', rolesDialog);
+    if ($('hdGroup')) $('hdGroup').addEventListener('click', function () {
+      var cmd = 'ตั้งค่ากลุ่ม HR ' + L.setupCode;
+      openModal({ color: state.dept.color, icon: 'send', title: 'เปลี่ยนกลุ่ม LINE ที่รับตาราง', noCancel: true, ok: 'ปิด',
+        body: '<p style="margin-top:0">เชิญบอท "SpunkyFood Report" เข้ากลุ่มใหม่ แล้วพิมพ์ข้อความนี้ในกลุ่มใหม่ รอบอทตอบ "✅ ตั้งกลุ่มนี้…" ตารางครั้งต่อไปจะส่งเข้ากลุ่มใหม่แทน</p>'
+          + '<div class="hdcode"><code>' + esc(cmd) + '</code><button type="button" class="btn btn-sm btn-line" data-copycmd="' + esc(cmd) + '">คัดลอก</button></div><p class="muted" style="font-size:13px">รหัสใช้ได้ครั้งเดียว</p>',
+        onOpen: function () { bindCopyCode($('mBody')); }, submit: function () { closeModal(); return Promise.resolve(); } });
+    });
     $('hdSave').addEventListener('click', function () { save().then(function (ok) { if (ok) { toast('บันทึกแล้ว'); render(); } }); });
     $('hdSend').addEventListener('click', sendFlow);
     bindCopyCode();
@@ -92,11 +100,11 @@
       + '<span>เชิญบอท "SpunkyFood Report" (บอทฝ่ายบัญชี) เข้ากลุ่มที่ต้องการ แล้วพิมพ์ข้อความนี้ในกลุ่ม รอบอทตอบ "✅ ตั้งกลุ่มนี้…" แล้วกดรีเฟรชหน้านี้</span>'
       + '<div class="hdcode"><code>' + esc(cmd) + '</code><button class="btn btn-sm btn-line" data-copycmd="' + esc(cmd) + '">คัดลอก</button></div></div></div>';
   }
-  function bindCopyCode() {
+  function bindCopyCode(root) {
     on('[data-copycmd]', 'click', function (el) {
       var t = el.getAttribute('data-copycmd');
       (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { toast('คัดลอกแล้ว'); }, function () { toast(t); });
-    });
+    }, root);
   }
   function chip(i, name) {
     var r = D.day.roles[i], j = r.leaves.map(function (l) { return l.name; }).indexOf(name);
