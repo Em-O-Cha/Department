@@ -75,8 +75,7 @@ function doPost(e) {
       var isAcc = accIsMyBot_(req.destination), isPrd = prdIsMyBot_(req.destination);
       if (req.events.length) accDiagLog_({ ev: 'webhook', acc: isAcc, prd: isPrd, types: req.events.map(function (x) { return x.type + (x.source ? '/' + x.source.type : ''); }).join(',') });
       // ฝ่ายผลิต (Prod.gs) ใช้ OA ของตัวเอง หรือใช้ OA เดียวกับฝ่ายบัญชีก็ได้ (แยกด้วยคำว่า "ผลิต" ในคำสั่ง)
-      // ฝ่ายบุคคล (HrDaily.gs) ใช้บอทฝ่ายบัญชี: คำสั่ง "ตั้งค่ากลุ่ม HR <รหัส>" แยกไปผูกกลุ่มเช็คพนักงาน
-      if (isAcc) { var hrd = req.events.filter(hrdIsCommand_); if (hrd.length) { hrdLineWebhook_(hrd); req.events = req.events.filter(function (x) { return !hrdIsCommand_(x); }); } }
+      // ฝ่ายบุคคล (HrDaily.gs) ส่งเช็คพนักงานผ่านบอทฝ่ายบัญชีเข้ากลุ่มเดียวกับฝ่ายบัญชี — ไม่มีคำสั่งผูกกลุ่มของตัวเอง
       if (isPrd && !isAcc) prdLineWebhook_(req.events);
       else if (isAcc && isPrd) { prdLineWebhook_(req.events.filter(prdIsCommand_), true); accLineWebhook_(req.events.filter(function (x) { return !prdIsCommand_(x); })); }
       else if (isAcc) accLineWebhook_(req.events);
