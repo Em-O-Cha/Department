@@ -255,6 +255,11 @@
     var bars = function (arr, color, unit) { var m = arr.length ? Math.max.apply(null, arr.map(function (x) { return x.n; })) : 1; return arr.map(function (x) { return bar(x.name, x.n, m, color, x.n + (unit || '')); }); };
     var html = '<div class="kpis">'
       + tile(h.active, 'พนักงานปัจจุบัน', '#2563eb', 'ต่างด้าว ' + h.foreign + ' · ทั้งหมดในทะเบียน ' + h.total)
+      + (h.natSplit ? (function (n) {   // คนไทย / พม่า (รวมพนักงาน Job) — ผู้ใช้ขอ 19/11/69
+        var sub2 = function (x) { return 'พนักงาน ' + x.staff + (x.job ? ' + Job ' + x.job : ''); };
+        return tile(n.thai.staff + n.thai.job, 'คนไทย', '#16a34a', sub2(n.thai)) + tile(n.mm.staff + n.mm.job, 'พม่า (เมียนมา)', '#b45309', sub2(n.mm))
+          + (n.other.staff + n.other.job ? tile(n.other.staff + n.other.job, 'สัญชาติอื่น / ไม่ระบุ', '#64748b', sub2(n.other)) : '');
+      })(h.natSplit) : '')
       + tile('+' + h.hires + ' / −' + h.exits, 'เข้าใหม่ / ลาออก (ช่วงนี้)', h.exits > h.hires ? '#dc2626' : '#16a34a', h.turnover == null ? '' : 'อัตราลาออก ' + h.turnover + '%')
       + tile(L.absenteeism == null ? '–' : L.absenteeism + '%', 'อัตราการลา/ขาด', L.absenteeism > 3 ? '#dc2626' : L.absenteeism > 1.5 ? '#d97706' : '#16a34a', 'ป่วย + กิจ + ขาดงาน ต่อวันทำงาน')
       + tile(D.expired + ' / ' + D.soon, 'เอกสารหมดอายุ / ใกล้หมด', D.expired ? '#dc2626' : D.soon ? '#d97706' : '#16a34a', 'ใน ' + D.alertDays + ' วัน' + (D.noWorkPermit ? ' · ต่างด้าวไม่มี WP ' + D.noWorkPermit : ''))
@@ -316,7 +321,7 @@
         var gr = rows.filter(function (j) { return (j.building || '— ไม่ระบุอาคาร —') === g; });
         return '<h4 class="hjb">' + esc(g) + ' <span>' + gr.length + ' คน</span></h4><div class="hgrid">' + gr.map(function (j) {
           return '<button class="hcard' + (j.status === 'ลาออก' ? ' off' : '') + '" data-job="' + j.id + '">' + jph(j) + '<div class="hinfo"><b>' + esc(j.name) + '</b>'
-            + '<span>' + esc([j.nickname, j.religion].filter(String).join(' · ')) + '</span>'
+            + '<span>' + esc([j.nickname, j.nationality, j.religion].filter(String).join(' · ')) + '</span>'
             + '<small>เริ่มงาน ' + (j.startDate ? thDate(j.startDate) + ' · ' + yrs(j.startDate) : '-') + '</small>'
             + '<small class="muted">' + esc(j.agent ? 'ผู้ดูแล: ' + j.agent : '') + (j.status === 'ลาออก' ? ' <b class="neg">ออกแล้ว' + (j.endDate ? ' ' + thDate(j.endDate) : '') + '</b>' : '') + '</small></div></button>';
         }).join('') + '</div>';
@@ -329,7 +334,7 @@
   }
   function jobModal(j) {
     var isNew = !j, all = H.jobs.jobs, thumb = null, removed = false;
-    j = j || { status: 'ทำงานอยู่', startDate: H.jobs.today };
+    j = j || { status: 'ทำงานอยู่', startDate: H.jobs.today, nationality: 'เมียนมา' };
     var blds = uniq(list(H.jobs.buildings).concat(all.map(function (x) { return x.building; })).concat([j.building]));
     wide({
       icon: 'users', title: isNew ? 'เพิ่มพนักงาน Job' : j.name, sub: 'ทะเบียนพนักงาน Job',
@@ -338,6 +343,7 @@
         + (j.photoThumb ? '<button type="button" class="link-btn danger" id="jRmPh">ลบรูป</button>' : '') + '</div>'
         + '<div class="pform">' + F('jName', 'ชื่อ *', j.name) + F('jNick', 'ชื่อเล่น', j.nickname)
         + S('jBld', 'อาคาร', opts(blds, '— ไม่ระบุ —'), j.building) + F('jStart', 'วันเริ่มงาน', j.startDate, 'date')
+        + F('jNat', 'สัญชาติ', j.nationality, 'text', ' list="hNatJ"') + '<datalist id="hNatJ"><option value="เมียนมา"><option value="ไทย"><option value="กัมพูชา"><option value="ลาว"></datalist>'
         + F('jRel', 'ศาสนา', j.religion, 'text', ' list="jRelL"') + '<datalist id="jRelL"><option value="พุทธ"><option value="อิสลาม"><option value="คริสต์"></datalist>'
         + F('jAgent', 'ผู้แนะนำ / ผู้ดูแล', j.agent, 'text', ' list="jAgL"') + '<datalist id="jAgL">' + uniq(all.map(function (x) { return x.agent; })).map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist>'
         + F('jPhone', 'เบอร์โทร', j.phone, 'tel') + S('jSt', 'สถานะ', opts(['ทำงานอยู่', 'ลาออก']), j.status || 'ทำงานอยู่')
@@ -365,7 +371,7 @@
         });
       },
       submit: function () {
-        var rec = { id: j.id || '', name: v('jName'), nickname: v('jNick'), building: v('jBld'), startDate: v('jStart'), religion: v('jRel'), agent: v('jAgent'),
+        var rec = { id: j.id || '', name: v('jName'), nickname: v('jNick'), building: v('jBld'), startDate: v('jStart'), nationality: v('jNat'), religion: v('jRel'), agent: v('jAgent'),
           phone: v('jPhone'), status: v('jSt'), endDate: v('jEnd'), note: v('jNote'), photoThumb: thumb || '', removePhoto: removed };
         if (!rec.name) return Promise.resolve('ระบุชื่อ');
         return call('hrSaveJob', state.token, rec).then(function (r) {
