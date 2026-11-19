@@ -380,13 +380,15 @@ function hrDashboard_(dept, from, to) {
   var band = function (arr, cuts, labels) { var o = labels.map(function (l) { return { name: l, n: 0 }; }); arr.forEach(function (v) { for (var i = 0; i < cuts.length; i++) if (v < cuts[i]) { o[i].n++; return; } o[o.length - 1].n++; }); return o; };
   // การลา
   var leaves = purRead_(ss, 'hr_leaves').filter(function (l) { return l.status !== 'ไม่อนุมัติ' && l.dateFrom <= to && (l.dateTo || l.dateFrom) >= from; });
-  var byType = {}, perEmp = {};
+  var byType = {}, perEmp = {}, pidx = null;
   leaves.forEach(function (l) {
     var k = HR_LEAVE_TYPES_[l.type] || l.type;
     byType[k] = byType[k] || { name: k, days: 0, times: 0, minutes: 0 };
     byType[k].days += Number(l.days) || 0; byType[k].times++; byType[k].minutes += Number(l.minutes) || 0;
     if (l.type === 'sick' || l.type === 'personal' || l.type === 'absent' || l.type === 'late') {
-      perEmp[l.empId] = perEmp[l.empId] || { id: l.empId, name: (idx[l.empId] || {}).fullName || '-', sick: 0, personal: 0, absent: 0, late: 0 };
+      if (!pidx) { pidx = {}; hrPeople_(ss).forEach(function (e) { pidx[e.id] = e; }); }   // รวมพนักงาน Job (เดิมขึ้น "-")
+      var pe = pidx[l.empId] || {};
+      perEmp[l.empId] = perEmp[l.empId] || { id: l.empId, name: (pe.fullName || '-') + (pe.isJob ? ' (Job)' : ''), sick: 0, personal: 0, absent: 0, late: 0 };
       perEmp[l.empId][l.type] += l.type === 'late' ? 1 : Number(l.days) || 0;
     }
   });
