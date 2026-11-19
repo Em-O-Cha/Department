@@ -18,6 +18,10 @@ var CP_TABLES_ = {
     ['id', 'รหัส'], ['fileName', 'ชื่อไฟล์'], ['poCount', 'จำนวนใบสั่ง'], ['added', 'เพิ่มใหม่'], ['changed', 'อัปเดต'], ['skipped', 'ข้าม (มีแล้ว)'],
     ['qty', 'รวมจำนวน'], ['amount', 'มูลค่ารวม (ไม่รวม VAT)'], ['sentAt', 'ส่ง LINE เมื่อ'], ['imgUrl', 'ภาพตาราง (LINE)'], ['pdfUrl', 'ไฟล์ PDF'], ['xlsxUrl', 'ไฟล์ Excel'], ['sheetUrl', 'ไฟล์รายงาน (Google Sheet)'], ['createdAt', 'นำเข้าเมื่อ']] }
 };
+// ประวัติเลื่อนวันส่ง (แก้ในหน้าเว็บ) — 1 แถว = เลื่อน 1 ครั้ง · ส่ง LINE แจ้งเลื่อนส่งได้
+CP_TABLES_.cp_moves = { tab: 'ประวัติเลื่อนส่ง', cols: [
+  ['id', 'รหัส'], ['lineId', 'รหัสรายการ'], ['poNo', 'เลขที่ใบสั่งซื้อ (PO)'], ['lineNo', 'ลำดับ'], ['product', 'สินค้า'], ['qty', 'จำนวน'], ['unit', 'หน่วย'],
+  ['place', 'สถานที่ส่ง'], ['fromDate', 'วันส่งเดิม'], ['toDate', 'วันส่งใหม่'], ['reason', 'เหตุผล'], ['createdAt', 'บันทึกเมื่อ'], ['sentAt', 'ส่ง LINE เมื่อ']] };
 var CP_PRODUCTS_DEFAULT_ = [{ code: '72400524', name: 'น้ำพริกหนังไก่กรอบ' }];
 var CP_SHIPS_DEFAULT_ = [{ key: 'WD01 LLKC', wh: '-', place: 'ลาดหลุมแก้ว' }];
 var CP_STATUS_ = { '': 'รอส่ง', done: 'ส่งสินค้าแล้ว', cancel: 'ยกเลิก' };
@@ -32,7 +36,7 @@ function cpDue_(iso) { return /^\d{4}-\d{2}-\d{2}$/.test(String(iso || '')) ? ac
 function cpRegister_() {
   accRegister_();
   Object.keys(CP_TABLES_).forEach(function (k) { PUR_TABLES_[k] = CP_TABLES_[k]; });
-  ['poDate', 'deliveryDate', 'dueDate'].forEach(function (k) { PUR_DATE_KEYS_[k] = 1; });
+  ['poDate', 'deliveryDate', 'dueDate', 'fromDate', 'toDate'].forEach(function (k) { PUR_DATE_KEYS_[k] = 1; });
   ['lineNo', 'qty', 'price', 'amount', 'vat', 'net', 'termDays', 'poCount', 'added', 'changed', 'skipped'].forEach(function (k) { PUR_NUM_KEYS_[k] = 1; });
 }
 function cpSettingRow_(ss, id) { return purRead_(ss, 'acc_settings').filter(function (x) { return x.id === id; })[0]; }
@@ -135,14 +139,16 @@ function cpLoad(token) {
   var dept = requireAcc_(token); cpRegister_();
   var main = purBook_(dept), map = cpMap_(main), ss = null, err = ''; cpHolInit_(main);
   try { ss = cpBook_(main); } catch (e) { err = 'เปิดชีต CP Ram ไม่ได้ — ตรวจว่าแชร์ให้บัญชีระบบเป็นผู้แก้ไขแล้ว'; }
-  var lines = [], imports = [];
+  var lines = [], imports = [], moves = [];
   if (ss) {
     lines = purRead_(ss, 'cp_lines').map(function (x) { delete x._row; Object.keys(x).forEach(function (k) { if (typeof x[k] === 'string') x[k] = x[k].replace(/^'/, ''); }); x.dueDate = cpDue_(x.deliveryDate) || x.dueDate; return x; });
+    moves = purRead_(ss, 'cp_moves').map(function (x) { delete x._row; Object.keys(x).forEach(function (k) { if (typeof x[k] === 'string') x[k] = x[k].replace(/^'/, ''); }); return x; })
+      .sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).slice(0, 100);
     imports = purRead_(ss, 'cp_imports').map(function (x) { delete x._row; Object.keys(x).forEach(function (k) { if (typeof x[k] === 'string') x[k] = x[k].replace(/^'/, ''); }); return x; }).sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).slice(0, 30);
   }
   var lp = props_();
   return { ok: true, today: purToday_(), line: !!(lp.getProperty('ACC_LINE_TOKEN') && lp.getProperty('ACC_LINE_GROUP')), linked: !!ss, sheetUrl: ss ? ss.getUrl() : '', sheetName: ss ? ss.getName() : '', error: err,
-    map: map, lines: lines, imports: imports, rounds: cpRounds_(lines) };
+    map: map, lines: lines, imports: imports, moves: moves, rounds: cpRounds_(lines) };
 }
 function cpSetSheet(token, url) {
   var dept = requireAcc_(token); cpRegister_();
@@ -209,6 +215,7 @@ function cpSave(token, pos, fileName) {
     return { ok: true, importId: impId, added: add.length, changed: chg.length, skipped: r.rows.length - add.length - chg.length, months: Object.keys(months).sort() };
   });
 }
+function cpHistLast_(h) { var t = String(h).split(' | ').pop().replace(/^[\d-]+: /, ''); return /^เลื่อนส่ง/.test(t) ? t : 'เปลี่ยน: ' + t; }
 function cpHistVal_(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? cpSlash_(v) : String(v); }
 function cpSaveMap(token, json) {
   var dept = requireAcc_(token); cpRegister_();
@@ -234,18 +241,32 @@ function cpSaveMap(token, json) {
   });
 }
 // สถานะ (รอส่ง / ส่งสินค้าแล้ว / ยกเลิก) + หมายเหตุ ของรายการ
-function cpUpdateLine(token, id, status, note) {
+function cpUpdateLine(token, id, status, note, newDate, reason) {
   var dept = requireAcc_(token); cpRegister_();
   if (!CP_STATUS_.hasOwnProperty(String(status || ''))) return { ok: false, error: 'สถานะไม่ถูกต้อง' };
+  var nd = newDate ? accDate_(newDate) : '', why = accClean_(reason, 200);
+  if (newDate && !nd) return { ok: false, error: 'วันที่ส่งไม่ถูกต้อง' };
   return purLocked_(function () {
     var main = purBook_(dept), ss = cpBook_(main); cpHolInit_(main);
     if (!ss) return { ok: false, error: 'ยังไม่ได้เชื่อมชีต CP Ram' };
     var row = purRead_(ss, 'cp_lines').filter(function (x) { return x.id === id; })[0];
     if (!row) return { ok: false, error: 'ไม่พบรายการ' };
-    row.status = String(status || ''); row.note = accClean_(note, 200); row.updatedAt = purNow_();
+    var now = purNow_(), old = String(row.deliveryDate || ''), move = null, months = old ? [old.slice(0, 7)] : [];
+    // เลื่อนวันส่ง → เก็บประวัติ (แท็บ ประวัติเลื่อนส่ง + ช่องประวัติของรายการ) แล้วคำนวณรอบเงินเข้าใหม่
+    if (nd && nd !== old) {
+      if (!why) return { ok: false, error: 'ใส่เหตุผลที่เลื่อนส่ง' };
+      move = { id: purId_('CPM'), lineId: row.id, poNo: String(row.poNo).replace(/^'/, ''), lineNo: row.lineNo, product: row.product, qty: row.qty, unit: row.unit,
+        place: row.place, fromDate: old, toDate: nd, reason: why, createdAt: now, sentAt: '' };
+      purWrite_(ss, 'cp_moves', move);
+      row.history = (row.history ? row.history + ' | ' : '') + now.slice(0, 10) + ': เลื่อนส่ง ' + cpSlash_(old) + ' → ' + cpSlash_(nd) + ' (' + why + ')';
+      row.deliveryDate = nd; row.dueDate = cpDue_(nd);
+      months.push(nd.slice(0, 7));
+      purLogWrite_(main, 'เลื่อนส่ง CP Ram', 'cp_moves', move.id, 'PO ' + move.poNo + ' · ' + old + ' → ' + nd + ' · ' + why);
+    }
+    row.status = String(status || ''); row.note = accClean_(note, 200); row.updatedAt = now;
     purWrite_(ss, 'cp_lines', row);
-    if (row.deliveryDate) cpRebuildMonths_(ss, [String(row.deliveryDate).slice(0, 7)]);
-    return { ok: true };
+    cpRebuildMonths_(ss, months.filter(function (m, i) { return months.indexOf(m) === i; }));
+    return { ok: true, moveId: move ? move.id : '', deliveryDate: row.deliveryDate, dueDate: row.dueDate, history: row.history };
   });
 }
 function cpRebuild(token, ym) {
@@ -296,7 +317,7 @@ function cpDraw_(sh, rows, title, withRounds) {
   groups.forEach(function (gr) {
     var n = gr.rows.length, sum = 0;
     gr.rows.forEach(function (r, i) {
-      var cancel = r.status === 'cancel', note = [cancel ? 'ยกเลิก' : r.status === 'done' ? '*ส่งสินค้าแล้ว' : '', r.note, r.history ? 'เปลี่ยน: ' + String(r.history).split(' | ').pop().replace(/^[\d-]+: /, '') : ''].filter(String).join(' · ');
+      var cancel = r.status === 'cancel', note = [cancel ? 'ยกเลิก' : r.status === 'done' ? '*ส่งสินค้าแล้ว' : '', r.note, r.history ? cpHistLast_(r.history) : ''].filter(String).join(' · ');
       if (!cancel) sum += Number(r.qty) || 0;
       if (cancel) cancelRows.push(row + i);
       vals.push([i ? '' : CP_DAYS_[new Date(gr.date + 'T00:00:00').getDay()], i ? '' : cpSlash_(gr.date), r.product, "'" + String(r.poNo).replace(/^'/, ''), String(r.wh || '-').replace(/^'/, ''), Number(r.qty) || 0,
@@ -364,13 +385,13 @@ function cpFlex_(lines, hasImg, files) {
     body.push({ type: 'box', layout: 'horizontal', margin: 'xl', backgroundColor: '#0F5132', cornerRadius: '10px', paddingTop: '7px', paddingBottom: '7px', paddingStart: '12px', paddingEnd: '12px', contents: [
       T('ส่งวัน' + accDayName_(d) + ' ' + accDot_(d), { size: 'sm', weight: 'bold', color: '#FFFFFF', flex: 7 }), T(sum.toLocaleString() + ' ลัง', { size: 'sm', weight: 'bold', color: '#FFFFFF', flex: 4, align: 'end' })] });
     g.forEach(function (x, i) {
-      var cancel = x.status === 'cancel', hist = x.history ? String(x.history).split(' | ').pop().replace(/^[\d-]+: /, '') : '';
+      var cancel = x.status === 'cancel', hist = x.history ? cpHistLast_(x.history) : '';
       var sub = [x.product || ('รหัส ' + x.itemCode), [x.wh && x.wh !== '-' ? 'คลัง' + x.wh : '', x.place].filter(String).join(' · ')].filter(String);
       var c = [{ type: 'box', layout: 'horizontal', contents: [T('PO ' + x.poNo, { size: 'sm', weight: 'bold', color: cancel ? '#94A3B8' : '#0F172A', flex: 7, decoration: cancel ? 'line-through' : 'none' }),
         T((Number(x.qty) || 0).toLocaleString() + ' ' + (x.unit || 'ลัง'), { size: 'sm', weight: 'bold', color: cancel ? '#94A3B8' : '#0F5132', flex: 4, align: 'end', decoration: cancel ? 'line-through' : 'none' })] },
         T(sub.join(' · '), { size: 'xs', color: '#64748B', margin: 'xs' })];
       if (cancel) c.push(T('ยกเลิก', { size: 'xs', color: '#DC2626', weight: 'bold', margin: 'xs' }));
-      if (hist && x._changed) c.push(T('⚠ เปลี่ยน: ' + hist, { size: 'xs', color: '#C2410C', weight: 'bold', margin: 'xs' }));
+      if (hist && x._changed) c.push(T('⚠ ' + hist, { size: 'xs', color: '#C2410C', weight: 'bold', margin: 'xs' }));
       body.push({ type: 'box', layout: 'vertical', margin: i ? 'md' : 'sm', paddingStart: '4px', paddingEnd: '4px', contents: c });
       if (i < g.length - 1) body.push({ type: 'separator', margin: 'md', color: '#E2E8F0' });
     });
@@ -489,5 +510,42 @@ function cpSendLine(token, importId, png, ratio) {
     purWrite_(ss, 'cp_imports', imp);
     purLogWrite_(main, 'ส่ง LINE ออเดอร์ CP Ram', 'cp_imports', importId, lines.length + ' รายการ');
     return { ok: true, sentAt: imp.sentAt, pdfUrl: imp.pdfUrl, xlsxUrl: imp.xlsxUrl };
+  });
+}
+
+// ---------- LINE: แจ้งเลื่อนส่ง (เฉพาะออเดอร์ ไม่มียอดเงิน) ----------
+function cpMoveFlex_(mv) {
+  var T = function (text, o) { var x = { type: 'text', text: String(text), wrap: true }; Object.keys(o || {}).forEach(function (k) { x[k] = o[k]; }); return x; };
+  var row = function (label, value, o) { return { type: 'box', layout: 'horizontal', margin: 'md', contents: [T(label, { size: 'sm', color: '#64748B', flex: 4 }), T(value, Object.assign({ size: 'sm', weight: 'bold', color: '#0F172A', flex: 7, align: 'end' }, o || {}))] }; };
+  var day = function (iso) { return 'วัน' + accDayName_(iso) + ' ' + accDot_(iso); };
+  var body = [row('ลูกค้า', 'CPRAM (ซีพีแรม)'), row('ใบสั่งซื้อ (PO)', mv.poNo), row('สินค้า', mv.product || '-'), row('จำนวน', (Number(mv.qty) || 0).toLocaleString() + ' ' + (mv.unit || 'ลัง'))];
+  if (mv.place) body.push(row('สถานที่ส่ง', mv.place));
+  body.push({ type: 'box', layout: 'vertical', margin: 'xl', backgroundColor: '#FFF7ED', cornerRadius: '16px', paddingAll: '14px', borderColor: '#FDBA74', borderWidth: '1px', contents: [
+    { type: 'box', layout: 'horizontal', contents: [T('วันส่งเดิม', { size: 'sm', color: '#9A3412', flex: 4 }), T(day(mv.fromDate), { size: 'sm', color: '#94A3B8', decoration: 'line-through', flex: 7, align: 'end' })] },
+    { type: 'box', layout: 'horizontal', margin: 'md', contents: [T('เลื่อนเป็น', { size: 'md', color: '#9A3412', weight: 'bold', flex: 4 }), T(day(mv.toDate), { size: 'lg', color: '#C2410C', weight: 'bold', flex: 7, align: 'end' })] }] });
+  if (mv.reason) body.push(T('เหตุผล: ' + mv.reason, { size: 'sm', color: '#334155', margin: 'lg' }));
+  var inner = [
+    { type: 'box', layout: 'vertical', backgroundColor: '#C2410C', cornerRadius: '18px', paddingAll: '18px', contents: [
+      T('DELIVERY RESCHEDULED · CP RAM', { size: 'xxs', color: '#FED7AA', weight: 'bold' }),
+      T('แจ้งเลื่อนส่งสินค้า CP Ram', { size: 'xl', color: '#FFFFFF', weight: 'bold', margin: 'sm' }),
+      T('บริษัท สปังกี้ ฟู้ด จำกัด · ฝ่ายบัญชี', { size: 'xs', color: '#FFEDD5', margin: 'xs' })] },
+    { type: 'box', layout: 'vertical', paddingStart: '6px', paddingEnd: '6px', paddingTop: '6px', paddingBottom: '4px', contents: body }];
+  return { type: 'flex', altText: 'แจ้งเลื่อนส่ง CP Ram · PO ' + mv.poNo + ' · ' + accDot_(mv.fromDate) + ' → ' + accDot_(mv.toDate),
+    contents: { type: 'bubble', size: 'giga', body: { type: 'box', layout: 'vertical', paddingAll: '14px', backgroundColor: '#FFFFFF', contents: inner } } };
+}
+function cpSendMoveLine(token, moveId) {
+  var dept = requireAcc_(token); cpRegister_();
+  return purLocked_(function () {
+    var main = purBook_(dept), ss = cpBook_(main);
+    if (!ss) return { ok: false, error: 'ยังไม่ได้เชื่อมชีต CP Ram' };
+    var mv = purRead_(ss, 'cp_moves').filter(function (x) { return x.id === moveId; })[0];
+    if (!mv) return { ok: false, error: 'ไม่พบประวัติการเลื่อนส่งนี้' };
+    Object.keys(mv).forEach(function (k) { if (typeof mv[k] === 'string') mv[k] = mv[k].replace(/^'/, ''); });
+    var r = accLinePush_([cpMoveFlex_(mv)]);
+    if (!r.ok) return r;
+    mv.sentAt = purNow_();
+    purWrite_(ss, 'cp_moves', mv);
+    purLogWrite_(main, 'ส่ง LINE แจ้งเลื่อนส่ง CP Ram', 'cp_moves', moveId, 'PO ' + mv.poNo);
+    return { ok: true, sentAt: mv.sentAt };
   });
 }

@@ -447,10 +447,32 @@ function accPlaceImage_(sh, url, row, col, cellW, cellH) {
   } catch (e) {}   // รูปเสีย/ลบไปแล้ว → เว้นว่าง ไม่ทำให้สร้างรายงานไม่ได้
 }
 // ไฟล์ Excel (.xlsx) ของรายงาน → โฟลเดอร์รายงาน · ทุกคนที่มีลิงก์ดาวน์โหลดได้ (ปุ่มใน LINE)
+// ไฟล์ Excel ที่ส่งออกใช้ฟอนต์ Angsana New ทุกครั้ง (ผู้ใช้ขอ 19/11/69) — Google Sheets ไม่มีฟอนต์นี้ จึงแก้ในไฟล์ xlsx หลังส่งออก
+// (styles.xml + ข้อความหลายรูปแบบใน sharedStrings.xml) · ขนาดตัวอักษร × 1.5 เพราะ Angsana New ตัวเล็กกว่าฟอนต์เดิมที่ขนาดเท่ากัน
+function accAngsanaXml_(xml, isStyles) {
+  var scale = function (m, v) { var n = Math.round(parseFloat(v) * 1.5 * 2) / 2; return '<sz val="' + n + '"/>'; };
+  xml = xml.replace(/<sz val="([\d.]+)"\s*\/>/g, scale);
+  xml = xml.replace(/<name val="[^"]*"\s*\/>/g, '<name val="Angsana New"/>');
+  xml = xml.replace(/<rFont val="[^"]*"\s*\/>/g, '<rFont val="Angsana New"/>');
+  xml = xml.replace(/<scheme val="[^"]*"\s*\/>/g, '');
+  if (isStyles) xml = xml.replace(/<font>((?:(?!<\/font>)[\s\S])*?)<\/font>/g, function (m, inner) { return /<sz /.test(inner) ? m : '<font><sz val="16"/>' + inner + '</font>'; });
+  return xml;
+}
+function accXlsxAngsana_(blob) {
+  try {
+    var parts = Utilities.unzip(blob.setContentType('application/zip'));
+    var out = parts.map(function (f) {
+      var n = f.getName();
+      if (n !== 'xl/styles.xml' && n !== 'xl/sharedStrings.xml') return f;
+      return Utilities.newBlob(accAngsanaXml_(f.getDataAsString('UTF-8'), n === 'xl/styles.xml'), 'application/xml', n);
+    });
+    return Utilities.zip(out, 'report.xlsx').setContentType('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  } catch (e) { return blob; }   // แก้ไม่ได้ → ใช้ไฟล์เดิม
+}
 function accExportXlsx_(ss, folder, name) {
   var res = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=xlsx', { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) throw new Error('สร้างไฟล์ Excel ไม่สำเร็จ (HTTP ' + res.getResponseCode() + ')');
-  var f = folder.createFile(res.getBlob().setName(name + '.xlsx'));
+  var f = folder.createFile(accXlsxAngsana_(res.getBlob()).setName(name + '.xlsx'));
   try { f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
   return f;
 }
