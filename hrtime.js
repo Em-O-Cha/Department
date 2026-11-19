@@ -151,7 +151,10 @@
 
   // ---------- หน้า ----------
   var FILTERS = [['all', 'ทั้งหมด'], ['late', 'มาสาย'], ['absent', 'ขาดงาน'], ['miss', 'ลืมสแกน'], ['early', 'ออกก่อน'], ['nomap', 'ยังไม่จับคู่']];
-  function isAbsent(r) { return /ขาดงาน/.test(r.remark); }
+  var KINDS = [['', 'ตามไฟล์เครื่องสแกน'], ['ok', 'มาทำงาน'], ['absent', 'ขาดงาน'], ['sick', 'ลาป่วย'], ['personal', 'ลากิจ'], ['vacation', 'ลาพักร้อน'], ['other', 'ลาอื่นๆ']];
+  function kindLabel(k) { var x = KINDS.filter(function (a) { return a[0] === k; })[0]; return x ? x[1] : ''; }
+  function isAbsent(r) { return r.kind ? r.kind === 'absent' : /ขาดงาน/.test(r.remark); }
+  function isLeave(r) { return ['sick', 'personal', 'vacation', 'other'].indexOf(r.kind) >= 0; }
   function isMiss(r) { return /ไม่สแกน/.test(r.remark); }
   function pass(r, f) {
     return f === 'all' || (f === 'late' && r.lateMin > 0) || (f === 'absent' && isAbsent(r)) || (f === 'miss' && isMiss(r)) || (f === 'early' && r.earlyMin > 0) || (f === 'nomap' && !r.empId);
@@ -170,16 +173,18 @@
       + '<div class="pchips">' + FILTERS.map(function (f) { var n = cnt(f[0]); return '<button class="chip' + (T.f === f[0] ? ' on' : '') + '" data-f="' + f[0] + '">' + f[1] + ' ' + n + '</button>'; }).join('') + '</div></div>'
       + '<div class="panel httab"><table><thead><tr><th>รหัส</th><th>ชื่อ</th><th>แผนก</th><th>เข้า</th><th>ออก</th><th>เวลาทำงาน</th><th>สาย</th><th>ออกก่อน</th><th>OT</th><th>หมายเหตุ</th></tr></thead><tbody>'
       + (all.filter(function (r) { return pass(r, T.f); }).map(function (r) {
-        var cls = r.dayStatus === 'วันหยุด' ? 'off' : isAbsent(r) ? 'abs' : r.lateMin > 0 ? 'late' : isMiss(r) || r.earlyMin > 0 ? 'warn' : '';
-        return '<tr class="' + cls + '"><td>' + esc(r.machineId) + '</td><td>' + who(r) + '</td><td>' + esc(r.dept) + '</td><td>' + esc(r.timeIn || '–') + '</td><td>' + esc(r.timeOut || '–') + '</td><td>' + esc(r.workTime || '') + '</td>'
-          + '<td>' + (r.lateMin ? '<b class="neg">' + mm(r.lateMin) + '</b>' : '') + '</td><td>' + (r.earlyMin ? mm(r.earlyMin) : '') + '</td><td>' + esc([r.otBefore, r.otAfter].filter(String).join(' / ')) + '</td>'
-          + '<td>' + esc(r.dayStatus === 'วันหยุด' ? 'วันหยุด' : r.remark) + '</td></tr>';
+        var cls = r.dayStatus === 'วันหยุด' && !r.kind ? 'off' : isAbsent(r) ? 'abs' : isLeave(r) ? 'lv' : r.lateMin > 0 ? 'late' : isMiss(r) || r.earlyMin > 0 ? 'warn' : '';
+        return '<tr class="' + cls + ' click" data-tid="' + esc(r.id) + '" title="แตะเพื่อแก้ไข"><td>' + esc(r.machineId) + '</td><td>' + who(r) + '</td><td>' + esc(r.dept) + '</td><td>' + esc(r.timeIn || '–') + '</td><td>' + esc(r.timeOut || '–') + '</td><td>' + esc(r.workTime || '') + '</td>'
+          + '<td>' + (Number(r.lateMin) ? '<b class="neg">' + mm(r.lateMin) + '</b>' : '') + '</td><td>' + (Number(r.earlyMin) ? mm(r.earlyMin) : '') + '</td><td>' + esc([r.otBefore, r.otAfter].filter(String).join(' / ')) + '</td>'
+          + '<td>' + (r.kind ? '<b class="' + (r.kind === 'ok' ? 'pos' : 'neg') + '">' + esc(kindLabel(r.kind)) + '</b> ' : '') + esc(r.dayStatus === 'วันหยุด' && !r.kind ? 'วันหยุด' : r.remark)
+          + (r.editedAt ? ' <small class="htedit">HR แก้</small>' : '') + '</td></tr>';
       }).join('') || '<tr><td colspan="10" class="muted">ไม่มีรายการ</td></tr>') + '</tbody></table></div>'
       + (cnt('nomap') ? '<p class="muted">มี ' + cnt('nomap') + ' คนที่ยังไม่จับคู่กับทะเบียน — มาสาย / ขาดงานของคนกลุ่มนี้ยังไม่ลงในหน้าการลา · <button class="link-btn" id="htRemap">จับคู่รายชื่อ</button></p>' : '');
     $('main').innerHTML = head + body;
     bindTop();
     if ($('htDay')) $('htDay').addEventListener('change', function () { T.day = this.value; render(); });
     on('[data-f]', 'click', function (el) { T.f = el.getAttribute('data-f'); render(); });
+    on('[data-tid]', 'click', function (el) { editDialog(T.rows.filter(function (r) { return r.id === el.getAttribute('data-tid'); })[0]); });
     if ($('htRemap')) $('htRemap').addEventListener('click', function () { mapDialog(T.rows.filter(function (r) { return !r.empId; }), true); });
   }
   function bindTop() {
@@ -196,15 +201,44 @@
       if (r.timeIn || r.timeOut) s.work++;
       if (r.lateMin > 0) { s.late++; s.lateMin += r.lateMin; }
       if (isAbsent(r)) s.absent++;
+      if (isLeave(r)) s.leave = (s.leave || 0) + 1;
       if (isMiss(r)) s.miss++;
       if (r.earlyMin > 0) s.early++;
     });
     var list = Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) { return (b.absent * 3 + b.late) - (a.absent * 3 + a.late) || (Number(a.r.machineId) - Number(b.r.machineId)); });
-    return '<div class="panel httab"><table><thead><tr><th>รหัส</th><th>ชื่อ</th><th>มาทำงาน (วัน)</th><th>มาสาย</th><th>ขาดงาน</th><th>ลืมสแกน</th><th>ออกก่อน</th></tr></thead><tbody>'
+    return '<div class="panel httab"><table><thead><tr><th>รหัส</th><th>ชื่อ</th><th>มาทำงาน (วัน)</th><th>มาสาย</th><th>ขาดงาน</th><th>ลา</th><th>ลืมสแกน</th><th>ออกก่อน</th></tr></thead><tbody>'
       + list.map(function (s) {
         return '<tr class="' + (s.absent ? 'abs' : s.late ? 'late' : '') + '"><td>' + esc(s.r.machineId) + '</td><td>' + who(s.r) + '</td><td>' + s.work + '</td><td>' + (s.late ? '<b class="neg">' + s.late + ' ครั้ง</b> · ' + mm(s.lateMin) : '') + '</td>'
-          + '<td>' + (s.absent ? '<b class="neg">' + s.absent + ' วัน</b>' : '') + '</td><td>' + (s.miss ? s.miss + ' ครั้ง' : '') + '</td><td>' + (s.early ? s.early + ' ครั้ง' : '') + '</td></tr>';
+          + '<td>' + (s.absent ? '<b class="neg">' + s.absent + ' วัน</b>' : '') + '</td><td>' + (s.leave ? s.leave + ' วัน' : '') + '</td><td>' + (s.miss ? s.miss + ' ครั้ง' : '') + '</td><td>' + (s.early ? s.early + ' ครั้ง' : '') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
+  }
+
+  // ---------- HR แก้ข้อมูลลงเวลา 1 แถว ----------
+  function editDialog(r) {
+    if (!r) return;
+    if (!r.empId) { toast('ยังไม่ได้จับคู่รายชื่อนี้กับทะเบียน — กด "จับคู่รายชื่อ" ก่อน'); return; }
+    var p = person(r.empId) || { name: r.name };
+    var fld = function (id, label, val, type, extra) { return '<div class="pf"><label for="' + id + '">' + label + '</label><input id="' + id + '" type="' + (type || 'text') + '" value="' + esc(val == null ? '' : val) + '"' + (extra || '') + '></div>'; };
+    openModal({ color: state.dept.color, icon: 'cal', wide: true, title: 'แก้ข้อมูลลงเวลา · ' + p.name, sub: th(r.date) + ' · รหัสที่เครื่อง ' + r.machineId + (r.shift ? ' · กะ ' + r.shift : ''),
+      body: '<p class="muted" style="margin-top:0">ในไฟล์: เข้า ' + esc(r.timeIn || '–') + ' · ออก ' + esc(r.timeOut || '–') + (r.remark ? ' · ' + esc(r.remark) : '') + '</p>'
+        + '<div class="pform">' + '<div class="pf"><label for="teKind">สถานะวันนี้</label><select id="teKind">' + KINDS.map(function (k) { return '<option value="' + k[0] + '"' + ((r.kind || '') === k[0] ? ' selected' : '') + '>' + k[1] + '</option>'; }).join('') + '</select></div>'
+        + fld('teIn', 'เวลาเข้า', r.timeIn, 'time') + fld('teOut', 'เวลาออก', r.timeOut, 'time')
+        + fld('teLate', 'สาย (นาที)', r.lateMin || 0, 'number', ' min="0" inputmode="numeric"') + fld('teEarly', 'ออกก่อน (นาที)', r.earlyMin || 0, 'number', ' min="0" inputmode="numeric"')
+        + '<div class="pf full"><label for="teNote">หมายเหตุ</label><input id="teNote" maxlength="120" value="' + esc(r.remark || '') + '"></div></div>'
+        + '<p class="muted" style="margin:6px 0 0;font-size:13px">บันทึกแล้วระบบปรับหน้าการลา / ขาด / มาสายของวันนี้ให้ตาม (ขาดงาน / ลา = ลงเป็นข้อมูลเลย · มาทำงาน = ลบขาดงานที่เครื่องสแกนลงไว้) · นำเข้าไฟล์วันนี้ซ้ำจะไม่ทับที่ HR แก้</p>',
+      ok: 'บันทึก',
+      onOpen: function () {
+        $('teKind').addEventListener('change', function () { if (['absent', 'sick', 'personal', 'vacation', 'other'].indexOf(this.value) >= 0) { $('teLate').value = 0; $('teEarly').value = 0; } });
+      },
+      submit: function () {
+        var x = { kind: $('teKind').value, timeIn: $('teIn').value, timeOut: $('teOut').value, lateMin: $('teLate').value, earlyMin: $('teEarly').value, remark: $('teNote').value.trim() };
+        return call('hrTimeEdit', state.token, r.id, x).then(function (res) {
+          if (!res.ok) return res.error;
+          var i = T.rows.indexOf(r); if (i >= 0) T.rows[i] = res.row;
+          closeModal(); toast('บันทึกแล้ว'); render();
+          if (window.HRM && window.HRM.dirtyLeaves) window.HRM.dirtyLeaves();
+        });
+      } });
   }
 
   // ---------- นำเข้า ----------
@@ -276,7 +310,7 @@
   css.textContent = [
     '.htbar{flex-wrap:wrap;gap:10px;align-items:center}.htlb{display:flex;gap:6px;align-items:center;font-weight:600}.htlb input,.htlb select{padding:7px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit}.htab{display:flex;gap:6px;margin-left:auto}',
     '.httab{overflow-x:auto;padding:0}.httab table{width:100%;border-collapse:collapse;font-size:14px}.httab th{background:#f1f5f9;text-align:left;padding:8px;white-space:nowrap;position:sticky;top:0}.httab td{padding:7px 8px;border-top:1px solid var(--line);vertical-align:top}',
-    '.httab tr.off td{color:#94a3b8}.httab tr.abs td{background:#fef2f2}.httab tr.late td{background:#fff7ed}.httab tr.warn td{background:#fffbeb}.htnomap{color:#b45309;background:#fef3c7;border-radius:6px;padding:1px 6px}.htjob{color:#c2410c}',
+    '.httab tr.click{cursor:pointer}.httab tr.click:hover td{background:#eef2ff}.httab tr.lv td{background:#f5f3ff}.htedit{color:#4338ca;background:#e0e7ff;border-radius:6px;padding:1px 6px}.httab tr.off td{color:#94a3b8}.httab tr.abs td{background:#fef2f2}.httab tr.late td{background:#fff7ed}.httab tr.warn td{background:#fffbeb}.htnomap{color:#b45309;background:#fef3c7;border-radius:6px;padding:1px 6px}.htjob{color:#c2410c}',
     '.htsum{display:grid;grid-template-columns:2fr repeat(4,1fr);gap:8px}.htsum div{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}.htsum b{display:block;font-size:20px}.htsum span{font-size:13px;color:#475569}.htsum .late b{color:#c2410c}.htsum .abs b{color:#dc2626}',
     '.htmap{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:10px}.htmr{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:7px 10px;border-top:1px solid var(--line)}.htmr:first-child{border-top:0}.htmr.need{background:#fffbeb}.htmr select{max-width:320px;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;font:inherit}',
     '@media (max-width:700px){.htsum{grid-template-columns:repeat(2,1fr)}.htsum div:first-child{grid-column:1/-1}.htab{margin-left:0}}'
