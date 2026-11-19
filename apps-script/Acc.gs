@@ -659,7 +659,24 @@ function accLineDiag() {
   var pt = p.getProperty('PROD_LINE_TOKEN'), pg = p.getProperty('PROD_LINE_GROUP'), ag = p.getProperty('ACC_LINE_GROUP');
   return { ok: true, token: !!token, tokenAccepted: info === 200, lineStatus: info, botName: name, group: !!ag,
     prod: { token: !!pt, sameBotAsAcc: !!pt && pt === token, group: !!pg, sameGroupAsAcc: !!pg && pg === ag, routeCheck: accRouteCheck_(token) },
-    log: JSON.parse(p.getProperty('ACC_WEBHOOK_LOG') || '[]') };
+    log: JSON.parse(p.getProperty('ACC_WEBHOOK_LOG') || '[]'), drive: accDriveDiag_() };
+}
+// ตรวจสิทธิ์ Google Drive ของบัญชีเจ้าของสคริปต์ (คืนแค่ผล ok / ข้อความ error ไม่มีข้อมูลไฟล์) — ไว้ตรวจปัญหาส่งรูปเข้า LINE ไม่ได้
+function accDriveDiag_() {
+  var out = {};
+  try { out.auth = String(ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL).getAuthorizationStatus()); } catch (e) { out.auth = 'error: ' + String(e.message || e).slice(0, 120); }
+  try { DriveApp.getRootFolder().getId(); out.root = 'ok'; } catch (e) { out.root = String(e.message || e).slice(0, 160); }
+  try {   // ทดสอบขั้นเดียวกับการส่งรูป: สร้างไฟล์ → แชร์ลิงก์ → ลบทิ้ง (โฟลเดอร์ HR ถ้ามี ไม่งั้น root)
+    var step = 'folder', fid = deptConfig_('HR').folderId, f;
+    out.hrFolderSet = !!fid;
+    try { f = fid ? DriveApp.getFolderById(fid) : null; if (f) f.getName(); out.hrFolder = f ? 'ok' : 'none'; } catch (e) { out.hrFolder = String(e.message || e).slice(0, 160); f = null; }
+    step = 'create';
+    var file = (f || DriveApp.getRootFolder()).createFile(Utilities.newBlob(Utilities.base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=='), 'image/png', '_diag.png'));
+    step = 'share'; file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    step = 'trash'; file.setTrashed(true);
+    out.write = 'ok';
+  } catch (e) { out.write = step + ': ' + String(e.message || e).slice(0, 160); }
+  return out;
 }
 function accLineReply_(replyToken, text) {
   var token = props_().getProperty('ACC_LINE_TOKEN');
