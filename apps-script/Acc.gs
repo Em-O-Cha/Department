@@ -659,7 +659,14 @@ function accLineDiag() {
   var pt = p.getProperty('PROD_LINE_TOKEN'), pg = p.getProperty('PROD_LINE_GROUP'), ag = p.getProperty('ACC_LINE_GROUP');
   return { ok: true, token: !!token, tokenAccepted: info === 200, lineStatus: info, botName: name, group: !!ag,
     prod: { token: !!pt, sameBotAsAcc: !!pt && pt === token, group: !!pg, sameGroupAsAcc: !!pg && pg === ag, routeCheck: accRouteCheck_(token) },
-    log: JSON.parse(p.getProperty('ACC_WEBHOOK_LOG') || '[]') };
+    log: JSON.parse(p.getProperty('ACC_WEBHOOK_LOG') || '[]'), drive: accDriveDiag_() };
+}
+// ตรวจสิทธิ์ Google Drive ของบัญชีเจ้าของสคริปต์ (คืนแค่ผล ok / ข้อความ error ไม่มีข้อมูลไฟล์) — ไว้ตรวจปัญหาส่งรูปเข้า LINE ไม่ได้
+function accDriveDiag_() {
+  var out = {};
+  try { out.auth = String(ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL).getAuthorizationStatus()); } catch (e) { out.auth = 'error: ' + String(e.message || e).slice(0, 120); }
+  try { DriveApp.getRootFolder().getId(); out.root = 'ok'; } catch (e) { out.root = String(e.message || e).slice(0, 160); }
+  return out;
 }
 function accLineReply_(replyToken, text) {
   var token = props_().getProperty('ACC_LINE_TOKEN');

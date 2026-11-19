@@ -114,8 +114,8 @@ function hrDailySaveRoles(token, roles) {
 }
 // โฟลเดอร์เก็บภาพตาราง: โฟลเดอร์ฝ่ายบุคคล / "รายงานเช็คพนักงาน" — ถ้ายังไม่ได้ตั้งหรือเปิดไม่ได้ ใช้ Drive ของบัญชีกลาง
 // (ส่ง LINE ได้เสมอ 19/11/69: เดิมโยน error แล้วหน้าเว็บขึ้นแค่ "เชื่อมต่อไม่ได้")
-function hrdFolder_(dept) {
-  var folderId = deptConfig_(dept.key).folderId, parent = null, name = 'รายงานเช็คพนักงาน';
+function hrdFolder_(dept, central) {
+  var folderId = central ? '' : deptConfig_(dept.key).folderId, parent = null, name = 'รายงานเช็คพนักงาน';
   if (folderId) try { parent = DriveApp.getFolderById(folderId); parent.getName(); } catch (e) { parent = null; }
   if (!parent) { parent = DriveApp.getRootFolder(); name = 'รายงานเช็คพนักงาน (ฝ่ายบุคคล)'; }
   var it = parent.getFoldersByName(name);
@@ -137,8 +137,15 @@ function hrdSendLine_(dept, d, png, ratio, tok, group) {
     if (!row) return { ok: false, error: 'บันทึกข้อมูลวันนี้ก่อนส่ง' };
     var old = String(row.imgUrl || '').match(/[-\w]{25,}/);
     if (old) try { DriveApp.getFileById(old[0]).setTrashed(true); } catch (e) {}
-    var f = hrdFolder_(dept).createFile(Utilities.newBlob(Utilities.base64Decode(png), 'image/png', 'เช็คพนักงาน ' + d + '.png'));
-    f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    // ภาพต้องแชร์แบบมีลิงก์ LINE ถึงเปิดได้ — โฟลเดอร์ HR (บัญชี HR เป็นเจ้าของ) ไม่ให้คนอื่นแชร์ลิงก์ (19/11/69: "Access denied: DriveApp")
+    // → แชร์ไม่ได้ให้ย้ายไปเก็บใน Drive ของบัญชีกลางแทน
+    var blob = Utilities.newBlob(Utilities.base64Decode(png), 'image/png', 'เช็คพนักงาน ' + d + '.png'), f = hrdFolder_(dept).createFile(blob);
+    try { f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); }
+    catch (e) {
+      try { f.setTrashed(true); } catch (e2) {}
+      f = hrdFolder_(dept, true).createFile(blob);
+      f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    }
     var url = 'https://lh3.googleusercontent.com/d/' + f.getId(), dd = cpSlash_(d);
     var rt = /^\d{2,5}:\d{2,5}$/.test(String(ratio)) ? String(ratio) : '3:4';
     var msg = { type: 'flex', altText: 'จำนวนพนักงาน วันที่ ' + dd + ' · ทั้งหมด ' + row.total + ' คน · ลา ' + row.leaveCount + ' คน',
