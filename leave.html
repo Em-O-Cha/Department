@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
-<title>ขอลา · Spunky Food</title>
+<title>ใบลา · Spunky Food</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Noto+Sans+Myanmar:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
@@ -43,6 +43,8 @@
   label { display: block; font-size: 14px; color: var(--muted); margin: 12px 0 4px; }
   input[type=date], input[type=time], textarea { width: 100%; padding: 12px; border: 1.5px solid var(--line); border-radius: 12px; font: inherit; background: #fff; }
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .row2 > div { min-width: 0; }
+  input[type=date], input[type=time] { min-width: 0; max-width: 100%; display: block; -webkit-appearance: none; appearance: none; min-height: 48px; }   /* iPhone: ช่องวันที่ไม่ล้นจอ */
   .modes { display: flex; gap: 6px; margin-top: 10px; } .modes button { flex: 1; padding: 9px 6px; border: 2px solid var(--line); background: #fff; border-radius: 12px; font: inherit; font-weight: 600; color: inherit; } .modes button.on { border-color: var(--c); background: color-mix(in srgb, var(--c) 10%, white); color: var(--c); }
   .half { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 15px; } .half input { width: 22px; height: 22px; }
   .sum { margin-top: 12px; padding: 12px; border-radius: 12px; background: #f0fdf4; border-left: 4px solid var(--ok); font-size: 15px; }
@@ -70,14 +72,14 @@
   var KEY = new URLSearchParams(location.search).get('k') || '';
   // ข้อความ 2 ภาษา (ภาษาเมียนมาควรให้พนักงานที่อ่านได้ช่วยตรวจ)
   var TX = {
-    th: { title: 'ขอลา', sub: 'บริษัท สปังกี้ ฟู้ด จำกัด · ฝ่ายบุคคล', pick: 'เลือกชื่อของคุณ', search: 'ค้นหาชื่อ / ชื่อเล่น', all: 'ทั้งหมด', notMe: 'ไม่ใช่ฉัน / เปลี่ยนชื่อ',
+    th: { title: 'ใบลา', sub: 'บริษัท สปังกี้ ฟู้ด จำกัด · ฝ่ายบุคคล', pick: 'เลือกชื่อของคุณ', search: 'ค้นหาชื่อ / ชื่อเล่น', all: 'ทั้งหมด', notMe: 'ไม่ใช่ฉัน / เปลี่ยนชื่อ',
       bal: 'สิทธิ์ลาคงเหลือปีนี้', left: 'เหลือ', days: 'วัน', pending: 'รออนุมัติ', type: 'ประเภทการลา', from: 'ตั้งแต่วันที่', to: 'ถึงวันที่', half: 'ลาครึ่งวัน', mFull: 'เต็มวัน', mHalf: 'ครึ่งวัน', mHours: 'เป็นชั่วโมง', tFrom: 'เวลาเริ่ม', tTo: 'ถึงเวลา', hrs: 'ชม.', mins: 'นาที', needTime: 'ระบุเวลาเริ่ม–สิ้นสุดให้ถูกต้อง',
       reason: 'เหตุผล', reasonPh: 'เช่น ไม่สบาย มีไข้ / ธุระที่บ้าน', file: 'รูปใบรับรองแพทย์ / เอกสาร (ถ้ามี)', cam: 'ถ่ายรูป', lib: 'เลือกรูป', send: 'ส่งคำขอลา',
       total: 'รวม', overQ: 'เกินสิทธิ์', willLeft: 'หลังอนุมัติจะเหลือ', sent: 'ส่งคำขอลาแล้ว', sentSub: 'รอฝ่ายบุคคลอนุมัติ — ดูสถานะได้ที่หน้านี้', again: 'ขอลาอีกครั้ง',
       recent: 'คำขอล่าสุดของฉัน', none: 'ยังไม่มี', hint: 'พิมพ์ชื่อหรือชื่อเล่นของคุณ แล้วแตะชื่อตัวเอง', notFound: 'ไม่พบชื่อ — ลองพิมพ์ใหม่ หรือเลือก "ทั้งหมด"', myReq: 'คำขอที่เพิ่งส่ง', badLink: 'ลิงก์ไม่ถูกต้อง — สแกน QR ที่ฝ่ายบุคคลติดไว้อีกครั้ง', needType: 'เลือกประเภทการลา', needDate: 'เลือกวันที่',
       st: { 'รออนุมัติ': 'รออนุมัติ', 'อนุมัติ': 'อนุมัติแล้ว', 'ไม่อนุมัติ': 'ไม่อนุมัติ' },
       types: { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', maternity: 'ลาคลอด', ordain: 'ลาบวช', other: 'ลาอื่นๆ' } },
-    my: { title: 'ခွင့်တောင်းရန်', sub: 'Spunky Food Co., Ltd. · HR', pick: 'သင့်နာမည်ကို ရွေးပါ', search: 'နာမည် ရှာရန်', all: 'အားလုံး', notMe: 'ကျွန်ုပ် မဟုတ်ပါ / နာမည်ပြောင်းရန်',
+    my: { title: 'ခွင့်လွှာ', sub: 'Spunky Food Co., Ltd. · HR', pick: 'သင့်နာမည်ကို ရွေးပါ', search: 'နာမည် ရှာရန်', all: 'အားလုံး', notMe: 'ကျွန်ုပ် မဟုတ်ပါ / နာမည်ပြောင်းရန်',
       bal: 'ယခုနှစ် ကျန်ရှိသော ခွင့်ရက်', left: 'ကျန်', days: 'ရက်', pending: 'အတည်ပြုရန် စောင့်ဆဲ', type: 'ခွင့်အမျိုးအစား', from: 'စတင်သည့်ရက်', to: 'ပြီးဆုံးသည့်ရက်', half: 'နေ့တစ်ဝက် ခွင့်', mFull: 'တစ်နေ့လုံး', mHalf: 'နေ့တစ်ဝက်', mHours: 'နာရီဖြင့်', tFrom: 'စတင်ချိန်', tTo: 'ပြီးဆုံးချိန်', hrs: 'နာရီ', mins: 'မိနစ်', needTime: 'အချိန်ကို မှန်ကန်စွာ ရွေးပါ',
       reason: 'အကြောင်းပြချက်', reasonPh: 'ဥပမာ - နေမကောင်း၊ ဖျား', file: 'ဆရာဝန်လက်မှတ် / စာရွက်စာတမ်း ဓာတ်ပုံ (ရှိလျှင်)', cam: 'ဓာတ်ပုံရိုက်', lib: 'ဓာတ်ပုံရွေး', send: 'ခွင့်တောင်းခံချက် ပို့ရန်',
       total: 'စုစုပေါင်း', overQ: 'ခွင့်ရက်ထက် ကျော်နေသည်', willLeft: 'အတည်ပြုပြီးနောက် ကျန်မည်', sent: 'ခွင့်တောင်းခံချက် ပို့ပြီးပါပြီ', sentSub: 'HR အတည်ပြုရန် စောင့်ပါ — ဤစာမျက်နှာတွင် အခြေအနေ ကြည့်နိုင်သည်', again: 'ထပ်မံ ခွင့်တောင်းရန်',
