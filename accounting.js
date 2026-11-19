@@ -23,6 +23,9 @@
     { group: 'CP Ram' },
     { id: 'a_cp', label: 'นำเข้า PO CP Ram (PDF)', ic: 'upload' },
     { id: 'a_cpl', label: 'ตารางส่งสินค้า CP Ram', ic: 'table' },
+    { group: 'ต่างประเทศ' },
+    { id: 'a_ex', label: 'นำเข้า Invoice ต่างประเทศ (PDF)', ic: 'upload' },
+    { id: 'a_exl', label: 'ออเดอร์ต่างประเทศ', ic: 'table' },
     { group: 'ตั้งค่า' },
     { id: 'a_set', label: 'ตั้งค่าศูนย์ / สินค้า 7-11 / LINE', ic: 'gear' }
   ];
@@ -62,7 +65,7 @@
     if (msg) toast(msg);
     return H.load().then(function () { if (String(state.page).indexOf('a_') === 0) H.render(state.page); }).catch(onServerError);
   }
-  H.reset = function () { if (window.ACCCP) ACCCP.reset(); H.data = null; H.q = {}; H.imp = null; H.cur = null; H.pendingCur = null; H.setDraft = null; landscape(false); };
+  H.reset = function () { if (window.ACCCP) ACCCP.reset(); if (window.ACCEX) ACCEX.reset(); H.data = null; H.q = {}; H.imp = null; H.cur = null; H.pendingCur = null; H.setDraft = null; landscape(false); };
   H.menus = function () { return MENUS; };
   H.render = function (page) {
     landscape(false);
@@ -74,7 +77,7 @@
       });
       return;
     }
-    ({ a_imp: importPage, a_hist: histPage, a_dash: dash, a_set: settings, a_cp: function () { window.ACCCP.importPage(); }, a_cpl: function () { window.ACCCP.listPage(); } }[page] || importPage)();
+    ({ a_imp: importPage, a_hist: histPage, a_dash: dash, a_set: settings, a_cp: function () { window.ACCCP.importPage(); }, a_cpl: function () { window.ACCCP.listPage(); }, a_ex: function () { window.ACCEX.importPage(); }, a_exl: function () { window.ACCEX.listPage(); } }[page] || importPage)();
   };
 
   // ==================== ตาราง "ต้นแบบรับออเดอร์ 7-11" ====================
