@@ -4,7 +4,8 @@
 // ฝ่ายงานที่ไม่มีรายชื่อ (พนักงานผลิตประจำ / ทดลองงาน / job) กรอกจำนวนเอง + เพิ่มชื่อคนลาเอง
 // จำนวนพนักงานนับทั้งหมด (รวมคนลา) ตามที่ผู้ใช้เลือก 19/11/69
 // แท็บ "เช็คพนักงานรายวัน" (1 แถว = 1 วัน, ข้อมูลเป็น JSON) · ฝ่ายงาน + รายชื่อตั้งต้นเก็บใน hr_settings: dailyRoles
-// LINE: ใช้บอทฝ่ายบัญชี (ACC_LINE_TOKEN) ส่งเข้ากลุ่มเดียวกับฝ่ายบัญชี/ฝ่ายผลิต (ACC_LINE_GROUP) ตามที่ผู้ใช้ขอ 19/11/69 — ไม่มีการผูกกลุ่มแยกของ HR
+// LINE: ใช้บอทฝ่ายบัญชี (ACC_LINE_TOKEN) · กลุ่มของ HR เอง (HR_DAILY_GROUP) ผูก/เปลี่ยนได้ด้วย "ตั้งค่ากลุ่ม บุคคล <รหัส>" (รหัส HR_DAILY_SETUP ใช้ครั้งเดียว)
+// ยังไม่ผูกกลุ่มของ HR → ส่งเข้ากลุ่มเดียวกับฝ่ายบัญชี/ฝ่ายผลิต (ACC_LINE_GROUP) เหมือนเดิม (ผู้ใช้ขอปุ่มเปลี่ยนกลุ่ม 19/11/69)
 // ภาพตารางสร้างในเบราว์เซอร์ (html2canvas) → PNG ในโฟลเดอร์ฝ่าย / "รายงานเช็คพนักงาน"
 
 var HRD_TABLE_ = { tab: 'เช็คพนักงานรายวัน', cols: [
@@ -44,8 +45,51 @@ function hrdCleanRole_(r) {
   return { role: hrdClean_(r && r.role, 60), names: names.join(', '), count: names.length ? names.length : Math.max(0, Math.round(Number(r && r.count) || 0)) };
 }
 function hrdLineInfo_() {
-  var p = props_();
-  return { token: !!p.getProperty('ACC_LINE_TOKEN'), group: !!p.getProperty('ACC_LINE_GROUP') };
+  var p = props_(), own = !!p.getProperty('HR_DAILY_GROUP'), acc = !!p.getProperty('ACC_LINE_GROUP');
+  return { token: !!p.getProperty('ACC_LINE_TOKEN'), group: own || acc, own: own, accGroup: acc,
+    setupCode: hrProp_('HR_DAILY_SETUP', hrSetupCode_), botName: hrdBotName_() };
+}
+function hrdGroup_() { var p = props_(); return p.getProperty('HR_DAILY_GROUP') || p.getProperty('ACC_LINE_GROUP') || ''; }
+// ชื่อบอทฝ่ายบัญชี (ให้รู้ว่าต้องเชิญบอทตัวไหนเข้ากลุ่ม) — แคช 6 ชม.
+function hrdBotName_() {
+  try {
+    var token = props_().getProperty('ACC_LINE_TOKEN'); if (!token) return '';
+    var nk = 'acc_bot_name_' + lineTokKey_(token), c = CacheService.getScriptCache(), n = c.get(nk);
+    if (n) return n;
+    var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/info', { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return '';
+    n = JSON.parse(res.getContentText()).displayName || '';
+    if (n) c.put(nk, n, 21600);
+    return n;
+  } catch (e) { return ''; }
+}
+// สถานะ LINE (หน้าเว็บกด "ตรวจสอบ" หลังพิมพ์คำสั่งในกลุ่ม) · fresh = ขอรหัสใหม่
+function hrDailyLineInfo(token, fresh) {
+  requireHr_(token);
+  if (fresh) props_().setProperty('HR_DAILY_SETUP', hrSetupCode_());
+  return { ok: true, line: hrdLineInfo_() };
+}
+function hrDailyLineTest(token) {
+  requireHr_(token);
+  var tok = props_().getProperty('ACC_LINE_TOKEN'), group = hrdGroup_();
+  if (!tok || !group) return { ok: false, error: 'ยังไม่ได้ผูกกลุ่ม LINE' };
+  var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    headers: { Authorization: 'Bearer ' + tok }, payload: JSON.stringify({ to: group, messages: [{ type: 'text', text: '✅ ทดสอบการเชื่อมต่อ: ฝ่ายบุคคล ส่งตารางเช็คพนักงานรายวันเข้ากลุ่มนี้' }] }) });
+  return res.getResponseCode() === 200 ? { ok: true } : { ok: false, error: 'LINE ตอบกลับ ' + res.getResponseCode() };
+}
+// webhook (บอทฝ่ายบัญชี): "ตั้งค่ากลุ่ม บุคคล <รหัส>" → กลุ่มนี้รับตารางเช็คพนักงาน · Acc.gs ส่งเฉพาะข้อความคำสั่งนี้มา
+function hrdIsCommand_(ev) { return ev && ev.type === 'message' && ev.message && ev.message.type === 'text' && /^ตั้ง(ค่า)?\s*กลุ่ม\s*(บุคคล|HR)/i.test(String(ev.message.text).trim()); }
+function hrdLineCommand_(ev) {
+  var gid = (ev.source || {}).groupId || '', text = String(ev.message.text).trim();
+  var m = text.match(/^ตั้งค่ากลุ่ม\s*(?:บุคคล|HR)\s+([A-Z0-9]{8})$/i);
+  if (!m) { accLineReply_(ev.replyToken, 'พิมพ์ให้ตรงรูปแบบนี้ค่ะ\nตั้งค่ากลุ่ม บุคคล <รหัส 8 ตัว>\n(คัดลอกได้จากระบบฝ่ายบุคคล → เช็คพนักงานรายวัน → เปลี่ยนกลุ่ม LINE)'); return; }
+  if (!gid) { accLineReply_(ev.replyToken, 'พิมพ์คำสั่งนี้ในกลุ่ม LINE ที่ต้องการให้รับตาราง (ไม่ใช่ในแชทส่วนตัว)'); return; }
+  hrRate_('hrdbind', 10, 3600);
+  if (m[1].toUpperCase() !== hrProp_('HR_DAILY_SETUP', hrSetupCode_)) { accDiagLog_({ ev: 'command', group: true, result: 'HR รหัสไม่ถูกต้อง' }); accLineReply_(ev.replyToken, 'รหัสตั้งค่าไม่ถูกต้อง (รหัสใช้ได้ครั้งเดียว — คัดลอกรหัสล่าสุดจากหน้าเช็คพนักงานรายวันอีกครั้ง)'); return; }
+  props_().setProperty('HR_DAILY_GROUP', gid);
+  props_().setProperty('HR_DAILY_SETUP', hrSetupCode_());
+  accDiagLog_({ ev: 'command', group: true, result: 'HR ผูกกลุ่มแล้ว' });
+  accLineReply_(ev.replyToken, '✅ ตั้งกลุ่มนี้เป็นกลุ่มรับตารางเช็คพนักงานรายวันของฝ่ายบุคคลแล้ว\nกด "ดูภาพ & ส่ง LINE" ในระบบ ตารางจะขึ้นในกลุ่มนี้');
 }
 // วันนั้น: ข้อมูลที่บันทึกไว้ หรือ (ยังไม่มี) ตั้งต้นจากรายชื่อ + จำนวนล่าสุดของฝ่ายที่กรอกจำนวนเอง
 function hrDailyLoad(token, date) {
@@ -135,9 +179,9 @@ function hrDailySendLine(token, date, png, ratio) {
   var dept = requireHr_(token), d = accDate_(date);
   if (!d) return { ok: false, error: 'วันที่ไม่ถูกต้อง' };
   if (!png || typeof png !== 'string' || png.length > 6000000 || !/^[A-Za-z0-9+\/=]+$/.test(png)) return { ok: false, error: 'สร้างภาพตารางไม่สำเร็จ' };
-  var p = props_(), tok = p.getProperty('ACC_LINE_TOKEN'), group = p.getProperty('ACC_LINE_GROUP');
+  var tok = props_().getProperty('ACC_LINE_TOKEN'), group = hrdGroup_();
   if (!tok) return { ok: false, error: 'ยังไม่ได้ตั้งบอท LINE (ใช้บอทของฝ่ายบัญชี)' };
-  if (!group) return { ok: false, error: 'ฝ่ายบัญชียังไม่ได้ผูกกลุ่ม LINE — ให้ฝ่ายบัญชีผูกกลุ่มก่อน (ตารางนี้ส่งเข้ากลุ่มเดียวกับฝ่ายบัญชี/ฝ่ายผลิต)' };
+  if (!group) return { ok: false, error: 'ยังไม่ได้ผูกกลุ่ม LINE — กด "เปลี่ยนกลุ่ม LINE" แล้วพิมพ์คำสั่งในกลุ่มก่อน' };
   try { return hrdSendLine_(dept, d, png, ratio, tok, group); }
   catch (e) { Logger.log('hrDailySendLine ' + e); return { ok: false, error: 'ส่ง LINE ไม่สำเร็จ: ' + String(e && e.message || e).slice(0, 200) }; }
 }

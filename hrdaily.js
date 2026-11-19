@@ -122,8 +122,9 @@
       + '<div class="pbar hdbar"><label class="hdlb">วันที่ <input type="date" id="hdDate" value="' + D.date + '"></label>'
       + '<span class="hdsum">ทั้งหมด <b>' + n0(total) + '</b> คน · ลา <b class="neg">' + lv + '</b> คน</span>'
       + (sent ? '<span class="hdtag ok">ส่ง LINE แล้ว ' + esc(String(d.sentAt).slice(11, 16)) + '</span>' : d.day ? '<span class="hdtag">บันทึกแล้ว · ยังไม่ส่ง LINE</span>' : '<span class="hdtag">ยังไม่บันทึก</span>')
-      + (L.token && L.group ? '<span class="hdtag">ส่งเข้ากลุ่มเดียวกับฝ่ายบัญชี / ฝ่ายผลิต</span>' : '')
-      + '<button class="btn btn-sm btn-line" id="hdRoles">' + icon('gear', 15) + ' แก้ฝ่ายงาน / รายชื่อ</button></div>'
+      + (L.token && L.group ? '<span class="hdtag">' + (L.own ? 'ส่งเข้ากลุ่ม LINE ของฝ่ายบุคคล' : 'ส่งเข้ากลุ่มเดียวกับฝ่ายบัญชี / ฝ่ายผลิต') + '</span>' : '')
+      + '<button class="btn btn-sm btn-line" id="hdRoles">' + icon('gear', 15) + ' แก้ฝ่ายงาน / รายชื่อ</button>'
+      + (L.token ? '<button class="btn btn-sm btn-line" id="hdGroup">' + icon('send', 15) + ' ' + (L.group ? 'เปลี่ยนกลุ่ม LINE' : 'ผูกกลุ่ม LINE') + '</button>' : '') + '</div>'
       + (L.token && L.group ? '' : lineSetup(L))
       + unmatchedHtml()
       + '<div class="hdgrid">' + day.roles.map(function (r, i) {
@@ -157,12 +158,41 @@
     on('[data-note]', 'change', function (el) { day.roles[+el.getAttribute('data-note')].note = el.value.trim(); D.dirty = true; $('hdPrev').innerHTML = tableHtml(day, D.date); });
     on('[data-unrs]', 'click', function (el) { var p = el.getAttribute('data-unrs').split(':'); day.roles[+p[0]].resigns.splice(+p[1], 1); D.dirty = true; render(); });
     $('hdRoles').addEventListener('click', rolesDialog);
+    if ($('hdGroup')) $('hdGroup').addEventListener('click', groupDialog);
     $('hdSave').addEventListener('click', function () { save().then(function (ok) { if (ok) { toast('บันทึกแล้ว'); render(); } }); });
     $('hdSend').addEventListener('click', sendFlow);
   }
   function lineSetup(L) {
-    return '<div class="panel status off"><div class="dot">' + icon('warn', 20) + '</div><div><b>' + (L.token ? 'ฝ่ายบัญชียังไม่ได้ผูกกลุ่ม LINE' : 'ยังไม่มีบอท LINE') + '</b>'
-      + '<span>ตารางนี้ส่งเข้ากลุ่ม LINE เดียวกับฝ่ายบัญชีและฝ่ายผลิต — ให้ฝ่ายบัญชีตั้งค่า LINE / ผูกกลุ่มก่อน แล้วกดรีเฟรชหน้านี้</span></div></div>';
+    if (!L.token) return '<div class="panel status off"><div class="dot">' + icon('warn', 20) + '</div><div><b>ยังไม่มีบอท LINE</b><span>ตารางนี้ส่งด้วยบอทของฝ่ายบัญชี — ให้ฝ่ายบัญชีตั้งค่า LINE ก่อน แล้วกดรีเฟรชหน้านี้</span></div></div>';
+    return '<div class="panel status off"><div class="dot">' + icon('warn', 20) + '</div><div><b>ยังไม่ได้ผูกกลุ่ม LINE ที่รับตารางนี้</b><span>กดปุ่ม "ผูกกลุ่ม LINE" ด้านบน แล้วทำตามขั้นตอน</span></div></div>';
+  }
+  // ผูก / เปลี่ยนกลุ่ม LINE ที่รับตาราง (ใช้บอทฝ่ายบัญชี) — ดึงรหัสล่าสุดก่อน (รหัสใช้ได้ครั้งเดียว)
+  function groupDialog() {
+    openModal({ color: state.dept.color, icon: 'send', wide: true, title: 'กลุ่ม LINE ที่รับตารางเช็คพนักงาน', noCancel: true, ok: 'ปิด',
+      body: '<div id="hgBody"><span class="spinner dark"></span> กำลังโหลด…</div>',
+      onOpen: function () { groupBody(); }, submit: function () { closeModal(); render(); return Promise.resolve(); } });
+  }
+  function groupBody(msg) {
+    return call('hrDailyLineInfo', state.token).then(function (r) {
+      var L = D.data.line = r.line, g = $('hgBody'); if (!g) return;
+      var cmd = 'ตั้งค่ากลุ่ม บุคคล ' + L.setupCode, bot = L.botName ? '"' + L.botName + '"' : 'ของฝ่ายบัญชี';
+      g.innerHTML = '<div class="hgnow ' + (L.group ? 'ok' : 'bad') + '">' + (L.own ? '✓ ตอนนี้ส่งเข้ากลุ่ม LINE ของฝ่ายบุคคลที่ผูกไว้' : L.group ? '✓ ตอนนี้ส่งเข้ากลุ่มเดียวกับฝ่ายบัญชี / ฝ่ายผลิต (ยังไม่ได้ผูกกลุ่มของฝ่ายบุคคลเอง)' : '✕ ยังไม่ได้ผูกกลุ่ม') + '</div>'
+        + (msg ? '<p class="hgmsg">' + esc(msg) + '</p>' : '')
+        + '<b>' + (L.group ? 'เปลี่ยนไปส่งเข้ากลุ่มอื่น' : 'ผูกกลุ่ม') + '</b><ol class="hgol"><li>เชิญบอท ' + esc(bot) + ' เข้ากลุ่ม LINE ที่ต้องการ (ถ้ายังไม่อยู่ในกลุ่ม)</li>'
+        + '<li>พิมพ์ข้อความนี้ในกลุ่มนั้น<div class="hdcode"><code>' + esc(cmd) + '</code><button type="button" class="btn btn-sm btn-line" data-copycmd="' + esc(cmd) + '">คัดลอก</button></div><small class="muted">รหัสใช้ได้ครั้งเดียว</small></li>'
+        + '<li>รอบอทตอบ "✅ ตั้งกลุ่มนี้…" แล้วกด "ตรวจสอบ" ด้านล่าง</li></ol>'
+        + '<div class="hgacts"><button type="button" class="btn btn-sm btn-line" id="hgCheck">↻ ตรวจสอบ</button>'
+        + (L.group ? '<button type="button" class="btn btn-sm btn-line" id="hgTest">' + icon('send', 15) + ' ส่งข้อความทดสอบเข้ากลุ่ม</button>' : '') + '</div>';
+      on('[data-copycmd]', 'click', function (el) {
+        var t = el.getAttribute('data-copycmd');
+        (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { toast('คัดลอกแล้ว'); }, function () { toast(t); });
+      }, g);
+      $('hgCheck').addEventListener('click', function () { this.disabled = true; groupBody('ตรวจสอบแล้ว ' + new Date().toTimeString().slice(0, 5) + ' น.'); });
+      if ($('hgTest')) $('hgTest').addEventListener('click', function () {
+        var b = this; b.disabled = true;
+        call('hrDailyLineTest', state.token).then(function (x) { b.disabled = false; toast(x.ok ? 'ส่งข้อความทดสอบแล้ว ดูในกลุ่ม LINE' : (x.error || 'ส่งไม่สำเร็จ')); }).catch(function (e) { b.disabled = false; onServerError(e); });
+      });
+    }).catch(onServerError);
   }
   function chip(i, name) {
     var r = D.day.roles[i], j = r.leaves.map(function (l) { return l.name; }).indexOf(name);
@@ -271,6 +301,9 @@
     '.hdsum{color:var(--muted)}.hdsum b{color:var(--ink)}.hdsum .neg{color:#dc2626}.hdtag{font-size:12.5px;font-weight:700;padding:3px 10px;border-radius:99px;background:#e2e8f0;color:#334155}.hdtag.ok{background:#dcfce7;color:#166534}#hdRoles{margin-left:auto}',
     '.hdgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:12px}.hdcard{padding:12px 14px}.hdch{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px}.hdch span{color:var(--muted);white-space:nowrap}.hdch em{color:#dc2626;font-style:normal;font-weight:700}',
     '.hdchips{display:flex;flex-wrap:wrap;gap:6px}.hdchip{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:6px 12px;font:inherit;font-size:14px;cursor:pointer}.hdchip:hover{border-color:var(--c)}.hdchip.off{background:#fee2e2;border-color:#fca5a5;color:#991b1b;text-decoration:line-through}',
+    '.hgnow{padding:10px 12px;border-radius:10px;font-weight:600;margin-bottom:12px}.hgnow.ok{background:#dcfce7;color:#15803d}.hgnow.bad{background:#fee2e2;color:#991b1b}.hgmsg{margin:0 0 10px;color:var(--muted);font-size:13px}',
+    '.hgol{margin:6px 0 12px;padding-left:22px;line-height:1.6}.hgol li{margin-bottom:6px}.hgacts{display:flex;gap:8px;flex-wrap:wrap}',
+    '.hdcode{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 2px}.hdcode code{background:#f1f5f9;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:15px;font-weight:700;user-select:all}',
     '.hdcnt{display:flex;gap:8px;align-items:center}.hdcnt input{width:90px;padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit}',
     '.hdchip.lt{border-color:#f59e0b;background:#fffbeb;color:#92400e}.hdlv div.lt{color:#b45309}.hdcard em.lt{color:#b45309}.hdauto{font-size:11px;color:#64748b;background:#f1f5f9;border-radius:6px;padding:1px 6px;margin-left:4px}',
     '.hdun{border:2px dashed #f59e0b;margin-bottom:12px}.hdun h4{margin:0 0 8px}.hdunr{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}.hdunr span{flex:1;min-width:180px}.hdunr select{padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;font:inherit}',

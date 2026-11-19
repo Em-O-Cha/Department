@@ -688,10 +688,12 @@ function accLineWebhook_(events) {
         var pp = props_();
         if (gid === pp.getProperty('ACC_LINE_GROUP')) pp.deleteProperty('ACC_LINE_GROUP');
         if (gid === pp.getProperty('PROD_LINE_GROUP') && pp.getProperty('PROD_LINE_TOKEN') === pp.getProperty('ACC_LINE_TOKEN')) pp.deleteProperty('PROD_LINE_GROUP');
+        if (gid === pp.getProperty('HR_DAILY_GROUP')) pp.deleteProperty('HR_DAILY_GROUP');
         accDiagLog_({ ev: 'leave', group: true, result: 'บอทออกจากกลุ่ม' });
         return;
       }
       if (ev.type !== 'message' || !ev.message || ev.message.type !== 'text') return;
+      if (hrdIsCommand_(ev)) { hrdLineCommand_(ev); return; }   // ฝ่ายบุคคล: ตารางเช็คพนักงาน (HrDaily.gs)
       var text = String(ev.message.text).trim();
       var m = text.match(/^ตั้งค่ากลุ่ม\s*(?:บัญชี|ACC)\s+([A-Z0-9]{8})$/i);
       if (!m) {
