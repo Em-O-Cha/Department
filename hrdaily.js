@@ -19,12 +19,13 @@
     return call('hrDailyLoad', state.token, date || '').then(function (r) {
       D.data = r; D.date = r.date; D.dirty = false;
       D.day = r.day ? r.day : {
-        resign: 0,
+        resign: 0, resignNames: [],
         roles: r.roles.map(function (x) {
           var names = splitNames(x.names);
           return { role: x.role, names: names, count: names.length ? names.length : (r.lastCounts[x.role] != null ? r.lastCounts[x.role] : x.count), leaves: [], note: '' };
         })
       };
+      if (!Array.isArray(D.day.resignNames)) D.day.resignNames = [];
       render();
     }).catch(onServerError);
   }
@@ -37,6 +38,8 @@
     return '<div class="hdbrand">' + (l ? '<img class="hdlogo" src="' + l.src + '" alt="Spunky Food">' : '') + '<div><b>' + COMPANY_TH + '</b><span>' + COMPANY_EN + '</span></div></div>';
   }
   function leaveText(l) { return l.name + ' (' + l.type + (l.reason ? ' · ' + l.reason : '') + ')'; }
+  // ลาออก: กรอกชื่อ → จำนวนนับจากรายชื่อ (ข้อมูลเก่าที่มีแต่ตัวเลข ใช้ตัวเลขเดิม)
+  function resignCount(day) { return day.resignNames && day.resignNames.length ? day.resignNames.length : (Number(day.resign) || 0); }
   function tableHtml(day, date) {
     var total = 0, lv = 0;
     var rows = day.roles.map(function (r) {
@@ -47,7 +50,7 @@
         + '<td class="hdn">' + esc(r.note || '') + '</td><td class="hdl">' + r.leaves.map(function (l, i) { return '<div>' + (i + 1) + '.' + esc(leaveText(l)) + '</div>'; }).join('') + '</td></tr>';
     }).join('');
     return '<div class="hdimg">' + brandHtml() + '<div class="hdt">จำนวนพนักงาน วันที่ ' + th(date) + '</div><table class="hdtab"><thead><tr><th>ฝ่ายงาน</th><th>ชื่อ</th><th>จำนวนพนักงาน</th><th>หมายเหตุ</th><th>การลา</th></tr></thead><tbody>' + rows + '</tbody>'
-      + '<tfoot><tr><td class="hdr hdf1" colspan="2">รวมพนักงานทั้งหมด</td><td class="hdf hdc"><b>' + n0(total) + '</b></td><td class="hdf">ลาออกทั้งหมด <b>' + n0(day.resign) + '</b> คน</td><td class="hdf">ลางานทั้งหมด <b>' + n0(lv) + '</b> คน</td></tr></tfoot></table></div>';
+      + '<tfoot><tr><td class="hdr hdf1" colspan="2">รวมพนักงานทั้งหมด</td><td class="hdf hdc"><b>' + n0(total) + '</b></td><td class="hdf">ลาออกทั้งหมด <b>' + n0(resignCount(day)) + '</b> คน' + (day.resignNames || []).map(function (n, i) { return '<div class="hdrn">' + (i + 1) + '.' + esc(n) + '</div>'; }).join('') + '</td><td class="hdf">ลางานทั้งหมด <b>' + n0(lv) + '</b> คน</td></tr></tfoot></table></div>';
   }
 
   // ---------- หน้า ----------
@@ -72,7 +75,11 @@
           + '<div class="hdfoot">' + (r.names.length ? '' : '<button class="link-btn" data-addlv="' + i + '">+ เพิ่มคนลา</button>')
           + '<input class="hdnote" data-note="' + i + '" placeholder="หมายเหตุ" value="' + esc(r.note || '') + '"></div></div>';
       }).join('') + '</div>'
-      + '<div class="panel hdresign"><label>ลาออก (คน) <input type="number" min="0" id="hdResign" value="' + (Number(day.resign) || 0) + '"></label></div>'
+      + '<div class="panel hdresign"><div class="hdrh"><b>ลาออก</b><span>' + n0(resignCount(day)) + ' คน</span></div>'
+      + '<div class="hdradd"><input id="hdResignName" list="hdAllNames" maxlength="60" placeholder="พิมพ์ชื่อคนลาออก"><button class="btn btn-sm btn-line" id="hdResignAdd">+ เพิ่มชื่อ</button></div>'
+      + '<datalist id="hdAllNames">' + day.roles.reduce(function (a, r) { return a.concat(r.names); }, []).map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>'
+      + (day.resignNames.length ? '<div class="hdchips">' + day.resignNames.map(function (n, i) { return '<span class="hdchip off">' + (i + 1) + '. ' + esc(n) + ' <button class="link-btn danger" data-unrs="' + i + '" aria-label="ลบชื่อ ' + esc(n) + '">✕</button></span>'; }).join('') + '</div>' : '')
+      + '</div>'
       + '<div class="panel pbox"><h4>' + icon('table', 18) + ' ตัวอย่างตาราง (ภาพที่จะส่ง LINE)</h4><div class="hdprev" id="hdPrev">' + tableHtml(day, D.date) + '</div></div>'
       + '<div class="a7bar"><button class="btn btn-line" id="hdSave">' + icon('check', 16) + ' บันทึก</button><button class="btn btn-primary" id="hdSend"' + (L.token && L.group ? '' : ' disabled') + '>' + icon('send', 16) + ' ดูภาพ & ส่ง LINE</button></div>';
     $('hdDate').addEventListener('change', function () {
@@ -86,7 +93,16 @@
     on('[data-unlv]', 'click', function (el) { var p = el.getAttribute('data-unlv').split(':'); day.roles[+p[0]].leaves.splice(+p[1], 1); D.dirty = true; render(); });
     on('[data-cnt]', 'change', function (el) { day.roles[+el.getAttribute('data-cnt')].count = Math.max(0, Math.round(Number(el.value) || 0)); D.dirty = true; render(); });
     on('[data-note]', 'change', function (el) { day.roles[+el.getAttribute('data-note')].note = el.value.trim(); D.dirty = true; $('hdPrev').innerHTML = tableHtml(day, D.date); });
-    $('hdResign').addEventListener('change', function () { day.resign = Math.max(0, Math.round(Number(this.value) || 0)); D.dirty = true; $('hdPrev').innerHTML = tableHtml(day, D.date); });
+    var addResign = function () {
+      var v = $('hdResignName').value.trim().slice(0, 60);
+      if (!v) { $('hdResignName').focus(); return; }
+      if (day.resignNames.indexOf(v) >= 0) { toast('มีชื่อนี้แล้ว'); return; }
+      day.resignNames.push(v); day.resign = day.resignNames.length; D.dirty = true; render();
+      if ($('hdResignName')) $('hdResignName').focus();
+    };
+    $('hdResignAdd').addEventListener('click', addResign);
+    $('hdResignName').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addResign(); } });
+    on('[data-unrs]', 'click', function (el) { day.resignNames.splice(+el.getAttribute('data-unrs'), 1); day.resign = day.resignNames.length; D.dirty = true; render(); });
     $('hdRoles').addEventListener('click', rolesDialog);
     $('hdSave').addEventListener('click', function () { save().then(function (ok) { if (ok) { toast('บันทึกแล้ว'); render(); } }); });
     $('hdSend').addEventListener('click', sendFlow);
@@ -180,13 +196,13 @@
     '.hdcnt{display:flex;gap:8px;align-items:center}.hdcnt input{width:90px;padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit}',
     '.hdlv{margin-top:8px;border-top:1px dashed var(--line);padding-top:6px}.hdlv div{display:flex;justify-content:space-between;gap:8px;font-size:14px;color:#991b1b;padding:2px 0}',
     '.hdfoot{display:flex;gap:8px;align-items:center;margin-top:8px}.hdnote{flex:1;min-width:0;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px}',
-    '.hdresign{padding:10px 14px;margin-bottom:12px}.hdresign input{width:80px;margin-left:8px;padding:6px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit}',
+    '.hdresign{padding:10px 14px;margin-bottom:12px}.hdrh{display:flex;gap:10px;align-items:baseline;margin-bottom:8px}.hdrh span{color:#991b1b;font-weight:600}.hdradd{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.hdradd input{flex:1;min-width:0;max-width:320px;padding:7px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit}.hdresign .hdchip{cursor:default;text-decoration:none}',
     '.hdtypes{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}.hdtypes input{position:absolute;opacity:0}.hdtypes span{display:block;padding:8px 12px;border:1.5px solid var(--line);border-radius:99px;cursor:pointer;font-weight:600}.hdtypes input:checked+span{border-color:var(--c);background:color-mix(in srgb,var(--c) 12%,white);color:var(--c)}.hdtypes input:focus-visible+span{outline:2px solid var(--c)}',
     '.hdprev{overflow-x:auto}.hdimgbox{position:fixed;left:-4000px;top:0}',
     '.hdimg{display:inline-block;min-width:720px;padding:18px;background:#fff;color:#000}.hdt{text-align:center;font-size:24px;font-weight:700;margin-bottom:12px}',
     '.hdbrand{display:flex;align-items:center;gap:12px;padding-bottom:10px;margin-bottom:12px;border-bottom:2px solid #e2e8f0}.hdlogo{height:56px;width:auto}.hdbrand b{display:block;font-size:20px}.hdbrand span{display:block;font-size:14px;color:#475569}',
     '.hdtab{border-collapse:collapse;width:100%;font-size:15px}.hdtab th{background:' + C_HEAD + ';border:1px solid #000;padding:8px;font-size:16px;white-space:nowrap}.hdtab td{border:1px solid #000;padding:6px 8px;vertical-align:top}',
-    '.hdtab .hdr{background:' + C_ROLE + ';font-weight:700;white-space:nowrap}.hdtab .hdc{text-align:center;font-weight:700}.hdtab .hdn{max-width:260px}.hdtab .hdl{color:#b91c1c;min-width:200px}.hdtab .hdl div{white-space:nowrap}',
+    '.hdtab .hdr{background:' + C_ROLE + ';font-weight:700;white-space:nowrap}.hdtab .hdc{text-align:center;font-weight:700}.hdtab .hdn{max-width:260px}.hdtab .hdl{color:#b91c1c;min-width:200px}.hdtab .hdl div{white-space:nowrap}.hdtab .hdrn{color:#b91c1c;white-space:nowrap}',
     '.hdtab tfoot td{background:' + C_FOOT + ';font-size:15px}.hdtab tfoot .hdf1{background:' + C_ROLE + ';font-size:17px}'
   ].join('\n');
   document.head.appendChild(css);

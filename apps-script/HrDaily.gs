@@ -71,7 +71,9 @@ function hrdCleanDay_(day) {
     var count = names.length ? names.length : Math.max(0, Math.round(Number(r.count) || 0));
     return { role: hrdClean_(r.role, 60), names: names, count: count, leaves: leaves, note: hrdClean_(r.note, 120) };
   }).filter(function (r) { return r.role; });
-  return { roles: roles, resign: Math.max(0, Math.round(Number(day.resign) || 0)) };
+  // ลาออก: รายชื่อ (19/11/69) — จำนวน = จำนวนชื่อ; ข้อมูลเก่าที่ไม่มีชื่อใช้ตัวเลขเดิม
+  var resignNames = (Array.isArray(day.resignNames) ? day.resignNames : []).slice(0, 80).map(function (n) { return hrdClean_(n, 60); }).filter(String);
+  return { roles: roles, resignNames: resignNames, resign: resignNames.length || Math.max(0, Math.round(Number(day.resign) || 0)) };
 }
 function hrDailySave(token, date, day) {
   var dept = requireHr_(token), d = accDate_(date);
