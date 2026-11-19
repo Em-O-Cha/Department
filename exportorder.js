@@ -46,7 +46,9 @@
   C.parseText = function (lines) {
     var T = lines.map(function (l) { return String(l).replace(/[ \t ]+/g, ' ').trim(); }).filter(Boolean), all = T.join('\n'), m;
     var inv = { invNo: '', issueDate: '', ref: '', customer: '', address: '', email: '', currency: '', incoterms: '', port: '', transport: '', payTerms: '', items: [], total: null, wht: 0, payAmount: null };
-    if ((m = all.match(/Doc\.?\s*No\.?\s*[:;.]?\s*([A-Z]{2,4}\s?-\s?\d{6,})/i)) || (m = all.match(/\b((?:IV|INV|EX|CI|PI)-?\d{8,})\b/i))) inv.invNo = m[1].replace(/\s/g, '').toUpperCase();
+    // เลขที่ Invoice = ค่าหลัง "Doc. No." (ผู้ใช้ยืนยัน 19/11/69) — รับทุกรูปแบบ เช่น IV-20260100003, IV2026…, INV/2026/001 (OCR อาจอ่าน No เป็น N0 / N o)
+    if ((m = all.match(/Doc\s*\.?\s*N\s*[o0O]\s*\.?\s*[:;.,]?\s*([A-Za-z0-9][A-Za-z0-9\-\/_.]{2,}(?:\s?-\s?[A-Za-z0-9]+)?(?:\s\d{4,}\b)?)/))) inv.invNo = m[1].replace(/\s/g, '').replace(/[.,;:]+$/, '').toUpperCase();
+    else if ((m = all.match(/\b((?:IV|INV|EX|CI|PI)-?\d{8,})\b/i))) inv.invNo = m[1].toUpperCase();
     if ((m = all.match(/Issue\s*Date\s*[:;.]?\s*(\d{1,2})\s*[\/.-]\s*(\d{1,2})\s*[\/.-]\s*(\d{4})/i))) { var y = +m[3]; if (y > 2400) y -= 543; inv.issueDate = y + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2); }
     if ((m = all.match(/Ref\.?\s*[:;]\s*([^\n]*)/i))) { var ref = m[1].trim(); inv.ref = /^[-–—_.]*$/.test(ref) ? '' : ref; }
     var ci = -1;
@@ -188,7 +190,7 @@
   };
 
   // ==================== หน้า 2: ตรวจ / แก้ข้อมูล ====================
-  var FIELDS = [['invNo', 'เลขที่ Invoice *'], ['issueDate', 'วันที่ Invoice *', 'date'], ['customer', 'ลูกค้า *'], ['shipDate', 'วันส่งสินค้า (ETD)', 'date'],
+  var FIELDS = [['invNo', 'เลขที่ Invoice (Doc. No.) *'], ['issueDate', 'วันที่ Invoice *', 'date'], ['customer', 'ลูกค้า *'], ['shipDate', 'วันส่งสินค้า (ETD)', 'date'],
     ['port', 'ปลายทาง (Delivery Location)'], ['incoterms', 'Incoterms'], ['transport', 'การขนส่ง'], ['currency', 'สกุลเงิน'], ['ref', 'อ้างอิง (Ref.)'], ['email', 'อีเมลลูกค้า'],
     ['address', 'ที่อยู่ลูกค้า', 'wide'], ['payTerms', 'เงื่อนไขการชำระเงิน', 'area'], ['note', 'หมายเหตุ', 'wide']];
   function checks(inv) {
@@ -214,7 +216,7 @@
   function previewPage() {
     var I = C.imp, inv = I.inv;
     var head = [chk(true, 'อ่านไฟล์ได้ ' + (inv.ocr ? '(อ่านจากภาพด้วย OCR — ตรวจตัวเลขกับไฟล์ต้นฉบับด้านล่างอีกครั้ง)' : '(ตัวหนังสือในไฟล์)') + ' · ' + inv.items.length + ' รายการ'),
-      chk(!!inv.invNo, inv.invNo ? 'เลขที่ Invoice ' + esc(inv.invNo) : 'ไม่พบเลขที่ Invoice — ใส่เอง'),
+      chk(!!inv.invNo, inv.invNo ? 'เลขที่ Invoice (Doc. No.) ' + esc(inv.invNo) : 'ไม่พบเลขที่ Invoice (Doc. No.) — ใส่เอง'),
       chk(!!inv.issueDate, inv.issueDate ? 'วันที่ Invoice ' + slash(inv.issueDate) : 'ไม่พบวันที่ Invoice — ใส่เอง')];
     if (I.exists) head.push(chk('warn', 'Invoice เลขนี้มีในระบบแล้ว (สถานะ ' + STATUS[I.exists.status || ''] + (I.exists.sentAt ? ' · ส่ง LINE แล้ว' : '') + ') — บันทึกจะอัปเดตข้อมูลเดิม'));
     $('main').innerHTML = '<h3>ตรวจข้อมูล Invoice ก่อนบันทึก</h3><p class="lead">' + esc(I.fileName) + ' · แก้ได้ทุกช่อง ถ้าถูกต้องกดบันทึก</p>' + steps(2)
