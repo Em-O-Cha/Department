@@ -68,12 +68,17 @@ function hrdCleanDay_(day) {
     var leaves = (Array.isArray(r.leaves) ? r.leaves : []).slice(0, 80).map(function (l) {
       return { name: hrdClean_(l.name, 60), type: hrdClean_(l.type, 30) || 'ลา', reason: hrdClean_(l.reason, 120) };
     }).filter(function (l) { return l.name; });
+    var resigns = (Array.isArray(r.resigns) ? r.resigns : []).slice(0, 80).map(function (x) {
+      return { name: hrdClean_(x && x.name, 60), reason: hrdClean_(x && x.reason, 120) };
+    }).filter(function (x) { return x.name; });
     var count = names.length ? names.length : Math.max(0, Math.round(Number(r.count) || 0));
-    return { role: hrdClean_(r.role, 60), names: names, count: count, leaves: leaves, note: hrdClean_(r.note, 120) };
+    return { role: hrdClean_(r.role, 60), names: names, count: count, leaves: leaves, resigns: resigns, note: hrdClean_(r.note, 120) };
   }).filter(function (r) { return r.role; });
-  // ลาออก: รายชื่อ (19/11/69) — จำนวน = จำนวนชื่อ; ข้อมูลเก่าที่ไม่มีชื่อใช้ตัวเลขเดิม
+  // ลาออก: รายชื่อในแต่ละฝ่ายงาน (roles[].resigns, แสดงในช่องหมายเหตุ) — จำนวน = จำนวนชื่อ
+  // ข้อมูลเก่า: resignNames (รวมทั้งวัน) / ตัวเลขอย่างเดียว ยังนับให้
   var resignNames = (Array.isArray(day.resignNames) ? day.resignNames : []).slice(0, 80).map(function (n) { return hrdClean_(n, 60); }).filter(String);
-  return { roles: roles, resignNames: resignNames, resign: resignNames.length || Math.max(0, Math.round(Number(day.resign) || 0)) };
+  var named = roles.reduce(function (s, r) { return s + r.resigns.length; }, 0) + resignNames.length;
+  return { roles: roles, resignNames: resignNames, resign: named || Math.max(0, Math.round(Number(day.resign) || 0)) };
 }
 function hrDailySave(token, date, day) {
   var dept = requireHr_(token), d = accDate_(date);

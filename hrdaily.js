@@ -22,10 +22,11 @@
         resign: 0, resignNames: [],
         roles: r.roles.map(function (x) {
           var names = splitNames(x.names);
-          return { role: x.role, names: names, count: names.length ? names.length : (r.lastCounts[x.role] != null ? r.lastCounts[x.role] : x.count), leaves: [], note: '' };
+          return { role: x.role, names: names, count: names.length ? names.length : (r.lastCounts[x.role] != null ? r.lastCounts[x.role] : x.count), leaves: [], resigns: [], note: '' };
         })
       };
       if (!Array.isArray(D.day.resignNames)) D.day.resignNames = [];
+      D.day.roles.forEach(function (r) { if (!Array.isArray(r.resigns)) r.resigns = []; });
       render();
     }).catch(onServerError);
   }
@@ -38,16 +39,21 @@
     return '<div class="hdbrand">' + (l ? '<img class="hdlogo" src="' + l.src + '" alt="Spunky Food">' : '') + '<div><b>' + COMPANY_TH + '</b><span>' + COMPANY_EN + '</span></div></div>';
   }
   function leaveText(l) { return l.name + ' (' + l.type + (l.reason ? ' · ' + l.reason : '') + ')'; }
-  // ลาออก: กรอกชื่อ → จำนวนนับจากรายชื่อ (ข้อมูลเก่าที่มีแต่ตัวเลข ใช้ตัวเลขเดิม)
-  function resignCount(day) { return day.resignNames && day.resignNames.length ? day.resignNames.length : (Number(day.resign) || 0); }
+  // ลาออก: แตะชื่อในฝ่ายงาน → เลือก "ลาออก" ชื่อไปอยู่ช่องหมายเหตุของฝ่ายนั้น (เหมือนการลา) · จำนวน = จำนวนชื่อ
+  // (ข้อมูลเก่า: resignNames รวมทั้งวัน / ตัวเลขอย่างเดียว ยังนับให้)
+  function resignText(x) { return x.name + ' (ลาออก' + (x.reason ? ' · ' + x.reason : '') + ')'; }
+  function resignCount(day) {
+    var n = day.roles.reduce(function (s, r) { return s + (r.resigns || []).length; }, 0) + (day.resignNames || []).length;
+    return n || (Number(day.resign) || 0);
+  }
   function tableHtml(day, date) {
     var total = 0, lv = 0;
     var rows = day.roles.map(function (r) {
-      var off = r.leaves.map(function (l) { return l.name; });
+      var off = r.leaves.concat(r.resigns || []).map(function (l) { return l.name; });
       var working = r.names.filter(function (n) { return off.indexOf(n) < 0; });
       total += Number(r.count) || 0; lv += r.leaves.length;
       return '<tr><td class="hdr">' + esc(r.role) + '</td><td class="hdn">' + esc(working.join(', ')) + '</td><td class="hdc">' + n0(r.count) + '</td>'
-        + '<td class="hdn">' + esc(r.note || '') + '</td><td class="hdl">' + r.leaves.map(function (l, i) { return '<div>' + (i + 1) + '.' + esc(leaveText(l)) + '</div>'; }).join('') + '</td></tr>';
+        + '<td class="hdn">' + (r.note ? '<div>' + esc(r.note) + '</div>' : '') + (r.resigns || []).map(function (x, k) { return '<div class="hdrn">' + (k + 1) + '.' + esc(resignText(x)) + '</div>'; }).join('') + '</td><td class="hdl">' + r.leaves.map(function (l, i) { return '<div>' + (i + 1) + '.' + esc(leaveText(l)) + '</div>'; }).join('') + '</td></tr>';
     }).join('');
     return '<div class="hdimg">' + brandHtml() + '<div class="hdt">จำนวนพนักงาน วันที่ ' + th(date) + '</div><table class="hdtab"><thead><tr><th>ฝ่ายงาน</th><th>ชื่อ</th><th>จำนวนพนักงาน</th><th>หมายเหตุ</th><th>การลา</th></tr></thead><tbody>' + rows + '</tbody>'
       + '<tfoot><tr><td class="hdr hdf1" colspan="2">รวมพนักงานทั้งหมด</td><td class="hdf hdc"><b>' + n0(total) + '</b></td><td class="hdf">ลาออกทั้งหมด <b>' + n0(resignCount(day)) + '</b> คน' + (day.resignNames || []).map(function (n, i) { return '<div class="hdrn">' + (i + 1) + '.' + esc(n) + '</div>'; }).join('') + '</td><td class="hdf">ลางานทั้งหมด <b>' + n0(lv) + '</b> คน</td></tr></tfoot></table></div>';
@@ -66,20 +72,16 @@
       + '<button class="btn btn-sm btn-line" id="hdRoles">' + icon('gear', 15) + ' แก้ฝ่ายงาน / รายชื่อ</button></div>'
       + (L.token && L.group ? '' : lineSetup(L))
       + '<div class="hdgrid">' + day.roles.map(function (r, i) {
-        var off = r.leaves.map(function (l) { return l.name; });
-        return '<div class="panel hdcard"><div class="hdch"><b>' + esc(r.role) + '</b><span>' + n0(r.count) + ' คน' + (r.leaves.length ? ' · <em>ลา ' + r.leaves.length + '</em>' : '') + '</span></div>'
+        var off = r.leaves.map(function (l) { return l.name; }), gone = r.resigns.map(function (x) { return x.name; });
+        return '<div class="panel hdcard"><div class="hdch"><b>' + esc(r.role) + '</b><span>' + n0(r.count) + ' คน' + (r.leaves.length ? ' · <em>ลา ' + r.leaves.length + '</em>' : '') + (r.resigns.length ? ' · <em>ลาออก ' + r.resigns.length + '</em>' : '') + '</span></div>'
           + (r.names.length
-            ? '<div class="hdchips">' + r.names.map(function (n) { var isOff = off.indexOf(n) >= 0; return '<button class="hdchip' + (isOff ? ' off' : '') + '" data-ri="' + i + '" data-nm="' + esc(n) + '">' + esc(n) + '</button>'; }).join('') + '</div>'
+            ? '<div class="hdchips">' + r.names.map(function (n) { var isOff = off.indexOf(n) >= 0, isGone = gone.indexOf(n) >= 0; return '<button class="hdchip' + (isGone ? ' gone' : isOff ? ' off' : '') + '" data-ri="' + i + '" data-nm="' + esc(n) + '">' + esc(n) + '</button>'; }).join('') + '</div>'
             : '<label class="hdcnt">จำนวน <input type="number" min="0" inputmode="numeric" data-cnt="' + i + '" value="' + (Number(r.count) || 0) + '"> คน</label>')
           + (r.leaves.length ? '<div class="hdlv">' + r.leaves.map(function (l, j) { return '<div><span>' + esc(leaveText(l)) + '</span><button class="link-btn danger" data-unlv="' + i + ':' + j + '" aria-label="ยกเลิกการลา">ยกเลิก</button></div>'; }).join('') + '</div>' : '')
-          + '<div class="hdfoot">' + (r.names.length ? '' : '<button class="link-btn" data-addlv="' + i + '">+ เพิ่มคนลา</button>')
+          + (r.resigns.length ? '<div class="hdlv hdrs">' + r.resigns.map(function (x, j) { return '<div><span>' + esc(resignText(x)) + '</span><button class="link-btn danger" data-unrs="' + i + ':' + j + '" aria-label="ยกเลิกลาออก">ยกเลิก</button></div>'; }).join('') + '</div>' : '')
+          + '<div class="hdfoot">' + (r.names.length ? '' : '<button class="link-btn" data-addlv="' + i + '">+ เพิ่มคนลา / ลาออก</button>')
           + '<input class="hdnote" data-note="' + i + '" placeholder="หมายเหตุ" value="' + esc(r.note || '') + '"></div></div>';
       }).join('') + '</div>'
-      + '<div class="panel hdresign"><div class="hdrh"><b>ลาออก</b><span>' + n0(resignCount(day)) + ' คน</span></div>'
-      + '<div class="hdradd"><input id="hdResignName" list="hdAllNames" maxlength="60" placeholder="พิมพ์ชื่อคนลาออก"><button class="btn btn-sm btn-line" id="hdResignAdd">+ เพิ่มชื่อ</button></div>'
-      + '<datalist id="hdAllNames">' + day.roles.reduce(function (a, r) { return a.concat(r.names); }, []).map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>'
-      + (day.resignNames.length ? '<div class="hdchips">' + day.resignNames.map(function (n, i) { return '<span class="hdchip off">' + (i + 1) + '. ' + esc(n) + ' <button class="link-btn danger" data-unrs="' + i + '" aria-label="ลบชื่อ ' + esc(n) + '">✕</button></span>'; }).join('') + '</div>' : '')
-      + '</div>'
       + '<div class="panel pbox"><h4>' + icon('table', 18) + ' ตัวอย่างตาราง (ภาพที่จะส่ง LINE)</h4><div class="hdprev" id="hdPrev">' + tableHtml(day, D.date) + '</div></div>'
       + '<div class="a7bar"><button class="btn btn-line" id="hdSave">' + icon('check', 16) + ' บันทึก</button><button class="btn btn-primary" id="hdSend"' + (L.token && L.group ? '' : ' disabled') + '>' + icon('send', 16) + ' ดูภาพ & ส่ง LINE</button></div>';
     $('hdDate').addEventListener('change', function () {
@@ -93,16 +95,7 @@
     on('[data-unlv]', 'click', function (el) { var p = el.getAttribute('data-unlv').split(':'); day.roles[+p[0]].leaves.splice(+p[1], 1); D.dirty = true; render(); });
     on('[data-cnt]', 'change', function (el) { day.roles[+el.getAttribute('data-cnt')].count = Math.max(0, Math.round(Number(el.value) || 0)); D.dirty = true; render(); });
     on('[data-note]', 'change', function (el) { day.roles[+el.getAttribute('data-note')].note = el.value.trim(); D.dirty = true; $('hdPrev').innerHTML = tableHtml(day, D.date); });
-    var addResign = function () {
-      var v = $('hdResignName').value.trim().slice(0, 60);
-      if (!v) { $('hdResignName').focus(); return; }
-      if (day.resignNames.indexOf(v) >= 0) { toast('มีชื่อนี้แล้ว'); return; }
-      day.resignNames.push(v); day.resign = day.resignNames.length; D.dirty = true; render();
-      if ($('hdResignName')) $('hdResignName').focus();
-    };
-    $('hdResignAdd').addEventListener('click', addResign);
-    $('hdResignName').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addResign(); } });
-    on('[data-unrs]', 'click', function (el) { day.resignNames.splice(+el.getAttribute('data-unrs'), 1); day.resign = day.resignNames.length; D.dirty = true; render(); });
+    on('[data-unrs]', 'click', function (el) { var p = el.getAttribute('data-unrs').split(':'); day.roles[+p[0]].resigns.splice(+p[1], 1); D.dirty = true; render(); });
     $('hdRoles').addEventListener('click', rolesDialog);
     $('hdSave').addEventListener('click', function () { save().then(function (ok) { if (ok) { toast('บันทึกแล้ว'); render(); } }); });
     $('hdSend').addEventListener('click', sendFlow);
@@ -114,19 +107,22 @@
   function chip(i, name) {
     var r = D.day.roles[i], j = r.leaves.map(function (l) { return l.name; }).indexOf(name);
     if (j >= 0) { r.leaves.splice(j, 1); D.dirty = true; render(); return; }   // แตะคนที่ลาอยู่ = ยกเลิกการลา
+    var g = r.resigns.map(function (x) { return x.name; }).indexOf(name);
+    if (g >= 0) { r.resigns.splice(g, 1); D.dirty = true; render(); return; }   // แตะคนที่ลาออก = ยกเลิก
     leaveDialog(i, name);
   }
   function leaveDialog(i, name) {
     var r = D.day.roles[i], types = D.data.leaveTypes;
-    openModal({ color: state.dept.color, icon: 'cal', title: name ? 'บันทึกลา · ' + name : 'เพิ่มคนลา · ' + r.role, sub: r.role,
+    openModal({ color: state.dept.color, icon: 'cal', title: name ? 'บันทึกลา / ลาออก · ' + name : 'เพิ่มคนลา / ลาออก · ' + r.role, sub: r.role,
       body: (name ? '' : '<label class="cpnl">ชื่อคนลา<input id="hdLvName" maxlength="60" placeholder="ชื่อเล่น เช่น จอ ตี ห้า"></label>')
-        + '<div class="hdtypes">' + types.map(function (t, k) { return '<label><input type="radio" name="hdT" value="' + esc(t) + '"' + (k ? '' : ' checked') + '><span>' + esc(t) + '</span></label>'; }).join('') + '</div>'
+        + '<div class="hdtypes">' + types.map(function (t, k) { return '<label><input type="radio" name="hdT" value="' + esc(t) + '"' + (k ? '' : ' checked') + '><span>' + esc(t) + '</span></label>'; }).join('') + '<label class="hdtrs"><input type="radio" name="hdT" value="__resign"><span>ลาออก</span></label></div>'
         + '<label class="cpnl">เหตุผล (ไม่บังคับ)<input id="hdLvWhy" maxlength="120" placeholder="เช่น ขาหัก / ไปหาหมอ"></label>',
-      ok: 'บันทึกการลา',
+      ok: 'บันทึก',
       check: function () { return !name && !$('hdLvName').value.trim() ? 'ใส่ชื่อคนลา' : ''; },
       submit: function () {
         var t = ($('mBody').querySelector('input[name=hdT]:checked') || {}).value || 'ลา';
-        r.leaves.push({ name: name || $('hdLvName').value.trim(), type: t, reason: $('hdLvWhy').value.trim() });
+        var who = (name || $('hdLvName').value.trim()).slice(0, 60), why = $('hdLvWhy').value.trim();
+        if (t === '__resign') r.resigns.push({ name: who, reason: why }); else r.leaves.push({ name: who, type: t, reason: why });
         D.dirty = true; closeModal(); render(); return Promise.resolve();
       } });
   }
@@ -196,7 +192,7 @@
     '.hdcnt{display:flex;gap:8px;align-items:center}.hdcnt input{width:90px;padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit}',
     '.hdlv{margin-top:8px;border-top:1px dashed var(--line);padding-top:6px}.hdlv div{display:flex;justify-content:space-between;gap:8px;font-size:14px;color:#991b1b;padding:2px 0}',
     '.hdfoot{display:flex;gap:8px;align-items:center;margin-top:8px}.hdnote{flex:1;min-width:0;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px}',
-    '.hdresign{padding:10px 14px;margin-bottom:12px}.hdrh{display:flex;gap:10px;align-items:baseline;margin-bottom:8px}.hdrh span{color:#991b1b;font-weight:600}.hdradd{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.hdradd input{flex:1;min-width:0;max-width:320px;padding:7px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit}.hdresign .hdchip{cursor:default;text-decoration:none}',
+    '.hdchip.gone{background:#e2e8f0;border-color:#94a3b8;color:#334155;text-decoration:line-through}.hdtypes .hdtrs span{border-style:dashed}.hdtypes .hdtrs input:checked+span{border-color:#334155;background:#e2e8f0;color:#0f172a}',
     '.hdtypes{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}.hdtypes input{position:absolute;opacity:0}.hdtypes span{display:block;padding:8px 12px;border:1.5px solid var(--line);border-radius:99px;cursor:pointer;font-weight:600}.hdtypes input:checked+span{border-color:var(--c);background:color-mix(in srgb,var(--c) 12%,white);color:var(--c)}.hdtypes input:focus-visible+span{outline:2px solid var(--c)}',
     '.hdprev{overflow-x:auto}.hdimgbox{position:fixed;left:-4000px;top:0}',
     '.hdimg{display:inline-block;min-width:720px;padding:18px;background:#fff;color:#000}.hdt{text-align:center;font-size:24px;font-weight:700;margin-bottom:12px}',
