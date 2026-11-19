@@ -112,11 +112,14 @@ function hrDailySaveRoles(token, roles) {
     return { ok: true, roles: list };
   });
 }
+// โฟลเดอร์เก็บภาพตาราง: โฟลเดอร์ฝ่ายบุคคล / "รายงานเช็คพนักงาน" — ถ้ายังไม่ได้ตั้งหรือเปิดไม่ได้ ใช้ Drive ของบัญชีกลาง
+// (ส่ง LINE ได้เสมอ 19/11/69: เดิมโยน error แล้วหน้าเว็บขึ้นแค่ "เชื่อมต่อไม่ได้")
 function hrdFolder_(dept) {
-  var folderId = deptConfig_(dept.key).folderId;
-  if (!folderId) throw new Error('ผู้ดูแลระบบยังไม่ได้ตั้งโฟลเดอร์ของฝ่ายบุคคล');
-  var parent = DriveApp.getFolderById(folderId), it = parent.getFoldersByName('รายงานเช็คพนักงาน');
-  return it.hasNext() ? it.next() : parent.createFolder('รายงานเช็คพนักงาน');
+  var folderId = deptConfig_(dept.key).folderId, parent = null, name = 'รายงานเช็คพนักงาน';
+  if (folderId) try { parent = DriveApp.getFolderById(folderId); parent.getName(); } catch (e) { parent = null; }
+  if (!parent) { parent = DriveApp.getRootFolder(); name = 'รายงานเช็คพนักงาน (ฝ่ายบุคคล)'; }
+  var it = parent.getFoldersByName(name);
+  return it.hasNext() ? it.next() : parent.createFolder(name);
 }
 function hrDailySendLine(token, date, png, ratio) {
   var dept = requireHr_(token), d = accDate_(date);
@@ -125,6 +128,10 @@ function hrDailySendLine(token, date, png, ratio) {
   var p = props_(), tok = p.getProperty('ACC_LINE_TOKEN'), group = p.getProperty('ACC_LINE_GROUP');
   if (!tok) return { ok: false, error: 'ยังไม่ได้ตั้งบอท LINE (ใช้บอทของฝ่ายบัญชี)' };
   if (!group) return { ok: false, error: 'ฝ่ายบัญชียังไม่ได้ผูกกลุ่ม LINE — ให้ฝ่ายบัญชีผูกกลุ่มก่อน (ตารางนี้ส่งเข้ากลุ่มเดียวกับฝ่ายบัญชี/ฝ่ายผลิต)' };
+  try { return hrdSendLine_(dept, d, png, ratio, tok, group); }
+  catch (e) { Logger.log('hrDailySendLine ' + e); return { ok: false, error: 'ส่ง LINE ไม่สำเร็จ: ' + String(e && e.message || e).slice(0, 200) }; }
+}
+function hrdSendLine_(dept, d, png, ratio, tok, group) {
   return purLocked_(function () {
     var ss = hrdBook_(dept), row = purRead_(ss, 'hr_daily').filter(function (x) { return x.id === 'D' + d; })[0];
     if (!row) return { ok: false, error: 'บันทึกข้อมูลวันนี้ก่อนส่ง' };

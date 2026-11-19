@@ -203,6 +203,10 @@
           return call('hrDailySendLine', state.token, D.date, img.png, img.ratio).then(function (r) {
             if (!r.ok) return r.error;
             D.data.sentAt = r.sentAt; closeModal(); toast('ส่ง LINE แล้ว'); render();
+          }).catch(function (e) {   // แสดงสาเหตุจริง (เดิมขึ้นแค่ "เชื่อมต่อไม่ได้")
+            var m = String(e && e.message || e);
+            if (m.indexOf('SESSION_EXPIRED') >= 0) throw e;
+            return /fetch|load failed|network/i.test(m) ? 'เชื่อมต่อไม่ได้ (' + m + ') — ลองใหม่อีกครั้ง' : 'ส่งไม่สำเร็จ: ' + m;
           });
         } });
     }).catch(function (e) { b.disabled = false; b.innerHTML = icon('send', 16) + ' ดูภาพ & ส่ง LINE'; toast('สร้างภาพไม่สำเร็จ ลองใหม่อีกครั้ง'); });
