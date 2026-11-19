@@ -669,7 +669,11 @@ function purStockReport(token, asOf) {
 
 // ---------- รายงานประวัติราคา (ตามผู้ขาย / วัตถุดิบ) · ราคาที่มีผลในช่วงวันที่ + เทียบราคาก่อนหน้า ----------
 function purPriceReport(token, from, to) {
-  var dept = requirePur_(token), ss = purBook_(dept);
+  var dept = requirePur_(token);
+  return purPriceReport_(purBook_(dept), from, to);
+}
+// ใช้ร่วมกับ Dashboard ผู้บริหาร (Executive.gs) — ราคาปรับขึ้นแยกตามสินค้า
+function purPriceReport_(ss, from, to) {
   from = purDate_(from); to = purDate_(to);
   if (!from || !to || from > to) return { ok: false, error: 'เลือกช่วงวันที่ให้ถูกต้อง' };
   var mats = {}, vens = {};
@@ -684,7 +688,7 @@ function purPriceReport(token, from, to) {
       if (p.effectiveDate < from || p.effectiveDate > to) return;
       var prev = i > 0 ? list[i - 1] : null, m = mats[mid] || {};
       var vendorId = p.vendorId || m.vendorId || '';
-      rows.push({ date: p.effectiveDate, materialId: mid, material: m.name || mid, unit: m.unit || '', vendorId: vendorId, vendor: vens[vendorId] || '',
+      rows.push({ date: p.effectiveDate, materialId: mid, material: m.name || mid, unit: m.unit || '', curPrice: m.price, vendorId: vendorId, vendor: vens[vendorId] || '',
         price: p.price, prevPrice: prev ? prev.price : '', prevDate: prev ? prev.effectiveDate : '',
         change: prev ? Math.round((p.price - prev.price) * 100) / 100 : '', pct: prev && prev.price ? Math.round((p.price - prev.price) / prev.price * 1000) / 10 : '', note: p.note });
     });

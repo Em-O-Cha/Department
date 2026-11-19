@@ -4,11 +4,17 @@
 // ตั๋วผู้บริหารเรียกได้เฉพาะ execOverview / execDashboard — ฟังก์ชันแก้ไขข้อมูลของแผนก (pur*) ใช้ตั๋วนี้ไม่ได้
 // ฝ่ายที่มีระบบข้อมูลแล้วจะมีตัวสรุปของฝ่ายนั้น (เช่น PUR = purDashboard_ ใน Purchasing.gs)
 
-var EXEC_DASHBOARDS_ = { PUR: function (dept, from, to) { return purDashboard_(dept, from, to); },
+// ส่วนที่เพิ่มในหน้าฝ่ายภายหลัง ให้ขึ้นในหน้าผู้บริหารด้วย (ผู้ใช้ขอ 19/11/69): PUR ราคาปรับขึ้น · QA ค่าใช้จ่าย · ACC เปรียบเทียบ + สรุปรายเดือนทุกบริษัท
+function execExtra_(d, fn) { try { fn(d); } catch (e) { d.extraError = (d.extraError ? d.extraError + ' · ' : '') + String(e.message || e); } return d; }
+var EXEC_DASHBOARDS_ = { PUR: function (dept, from, to) { return execExtra_(purDashboard_(dept, from, to), function (d) { d.rises = purPriceReport_(purBook_(dept), from, to); }); },
   HR: function (dept, from, to) { return hrDashboard_(dept, from, to); },
   SHE: function (dept, from, to) { var d = sheDashboard_(dept, from, to); d.kind = 'safety'; return d; },
-  QA: function (dept, from, to) { return qaDashboard_(dept, from, to); },
-  ACC: function (dept, from, to) { return accDashboard_(dept, from, to, 'po', ''); },
+  QA: function (dept, from, to) { return execExtra_(qaDashboard_(dept, from, to), function (d) {
+    var ss = qaBook_(dept);
+    d.cost = { today: purToday_(), tests: purRead_(ss, 'qa_tests').map(function (t) { return { year: t.year, kind: t.kind, status: t.status, price: t.price, sentDate: t.sentDate, testType: t.testType, sample: t.sample, lab: t.lab }; }),
+      complaints: purRead_(ss, 'qa_complaints').filter(function (c) { return Number(c.remedyCost) > 0; }).map(function (c) { return { recvDate: c.recvDate, remedyCost: c.remedyCost, product: c.product }; }) };
+  }); },
+  ACC: function (dept, from, to) { return execExtra_(accDashboard_(dept, from, to, 'po', ''), function (d) { d.compare = accCompareData_(dept); d.monthly = accMonthlyData_(dept); }); },
   PROD: function (dept, from, to) { return prdDashboard_(dept, from, to); },
   RD: function (dept, from, to) { return rdDashboard_(dept, from, to); } };
 

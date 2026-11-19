@@ -76,6 +76,24 @@
     else if (r.kind === 'rd' && window.RDM) $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + dd(r.from) + ' – ' + dd(r.to) + ' · ผลิตภัณฑ์ใหม่ / คู่ค้า</span></div>' + window.RDM.dashHtml(r);
     else if (r.kind === 'production' && window.PRDM) $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + dd(r.from) + ' – ' + dd(r.to) + ' · Yield / ของเสีย / เสร็จตามกำหนด</span></div>' + window.PRDM.dashHtml(r);
     else if (r.kind === 'safety' && window.SHE) $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + dd(r.from) + ' – ' + dd(r.to) + '</span></div>' + window.SHE.dashHtml(r);
+    extras(r);
+  }
+
+  // ส่วนที่เพิ่มในหน้าฝ่ายภายหลัง (ผู้ใช้ขอ 19/11/69): จัดซื้อ = ราคาปรับขึ้น · QA = ค่าใช้จ่าย · บัญชี = เปรียบเทียบยอด + สรุปรายเดือนทุกบริษัท
+  function extras(r) {
+    var out = $('xOut'); if (!out) return;
+    var add = function (title, inner) { var el = document.createElement('div'); el.innerHTML = '<h4 class="xsec">' + title + '</h4>' + (inner || ''); out.appendChild(el); return el; };
+    var range = dd(r.from) + ' – ' + dd(r.to);
+    if (r.kind === 'purchasing' && r.rises && r.rises.ok && window.PUR && window.PUR.risesHtml) add('ราคาปรับขึ้น แยกตามสินค้า', '<div class="panel pbox">' + window.PUR.risesHtml(r.rises, range) + '</div>');
+    if (r.kind === 'quality' && r.cost && window.QAM && window.QAM.costHtml) {
+      var y = +String(r.to).slice(0, 4);
+      add('ค่าใช้จ่าย QA ปี ' + (y + 543) + ' <small class="muted">(ค่าตรวจวิเคราะห์ · ค่าใช้จ่ายอื่น · ชดเชยลูกค้า)</small>', window.QAM.costHtml(r.cost, y));
+    }
+    if (r.kind === 'accounting' && window.ACC) {
+      if (r.compare && window.ACC.mountCmp) { var c = add('เปรียบเทียบยอดสั่งซื้อ แยกบริษัท / สินค้า', '<div class="panel pbox a7cmp"><div class="xcmp"></div></div>'); window.ACC.mountCmp(c.querySelector('.xcmp'), r.compare); }
+      if (r.monthly && window.ACC.mountMonthly) { var m = add('สรุปรายเดือน ทุกบริษัท', '<div class="xmon"></div>'); window.ACC.mountMonthly(m.querySelector('.xmon'), r.monthly); }
+    }
+    if (r.extraError) add('', '<div class="a7msg bad">บางส่วนโหลดไม่ได้: ' + esc(r.extraError) + '</div>');
   }
 
   // ---------- ฝ่ายจัดซื้อ & สต๊อก ----------

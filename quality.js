@@ -492,11 +492,21 @@
   // รวม 3 ก้อน: ค่าตรวจวิเคราะห์ (qa_tests kind test) · ค่าใช้จ่ายอื่น (kind other) · ค่าชดเชยลูกค้า (remedyCost ของข้อร้องเรียน)
   // ปีตามช่อง "ปี" ของรายการตรวจ / ปีของวันที่รับเรื่อง · เดือนตามวันที่ส่งตรวจ/จ่าย (ไม่มีวันที่ = "ยังไม่กำหนดเดือน") · ไม่นับรายการยกเลิก
   function costDash() {
-    var y = curYear(), num = function (v) { return Number(v) || 0; };
-    var yearsT = H.data.tests.concat(H.data.complaints.filter(function (c) { return num(c.remedyCost) > 0 && c.recvDate; }).map(function (c) { return { year: +String(c.recvDate).slice(0, 4) }; }));
+    var y = curYear();
+    var yearsT = H.data.tests.concat(H.data.complaints.filter(function (c) { return Number(c.remedyCost) > 0 && c.recvDate; }).map(function (c) { return { year: +String(c.recvDate).slice(0, 4) }; }));
+    $('main').innerHTML = '<h3>Dashboard ค่าใช้จ่าย QA</h3><p class="lead">ค่าตรวจวิเคราะห์ ค่าใช้จ่ายอื่น และค่าชดเชยลูกค้า ปี ' + (y + 543) + ' · ไม่นับรายการที่ยกเลิก</p>'
+      + '<div class="pbar noprint">' + yearChips(yearsT) + '<button class="btn btn-sm btn-line" id="cPrint">' + icon('print', 16) + ' พิมพ์</button></div>'
+      + H.costHtml(H.data, y);
+    on('[data-yr]', 'click', function (el) { H.q.ty = +el.getAttribute('data-yr'); costDash(); }, $('main'));
+    $('cPrint').addEventListener('click', function () { window.print(); });
+  }
+  // ใช้ร่วมกับหน้า Dashboard ผู้บริหาร (executive.js): DATA = { tests, complaints } · y = ปี ค.ศ.
+  H.costHtml = function (DATA, y) {
+    var num = function (v) { return Number(v) || 0; };
+    var yearsT = DATA.tests.concat(DATA.complaints.filter(function (c) { return num(c.remedyCost) > 0 && c.recvDate; }).map(function (c) { return { year: +String(c.recvDate).slice(0, 4) }; }));
     var of = function (yr) {
-      var t = H.data.tests.filter(function (x) { return +x.year === yr && x.status !== 'cancel'; });
-      var comp = H.data.complaints.filter(function (c) { return String(c.recvDate).slice(0, 4) === String(yr) && num(c.remedyCost) > 0; });
+      var t = DATA.tests.filter(function (x) { return +x.year === yr && x.status !== 'cancel'; });
+      var comp = DATA.complaints.filter(function (c) { return String(c.recvDate).slice(0, 4) === String(yr) && num(c.remedyCost) > 0; });
       return { test: t.filter(function (x) { return x.kind !== 'other'; }), other: t.filter(function (x) { return x.kind === 'other'; }), comp: comp };
     };
     var sum = function (a, k) { return a.reduce(function (s2, x) { return s2 + num(x[k || 'price']); }, 0); };
@@ -529,8 +539,7 @@
     };
     var box = function (title, inner) { return '<div class="panel pbox"><h4>' + icon('chart', 18) + ' ' + title + '</h4>' + inner + '</div>'; };
     var stRow = function (label, v, color) { return '<div class="sbar"><span>' + label + '</span><i><em style="width:' + (v ? Math.max(2, Math.round(v / Math.max(1, tT + tO) * 100)) : 0) + '%;background:' + color + '"></em></i><b>' + baht(v) + '</b></div>'; };
-    $('main').innerHTML = '<h3>Dashboard ค่าใช้จ่าย QA</h3><p class="lead">ค่าตรวจวิเคราะห์ ค่าใช้จ่ายอื่น และค่าชดเชยลูกค้า ปี ' + (y + 543) + ' · ไม่นับรายการที่ยกเลิก</p>'
-      + '<div class="pbar noprint">' + yearChips(yearsT) + '<button class="btn btn-sm btn-line" id="cPrint">' + icon('print', 16) + ' พิมพ์</button></div>'
+    return ''
       + '<div class="kpis">' + tile(baht(all), 'ค่าใช้จ่ายรวมปี ' + (y + 543), '#7c3aed', prev ? 'ปีก่อน ' + baht(prev) + ' (' + (diff >= 0 ? '+' : '') + diff + '%)' : 'ปีก่อนไม่มีข้อมูล')
       + tile(baht(tT), 'ค่าตรวจวิเคราะห์', '#2563eb', D.test.length + ' รายการ')
       + tile(baht(tO), 'ค่าใช้จ่ายอื่น', '#0891b2', D.other.length + ' รายการ (อย. / สอบเทียบ ฯลฯ)')
@@ -545,9 +554,7 @@
       + box('ค่าใช้จ่ายอื่น', bars(group(D.other, 'sample'), '#0d9488'))
       + box('ค่าชดเชยลูกค้า แยกตามสินค้า', bars(group(D.comp, 'product', 'remedyCost'), '#dc2626'))
       + '</div>';
-    on('[data-yr]', 'click', function (el) { H.q.ty = +el.getAttribute('data-yr'); costDash(); }, $('main'));
-    $('cPrint').addEventListener('click', function () { window.print(); });
-  }
+  };
 
   function testPage() {
     var y = curYear(), f = H.q.tf || 'all', all = H.data.tests.filter(function (t) { return +t.year === y; });

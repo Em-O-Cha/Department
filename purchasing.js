@@ -160,6 +160,31 @@
     priceRises();
   }
   // ---- Dashboard ราคาปรับขึ้น แยกตามสินค้า (จากประวัติราคา: ราคาที่มีผลในช่วง เทียบราคาก่อนหน้า) ----
+  // ใช้ร่วมกับหน้า Dashboard ผู้บริหาร (executive.js) — r = ผล purPriceReport · label = ช่วงเวลาที่แสดง
+  P.risesHtml = function (r, label) {
+    var dth = function (iso) { if (!iso) return '-'; var p = String(iso).slice(0, 10).split('-'); return +p[2] + '/' + +p[1] + '/' + String(+p[0] + 543).slice(2); };
+      var by = {};
+    r.rows.forEach(function (x) { if (x.change !== '' && x.change > 0) (by[x.materialId] = by[x.materialId] || { id: x.materialId, name: x.material, unit: x.unit, list: [] }).list.push(x); });
+    var mats = Object.keys(by).map(function (k) {
+      var g = by[k]; g.list.sort(function (a, b) { return b.date.localeCompare(a.date); });
+      var m = P.idx && P.idx.mat ? P.idx.mat[k] : null, first = g.list[g.list.length - 1];
+      if (!m && g.list[0].curPrice !== '' && g.list[0].curPrice != null) m = { price: g.list[0].curPrice };   // หน้าผู้บริหาร: ราคาปัจจุบันมากับข้อมูล
+      g.last = g.list[0].date; g.price = m && m.price !== '' && m.price != null ? m.price : g.list[0].price;
+      g.base = first.prevPrice; g.total = g.base ? Math.round((g.list[0].price - g.base) / g.base * 1000) / 10 : '';
+      return g;
+    }).sort(function (a, b) { return b.last.localeCompare(a.last) || a.name.localeCompare(b.name, 'th'); });
+    return mats.length ? '<p class="muted" style="margin:0 0 8px;font-size:13px">' + mats.length + ' รายการที่ราคาขึ้น · ' + label + '</p>'
+      + '<div class="prgrid">' + mats.map(function (g) {
+        return '<div class="prc"><div class="prct"><b>' + esc(g.name) + '</b><span>ราคาปัจจุบัน <b>' + baht(g.price) + '</b>' + (g.unit ? ' / ' + esc(g.unit) : '') + '</span>'
+          + (g.total !== '' ? '<em>ขึ้นรวม +' + g.total + '%' + (g.list.length > 1 ? ' (' + g.list.length + ' ครั้ง)' : '') + '</em>' : '') + '</div>'
+          + g.list.map(function (x) {
+            return '<div class="prr"><span class="prd">' + dth(x.date) + '</span><span>' + baht(x.prevPrice) + ' → <b>' + baht(x.price) + '</b></span><b class="neg">+' + baht(x.change) + (x.pct !== '' ? ' (+' + x.pct + '%)' : '') + '</b>'
+              + (x.vendor ? '<small>' + esc(x.vendor) + '</small>' : '') + '</div>';
+          }).join('') + '</div>';
+      }).join('') + '</div>'
+      : '<div class="muted">ไม่มีสินค้าที่ราคาปรับขึ้นในช่วงนี้' + (r.rows.length ? '' : ' (ยังไม่มีการบันทึกราคาในช่วงนี้ — บันทึกราคาได้ที่เมนูวัตถุดิบ & ราคา)') + '</div>';
+
+  };
   function priceRises() {
     var dth = function (iso) { if (!iso) return '-'; var p = String(iso).slice(0, 10).split('-'); return +p[2] + '/' + +p[1] + '/' + String(+p[0] + 543).slice(2); };
     var t = P.data.today || todayIso(), box = $('pRise'); if (!box) return;
@@ -174,25 +199,7 @@
     call('purPriceReport', state.token, cur[2], t).then(function (r) {
       if (my !== P.riseSeq || !$('pRiseOut')) return;
       if (!r.ok) { $('pRiseOut').innerHTML = '<div class="muted">' + esc(r.error) + '</div>'; return; }
-      var by = {};
-      r.rows.forEach(function (x) { if (x.change !== '' && x.change > 0) (by[x.materialId] = by[x.materialId] || { id: x.materialId, name: x.material, unit: x.unit, list: [] }).list.push(x); });
-      var mats = Object.keys(by).map(function (k) {
-        var g = by[k]; g.list.sort(function (a, b) { return b.date.localeCompare(a.date); });
-        var m = P.idx && P.idx.mat ? P.idx.mat[k] : null, first = g.list[g.list.length - 1];
-        g.last = g.list[0].date; g.price = m && m.price !== '' && m.price != null ? m.price : g.list[0].price;
-        g.base = first.prevPrice; g.total = g.base ? Math.round((g.list[0].price - g.base) / g.base * 1000) / 10 : '';
-        return g;
-      }).sort(function (a, b) { return b.last.localeCompare(a.last) || a.name.localeCompare(b.name, 'th'); });
-      $('pRiseOut').innerHTML = mats.length ? '<p class="muted" style="margin:0 0 8px;font-size:13px">' + mats.length + ' รายการที่ราคาขึ้น · ' + (cur[0] === 'all' ? 'ทุกช่วงเวลา' : dth(cur[2]) + ' – ' + dth(t)) + '</p>'
-        + '<div class="prgrid">' + mats.map(function (g) {
-          return '<div class="prc"><div class="prct"><b>' + esc(g.name) + '</b><span>ราคาปัจจุบัน <b>' + baht(g.price) + '</b>' + (g.unit ? ' / ' + esc(g.unit) : '') + '</span>'
-            + (g.total !== '' ? '<em>ขึ้นรวม +' + g.total + '%' + (g.list.length > 1 ? ' (' + g.list.length + ' ครั้ง)' : '') + '</em>' : '') + '</div>'
-            + g.list.map(function (x) {
-              return '<div class="prr"><span class="prd">' + dth(x.date) + '</span><span>' + baht(x.prevPrice) + ' → <b>' + baht(x.price) + '</b></span><b class="neg">+' + baht(x.change) + (x.pct !== '' ? ' (+' + x.pct + '%)' : '') + '</b>'
-                + (x.vendor ? '<small>' + esc(x.vendor) + '</small>' : '') + '</div>';
-            }).join('') + '</div>';
-        }).join('') + '</div>'
-        : '<div class="muted">ไม่มีสินค้าที่ราคาปรับขึ้นในช่วงนี้' + (r.rows.length ? '' : ' (ยังไม่มีการบันทึกราคาในช่วงนี้ — บันทึกราคาได้ที่เมนูวัตถุดิบ & ราคา)') + '</div>';
+      $('pRiseOut').innerHTML = P.risesHtml(r, cur[0] === 'all' ? 'ทุกช่วงเวลา' : dth(cur[2]) + ' – ' + dth(t));
     }).catch(onServerError);
   }
 

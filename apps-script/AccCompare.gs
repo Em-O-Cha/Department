@@ -39,16 +39,18 @@ function accSources_(dept) {
   } catch (e) {}
   return out;
 }
-function accCompare(token) {
-  var dept = requireAcc_(token), today = purToday_();
+function accCompare(token) { return accCompareData_(requireAcc_(token)); }
+function accCompareData_(dept) {
+  var today = purToday_();
   return { ok: true, today: today, companies: accSources_(dept).map(function (s) {
     return s.error ? { key: s.meta.key, name: s.meta.name, error: s.error } : accCmp_(s.meta, s.rows, today, s.capToday);
   }) };
 }
 // รายงานสรุปรายเดือน ทุกบริษัท (ผู้ใช้ขอ 19/11/69): ทุกเดือนที่มีข้อมูล · ต่อบริษัท: จำนวน / ยอดเงิน / จำนวนเอกสาร ต่อเดือน + แยกสินค้า
 // CP Ram นับตามวันส่ง (รวมวันส่งที่กำหนดไว้ในอนาคต → หน้าเว็บแสดงว่าเป็นยอดตามกำหนดส่ง)
-function accMonthly(token) {
-  var dept = requireAcc_(token), today = purToday_();
+function accMonthly(token) { return accMonthlyData_(requireAcc_(token)); }
+function accMonthlyData_(dept) {
+  var today = purToday_();
   return { ok: true, today: today, companies: accSources_(dept).map(function (s) {
     var m = s.meta;
     if (s.error) return { key: m.key, name: m.name, error: s.error };

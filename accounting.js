@@ -515,12 +515,14 @@
     }).catch(onServerError);
   }
   function monthTh(ym) { if (!ym) return '-'; var p = ym.split('-'); return MONTHS[+p[1] - 1] + ' ' + String(+p[0] + 543).slice(2); }
-  function cmpRender() {
-    var box = $('cmpOut'); if (!box || !H.cmp) return;
-    var cs = (H.cmp.companies || []).filter(function (c) { return c.error || c.count; });
+  function cmpRender() { var box = $('cmpOut'); if (box && H.cmp) H.mountCmp(box, H.cmp, function () { box.innerHTML = '<span class="spinner dark"></span> กำลังคำนวณ…'; cmpLoad(true); }); }
+  // ใช้ร่วมกับหน้า Dashboard ผู้บริหาร (executive.js): วาดลงกล่อง box + ผูกปุ่มเลือกบริษัท · reload = ปุ่มคำนวณใหม่ (ไม่ส่ง = ไม่มีปุ่ม)
+  H.mountCmp = function (box, data, reload) {
+    var cs = (data.companies || []).filter(function (c) { return c.error || c.count; });
     if (!cs.length) { box.innerHTML = '<p class="muted">ยังไม่มีข้อมูลออเดอร์</p>'; return; }
-    if (!H.cmpSel || !cs.some(function (c) { return c.key === H.cmpSel; })) H.cmpSel = cs[0].key;
-    var c = cs.filter(function (x) { return x.key === H.cmpSel; })[0];
+    var sel = box.getAttribute('data-sel') || H.cmpSel;
+    if (!sel || !cs.some(function (c) { return c.key === sel; })) sel = cs[0].key;
+    var c = cs.filter(function (x) { return x.key === sel; })[0];
     var money = function (v) { var n = Number(v || 0); return c.currency === 'บาท' ? '฿' + n.toLocaleString('th-TH', { maximumFractionDigits: 0 }) : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };   // สกุลอื่นบอกไว้ที่หัวตาราง
     var qty = function (v) { return Number(v || 0).toLocaleString('th-TH', { maximumFractionDigits: 2 }) + (c.unit ? ' ' + c.unit : ''); };
     var diff = function (now, before, fmt) {
@@ -541,13 +543,13 @@
         + '</tbody><tfoot>' + row('รวม', '', c.total[k], 'cmt') + '</tfoot></table></div>';
     };
     box.innerHTML = '<div class="pchips cmchips">' + cs.map(function (x) { return '<button class="chip' + (x.key === c.key ? ' on' : '') + '" data-cmp="' + esc(x.key) + '">' + esc(x.name) + '</button>'; }).join('')
-      + '<button class="btn btn-sm btn-line noprint" id="cmpRe">↻ คำนวณใหม่</button></div>'
+      + (reload ? '<button class="btn btn-sm btn-line noprint" data-cmpre="1">↻ คำนวณใหม่</button>' : '') + '</div>'
       + (c.error ? '<p class="muted">' + esc(c.error) + '</p>' : '<p class="muted cmnote">นับ' + esc(c.basis) + ' · ' + esc(c.note) + (c.currency !== 'บาท' ? ' · ยอดเงินเป็น ' + esc(c.currency) : '') + '</p>'
         + '<h5 class="cmh">ครั้งล่าสุด เทียบครั้งก่อน</h5>' + table('r', 'ครั้งก่อน<small>' + (c.round.prev ? thDate(c.round.prev) : '-') + '</small>', 'ครั้งล่าสุด<small>' + (c.round.last ? thDate(c.round.last) : '-') + '</small>')
         + '<h5 class="cmh">เดือนล่าสุด เทียบเดือนก่อน</h5>' + table('m', 'เดือนก่อน<small>' + monthTh(c.month.prev) + '</small>', 'เดือนล่าสุด<small>' + monthTh(c.month.last) + '</small>'));
-    on('[data-cmp]', 'click', function (el) { H.cmpSel = el.getAttribute('data-cmp'); cmpRender(); }, box);
-    $('cmpRe').addEventListener('click', function () { box.innerHTML = '<span class="spinner dark"></span> กำลังคำนวณ…'; cmpLoad(true); });
-  }
+    on('[data-cmp]', 'click', function (el) { var k = el.getAttribute('data-cmp'); box.setAttribute('data-sel', k); if (reload) H.cmpSel = k; H.mountCmp(box, data, reload); }, box);
+    on('[data-cmpre]', 'click', function () { reload(); }, box);
+  };
   // ---------- รายงานสรุปรายเดือน ทุกบริษัท (accMonthly ใน AccCompare.gs) ----------
   function monthly() {
     if (!H.mon) {
@@ -555,11 +557,18 @@
       call('accMonthly', state.token).then(function (r) { if (!r.ok) throw new Error(r.error); H.mon = r; if (state.page === 'a_mon') monthly(); }).catch(onServerError);
       return;
     }
-    var r = H.mon, cs = (r.companies || []).filter(function (c) { return c.error || Object.keys(c.months || {}).length; });
+    var box = $('main');
+    box.innerHTML = '<h3>รายงานสรุปรายเดือน (ทุกบริษัท)</h3><p class="lead">ยอดสั่งซื้อทุกเดือนของแต่ละบริษัท · จำนวน / ยอดเงิน (ไม่รวม VAT) / จำนวนใบสั่ง · ไม่นับรายการที่ยกเลิก</p><div id="monOut"></div>';
+    H.mountMonthly($('monOut'), H.mon, function () { H.mon = null; monthly(); });
+  }
+  // ใช้ร่วมกับหน้า Dashboard ผู้บริหาร: วาดสรุปรายเดือนลง box + ผูกปุ่มเลือกปี
+  H.mountMonthly = function (box, r, reload) {
+    var cs = (r.companies || []).filter(function (c) { return c.error || Object.keys(c.months || {}).length; });
     var all = {}; cs.forEach(function (c) { Object.keys(c.months || {}).forEach(function (k) { all[k] = 1; }); });
     var yms = Object.keys(all).sort(), years = []; yms.forEach(function (k) { var y = k.slice(0, 4); if (years.indexOf(y) < 0) years.push(y); });
-    if (!H.monY || (H.monY !== 'all' && years.indexOf(H.monY) < 0)) H.monY = years.indexOf(r.today.slice(0, 4)) >= 0 ? r.today.slice(0, 4) : (years[years.length - 1] || 'all');
-    var Y = H.monY, list = Y === 'all' ? yms : ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map(function (m) { return Y + '-' + m; });
+    var Y = box.getAttribute('data-y') || (reload ? H.monY : '');
+    if (!Y || (Y !== 'all' && years.indexOf(Y) < 0)) Y = years.indexOf(r.today.slice(0, 4)) >= 0 ? r.today.slice(0, 4) : (years[years.length - 1] || 'all');
+    var list = Y === 'all' ? yms : ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map(function (m) { return Y + '-' + m; });
     var cur = r.today.slice(0, 7);
     var mny = function (c, v) { var n = Number(v || 0); return c.currency === 'บาท' ? '฿' + n.toLocaleString('th-TH', { maximumFractionDigits: 0 }) : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
     var qn = function (c, v) { return Number(v || 0).toLocaleString('th-TH', { maximumFractionDigits: 2 }) + (c.unit ? ' ' + c.unit : ''); };
@@ -597,16 +606,15 @@
         + '<div class="cpwrap"><table class="cptab cmtab mtab"><thead><tr><th>สินค้า</th>' + ms.map(function (ym) { return '<th>' + monthTh(ym) + (ym > cur && c.future ? '<small>ตามกำหนดส่ง</small>' : '') + '</th>'; }).join('') + '<th>รวม</th></tr></thead><tbody>' + body + '</tbody>'
         + '<tfoot><tr class="cmt"><td class="cmn">รวม</td>' + ft + '<td class="mtot">' + cell(c, fq, fa) + '</td></tr></tfoot></table></div></div>';
     }).join('');
-    $('main').innerHTML = '<h3>รายงานสรุปรายเดือน (ทุกบริษัท)</h3><p class="lead">ยอดสั่งซื้อทุกเดือนของแต่ละบริษัท · จำนวน / ยอดเงิน (ไม่รวม VAT) / จำนวนใบสั่ง · ไม่นับรายการที่ยกเลิก</p>'
-      + '<div class="pchips cmchips noprint">' + years.map(function (y) { return '<button class="chip' + (Y === y ? ' on' : '') + '" data-my="' + y + '">ปี ' + (+y + 543) + '</button>'; }).join('')
-      + '<button class="chip' + (Y === 'all' ? ' on' : '') + '" data-my="all">ทั้งหมด</button><button class="btn btn-sm btn-line" id="monRe">↻ คำนวณใหม่</button></div>'
+    box.innerHTML = '<div class="pchips cmchips noprint">' + years.map(function (y) { return '<button class="chip' + (Y === y ? ' on' : '') + '" data-my="' + y + '">ปี ' + (+y + 543) + '</button>'; }).join('')
+      + '<button class="chip' + (Y === 'all' ? ' on' : '') + '" data-my="all">ทั้งหมด</button>' + (reload ? '<button class="btn btn-sm btn-line" data-monre="1">↻ คำนวณใหม่</button>' : '') + '</div>'
       + cs.filter(function (c) { return c.error; }).map(function (c) { return '<div class="a7msg bad">' + esc(c.name) + ': ' + esc(c.error) + '</div>'; }).join('')
       + (ok.length ? '<div class="panel pbox"><h4>' + icon('chart', 18) + ' ภาพรวมทุกบริษัท ' + (Y === 'all' ? '(ทุกเดือน)' : 'ปี ' + (+Y + 543)) + '</h4>'
         + '<p class="muted cmnote">CP ALL นับตามวันที่สั่ง · CP Ram ตามวันส่งสินค้า (เดือนหลังจากนี้ = ตามกำหนดส่ง) · ต่างประเทศตามวันที่ Invoice · ช่อง "รวม (บาท)" รวมเฉพาะบริษัทที่เป็นเงินบาท</p>' + t1 + '</div>' + per
         : '<div class="panel pbox muted">ยังไม่มีข้อมูลออเดอร์</div>');
-    on('[data-my]', 'click', function (el) { H.monY = el.getAttribute('data-my'); monthly(); }, $('main'));
-    $('monRe').addEventListener('click', function () { H.mon = null; monthly(); });
-  }
+    on('[data-my]', 'click', function (el) { var y = el.getAttribute('data-my'); box.setAttribute('data-y', y); if (reload) H.monY = y; H.mountMonthly(box, r, reload); }, box);
+    on('[data-monre]', 'click', function () { reload(); }, box);
+  };
   // ใช้ร่วมกับหน้า Dashboard ผู้บริหาร (executive.js) — ข้อมูลจาก accDashboard_
   H.dashHtml = function (r, interactive) {
     var m = r.matrix, map = r.map, pv = r.prev;
