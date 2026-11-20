@@ -170,7 +170,7 @@
       var b = B && B[F.type], after = b && b.quota != null ? r2(b.left - b.pending - H) : null;
       sum = '<div class="sum' + (after != null && after < 0 ? ' bad' : '') + '">' + t('total') + ' <b>' + fh(H) + '</b>' + (after != null ? ' · ' + (after < 0 ? t('overQ') + ' <b>' + fh(-after) + '</b>' : t('willLeft') + ' <b>' + fh(after) + '</b>') : '')
         + (CAL[F.type] ? '<br><small>' + t('calNote') + '</small>' : '')
-        + (F.type === 'maternity' && b && b.paidDays ? (function () { var before = (b.used + b.pending) / stdH(), d = H / stdH(), paid = Math.max(0, Math.min(d, b.paidDays - before)), un = r2(d - paid); return '<br><small>' + t('paid') + ' ' + r2(paid) + ' ' + t('days') + (un > 0 ? ' · ' + t('unpaid') + ' ' + un + ' ' + t('days') : '') + '</small>'; })() : '') + '</div>';
+        + (F.type === 'maternity' && b && b.paidH ? (function () { var paid = Math.max(0, Math.min(H, b.paidH - b.used - b.pending)), un = r2(H - paid); return '<br><small>' + t('paid') + ' ' + fh(paid) + (un > 0 ? ' · ' + t('unpaid') + ' ' + fh(un) : '') + '</small>'; })() : '') + '</div>';
     }
     var sups = S.data.supervisors || [];
     $('app').innerHTML = '<div class="card"><div class="me">' + ph(e) + '<div><b>' + esc(e.name) + '</b><small>' + esc([e.nick, e.position].filter(String).join(' · ')) + '</small><button class="link" id="notMe">' + t('notMe') + '</button></div></div>'

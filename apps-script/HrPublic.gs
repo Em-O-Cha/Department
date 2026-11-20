@@ -171,7 +171,7 @@ function hrBalance_(ss, e, year) {
   });
   var out = {}, r2 = function (v) { return Math.round((v || 0) * 100) / 100; };
   HR_FORM_TYPES_.forEach(function (k) { var q = hrQuota_(st, e, k, year, today); out[k] = { quota: q, used: r2(used[k]), pending: r2(pend[k]), left: q == null ? null : r2(q - (used[k] || 0)), unit: 'h', std: st.stdHours }; });
-  out.maternity.paidDays = Number(st.maternityPaidDays) || 90;
+  out.maternity.paidH = st.maternityPaidH;   // ลาคลอดจ่ายค่าจ้าง (ชม.)
   return out;
 }
 function hrFormBalance(key, empId) {
@@ -283,9 +283,9 @@ function hrLeaveFlex_(l, e, bal, decided) {
     T([e.position, e.group, e.building].filter(String).join(' · ') || ' ', { size: 'xs', color: '#64748b' }), { type: 'separator', margin: 'md' },
     { type: 'box', layout: 'vertical', margin: 'md', spacing: 'sm', contents: [row('ประเภท', HR_LEAVE_TYPES_[l.type] || l.type), row('วันที่', dates), row('จำนวน', l.hours != null && l.hours !== '' ? hrFmtH_(l.hours, { stdHours: l.std || 10 }) : l.type !== 'late' && Number(l.minutes) ? hrHoursTxt_(Number(l.minutes)) + ' (' + l.days + ' วัน)' : l.days + ' วัน')]
       .concat(l.supervisor ? [row('หัวหน้างาน', l.supervisor)] : [])
-      .concat(l.type === 'maternity' && bal && bal.paidDays ? (function () {   // จ่ายค่าจ้าง 90 วันแรกของปี
-        var std = bal.std || 10, before = (bal.used || 0) / std, d = (Number(l.hours) || 0) / std, paid = Math.max(0, Math.min(d, bal.paidDays - before)), un = Math.round((d - paid) * 100) / 100;
-        return [row('ค่าจ้าง', 'จ่าย ' + Math.round(paid * 100) / 100 + ' วัน' + (un > 0 ? ' · ไม่รับค่าจ้าง ' + un + ' วัน' : ''), un > 0 ? '#c2410c' : '#15803d')]; })() : [])
+      .concat(l.type === 'maternity' && bal && bal.paidH ? (function () {   // จ่ายค่าจ้างตามชั่วโมงที่ตั้งไว้ (ค่าเริ่มต้น 90 วัน × 10 ชม.)
+        var o = { stdHours: bal.std || 10 }, h = Number(l.hours) || 0, paid = Math.max(0, Math.min(h, bal.paidH - (bal.used || 0))), un = Math.round((h - paid) * 100) / 100;
+        return [row('ค่าจ้าง', 'จ่าย ' + hrFmtH_(paid, o) + (un > 0 ? ' · ไม่รับค่าจ้าง ' + hrFmtH_(un, o) : ''), un > 0 ? '#c2410c' : '#15803d')]; })() : [])
       .concat(l.reason ? [row('เหตุผล', l.reason)] : [])
       .concat(bal && bal.quota != null ? (function () { var after = Math.round((bal.left - (Number(l.hours) || 0)) * 100) / 100, o = { stdHours: bal.std || 10 };
         return [row('สิทธิ์คงเหลือ', hrFmtH_(bal.left, o) + ' → หลังอนุมัติ ' + hrFmtH_(after, o), after < 0 ? '#dc2626' : '#15803d')]; })() : []) }];

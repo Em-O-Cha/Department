@@ -38,7 +38,7 @@ var HR_DOC_TYPES_ = { idcard: 'บัตรประชาชน', passport: '�
   health: 'ตรวจสุขภาพประจำปี / ใบรับรองแพทย์', food: 'อบรมสุขาภิบาลอาหาร', driving: 'ใบขับขี่', contract: 'สัญญาจ้าง', other: 'อื่นๆ' };
 var HR_DISC_LEVELS_ = { verbal: 'ตักเตือนด้วยวาจา', written1: 'ใบเตือนครั้งที่ 1', written2: 'ใบเตือนครั้งที่ 2', suspend: 'พักงาน', terminate: 'เลิกจ้าง' };
 var HR_SETTINGS_DEFAULT_ = {
-  quotas: JSON.stringify({ sick: 30, personal: 3, vacation: 6, maternity: 120, paternity: 15, ordain: 15 }), maternityPaidDays: '90',
+  quotas: JSON.stringify({ sick: 30, personal: 3, vacation: 6, maternity: 120, paternity: 15, ordain: 15 }), maternityPaidDays: '90', maternityPaidHours: '',
   buildings: 'G1, G2, G3, ออฟฟิศ', groups: 'ผลิต, ออฟฟิศ', alertDays: '60', workDays: 'จ-ศ',
   // ชั่วโมงทำงานต่อวัน (ผู้ใช้กำหนด 20/11/69): จ.–พฤ. 10 ชม. · ศ. 8 ชม. · เสาร์ไม่ทำงาน — การลาคิดเป็นชั่วโมงตามวันจริง
   hoursMonThu: '10', hoursFri: '8', hoursSat: '0',
@@ -85,11 +85,13 @@ function hrSettings_(ss) {
   if (q.paternity == null) q.paternity = 15;
   s.quotaDays = q;
   Object.keys(HR_LEAVE_TYPES_).forEach(function (k) {
-    if (HR_CAL_TYPES_[k]) { if (q[k] != null && q[k] !== '') qm[k] = Math.round((Number(q[k]) || 0) * std * 100) / 100; return; }   // นับเป็นวัน (ปฏิทิน)
+    // ลาคลอด / ดูแลบุตร: ตั้งเป็นชั่วโมงได้ (ผู้ใช้ขอ 20/11/69) · ยังไม่ตั้ง = วัน × ชม. มาตรฐาน (1 วันปฏิทิน = ชม. จ.–พฤ.)
+    if (HR_CAL_TYPES_[k]) { if (qh[k] !== undefined && qh[k] !== '' && qh[k] !== null) qm[k] = Math.max(0, Number(qh[k]) || 0); else if (q[k] != null && q[k] !== '') qm[k] = Math.round((Number(q[k]) || 0) * std * 100) / 100; return; }
     if (qh[k] !== undefined && qh[k] !== '' && qh[k] !== null) qm[k] = Math.max(0, Number(qh[k]) || 0);
     else if (q[k] !== undefined && q[k] !== '' && q[k] !== null) { qm[k] = Math.round((Number(q[k]) || 0) * std * 100) / 100; s.quotaFromDays.push(k); }
   });
   s.quotaMap = qm;
+  s.maternityPaidH = s.maternityPaidHours !== '' && isFinite(Number(s.maternityPaidHours)) ? Math.max(0, Number(s.maternityPaidHours)) : (Number(s.maternityPaidDays) || 90) * std;   // ลาคลอดจ่ายค่าจ้าง (ชม.)
   return s;
 }
 // ---------- ชั่วโมงลา (20/11/69) ----------
@@ -401,6 +403,7 @@ function hrSaveSettings(token, s) {
   var dept = requireHr_(token);
   s = s || {};
   if (s.quotaHours !== undefined && s.quotaHours !== '') { try { var qh = JSON.parse(s.quotaHours); Object.keys(qh).forEach(function (k) { if (!HR_LEAVE_TYPES_[k] || qh[k] === '' || qh[k] === null) delete qh[k]; else qh[k] = Math.max(0, Math.round((Number(qh[k]) || 0) * 100) / 100); }); s.quotaHours = JSON.stringify(qh); } catch (e) { return { ok: false, error: 'สิทธิ์ลา (ชั่วโมง) ไม่ถูกต้อง' }; } }
+  if (s.maternityPaidHours !== undefined && s.maternityPaidHours !== '') { var mp = Number(s.maternityPaidHours); s.maternityPaidHours = isFinite(mp) && mp >= 0 ? String(mp) : ''; }
   ['hoursMonThu', 'hoursFri', 'hoursSat'].forEach(function (k) { if (s[k] !== undefined) { var n = Number(s[k]); s[k] = String(isFinite(n) && n >= 0 && n <= 24 ? n : HR_SETTINGS_DEFAULT_[k]); } });
   if (s.quotas !== undefined) { try { var q = JSON.parse(s.quotas); Object.keys(q).forEach(function (k) { if (!HR_LEAVE_TYPES_[k]) delete q[k]; else q[k] = Math.max(0, Number(q[k]) || 0); }); s.quotas = JSON.stringify(q); } catch (e) { return { ok: false, error: 'โควตาวันลาไม่ถูกต้อง' }; } }
   return purLocked_(function () {

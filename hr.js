@@ -88,9 +88,9 @@
   var QK = ['sick', 'personal', 'vacation', 'maternity', 'paternity', 'ordain'];
   var CAL = { maternity: 1, paternity: 1 };   // ลาคลอด / ลาดูแลบุตร (ชาย): นับทุกวันรวมวันหยุด (20/11/69)
   // ลาคลอด: จ่ายค่าจ้าง n วันแรกของปี (ตั้งค่า maternityPaidDays = 90) — คืนข้อความ "จ่าย x วัน · ไม่รับค่าจ้าง y วัน"
-  function matPay(usedBeforeH, thisH) {
-    var paidMax = Number(H.data.settings.maternityPaidDays) || 90, before = usedBeforeH / stdH(), d = thisH / stdH(), paid = Math.max(0, Math.min(d, paidMax - before)), un = r2(d - paid);
-    return 'จ่ายค่าจ้าง ' + r2(paid) + ' วัน' + (un > 0 ? ' · ไม่รับค่าจ้าง ' + un + ' วัน' : '') + ' (สิทธิ์จ่าย ' + paidMax + ' วันแรก)';
+  function matPay(usedBeforeH, thisH) {   // เป็นชั่วโมง (ผู้ใช้ขอ 20/11/69)
+    var s = H.data.settings, paidMax = Number(s.maternityPaidH) || (Number(s.maternityPaidDays) || 90) * stdH(), paid = Math.max(0, Math.min(thisH, paidMax - usedBeforeH)), un = r2(thisH - paid);
+    return 'จ่ายค่าจ้าง ' + fh(paid) + (un > 0 ? ' · ไม่รับค่าจ้าง ' + fh(un) : '') + ' (สิทธิ์จ่าย ' + fh(paidMax) + ')';
   }
   function quotaOf(e, k, year) {   // null = ไม่จำกัด/ไม่ได้ตั้ง · พักร้อน: ต้องทำงานครบ 1 ปี (ถ้ารู้วันเริ่มงาน)
     var q = (H.data.settings.quotaMap || {})[k];
@@ -992,8 +992,10 @@
       + '<h4>สิทธิ์ลาต่อปี (ชั่วโมง)</h4>'
       + ((s.quotaFromDays || []).length ? '<p class="hqinfo warn" style="margin:0 0 8px">' + s.quotaFromDays.map(function (k) { return LT[k]; }).join(', ') + ' ยังเป็นค่าที่แปลงจากวันเดิม × ' + stdH() + ' ชม. — ตรวจตัวเลขแล้วกด "บันทึกการตั้งค่า" เพื่อยืนยัน</p>' : '')
       + '<div class="pform">' + ['sick', 'personal', 'vacation', 'ordain'].map(function (k) { return F('q_' + k, LT[k] + ' (ชม.)' + (s.quotaDays && s.quotaDays[k] != null ? ' · เดิม ' + s.quotaDays[k] + ' วัน' : ''), qm[k] == null ? '' : r2(qm[k]), 'number', ' min="0" step="0.5"'); }).join('') + '</div>'
-      + '<h4>ลาคลอด / ลาดูแลบุตร (นับทุกวัน รวมวันหยุด)</h4><div class="pform">' + F('qd_maternity', 'ลาคลอด (วัน)', (s.quotaDays || {}).maternity == null ? 120 : s.quotaDays.maternity, 'number', ' min="0"')
-      + F('sMatPaid', 'ลาคลอด จ่ายค่าจ้าง (วันแรก)', s.maternityPaidDays || 90, 'number', ' min="0"') + F('qd_paternity', 'ลาดูแลบุตร · ชาย (วัน)', (s.quotaDays || {}).paternity == null ? 15 : s.quotaDays.paternity, 'number', ' min="0"') + '</div>'
+      + '<h4>ลาคลอด / ลาดูแลบุตร (ชั่วโมง · นับทุกวันรวมวันหยุด 1 วัน = ' + stdH() + ' ชม.)</h4><div class="pform">'
+      + F('q_maternity', 'ลาคลอด (ชม.) · ' + r2((qm.maternity || 0) / stdH()) + ' วัน', qm.maternity == null ? '' : r2(qm.maternity), 'number', ' min="0" step="0.5"')
+      + F('sMatPaidH', 'ลาคลอด จ่ายค่าจ้าง (ชม.) · ' + r2((s.maternityPaidH || 0) / stdH()) + ' วัน', s.maternityPaidH == null ? '' : r2(s.maternityPaidH), 'number', ' min="0" step="0.5"')
+      + F('q_paternity', 'ลาดูแลบุตร · ชาย (ชม.) · ' + r2((qm.paternity || 0) / stdH()) + ' วัน', qm.paternity == null ? '' : r2(qm.paternity), 'number', ' min="0" step="0.5"') + '</div>'
       + '<h4>รายชื่อ / การแจ้งเตือน</h4><div class="pform">' + F('sGroups', 'แผนก (คั่นด้วย , )', s.groups) + F('sBld', 'อาคาร (คั่นด้วย , )', s.buildings)
       + F('sAlert', 'แจ้งเตือนเอกสารล่วงหน้า (วัน)', s.alertDays, 'number', ' min="7"') + '</div>'
       + '<h4>รหัสแบบฟอร์ม (แสดงมุมขวาบนของรายงาน · เว้นว่าง = ไม่แสดง)</h4><div class="pform">' + F('sFmR', 'ทะเบียนประวัติพนักงาน', s.fmRegister, 'text', ' placeholder="เช่น FM-HR-01-01 Rev.00 วันที่ประกาศใช้ 01/01/2026"')
@@ -1002,10 +1004,9 @@
       + '<div class="panel" id="formBox" style="margin-top:14px"><span class="spinner dark"></span> กำลังโหลดลิงก์แบบฟอร์มขอลา…</div>';
     formSettings();
     $('sSave').addEventListener('click', function () {
-      var qq = {}; ['sick', 'personal', 'vacation', 'ordain'].forEach(function (k) { if (v('q_' + k) !== '') qq[k] = Number(v('q_' + k)); });
-      var qd = Object.assign({}, s.quotaDays || {}); ['maternity', 'paternity'].forEach(function (k) { if (v('qd_' + k) !== '') qd[k] = Number(v('qd_' + k)); });
+      var qq = {}; ['sick', 'personal', 'vacation', 'ordain', 'maternity', 'paternity'].forEach(function (k) { if (v('q_' + k) !== '') qq[k] = Number(v('q_' + k)); });
       var b = $('sSave'); b.disabled = true;
-      call('hrSaveSettings', state.token, { quotaHours: JSON.stringify(qq), quotas: JSON.stringify(qd), maternityPaidDays: v('sMatPaid'), hoursMonThu: v('sHMT'), hoursFri: v('sHF'), hoursSat: v('sHS'), workDays: Number(v('sHS')) > 0 ? 'จ-ส' : 'จ-ศ', groups: v('sGroups'), buildings: v('sBld'), alertDays: v('sAlert'), fmRegister: v('sFmR'), fmProfile: v('sFmP'), fmLeave: v('sFmL') })
+      call('hrSaveSettings', state.token, { quotaHours: JSON.stringify(qq), maternityPaidHours: v('sMatPaidH'), hoursMonThu: v('sHMT'), hoursFri: v('sHF'), hoursSat: v('sHS'), workDays: Number(v('sHS')) > 0 ? 'จ-ส' : 'จ-ศ', groups: v('sGroups'), buildings: v('sBld'), alertDays: v('sAlert'), fmRegister: v('sFmR'), fmProfile: v('sFmP'), fmLeave: v('sFmL') })
         .then(function (r) { b.disabled = false; if (!r.ok) return toast(r.error); H.data.settings = r.settings; toast('บันทึกการตั้งค่าแล้ว'); }).catch(onServerError);
     });
   }
