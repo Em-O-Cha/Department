@@ -55,6 +55,7 @@ function apAiRead(token, pages, vendors) {
   if (!key) return { ok: false, needKey: true, error: 'ยังไม่ได้ตั้งค่าคีย์ AI — ไปที่หน้า "ผู้ขาย / ตั้งค่า (จ่าย)" แล้ววางคีย์' };
   pages = (Array.isArray(pages) ? pages : []).slice(0, 6).filter(function (p) { return p && typeof p.b64 === 'string' && /^[A-Za-z0-9+\/=]+$/.test(p.b64) && p.b64.length < 5500000; });
   if (!pages.length) return { ok: false, error: 'ไม่มีภาพบิลให้อ่าน' };
+  apRegister_();   // ต้องลงทะเบียนตารางฝ่ายบัญชีก่อนอ่านตั้งค่า (เดิมลืม → "reading 'tab'")
   var main = purBook_(dept), our = String(apSettings_(main).ourTaxId || '');
   var names = (Array.isArray(vendors) ? vendors : []).slice(0, 150).map(function (v) { return String(v || '').slice(0, 80); }).filter(String);
   var prompt = 'ภาพที่แนบคือบิล / ใบกำกับภาษี / ใบส่งของ ที่บริษัทเราได้รับจากผู้ขาย ' + (pages.length > 1 ? '(' + pages.length + ' หน้า เป็นบิลใบเดียวกัน) ' : '')
