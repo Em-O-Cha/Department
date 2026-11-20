@@ -758,14 +758,27 @@
     for (var j = 0; j < n; j++) { var c = row.r[j] || ''; if (c) done++; if (c === 'X' || c === 'O') bad++; }
     return { done: done, n: n, bad: bad, full: done === n, empty: !done };
   }
+  // กล่องบันทึกปัญหา (เฉพาะจุดที่มี ✕ / ⟳): รายละเอียด + รูป — เก็บในระบบ ไม่ออกในแบบฟอร์มที่พิมพ์
+  function mProblem(row, i, bad) {
+    var need = bad && !String(row.detail).trim();
+    var th = row.files.map(function (f, k) {
+      var src = (H.mThumb && H.mThumb[f.id]) || img(f.id, 240);
+      return '<span class="smph"><a href="' + esc(f.url) + '" target="_blank" rel="noopener"><img src="' + esc(src) + '" alt="รูปปัญหา ' + (k + 1) + '"></a><button class="smphx" data-phx="' + i + ':' + k + '" aria-label="ลบรูปนี้">✕</button></span>';
+    }).join('') + (H.mUp && H.mUp[i] ? '<span class="smph up"><span class="spinner"></span>' + H.mUp[i] + ' รูป</span>' : '');
+    return '<div class="smprob"><div class="smpt">⚠ บันทึกปัญหา <em>เก็บไว้ดูในระบบ · ไม่แสดงในเอกสาร</em></div>'
+      + '<label class="smdet' + (need ? ' need' : '') + '"><span>ผิดปกติอะไร / พบอะไร' + (bad ? ' *' : '') + '</span><textarea data-detail="' + i + '" rows="2" placeholder="เช่น หลอดไฟด้านซ้ายไม่ติด แบตเตอรี่บวม">' + esc(row.detail) + '</textarea></label>'
+      + '<div class="smphs">' + th + '<button type="button" class="smadd2" data-mph="' + i + '" data-src="cam">' + icon('camera', 20) + '<span>ถ่ายรูป</span></button>'
+      + '<button type="button" class="smadd2" data-mph="' + i + '" data-src="lib">' + icon('image', 20) + '<span>เลือกรูป</span></button></div></div>';
+  }
   function monthlyForm() {
     var q = H.q, r = H.mon, form = q.mForm, def = SHEM[form], rec = r.records[form];
     var ed = H.mEdit && H.mEdit.form === form && H.mEdit.ym === r.ym ? H.mEdit : null;
     if (!ed) {
-      var rows = rec ? rec.rows.map(function (x) { return { loc: x.loc, r: x.r.slice(), note: x.note || '' }; })
-        : (r.locs[form] || []).map(function (l) { return { loc: l, r: [], note: '' }; });
+      // detail / files = บันทึกปัญหาของจุดที่ผิดปกติ เก็บในระบบเท่านั้น (เอกสารพิมพ์แค่หมายเหตุ — ผู้ใช้ขอ 20/11/69)
+      var rows = rec ? rec.rows.map(function (x) { return { loc: x.loc, r: x.r.slice(), note: x.note || '', detail: x.detail || (mState(def, x).bad ? x.note || '' : ''), files: (x.files || []).slice() }; })
+        : (r.locs[form] || []).map(function (l) { return { loc: l, r: [], note: '', detail: '', files: [] }; });
       ed = H.mEdit = { form: form, ym: r.ym, rows: rows, inspector: rec ? rec.inspector : inspectors()[0], inspDate: rec ? rec.inspDate : r.today,
-        approver: rec ? rec.approver : '', approveDate: rec ? rec.approveDate : '', tester: rec ? rec.tester : '', testDate: rec ? rec.testDate : (def.smoke ? r.today : ''), dirty: false, open: {} };
+        approver: rec ? rec.approver : '', approveDate: rec ? rec.approveDate : '', tester: rec ? rec.tester : '', testDate: rec ? rec.testDate : (def.smoke ? r.today : ''), dirty: false, open: {}, up: 0 };
     }
     var opts = def.withO ? ['P', 'X', 'O', '-'] : ['P', 'X', '-'];
     var guard = function (fn) { if (!ed.dirty) return fn(); ask({ title: 'ยังไม่ได้บันทึก', text: 'ผลตรวจที่กรอกไว้ของ ' + def.name + ' จะหายถ้าออกจากหน้านี้', ok: 'ออกโดยไม่บันทึก', cancel: 'กลับไปบันทึก' }).then(function (yes) { if (yes) { ed.dirty = false; fn(); } }); };
@@ -786,7 +799,8 @@
           }).join('') + '</div></div>';
         }).join('') + '</div>'
         + '<div class="smfoot"><button class="smallok" data-allok="' + i + '">✓ ทุกข้อปกติ</button>'
-        + '<label class="smnote' + (st.bad && !String(row.note).trim() ? ' need' : '') + '"><span>' + (st.bad ? 'รายละเอียดสิ่งที่ผิดปกติ / การแก้ไข *' : 'หมายเหตุ (ถ้ามี)') + '</span><input data-note="' + i + '" value="' + esc(row.note) + '" placeholder="' + (st.bad ? 'เช่น หลอดไฟไม่ติด แจ้งช่างแล้ว' : '') + '"></label></div></section>';
+        + (st.bad || row.detail || row.files.length ? mProblem(row, i, st.bad) : '')
+        + '<label class="smnote"><span>หมายเหตุ <em>(พิมพ์ในเอกสาร · ถ้ามี)</em></span><input data-note="' + i + '" value="' + esc(row.note) + '" placeholder="' + (st.bad ? 'เช่น แจ้งช่างแล้ว รอเปลี่ยนหลอด' : '') + '"></label></div></section>';
     }).join('');
     var total = ed.rows.filter(function (x) { return String(x.loc).trim(); }).length;
     var doneN = ed.rows.filter(function (x) { return String(x.loc).trim() && mState(def, x).full; }).length;
@@ -811,11 +825,35 @@
     $('mYm').addEventListener('change', function () { var val = this.value; if (!val) return; guard(function () { q.mYm = val; H.mEdit = null; monthly(); }); this.value = r.ym; });
     on('[data-mf]', 'click', function (el) { var k = el.getAttribute('data-mf'); if (k === form) return; keep(); guard(function () { H.mEdit = null; q.mForm = k; monthlyForm(); }); });
     on('.smloc', 'input', function (el) { ed.rows[+el.getAttribute('data-i')].loc = el.value; ed.dirty = true; });
-    on('[data-note]', 'input', function (el) { ed.rows[+el.getAttribute('data-note')].note = el.value; ed.dirty = true; el.closest('.smnote').classList.toggle('need', mState(def, ed.rows[+el.getAttribute('data-note')]).bad > 0 && !el.value.trim()); });
+    on('[data-note]', 'input', function (el) { ed.rows[+el.getAttribute('data-note')].note = el.value; ed.dirty = true; });
+    on('[data-detail]', 'input', function (el) { var row = ed.rows[+el.getAttribute('data-detail')]; row.detail = el.value; ed.dirty = true; el.closest('.smdet').classList.toggle('need', mState(def, row).bad > 0 && !el.value.trim()); });
+    // รูป: อัปโหลดทันทีที่ถ่าย/เลือก (ทีละรูป) แล้วผูกกับจุดนั้น · บันทึกจริงตอนกด "บันทึก"
+    on('[data-mph]', 'click', function (el) {
+      var i = +el.getAttribute('data-mph');
+      pickPhotos(function (arr) {
+        if (!arr.length) return;
+        H.mUp = H.mUp || {}; H.mThumb = H.mThumb || {}; H.mUp[i] = (H.mUp[i] || 0) + arr.length; ed.up += arr.length; redraw();
+        var k = 0, fails = 0;
+        (function next() {
+          if (k >= arr.length) { if (fails) toast('อัปโหลดไม่สำเร็จ ' + fails + ' รูป — ลองใหม่อีกครั้ง'); else toast('✓ แนบรูปแล้ว — กดบันทึกเพื่อเก็บผล'); return; }
+          var ph = arr[k++];
+          call('sheMonthlyPhoto', state.token, form, r.ym, ph.name, 'image/jpeg', ph.b64).then(function (x) {
+            if (!x.ok) throw new Error(x.error);
+            H.mThumb[x.file.id] = ph.dataUrl; if (ed.rows[i]) ed.rows[i].files.push(x.file); ed.dirty = true;
+          }).catch(function (e) { fails++; console.warn(e); }).then(function () {
+            H.mUp[i]--; ed.up--; if (H.mEdit === ed && q.mForm === form && $('mSave')) redraw(); next();
+          });
+        })();
+      }, el.getAttribute('data-src') === 'cam');
+    });
+    on('[data-phx]', 'click', function (el) {
+      var a = el.getAttribute('data-phx').split(':'), row = ed.rows[+a[0]];
+      ask({ title: 'ลบรูปนี้?', text: 'รูปจะถูกเอาออกจากจุด "' + (row.loc || '') + '"', ok: 'ลบรูป', cancel: 'ไม่ลบ', tone: 'danger' }).then(function (yes) { if (yes) { row.files.splice(+a[1], 1); ed.dirty = true; redraw(); } });
+    });
     on('.smo', 'click', function (el) {
       var i = +el.getAttribute('data-i'), j = +el.getAttribute('data-j'), o = el.getAttribute('data-o'), row = ed.rows[i];
       row.r[j] = row.r[j] === o ? '' : o; ed.dirty = true;   // แตะซ้ำ = ล้างค่า
-      redraw(row.r[j] === 'X' || row.r[j] === 'O' ? '[data-note="' + i + '"]' : null);
+      redraw((row.r[j] === 'X' || row.r[j] === 'O') && !String(row.detail).trim() ? '[data-detail="' + i + '"]' : null);
     });
     on('[data-allok]', 'click', function (el) { var row = ed.rows[+el.getAttribute('data-allok')]; for (var j = 0; j < def.items.length; j++) if (!row.r[j]) row.r[j] = 'P'; ed.dirty = true; redraw(); });
     on('[data-del]', 'click', function (el) {
@@ -827,7 +865,7 @@
     var addLoc = function () {
       var name = v('mNewLoc'); if (!name) { $('mNewLoc').focus(); return toast('พิมพ์ชื่อจุดติดตั้งก่อน'); }
       if (ed.rows.some(function (x) { return String(x.loc).trim() === name; })) return toast('มีจุดชื่อนี้แล้ว');
-      keep(); ed.rows.push({ loc: name, r: [], note: '' }); ed.dirty = true; redraw('#mNewLoc');
+      keep(); ed.rows.push({ loc: name, r: [], note: '', detail: '', files: [] }); ed.dirty = true; redraw('#mNewLoc');
       var cs = $('main').querySelectorAll('.smcard'); if (cs.length) cs[cs.length - 1].scrollIntoView({ block: 'center' });
     };
     $('mAdd').addEventListener('click', addLoc);
@@ -843,8 +881,9 @@
       if (!named.length) { $('mNewLoc').focus(); return toast('เพิ่มจุดติดตั้งอย่างน้อย 1 จุด'); }
       var noName = ed.rows.filter(function (x) { return !String(x.loc).trim() && !mState(def, x).empty; });
       if (noName.length) { toast('มีจุดที่กรอกผลแล้วแต่ยังไม่มีชื่อ — ใส่ชื่อจุดก่อน'); var e1 = $('main').querySelector('.smloc[value=""]'); if (e1) e1.focus(); return; }
-      var needNote = ed.rows.map(function (x, i) { return i; }).filter(function (i) { return mState(def, ed.rows[i]).bad && !String(ed.rows[i].note).trim(); });
-      if (needNote.length) { toast('ระบุรายละเอียดของจุดที่ผิดปกติก่อนบันทึก'); var e2 = $('main').querySelector('[data-note="' + needNote[0] + '"]'); if (e2) { e2.scrollIntoView({ block: 'center' }); e2.focus(); } return; }
+      if (ed.up > 0) return toast('รอรูปอัปโหลดเสร็จก่อน แล้วกดบันทึกอีกครั้ง');
+      var needNote = ed.rows.map(function (x, i) { return i; }).filter(function (i) { return mState(def, ed.rows[i]).bad && !String(ed.rows[i].detail).trim(); });
+      if (needNote.length) { toast('ระบุว่าผิดปกติอะไร ก่อนบันทึก'); var e2 = $('main').querySelector('[data-detail="' + needNote[0] + '"]'); if (e2) { e2.scrollIntoView({ block: 'center' }); e2.focus(); } return; }
       if (!ed.inspector) { $('main').querySelector('.smsign').open = true; $('mInsp').focus(); return toast('ใส่ชื่อผู้ตรวจสอบ'); }
       var part = named.filter(function (x) { return !mState(def, x).full; }).length;
       var doSave = function () {
@@ -1010,7 +1049,12 @@
     '.smitems{display:flex;flex-direction:column;gap:8px}.smrow{display:flex;flex-direction:column;gap:5px;padding:8px 0;border-top:1px dashed var(--line)}.smlab{font-size:14px;font-weight:600;color:#334155}.smlab small{font-weight:400;color:var(--muted)}',
     '.smseg{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:6px}.smo{min-height:44px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font:inherit;font-size:14px;font-weight:600;color:#475569;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;padding:4px}.smo i{font-style:normal;font-weight:800}',
     '.smo.oP.on{background:#16a34a;border-color:#16a34a;color:#fff}.smo.oX.on{background:#dc2626;border-color:#dc2626;color:#fff}.smo.oO.on{background:#ea580c;border-color:#ea580c;color:#fff}.smo.oN.on{background:#64748b;border-color:#64748b;color:#fff}.smo:focus-visible{outline:3px solid var(--c);outline-offset:1px}',
-    '.smfoot{display:flex;flex-direction:column;gap:8px;margin-top:10px}.smallok{align-self:flex-start;min-height:40px;border:1.5px solid #bbf7d0;background:#f0fdf4;color:#15803d;border-radius:10px;padding:6px 14px;font:inherit;font-weight:700;cursor:pointer}.smnote span{display:block;font-size:13px;color:var(--muted);margin-bottom:3px}.smnote input{width:100%;padding:10px;border:1.5px solid var(--line);border-radius:10px;font:inherit}.smnote.need span{color:#b91c1c;font-weight:700}.smnote.need input{border-color:#dc2626;background:#fef2f2}',
+    '.smfoot{display:flex;flex-direction:column;gap:8px;margin-top:10px}.smallok{align-self:flex-start;min-height:40px;border:1.5px solid #bbf7d0;background:#f0fdf4;color:#15803d;border-radius:10px;padding:6px 14px;font:inherit;font-weight:700;cursor:pointer}.smnote span{display:block;font-size:13px;color:var(--muted);margin-bottom:3px}.smnote em,.smpt em{font-style:normal;font-weight:400;color:var(--muted);font-size:12.5px}.smnote input{width:100%;padding:10px;border:1.5px solid var(--line);border-radius:10px;font:inherit}',
+    '.smprob{border:1.5px solid #fecaca;background:#fff7f7;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}.smpt{font-weight:700;color:#b91c1c;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline}',
+    '.smdet span{display:block;font-size:13px;color:#7f1d1d;margin-bottom:3px}.smdet textarea{width:100%;padding:10px;border:1.5px solid #fca5a5;border-radius:10px;font:inherit;resize:vertical;background:#fff}.smdet.need span{font-weight:700;color:#b91c1c}.smdet.need textarea{border-color:#dc2626;box-shadow:0 0 0 3px #fee2e2}',
+    '.smphs{display:flex;flex-wrap:wrap;gap:8px}.smph{position:relative;width:76px;height:76px;border-radius:10px;overflow:hidden;background:#fee2e2;display:flex;align-items:center;justify-content:center;gap:4px;font-size:12px;color:#7f1d1d;flex-direction:column}.smph img{width:76px;height:76px;object-fit:cover;display:block}',
+    '.smphx{position:absolute;top:3px;right:3px;width:26px;height:26px;border-radius:50%;border:0;background:rgba(0,0,0,.6);color:#fff;font-size:13px;cursor:pointer;line-height:26px;padding:0}',
+    '.smadd2{width:76px;height:76px;border:1.5px dashed #f87171;border-radius:10px;background:#fff;color:#b91c1c;font:inherit;font-size:12.5px;font-weight:700;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer}.smadd2:active{background:#fee2e2}',
     '.smadd{display:flex;gap:8px;margin:14px 0}.smadd input{flex:1;min-width:0;padding:11px 12px;border:1.5px dashed #94a3b8;border-radius:12px;font:inherit}.smadd .btn{width:auto}.smsign{margin-bottom:12px}.smsign summary{cursor:pointer;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;padding:2px 0}.smsign[open] summary{margin-bottom:10px}.smdel{color:#b91c1c;width:auto}',
     '.smbar{position:sticky;bottom:0;z-index:5;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-top:12px;box-shadow:0 -4px 16px rgba(15,23,42,.10)}.smbar .btn{width:auto}.smprog{flex:1;min-width:0;font-size:14px}.smprog .bad{color:#b91c1c;font-weight:700}.smprog .dirty{color:#c2410c;font-weight:700}.smprog i{display:block;height:6px;background:#e2e8f0;border-radius:99px;margin-top:5px;overflow:hidden}.smprog s{display:block;height:100%;background:#16a34a;text-decoration:none}',
     '@media (max-width:700px){.smcards{grid-template-columns:minmax(0,1fr)}.smo{font-size:13px;gap:3px}.smbar{margin:12px -4px 0;border-radius:12px}.smbar .btn{padding:10px 12px}}',

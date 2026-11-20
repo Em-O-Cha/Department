@@ -59,8 +59,11 @@ function sheSaveMonthly(token, rec) {
   var rows = (Array.isArray(rec.rows) ? rec.rows : []).slice(0, 200).map(function (x) {
     var r = (Array.isArray(x && x.r) ? x.r : []).slice(0, 10).map(function (c) { c = String(c || ''); return /^[PX\-O]$/.test(c) ? c : ''; });
     r.forEach(function (c) { if (c === 'P') ok++; if (c === 'X' || c === 'O') bad++; });
-    return { loc: sheText_(x && x.loc, 150), r: r, sum: sheText_(x && x.sum, 30), note: sheText_(x && x.note, 300) };
-  }).filter(function (x) { return x.loc || x.r.some(String) || x.note; });
+    // detail / files = บันทึกปัญหาของจุดที่ผิดปกติ (ผู้ใช้ขอ 20/11/69: เก็บไว้ดูในระบบ ไม่แสดงในเอกสาร — เอกสารพิมพ์แค่หมายเหตุ)
+    var files = (Array.isArray(x && x.files) ? x.files : []).slice(0, 10).filter(function (f) { return f && /^[\w-]{20,}$/.test(String(f.id)); })
+      .map(function (f) { return { id: String(f.id), name: sheText_(f.name, 100), url: 'https://drive.google.com/file/d/' + String(f.id) + '/view', at: sheText_(f.at, 20) }; });
+    return { loc: sheText_(x && x.loc, 150), r: r, sum: sheText_(x && x.sum, 30), note: sheText_(x && x.note, 300), detail: sheText_(x && x.detail, 1000), files: files };
+  }).filter(function (x) { return x.loc || x.r.some(String) || x.note || x.detail || x.files.length; });
   return purLocked_(function () {
     var ss = sheBook_(dept), id = shemId_(form, ym), now = purNow_();
     var old = purRead_(ss, 'she_monthly').filter(function (r) { return r.id === id; })[0];
@@ -89,4 +92,20 @@ function sheDeleteMonthly(token, form, ym) {
     purLogWrite_(ss, 'ลบผลตรวจประจำเดือน', 'she_monthly', id, '');
     return { ok: true };
   });
+}
+
+// รูปของจุดที่ผิดปกติ → โฟลเดอร์ฝ่าย / "รูปตรวจประจำเดือน" (อัปโหลดทันทีที่ถ่าย · ผูกกับจุดตอนกดบันทึก)
+function sheMonthlyPhoto(token, form, ym, fileName, mimeType, base64) {
+  var dept = requireShe_(token);
+  if (SHEM_FORM_KEYS_.indexOf(String(form)) < 0) return { ok: false, error: 'ไม่รู้จักแบบฟอร์ม' };
+  if (!/^image\/(jpeg|png|webp)$/.test(String(mimeType))) return { ok: false, error: 'แนบได้เฉพาะรูปภาพ' };
+  var bytes = Utilities.base64Decode(String(base64 || ''));
+  if (!bytes.length || bytes.length > 10 * 1024 * 1024) return { ok: false, error: 'ไฟล์ว่างหรือใหญ่เกิน 10 MB' };
+  var folderId = deptConfig_(dept.key).folderId;
+  if (!folderId) return { ok: false, error: 'ผู้ดูแลระบบยังไม่ได้ตั้งโฟลเดอร์เก็บรูปของฝ่าย' };
+  var parent = DriveApp.getFolderById(folderId), it = parent.getFoldersByName('รูปตรวจประจำเดือน'), folder = it.hasNext() ? it.next() : parent.createFolder('รูปตรวจประจำเดือน');
+  var safe = purClean_(fileName, 100).replace(/[\\/:*?"<>|]/g, '_') || 'photo.jpg';
+  var f = folder.createFile(Utilities.newBlob(bytes, mimeType, 'FM-SHE-' + form + '_' + String(ym).slice(0, 7) + '_' + safe));
+  try { f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
+  return { ok: true, file: { id: f.getId(), name: safe, url: 'https://drive.google.com/file/d/' + f.getId() + '/view', at: purNow_() } };
 }
