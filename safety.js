@@ -924,124 +924,162 @@
     mains.forEach(function (m) { m.leaves = m.subs.length ? m.subs.map(function (x) { return { key: m.name + ' › ' + x, label: x }; }) : [{ key: m.name, label: m.name }]; });
     return mains;
   }
+  // หน้าแฟ้มเอกสารแบบ File Explorer ของ Windows (ผู้ใช้ขอ 20/11/69): โฟลเดอร์ ปี → หมวด → หมวดย่อย → ไฟล์
+  // แตะโฟลเดอร์ = เข้าไปข้างใน · แถบที่อยู่ (breadcrumb) + ปุ่มย้อนกลับ / ขึ้นระดับ · มุมมอง ไอคอน / รายละเอียด · ลากไฟล์มาวางในโฟลเดอร์ปลายทาง = อัปโหลด
+  var FOLDER_SVG = '<svg viewBox="0 0 64 52" aria-hidden="true"><path d="M2 8a4 4 0 0 1 4-4h17l6 6h29a4 4 0 0 1 4 4v32a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4z" fill="#E0A82E"/><path d="M2 17a3 3 0 0 1 3-3h54a3 3 0 0 1 3 3v29a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4z" fill="#FFCA4F"/></svg>';
+  function fileSvg(name) {
+    var k = docKind(name) || ['', '?', 'ไฟล์', '#64748b'];
+    return '<svg viewBox="0 0 48 60" aria-hidden="true"><path d="M4 2h28l12 12v42a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="#fff" stroke="#cbd5e1" stroke-width="2"/><path d="M32 2v12h12" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="2"/>'
+      + '<rect x="0" y="30" width="' + (k[1].length > 1 ? 34 : 26) + '" height="20" rx="3" fill="' + k[3] + '"/><text x="' + (k[1].length > 1 ? 17 : 13) + '" y="45" text-anchor="middle" font-size="' + (k[1].length > 1 ? 12 : 14) + '" font-weight="700" fill="#fff" font-family="Arial,sans-serif">' + k[1] + '</text></svg>';
+  }
   function docsPage() {
     var D = H.docs;
     if (!D) {
       $('main').innerHTML = '<h3>แฟ้มเอกสาร</h3><div class="panel"><span class="spinner dark"></span> กำลังโหลด…</div>';
       return call('sheDocs', state.token).then(function (r) { if (!r.ok) return toast(r.error); H.docs = r; if (state.page === 's_doc') docsPage(); }).catch(onServerError);
     }
-    var q = H.q, years = D.years, tree = docTree(D.cats), leaves = [].concat.apply([], tree.map(function (m) { return m.leaves; }));
-    if (!q.dYear || years.indexOf(q.dYear) < 0) q.dYear = years.indexOf(beYear()) >= 0 ? beYear() : years[years.length - 1];
-    if (!q.dCat || !leaves.some(function (l) { return l.key === q.dCat; })) q.dCat = leaves[0] ? leaves[0].key : '';
-    var term = String(q.dTerm || '').toLowerCase();
-    var inYear = D.docs.filter(function (d) { return d.year === q.dYear; });
-    var shown = inYear.filter(function (d) { return !term || (d.title + ' ' + d.fileName + ' ' + d.category + ' ' + d.note).toLowerCase().indexOf(term) >= 0; });
-    var known = {}; leaves.forEach(function (l) { known[l.key] = 1; });
-    var chips = years.map(function (y) { var n = D.docs.filter(function (d) { return d.year === y; }).length; return '<button class="chip' + (y === q.dYear ? ' on' : '') + '" data-dy="' + y + '">ปี ' + y + ' <small>(' + n + ')</small></button>'; }).join('')
-      + '<button class="chip" id="dAddYear">+ เพิ่มปี</button>';
-    var row = function (d) {
-      var k = docKind(d.fileName) || ['', '?', 'ไฟล์', '#64748b'];
-      return '<div class="sdoc"><span class="sdic" style="background:' + k[3] + '">' + k[1] + '</span><div class="sdtx"><b>' + esc(d.title) + '</b><small>' + esc(d.fileName) + ' · ' + docSize(d.size) + ' · อัปโหลด ' + esc(String(d.createdAt).slice(0, 10).split('-').reverse().join('/')) + (d.by ? ' · ' + esc(d.by) : '') + '</small>' + (d.note ? '<small>' + esc(d.note) + '</small>' : '') + '</div>'
-        + '<div class="sdbt"><a class="btn btn-sm btn-primary" href="' + esc(d.url) + '" target="_blank" rel="noopener">เปิดดู</a>'
-        + '<a class="btn btn-sm btn-line" href="https://drive.google.com/uc?export=download&id=' + encodeURIComponent(d.fileId) + '" target="_blank" rel="noopener" aria-label="ดาวน์โหลด ' + esc(d.title) + '" title="ดาวน์โหลด">' + icon('dl', 16) + '</a>'
-        + '<button class="btn btn-sm btn-line" data-dedit="' + esc(d.id) + '" aria-label="แก้ไข ' + esc(d.title) + '" title="แก้ไข">' + icon('pen', 16) + '</button>'
-        + '<button class="btn btn-sm btn-line sddel" data-ddel="' + esc(d.id) + '" aria-label="ลบ ' + esc(d.title) + '" title="ลบ">' + icon('trash', 16) + '</button></div></div>';
+    var q = H.q, years = D.years, tree = docTree(D.cats);
+    var view = q.dView || (function () { try { return localStorage.getItem('she_doc_view') || 'icon'; } catch (e) { return 'icon'; } })();
+    // ตำแหน่งปัจจุบัน: path = [] (ราก = ทุกปี) · [ปี] · [ปี, หมวด] · [ปี, หมวด, หมวดย่อย]
+    var path = q.dPath || [], y = path[0], m = path.length > 1 ? tree[path[1]] : null, sub = m && path.length > 2 ? m.subs[path[2]] : null;
+    if (path.length && years.indexOf(y) < 0) { path = q.dPath = []; y = null; m = null; }
+    if (path.length > 1 && path[1] !== -1 && !m) { path = q.dPath = [y]; }
+    var leafKey = m ? (sub != null ? m.name + ' › ' + sub : (m.subs.length ? null : m.name)) : null;   // โฟลเดอร์ที่อัปโหลดได้
+    var term = String(q.dTerm || '').toLowerCase().trim();
+    var known = {}; tree.forEach(function (mm) { mm.leaves.forEach(function (l) { known[l.key] = 1; }); });
+    var cnt = function (filter) { return D.docs.filter(filter).length; };
+    var items = [];   // { kind: 'folder'|'file', name, sub, go | doc }
+    if (term) {
+      D.docs.filter(function (d) { return (d.title + ' ' + d.fileName + ' ' + d.category + ' ' + d.note).toLowerCase().indexOf(term) >= 0 && (!y || d.year === y); })
+        .forEach(function (d) { items.push({ kind: 'file', doc: d, where: 'ปี ' + d.year + ' › ' + (d.category || 'อื่น ๆ') }); });
+    } else if (!path.length) {
+      years.forEach(function (yy) { items.push({ kind: 'folder', name: 'ปี ' + yy, n: cnt(function (d) { return d.year === yy; }), go: [yy] }); });
+    } else if (path.length === 1) {
+      tree.forEach(function (mm, i) { var ks = {}; mm.leaves.forEach(function (l) { ks[l.key] = 1; }); items.push({ kind: 'folder', name: mm.name, n: cnt(function (d) { return d.year === y && ks[d.category]; }), go: [y, i] }); });
+      var other = D.docs.filter(function (d) { return d.year === y && !known[d.category]; });
+      if (other.length) items.push({ kind: 'folder', name: 'อื่น ๆ / ยังไม่ได้จัดหมวด', n: other.length, go: [y, -1] });
+    } else if (path[1] === -1) {
+      D.docs.filter(function (d) { return d.year === y && !known[d.category]; }).forEach(function (d) { items.push({ kind: 'file', doc: d }); });
+    } else if (m.subs.length && sub == null) {
+      m.subs.forEach(function (s, i) { var k = m.name + ' › ' + s; items.push({ kind: 'folder', name: s, n: cnt(function (d) { return d.year === y && d.category === k; }), go: [y, path[1], i] }); });
+    } else {
+      D.docs.filter(function (d) { return d.year === y && d.category === leafKey; }).sort(function (a, b) { return String(a.title).localeCompare(String(b.title), 'th'); }).forEach(function (d) { items.push({ kind: 'file', doc: d }); });
+    }
+    var crumbs = [['แฟ้มเอกสาร', []]];
+    if (y) crumbs.push(['ปี ' + y, [y]]);
+    if (path[1] === -1) crumbs.push(['อื่น ๆ', [y, -1]]); else if (m) crumbs.push([m.name, [y, path[1]]]);
+    if (sub != null) crumbs.push([sub, path.slice()]);
+    var fdate = function (s) { var p = String(s || '').slice(0, 10).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + String(+p[0] + 543).slice(2) + ' ' + String(s).slice(11, 16) : ''; };
+    var tile = function (it, i) {
+      if (it.kind === 'folder') return '<button class="sxitem" data-xgo="' + i + '" title="' + esc(it.name) + '">' + '<span class="sxic">' + FOLDER_SVG + '</span><span class="sxnm">' + esc(it.name) + '</span><small>' + it.n + ' ไฟล์</small></button>';
+      var d = it.doc;
+      return '<div class="sxitem sxfile"><a class="sxopen" href="' + esc(d.url) + '" target="_blank" rel="noopener" title="' + esc(d.title + ' (' + d.fileName + ')') + '"><span class="sxic">' + fileSvg(d.fileName) + '</span><span class="sxnm">' + esc(d.title) + '</span><small>' + docSize(d.size) + (it.where ? ' · ' + esc(it.where) : '') + '</small></a>'
+        + '<button class="sxmore" data-xmore="' + esc(d.id) + '" aria-label="ตัวเลือกของ ' + esc(d.title) + '">⋮</button></div>';
     };
-    var leafBox = function (l, sub) {
-      var fs = shown.filter(function (d) { return d.category === l.key; });
-      if (term && !fs.length) return '';
-      return '<div class="sdleaf">' + (sub ? '<div class="sdlh"><b>' + esc(l.label) + '</b><span class="muted">ประจำปี ' + q.dYear + ' · ' + fs.length + ' ไฟล์</span><button class="btn btn-sm btn-line" data-dupto="' + esc(l.key) + '">' + icon('up', 15) + ' อัปโหลดเข้าหมวดนี้</button></div>'
-        : '<div class="sdlh"><span class="muted">ประจำปี ' + q.dYear + ' · ' + fs.length + ' ไฟล์</span><button class="btn btn-sm btn-line" data-dupto="' + esc(l.key) + '">' + icon('up', 15) + ' อัปโหลดเข้าหมวดนี้</button></div>')
-        + (fs.length ? fs.map(row).join('') : '<p class="muted sdnone">ยังไม่มีไฟล์</p>') + '</div>';
+    var row = function (it, i) {
+      if (it.kind === 'folder') return '<tr class="sxrow" data-xgo="' + i + '" tabindex="0"><td class="sxn"><span class="sxsm">' + FOLDER_SVG + '</span>' + esc(it.name) + '</td><td>' + it.n + ' ไฟล์</td><td>โฟลเดอร์</td><td></td><td></td></tr>';
+      var d = it.doc, k = docKind(d.fileName) || ['', '', 'ไฟล์'];
+      return '<tr class="sxrow"><td class="sxn"><a href="' + esc(d.url) + '" target="_blank" rel="noopener"><span class="sxsm">' + fileSvg(d.fileName) + '</span>' + esc(d.title) + '</a>' + (it.where ? '<small>' + esc(it.where) + '</small>' : '') + '</td><td>' + fdate(d.updatedAt || d.createdAt) + '</td><td>' + k[2] + '</td><td class="r">' + docSize(d.size) + '</td><td class="r"><button class="sxmore" data-xmore="' + esc(d.id) + '" aria-label="ตัวเลือกของ ' + esc(d.title) + '">⋮</button></td></tr>';
     };
-    // แสดงเฉพาะหมวดหลักก่อน แตะเพื่อเปิดดูหมวดย่อย / ไฟล์ (ผู้ใช้ขอ 20/11/69) · ตอนค้นหาเปิดหมวดที่เจอให้เอง
-    q.dOpen = q.dOpen || {};
-    var body = tree.map(function (m, mi) {
-      var inner = m.leaves.map(function (l) { return leafBox(l, m.subs.length > 0); }).join('');
-      if (term && !inner) return '';
-      var keys = {}; m.leaves.forEach(function (l) { keys[l.key] = 1; });
-      var n = inYear.filter(function (d) { return keys[d.category]; }).length, open = !!term || !!q.dOpen[m.name];
-      return '<div class="panel pbox sdmain' + (open ? ' open' : '') + '"><button class="sdmh" data-dopen="' + mi + '" aria-expanded="' + open + '">' + icon('folder', 20) + '<b>' + esc(m.name) + '</b>'
-        + '<span class="sdcnt">' + (m.subs.length ? m.subs.length + ' หมวดย่อย · ' : '') + n + ' ไฟล์</span><i class="sdchev">' + (open ? '▾' : '▸') + '</i></button>'
-        + (open ? '<div class="sdbody">' + inner + '</div>' : '') + '</div>';
-    }).join('');
-    var others = shown.filter(function (d) { return !known[d.category]; });
-    if (others.length) body += '<div class="panel pbox sdmain"><h4>' + icon('folder', 18) + ' อื่น ๆ / ยังไม่ได้จัดหมวด</h4>' + others.map(function (d) { return row(d) + (d.category ? '' : ''); }).join('') + '<p class="muted">กดปุ่มแก้ไข (ดินสอ) เพื่อย้ายเข้าหมวด</p></div>';
-    var catOpts = function (sel) { return tree.map(function (m) { return '<optgroup label="' + esc(m.name) + '">' + m.leaves.map(function (l) { return '<option value="' + esc(l.key) + '"' + (l.key === sel ? ' selected' : '') + '>' + esc(l.label) + '</option>'; }).join('') + '</optgroup>'; }).join(''); };
-    $('main').innerHTML = '<h3>แฟ้มเอกสาร</h3><p class="lead">เก็บไฟล์ Word / Excel / PowerPoint (และ PDF) ของฝ่ายไว้ในระบบ แยกตามหมวดและปี · กด "เปิดดู" ได้ทุกเมื่อ</p>'
-      + '<div class="pchips noprint">' + chips + '</div>'
-      + '<div class="panel noprint sdup" id="dUpBox"><b>อัปโหลดไฟล์เข้า ปี ' + q.dYear + '</b>'
-      + '<div class="pform"><div class="pf"><label for="dCat">หมวด</label><select id="dCat">' + catOpts(q.dCat) + (others.length || !leaves.length ? '' : '') + '</select></div>'
-      + '<div class="pf"><label for="dBy">ผู้อัปโหลด</label><input id="dBy" list="dPeople" value="' + esc(q.dBy || inspectors()[0]) + '">' + datalist('dPeople', inspectors()) + '</div></div>'
-      + '<label class="sddrop" id="dDrop" tabindex="0"><input type="file" id="dFile" multiple hidden accept=".doc,.docx,.xls,.xlsx,.xlsm,.csv,.ppt,.pptx,.pdf">' + icon('up', 30) + '<b>แตะเพื่อเลือกไฟล์ (เลือกได้หลายไฟล์)</b><span>หรือลากไฟล์มาวาง · Word / Excel / PowerPoint / PDF · ไม่เกิน 20 MB ต่อไฟล์</span></label>'
-      + '<div id="dProg"></div></div>'
-      + '<div class="pbar noprint"><input id="dTerm" type="search" placeholder="ค้นหาชื่อเอกสาร / หมวด" value="' + esc(q.dTerm || '') + '" aria-label="ค้นหาเอกสาร"><span class="muted">ปี ' + q.dYear + ' · ' + inYear.length + ' ไฟล์</span><button class="btn btn-sm btn-line" id="dCats">' + icon('pen', 15) + ' แก้หมวด</button></div>'
-      + (body || '<div class="panel sdempty">ไม่พบเอกสารที่ค้นหา</div>');
-    on('[data-dy]', 'click', function (el) { q.dYear = +el.getAttribute('data-dy'); docsPage(); }, $('main'));
-    on('[data-dopen]', 'click', function (el) { var m = tree[+el.getAttribute('data-dopen')]; if (!m || term) return; q.dOpen[m.name] = !q.dOpen[m.name]; docsPage(); }, $('main'));
-    on('[data-dupto]', 'click', function (el) { q.dCat = el.getAttribute('data-dupto'); $('dCat').value = q.dCat; $('dUpBox').scrollIntoView({ block: 'center' }); $('dFile').click(); }, $('main'));
-    $('dAddYear').addEventListener('click', function () {
+    var body = items.length ? (view === 'list'
+      ? '<table class="sxtab"><thead><tr><th>ชื่อ</th><th>วันที่แก้ไข</th><th>ชนิด</th><th class="r">ขนาด</th><th></th></tr></thead><tbody>' + items.map(row).join('') + '</tbody></table>'
+      : '<div class="sxgrid">' + items.map(tile).join('') + '</div>')
+      : '<div class="sxempty">' + (term ? 'ไม่พบเอกสารที่ค้นหา' : leafKey ? 'โฟลเดอร์นี้ยังไม่มีไฟล์<br><small>ลากไฟล์มาวางตรงนี้ หรือกด "อัปโหลดไฟล์"</small>' : 'ว่าง') + '</div>';
+    $('main').innerHTML = '<h3>แฟ้มเอกสาร</h3><p class="lead">เก็บไฟล์ Word / Excel / PowerPoint (และ PDF) ของฝ่าย · แตะโฟลเดอร์เพื่อเปิด แตะไฟล์เพื่อเปิดดู</p>'
+      + '<div class="sxwin">'
+      + '<div class="sxbar"><button class="sxnav" id="xBack" aria-label="ย้อนกลับ" title="ย้อนกลับ"' + (path.length || term ? '' : ' disabled') + '>←</button>'
+      + '<button class="sxnav" id="xUp" aria-label="ขึ้นหนึ่งระดับ" title="ขึ้นหนึ่งระดับ"' + (path.length ? '' : ' disabled') + '>↑</button>'
+      + '<nav class="sxcrumb" aria-label="ตำแหน่งโฟลเดอร์">' + crumbs.map(function (c, i) { return (i ? '<span class="sxsep">›</span>' : '') + '<button data-xcr="' + i + '"' + (i === crumbs.length - 1 ? ' aria-current="page"' : '') + '>' + (i ? '' : '<span class="sxsm">' + FOLDER_SVG + '</span>') + esc(c[0]) + '</button>'; }).join('') + '</nav>'
+      + '<input id="dTerm" type="search" placeholder="ค้นหาใน ' + esc(crumbs[crumbs.length - 1][0]) + '" value="' + esc(q.dTerm || '') + '" aria-label="ค้นหาเอกสาร"></div>'
+      + '<div class="sxtools">' + (leafKey ? '<button class="btn btn-sm btn-primary" id="xUpl">' + icon('up', 15) + ' อัปโหลดไฟล์</button>' : '')
+      + (!path.length ? '<button class="btn btn-sm btn-line" id="dAddYear">+ เพิ่มปี</button>' : '') + (path.length === 1 ? '<button class="btn btn-sm btn-line" id="dCats">' + icon('pen', 15) + ' แก้หมวด</button>' : '')
+      + '<span class="sxcount">' + items.length + ' รายการ</span>'
+      + '<div class="sxview" role="group" aria-label="มุมมอง"><button data-xv="icon" aria-pressed="' + (view === 'icon') + '" title="ไอคอน">▦</button><button data-xv="list" aria-pressed="' + (view === 'list') + '" title="รายละเอียด">☰</button></div></div>'
+      + '<div class="sxbody' + (leafKey ? ' droppable' : '') + '" id="xBody">' + body + '<div id="dProg"></div></div>'
+      + '<div class="sxstatus">' + (leafKey ? 'อัปโหลดเข้า: ' + esc(crumbs.slice(1).map(function (c) { return c[0]; }).join(' › ')) + ' · Word / Excel / PowerPoint / PDF ไม่เกิน 20 MB ต่อไฟล์ · ผู้อัปโหลด <input id="dBy" list="dPeople" value="' + esc(q.dBy || inspectors()[0]) + '" aria-label="ผู้อัปโหลด">' + datalist('dPeople', inspectors()) : (!path.length ? 'เลือกปี' : path.length === 1 ? 'เลือกหมวด' : 'เลือกหมวดย่อย') + ' แล้วจึงอัปโหลดไฟล์ได้') + '</div>'
+      + '<input type="file" id="dFile" multiple hidden accept=".doc,.docx,.xls,.xlsx,.xlsm,.csv,.ppt,.pptx,.pdf"></div>';
+    var nav = function (p) { q.dHist = (q.dHist || []).concat([path]); q.dPath = p; q.dTerm = ''; docsPage(); window.scrollTo(0, 0); };
+    on('[data-xgo]', 'click', function (el) { nav(items[+el.getAttribute('data-xgo')].go); }, $('main'));
+    on('tr[data-xgo]', 'keydown', function (el, e) { if (e.key === 'Enter') nav(items[+el.getAttribute('data-xgo')].go); }, $('main'));
+    on('[data-xcr]', 'click', function (el) { var c = crumbs[+el.getAttribute('data-xcr')]; if (c) nav(c[1]); }, $('main'));
+    $('xBack').addEventListener('click', function () { if (q.dTerm) { q.dTerm = ''; return docsPage(); } var h = q.dHist || []; q.dPath = h.length ? h.pop() : path.slice(0, -1); q.dHist = h; docsPage(); });
+    $('xUp').addEventListener('click', function () { nav(path[1] === -1 ? [y] : path.slice(0, -1)); });
+    on('[data-xv]', 'click', function (el) { q.dView = el.getAttribute('data-xv'); try { localStorage.setItem('she_doc_view', q.dView); } catch (e) {} docsPage(); }, $('main'));
+    var t; $('dTerm').addEventListener('input', function () { var val = this.value; clearTimeout(t); t = setTimeout(function () { q.dTerm = val; docsPage(); var el = $('dTerm'); el.focus(); el.setSelectionRange(val.length, val.length); }, 250); });
+    if ($('dBy')) $('dBy').addEventListener('change', function () { q.dBy = this.value; });
+    var inp = $('dFile');
+    if ($('xUpl')) $('xUpl').addEventListener('click', function () { inp.click(); });
+    inp.addEventListener('change', function () { var fs = Array.prototype.slice.call(inp.files || []); inp.value = ''; if (fs.length && leafKey) uploadDocs(fs, y, leafKey); });
+    var xb = $('xBody');
+    if (leafKey) {
+      ['dragenter', 'dragover'].forEach(function (ev) { xb.addEventListener(ev, function (e) { e.preventDefault(); xb.classList.add('over'); }); });
+      ['dragleave', 'drop'].forEach(function (ev) { xb.addEventListener(ev, function (e) { e.preventDefault(); xb.classList.remove('over'); }); });
+      xb.addEventListener('drop', function (e) { var fs = Array.prototype.slice.call(e.dataTransfer.files || []); if (fs.length) uploadDocs(fs, y, leafKey); });
+    }
+    if ($('dAddYear')) $('dAddYear').addEventListener('click', function () {
       openModal({ title: 'เพิ่มปี', icon: 'folder', color: state.dept.color, ok: 'เพิ่ม', body: F('dNewYear', 'ปี (พ.ศ.)', Math.max.apply(null, years) + 1, 'number', ' min="2500" max="2700"'),
         submit: function () {
-          var y = +v('dNewYear'); if (!(y >= 2500 && y <= 2700)) return 'ใส่ปี พ.ศ. เช่น 2571';
-          return call('sheDocYears', state.token, years.concat([y])).then(function (r) { if (!r.ok) return r.error; D.years = r.years; q.dYear = y; closeModal(); docsPage(); });
+          var yy = +v('dNewYear'); if (!(yy >= 2500 && yy <= 2700)) return 'ใส่ปี พ.ศ. เช่น 2571';
+          return call('sheDocYears', state.token, years.concat([yy])).then(function (r) { if (!r.ok) return r.error; D.years = r.years; closeModal(); docsPage(); });
         } });
     });
-    $('dCats').addEventListener('click', function () {
+    if ($('dCats')) $('dCats').addEventListener('click', function () {
       openModal({ title: 'แก้หมวดเอกสาร', icon: 'folder', color: state.dept.color, ok: 'บันทึก',
-        body: '<p class="muted">1 บรรทัด = 1 หมวด · บรรทัดที่ขึ้นต้นด้วย "หมวด" เป็นหมวดหลัก บรรทัดถัดไปเป็นหมวดย่อยของหมวดนั้น (เช่น 1.1 …) · ไฟล์เก็บแยกตามปีให้เองอยู่แล้ว</p><textarea id="dCatText" rows="10" style="width:100%;font:inherit;padding:10px;border:1.5px solid var(--line);border-radius:10px">' + esc(D.cats) + '</textarea><p class="muted">ถ้าเปลี่ยนชื่อหมวดที่มีไฟล์อยู่ ไฟล์เดิมจะไปอยู่ใน "อื่น ๆ" ให้ย้ายเข้าหมวดใหม่ด้วยปุ่มแก้ไข</p>',
+        body: '<p class="muted">1 บรรทัด = 1 โฟลเดอร์ · บรรทัดที่ขึ้นต้นด้วย "หมวด" เป็นโฟลเดอร์หลัก บรรทัดถัดไปเป็นโฟลเดอร์ย่อยของหมวดนั้น (เช่น 1.1 …) · ทุกปีใช้หมวดชุดเดียวกัน</p><textarea id="dCatText" rows="10" style="width:100%;font:inherit;padding:10px;border:1.5px solid var(--line);border-radius:10px">' + esc(D.cats) + '</textarea><p class="muted">ถ้าเปลี่ยนชื่อหมวดที่มีไฟล์อยู่ ไฟล์เดิมจะไปอยู่ในโฟลเดอร์ "อื่น ๆ" ให้ย้ายเข้าหมวดใหม่ด้วยปุ่ม ⋮ → แก้ไข</p>',
         submit: function () {
           return call('sheDocCats', state.token, $('dCatText').value).then(function (r) { if (!r.ok) return r.error; D.cats = r.cats; closeModal(); toast('บันทึกหมวดแล้ว'); docsPage(); });
         } });
     });
-    var t; $('dTerm').addEventListener('input', function () { var val = this.value; clearTimeout(t); t = setTimeout(function () { q.dTerm = val; docsPage(); var el = $('dTerm'); el.focus(); el.setSelectionRange(val.length, val.length); }, 250); });
-    $('dCat').addEventListener('change', function () { q.dCat = this.value; });
-    $('dBy').addEventListener('change', function () { q.dBy = this.value; });
-    var inp = $('dFile'), drop = $('dDrop');
-    inp.addEventListener('change', function () { var fs = Array.prototype.slice.call(inp.files || []); inp.value = ''; if (fs.length) uploadDocs(fs); });
-    drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inp.click(); } });
-    ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
-    ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
-    drop.addEventListener('drop', function (e) { var fs = Array.prototype.slice.call(e.dataTransfer.files || []); if (fs.length) uploadDocs(fs); });
-    on('[data-ddel]', 'click', function (el) {
-      var d = D.docs.filter(function (x) { return x.id === el.getAttribute('data-ddel'); })[0]; if (!d) return;
-      ask({ title: 'ลบเอกสาร "' + d.title + '"?', text: 'ไฟล์ ' + d.fileName + ' จะถูกย้ายไปถังขยะของ Google Drive และหายจากรายการ', ok: 'ลบเอกสาร', cancel: 'ไม่ลบ', tone: 'danger' }).then(function (yes) {
-        if (!yes) return;
-        call('sheDeleteDoc', state.token, d.id).then(function (r) { if (!r.ok) return toast(r.error); D.docs = D.docs.filter(function (x) { return x.id !== d.id; }); toast('ลบแล้ว'); docsPage(); }).catch(onServerError);
-      });
+    on('[data-xmore]', 'click', function (el, e) {
+      e.preventDefault(); e.stopPropagation();
+      var d = D.docs.filter(function (x) { return x.id === el.getAttribute('data-xmore'); })[0]; if (!d) return;
+      docMenu(d, tree, years, known);
     }, $('main'));
-    on('[data-dedit]', 'click', function (el) {
-      var d = D.docs.filter(function (x) { return x.id === el.getAttribute('data-dedit'); })[0]; if (!d) return;
+  }
+  // เมนู ⋮ ของไฟล์: เปิดดู / ดาวน์โหลด / แก้ไข (ชื่อ ปี หมวด หมายเหตุ) / ลบ
+  function docMenu(d, tree, years, known) {
+    var D = H.docs, k = docKind(d.fileName) || ['', '?', 'ไฟล์'];
+    openModal({ title: d.title, icon: 'folder', color: state.dept.color, noCancel: true, ok: 'ปิด',
+      body: '<p class="muted">' + esc(d.fileName) + ' · ' + k[2] + ' · ' + docSize(d.size) + ' · อัปโหลด ' + esc(String(d.createdAt).slice(0, 16)) + (d.by ? ' โดย ' + esc(d.by) : '') + (d.note ? '<br>หมายเหตุ: ' + esc(d.note) : '') + '</p>'
+        + '<div class="sxmenu"><a class="btn btn-primary" href="' + esc(d.url) + '" target="_blank" rel="noopener">เปิดดู</a>'
+        + '<a class="btn btn-line" href="https://drive.google.com/uc?export=download&id=' + encodeURIComponent(d.fileId) + '" target="_blank" rel="noopener">' + icon('dl', 16) + ' ดาวน์โหลด</a>'
+        + '<button class="btn btn-line" id="xEdit">' + icon('pen', 16) + ' แก้ไข / ย้ายโฟลเดอร์</button><button class="btn btn-line sddel" id="xDel">' + icon('trash', 16) + ' ลบ</button></div>',
+      submit: function () { closeModal(); } });
+    $('xEdit').addEventListener('click', function () {
+      var catOpts = (known[d.category] ? '' : '<option value="' + esc(d.category) + '" selected>' + esc(d.category || '— ยังไม่ได้จัดหมวด —') + '</option>') + tree.map(function (mm) { return '<optgroup label="' + esc(mm.name) + '">' + mm.leaves.map(function (l) { return '<option value="' + esc(l.key) + '"' + (l.key === d.category ? ' selected' : '') + '>' + esc(l.label) + '</option>'; }).join('') + '</optgroup>'; }).join('');
       openModal({ title: 'แก้ข้อมูลเอกสาร', icon: 'pen', color: state.dept.color, ok: 'บันทึก',
-        body: F('deTitle', 'ชื่อเอกสาร', d.title)
-          + '<div class="pf"><label for="deCat">หมวด</label><select id="deCat">' + (known[d.category] ? '' : '<option value="' + esc(d.category) + '" selected>' + esc(d.category || '— ยังไม่ได้จัดหมวด —') + '</option>') + catOpts(d.category) + '</select></div>'
-          + '<div class="pf"><label for="deYear">ปี (พ.ศ.)</label><select id="deYear">' + years.map(function (y) { return '<option' + (y === d.year ? ' selected' : '') + '>' + y + '</option>'; }).join('') + '</select></div>'
-          + F('deNote', 'หมายเหตุ', d.note) + '<p class="muted">ไฟล์: ' + esc(d.fileName) + ' (ถ้าจะเปลี่ยนไฟล์ ให้อัปโหลดไฟล์ใหม่แล้วลบไฟล์เดิม)</p>',
+        body: F('deTitle', 'ชื่อเอกสาร', d.title) + '<div class="pf"><label for="deYear">ปี (พ.ศ.)</label><select id="deYear">' + years.map(function (yy) { return '<option' + (yy === d.year ? ' selected' : '') + '>' + yy + '</option>'; }).join('') + '</select></div>'
+          + '<div class="pf"><label for="deCat">โฟลเดอร์ (หมวด)</label><select id="deCat">' + catOpts + '</select></div>' + F('deNote', 'หมายเหตุ', d.note),
         submit: function () {
           if (!v('deTitle')) return 'ใส่ชื่อเอกสาร';
           return call('sheUpdateDoc', state.token, d.id, { title: v('deTitle'), category: $('deCat').value, year: +$('deYear').value, note: v('deNote') }).then(function (r) {
             if (!r.ok) return r.error; Object.assign(d, r.doc); closeModal(); toast('บันทึกแล้ว'); docsPage();
           });
         } });
-    }, $('main'));
+    });
+    $('xDel').addEventListener('click', function () {
+      ask({ title: 'ลบเอกสาร "' + d.title + '"?', text: 'ไฟล์ ' + d.fileName + ' จะถูกย้ายไปถังขยะของ Google Drive และหายจากโฟลเดอร์', ok: 'ลบเอกสาร', cancel: 'ไม่ลบ', tone: 'danger' }).then(function (yes) {
+        if (!yes) return;
+        call('sheDeleteDoc', state.token, d.id).then(function (r) { if (!r.ok) return toast(r.error); D.docs = D.docs.filter(function (x) { return x.id !== d.id; }); closeModal(); toast('ลบแล้ว'); docsPage(); }).catch(onServerError);
+      });
+    });
   }
   function readB64(file) {
     return new Promise(function (ok, fail) { var fr = new FileReader(); fr.onload = function () { ok(String(fr.result).split(',')[1] || ''); }; fr.onerror = function () { fail(new Error('อ่านไฟล์ไม่ได้')); }; fr.readAsDataURL(file); });
   }
-  function uploadDocs(files) {
-    var q = H.q, D = H.docs, year = q.dYear, cat = $('dCat') ? $('dCat').value : q.dCat, by = v('dBy');
-    q.dCat = cat; q.dBy = by;
+  function uploadDocs(files, year, cat) {
+    var q = H.q, D = H.docs, by = $('dBy') ? $('dBy').value.trim() : (q.dBy || '');
+    q.dBy = by;
     var bad = files.filter(function (f) { return !docKind(f.name) || f.size > 20 * 1024 * 1024; });
     var good = files.filter(function (f) { return bad.indexOf(f) < 0; });
-    var prog = $('dProg'), done = 0, fails = [];
+    var done = 0, fails = [];
     if (bad.length) toast('ข้าม ' + bad.length + ' ไฟล์ (ไม่ใช่ Word / Excel / PowerPoint / PDF หรือใหญ่เกิน 20 MB)');
     if (!good.length) return;
-    var show = function (cur) { if (prog) prog.innerHTML = '<div class="sdprog"><span class="spinner dark"></span> กำลังอัปโหลด ' + (done + 1) + '/' + good.length + ' · ' + esc(cur) + '</div>'; };
+    var show = function (cur) { var prog = $('dProg'); if (prog) prog.innerHTML = '<div class="sdprog"><span class="spinner dark"></span> กำลังอัปโหลด ' + (done + 1) + '/' + good.length + ' · ' + esc(cur) + '</div>'; };
     var i = 0;
     (function next() {
       if (i >= good.length) {
-        toast(fails.length ? 'อัปโหลดได้ ' + done + ' ไฟล์ · ไม่สำเร็จ ' + fails.length + ' (' + fails.join(', ') + ')' : '✓ อัปโหลด ' + done + ' ไฟล์เข้า ปี ' + year + ' แล้ว');
-        q.dOpen = q.dOpen || {}; q.dOpen[String(cat).split(' › ')[0]] = true;   // เปิดหมวดที่เพิ่งอัปโหลดให้เห็นไฟล์
+        toast(fails.length ? 'อัปโหลดได้ ' + done + ' ไฟล์ · ไม่สำเร็จ ' + fails.length + ' (' + fails.join(', ') + ')' : '✓ อัปโหลด ' + done + ' ไฟล์แล้ว');
         if (state.page === 's_doc') docsPage();
         return;
       }
@@ -1205,6 +1243,19 @@
     '.sdprog{margin-top:10px;font-weight:600}.sdoc{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}.sdoc:first-of-type{border-top:0}.sdic{flex:0 0 44px;height:44px;border-radius:10px;color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:15px}',
     '#dTerm{flex:1 1 200px;min-width:0;padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;font:inherit}.sdmh{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;padding:4px 2px;font:inherit;text-align:left;cursor:pointer;color:var(--ink)}.sdmh b{font-size:17px;flex:1}.sdcnt{color:var(--muted);font-size:13.5px;white-space:nowrap}.sdchev{font-style:normal;font-size:18px;color:var(--muted);width:20px;text-align:center}.sdmain:not(.open):hover{background:#fff7ed}.sdbody{margin-top:6px}.sdmain h4{margin-bottom:6px}.sdleaf{border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin-top:8px}.sdlh{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}.sdlh .btn{width:auto;margin-left:auto}.sdnone{margin:6px 0 2px}.sdtx{flex:1;min-width:0}.sdtx b{display:block;overflow-wrap:anywhere}.sdtx small{display:block;color:var(--muted);overflow-wrap:anywhere}.sdbt{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.sdbt .btn{width:auto}.sddel{color:#dc2626}.sdempty{color:var(--muted)}',
     '@media (max-width:640px){.sdoc{flex-wrap:wrap}.sdbt{flex-basis:100%;justify-content:flex-start;padding-left:56px}}',
+    '.sxwin{background:#fff;border:1px solid #d6dbe3;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(15,23,42,.06)}.sxbar{display:flex;align-items:center;gap:6px;padding:8px;background:#f3f6fa;border-bottom:1px solid #e2e8f0;flex-wrap:wrap}',
+    '.sxnav{flex:0 0 36px;width:36px!important;min-width:0;padding:0;height:36px;border:1px solid transparent;border-radius:8px;background:none;font-size:18px;cursor:pointer;color:#334155}.sxnav:hover:not(:disabled){background:#e2e8f0}.sxnav:disabled{color:#cbd5e1;cursor:default}',
+    '.sxcrumb{flex:1 1 280px;min-width:0;display:flex;align-items:center;flex-wrap:wrap;gap:2px;min-height:36px;background:#fff;border:1px solid #d6dbe3;border-radius:8px;padding:2px 6px}.sxcrumb button{border:0;background:none;font:inherit;font-size:14px;padding:4px 6px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;color:#1e293b}.sxcrumb button:hover{background:#e0ecff}.sxcrumb [aria-current]{font-weight:700}.sxsep{color:#94a3b8}',
+    '.sxsm{display:inline-block;width:20px;height:18px;vertical-align:middle}.sxsm svg{width:100%;height:100%}.sxbar #dTerm{flex:1 1 180px;max-width:320px;min-width:0;padding:7px 10px;border:1px solid #d6dbe3;border-radius:8px;font:inherit;font-size:14px}',
+    '.sxtools{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #eef2f6;flex-wrap:wrap}.sxtools .btn{width:auto!important;flex:0 0 auto}.sxcount{color:var(--muted);font-size:13px;margin-left:auto}.sxview{display:inline-flex;border:1px solid #d6dbe3;border-radius:8px;overflow:hidden}.sxview button{width:34px!important;min-width:0;padding:0;border:0;background:#fff;width:34px;height:30px;cursor:pointer;font-size:15px}.sxview button[aria-pressed=true]{background:#dbeafe;color:#1d4ed8}',
+    '.sxbody{min-height:260px;padding:12px;position:relative}.sxbody.over{background:#eff6ff;outline:2px dashed #3b82f6;outline-offset:-8px}.sxgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:6px}',
+    '.sxitem{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:10px 6px;border:1px solid transparent;border-radius:8px;background:none;font:inherit;cursor:pointer;color:#0f172a}.sxitem:hover,.sxitem:focus-within{background:#e5f1fb;border-color:#cce4f7}',
+    '.sxopen{display:flex;flex-direction:column;align-items:center;gap:4px;color:inherit;text-decoration:none;width:100%}.sxic{width:64px;height:54px;display:flex;align-items:center;justify-content:center}.sxic svg{max-width:64px;max-height:54px}.sxfile .sxic svg{height:54px;width:auto}',
+    '.sxnm{font-size:13.5px;line-height:1.3;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.sxitem small{font-size:11.5px;color:var(--muted)}.sxmore{position:absolute;top:4px;right:4px;width:28px;height:28px;border:0;border-radius:6px;background:none;font-size:18px;cursor:pointer;color:#475569}.sxmore:hover{background:#cbd5e1}',
+    '.sxtab{width:100%;border-collapse:collapse;font-size:14px}.sxtab th{text-align:left;font-weight:600;color:#475569;padding:6px 8px;border-bottom:1px solid #e2e8f0}.sxtab td{padding:6px 8px;border-bottom:1px solid #f1f5f9;vertical-align:middle}.sxtab .r{text-align:right}.sxrow:hover{background:#e5f1fb}.sxrow[data-xgo]{cursor:pointer}',
+    '.sxn a{color:inherit;text-decoration:none;display:inline-flex;align-items:center;gap:8px}.sxn{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sxn .sxsm{width:22px;height:22px}.sxn small{flex-basis:100%;color:var(--muted);font-size:12px;padding-left:30px}.sxtab .sxmore{position:static}',
+    '.sxempty{text-align:center;color:var(--muted);padding:50px 10px}.sxstatus{padding:8px 12px;border-top:1px solid #eef2f6;background:#f8fafc;font-size:13px;color:#475569}.sxstatus input{padding:4px 8px;border:1px solid #d6dbe3;border-radius:6px;font:inherit;font-size:13px;width:180px}.sxmenu{display:flex;flex-wrap:wrap;gap:8px}.sxmenu .btn{width:auto}',
+    '@media (max-width:640px){.sxgrid{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}.sxbar #dTerm{flex:1 1 100%;max-width:none}.sxcrumb{flex-basis:calc(100% - 90px)}.sxtab th:nth-child(2),.sxtab td:nth-child(2),.sxtab th:nth-child(3),.sxtab td:nth-child(3){display:none}}',
     '.smprob{border:1.5px solid #fecaca;background:#fff7f7;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}.smpt{font-weight:700;color:#b91c1c;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline}',
     '.smdet span{display:block;font-size:13px;color:#7f1d1d;margin-bottom:3px}.smdet textarea{width:100%;padding:10px;border:1.5px solid #fca5a5;border-radius:10px;font:inherit;resize:vertical;background:#fff}.smdet.need span{font-weight:700;color:#b91c1c}.smdet.need textarea{border-color:#dc2626;box-shadow:0 0 0 3px #fee2e2}',
     '.smphs{display:flex;flex-wrap:wrap;gap:8px}.smph{position:relative;width:76px;height:76px;border-radius:10px;overflow:hidden;background:#fee2e2;display:flex;align-items:center;justify-content:center;gap:4px;font-size:12px;color:#7f1d1d;flex-direction:column}.smph img{width:76px;height:76px;object-fit:cover;display:block}',
