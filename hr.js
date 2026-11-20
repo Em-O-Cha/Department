@@ -94,8 +94,10 @@
     var s = H.data.settings, paidMax = Number(s.maternityPaidH) || (Number(s.maternityPaidDays) || 90) * stdH(), paid = Math.max(0, Math.min(thisH, paidMax - usedBeforeH)), un = r2(thisH - paid);
     return 'จ่ายค่าจ้าง ' + fh(paid) + (un > 0 ? ' · ไม่รับค่าจ้าง ' + fh(un) : '') + ' (สิทธิ์จ่าย ' + fh(paidMax) + ')';
   }
+  // ลาพักร้อนรายคน (ผู้ใช้ขอ 20/11/69): วันในทะเบียน × ชม. จ.–พฤ. · ไม่ได้ใส่ = ค่าเริ่มต้นในหน้าตั้งค่า (วัน)
+  function vacDaysOf(e) { return e && e.vacDays !== '' && e.vacDays != null && isFinite(Number(e.vacDays)) ? Number(e.vacDays) : null; }
   function quotaOf(e, k, year) {   // null = ไม่จำกัด/ไม่ได้ตั้ง · พักร้อน: ต้องทำงานครบ 1 ปี (ถ้ารู้วันเริ่มงาน)
-    var q = (H.data.settings.quotaMap || {})[k];
+    var q = k === 'vacation' && vacDaysOf(e) != null ? r2(vacDaysOf(e) * stdH()) : (H.data.settings.quotaMap || {})[k];
     if (q == null || q === '' || QK.indexOf(k) < 0) return null;
     q = Number(q) || 0;
     if (k === 'vacation' && e && e.startDate) { var ref = year + '-12-31' < H.data.today ? year + '-12-31' : H.data.today; if (days(e.startDate, ref) < 365) return 0; }
@@ -210,7 +212,7 @@
   H.dirtyLeaves = function () { pollLeaves(true); };   // หน้าลงเวลานำเข้าแล้ว → ดึงการลาใหม่ (มาสาย / ขาดงานจากเครื่องสแกน)
   H.reset = function () { if (window.HRTIME) HRTIME.reset(); H.jobs = null; if (H.pollT) { clearInterval(H.pollT); H.pollT = null; } if (window.HRDAILY) HRDAILY.reset(); H.data = null; H.q = {}; H.photos = {}; H.photosLoaded = false; pageSize(''); };
   // ปุ่ม "Excel" บนแถบด้านบน: ทะเบียนพนักงาน / พนักงาน Job ส่งข้อมูลครบทุกช่อง (หน้าอื่นอ่านจากหน้าจอ)
-  var XP_EMP = [['code', 'รหัสพนักงาน'], ['seq', 'ลำดับ'], ['fullName', 'ชื่อ-นามสกุล'], ['nickname', 'ชื่อเล่น'], ['gender', 'เพศ'], ['nationality', 'สัญชาติ'], ['religion', 'ศาสนา'],
+  var XP_EMP = [['code', 'รหัสพนักงาน'], ['seq', 'ลำดับ'], ['vacDays', 'วันลาพักร้อน (วัน/ปี)'], ['fullName', 'ชื่อ-นามสกุล'], ['nickname', 'ชื่อเล่น'], ['gender', 'เพศ'], ['nationality', 'สัญชาติ'], ['religion', 'ศาสนา'],
     ['birthDate', 'วันเกิด'], ['idNo', 'เลขบัตรประชาชน / พาสปอร์ต'], ['phone', 'เบอร์โทร'], ['addrReg', 'ที่อยู่ตามทะเบียนบ้าน'], ['addrNow', 'ที่อยู่ปัจจุบัน'], ['building', 'อาคาร'],
     ['position', 'ตำแหน่ง'], ['group', 'แผนก'], ['empType', 'ประเภทการจ้าง'], ['startDate', 'วันเริ่มงาน'], ['status', 'สถานะ'], ['endDate', 'วันที่ออก'], ['endReason', 'เหตุผลที่ออก'],
     ['emergencyName', 'ผู้ติดต่อฉุกเฉิน'], ['emergencyPhone', 'เบอร์ผู้ติดต่อฉุกเฉิน'], ['education', 'วุฒิการศึกษา'], ['note', 'หมายเหตุ']];
@@ -245,7 +247,7 @@
       return '<div class="hpr-row">' + photo(e, 'hph sm') + '<div class="pinfo"><b>' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</b>'
         + '<small><span class="htype ' + l.type + '">' + LT[l.type] + '</span> ' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + ' · ' + lvLen(l)
         + (left != null ? ' · <b class="' + (left - hrsOf(l) < 0 ? 'neg' : 'pos') + '">คงเหลือ ' + fh(left) + ' → หลังอนุมัติ ' + fh(left - hrsOf(l)) + '</b>' : '') + '</small>'
-        + (l.supervisor ? '<small>หัวหน้างาน: ' + esc(l.supervisor) + '</small>' : '')
+        + (l.filledBy ? '<small>ผู้กรอกใบลา: ' + esc(l.filledBy) + '</small>' : l.supervisor ? '<small>หัวหน้างาน: ' + esc(l.supervisor) + '</small>' : '')
         + (l.reason ? '<small>เหตุผล: ' + esc(l.reason) + '</small>' : '') + (l.files.length ? '<small>' + fileLinks(l.files) + '</small>' : '') + '<small class="muted">ส่งเมื่อ ' + esc(String(l.createdAt).slice(0, 16)) + (l.source ? ' · ' + esc(l.source) : '') + '</small></div>'
         + '<div class="hpr-btns"><button class="btn btn-sm hok" data-ok="' + l.id + '">✅ อนุมัติ</button><button class="btn btn-sm hno" data-no="' + l.id + '">❌ ไม่อนุมัติ</button></div></div>';
     }).join('') + '</div>';
@@ -556,6 +558,7 @@
         + S('mGroup', 'แผนก', opts(uniq(list(s.groups).concat([e.group])), '— ไม่ระบุ —'), e.group) + S('mBld', 'อาคาร', opts(uniq(list(s.buildings).concat([e.building])), '— ไม่ระบุ —'), e.building)
         + S('mType', 'ประเภทการจ้าง', opts(uniq(['รายเดือน', 'รายวัน', 'สัญญาจ้าง', 'พาร์ทไทม์', e.empType]), '— ไม่ระบุ —'), e.empType)
         + F('mStart', 'วันเริ่มงาน', e.startDate, 'date') + F('mEnd', 'วันที่ออก (ถ้าลาออก)', e.endDate, 'date')
+        + F('mVac', 'วันลาพักร้อน (วัน/ปี) · คิดเป็น ' + stdH() + ' ชม./วัน · ว่าง = ค่าเริ่มต้น' + (s.quotaDays && s.quotaDays.vacation != null ? ' ' + s.quotaDays.vacation + ' วัน' : ''), vacDaysOf(e) == null ? '' : vacDaysOf(e), 'number', ' min="0" max="60" step="0.5"')
         + S('mGender', 'เพศ', opts(['หญิง', 'ชาย'], '— ไม่ระบุ —'), e.gender) + F('mNat', 'สัญชาติ', e.nationality, 'text', ' list="hNat"') + '<datalist id="hNat"><option value="ไทย"><option value="เมียนมา"><option value="กัมพูชา"><option value="ลาว"></datalist>'
         + F('mRel', 'ศาสนา', e.religion) + F('mBirth', 'วันเกิด', e.birthDate, 'date') + F('mIdNo', 'เลขบัตรประชาชน / พาสปอร์ต', e.idNo) + F('mPhone', 'เบอร์โทร', e.phone, 'tel')
         + F('mEdu', 'วุฒิการศึกษา', e.education) + F('mEmName', 'ผู้ติดต่อฉุกเฉิน', e.emergencyName) + F('mEmPhone', 'เบอร์ผู้ติดต่อฉุกเฉิน', e.emergencyPhone, 'tel')
@@ -570,7 +573,7 @@
       check: function () { return v('mName') ? '' : 'ระบุชื่อ-นามสกุล'; },
       submit: function () {
         var rec = { id: e.id || '', fullName: v('mName'), nickname: v('mNick'), code: v('mCode'), status: v('mStatus'), position: v('mPos'), group: v('mGroup'), building: v('mBld'), empType: v('mType'),
-          startDate: v('mStart'), endDate: v('mEnd'), gender: v('mGender'), nationality: v('mNat'), religion: v('mRel'), birthDate: v('mBirth'), idNo: v('mIdNo'), phone: v('mPhone'),
+          startDate: v('mStart'), endDate: v('mEnd'), vacDays: v('mVac'), gender: v('mGender'), nationality: v('mNat'), religion: v('mRel'), birthDate: v('mBirth'), idNo: v('mIdNo'), phone: v('mPhone'),
           education: v('mEdu'), emergencyName: v('mEmName'), emergencyPhone: v('mEmPhone'), addrReg: v('mAddr1'), addrNow: v('mAddr2'), endReason: v('mEndR'), note: v('mNote') };
         return call('hrSaveEmp', state.token, rec).then(function (r) {
           if (!r.ok) return r.error;
@@ -591,7 +594,7 @@
       .sort(function (a, b) { return String(b.dateFrom).localeCompare(String(a.dateFrom)); });
     var y = q.lm.slice(0, 4), quotas = H.data.settings.quotaMap || {}, sum = {};
     H.data.leaves.filter(function (l) { return l.dateFrom.slice(0, 4) === y && l.status !== 'ไม่อนุมัติ'; }).forEach(function (l) { sum[l.empId] = sum[l.empId] || {}; sum[l.empId][l.type] = r2((sum[l.empId][l.type] || 0) + (l.type === 'late' ? 1 : hrsOf(l))); });
-    var over = Object.keys(sum).filter(function (id) { return ['sick', 'personal', 'vacation'].some(function (k) { return quotas[k] && (sum[id][k] || 0) > quotas[k]; }); });
+    var over = Object.keys(sum).filter(function (id) { return ['sick', 'personal', 'vacation'].some(function (k) { var qq = quotaOf(emp(id) || {}, k, y); return qq != null && (sum[id][k] || 0) > qq; }); });
     q.lview = q.lview || 'list';
     if (q.lview === 'bal') return leaveBalances(y);
     $('main').innerHTML = '<h3>การลา / ขาดงาน / มาสาย</h3><p class="lead">บันทึกการลาทุกประเภท · คิดเป็นชั่วโมง: จ.–พฤ. ' + dayHrs()[1] + ' ชม. · ศ. ' + dayHrs()[5] + ' ชม.' + (dayHrs()[6] ? ' · ส. ' + dayHrs()[6] + ' ชม.' : ' · เสาร์–อาทิตย์ไม่นับ') + ' (ตั้งได้ในหน้าตั้งค่า)</p>'
@@ -602,7 +605,7 @@
       + '<b style="flex:1">' + rows.length + ' รายการ</b><button class="btn btn-sm btn-primary" id="lNew">' + icon('plus', 16) + ' บันทึกการลา</button></div>'
       + '<div class="plist">' + (rows.map(function (l) {
         var e = emp(l.empId) || { fullName: '(ไม่พบพนักงาน)' };
-        return '<button class="prow click" data-lv="' + l.id + '">' + photo(e, 'hph sm') + '<div class="pinfo"><b>' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</b><small>' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + (l.reason ? ' · ' + esc(l.reason) : '') + (l.supervisor ? ' · หัวหน้างาน ' + esc(l.supervisor) : '') + '</small></div>'
+        return '<button class="prow click" data-lv="' + l.id + '">' + photo(e, 'hph sm') + '<div class="pinfo"><b>' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</b><small>' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + (l.reason ? ' · ' + esc(l.reason) : '') + (l.filledBy ? ' · ผู้กรอก ' + esc(l.filledBy) : l.supervisor ? ' · หัวหน้างาน ' + esc(l.supervisor) : '') + '</small></div>'
           + '<div class="pprice"><span class="htype ' + l.type + '">' + LT[l.type] + '</span><small>' + lvLen(l) + '</small>' + stTag(l) + '</div></button>';
       }).join('') || '<div class="panel muted">ไม่มีรายการ</div>') + '</div>';
     $('lM').addEventListener('change', function () { q.lm = v('lM'); if (q.lm && q.lm.slice(0, 4) < String(+H.data.today.slice(0, 4) - 1)) loadOld(q.lm); else leaves(); });
@@ -687,7 +690,7 @@
         + F('lFrom', 'ตั้งแต่วันที่ *', l.dateFrom, 'date') + F('lTo', 'ถึงวันที่', l.dateTo || l.dateFrom, 'date')
         + F('lDays', 'จำนวนวันทำงาน (ครึ่งวัน = 0.5 · ระบบคิดเป็นชั่วโมงให้)', l.days === '' || l.days == null ? '' : l.days, 'number', ' step="0.5" min="0"') + F('lMin', 'มาสาย (นาที)', l.minutes, 'number', ' min="0"')
         + S('lSt', 'สถานะ', [['อนุมัติ', 'อนุมัติ'], ['รออนุมัติ', 'รออนุมัติ'], ['ไม่อนุมัติ', 'ไม่อนุมัติ']], l.status) + F('lAppr', 'ผู้อนุมัติ', l.approver) + S('lSup', 'หัวหน้างาน', supOpts, l.supervisor || '')
-        + T('lReason', 'เหตุผล', l.reason) + '</div><div id="lQuota" class="hqinfo"></div>'
+        + T('lReason', 'เหตุผล', l.reason) + '</div>' + (l.filledBy ? '<p class="hqinfo">ผู้กรอกใบลา (จาก QR): <b>' + esc(l.filledBy) + '</b></p>' : '') + '<div id="lQuota" class="hqinfo"></div>'
         + '<div class="psec"><div class="psec-h"><b>ใบรับรองแพทย์ / เอกสารประกอบ</b></div><div class="hfiles" id="lFiles"></div><div class="pfoot">' + attachBtns('leave') + '</div></div>',
       foot: isNew ? '' : '<div class="pfoot"><button type="button" class="link-btn danger" id="lDel">' + icon('trash', 16) + ' ลบรายการนี้</button></div>',
       ok: 'บันทึก',
@@ -927,13 +930,13 @@
     var tr = H.data.trainings.filter(function (t) { return t.attendees.indexOf(e.id) >= 0; }).sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
     var ds = H.data.disc.filter(function (x) { return x.empId === e.id; });
     var body = '<div class="hpr"><div>' + photo(e, 'hprimg') + '</div><table class="hkt">' + r('ชื่อ-นามสกุล', e.fullName) + r('ชื่อเล่น', e.nickname) + r('รหัสพนักงาน', e.code) + r('ตำแหน่ง', e.position) + r('แผนก / อาคาร', [e.group, e.building].filter(String).join(' / '))
-      + r('ประเภทการจ้าง', e.empType) + r('วันเริ่มงาน', e.startDate ? thDate(e.startDate) + ' (อายุงาน ' + yrs(e.startDate) + ')' : '') + r('สถานะ', e.status + (e.endDate ? ' ' + thDate(e.endDate) : '')) + '</table></div>'
+      + r('ประเภทการจ้าง', e.empType) + r('วันเริ่มงาน', e.startDate ? thDate(e.startDate) + ' (อายุงาน ' + yrs(e.startDate) + ')' : '') + r('สิทธิ์ลาพักร้อน', vacDaysOf(e) != null ? vacDaysOf(e) + ' วัน/ปี = ' + fh(vacDaysOf(e) * stdH()) : 'ค่าเริ่มต้น' + (H.data.settings.quotaDays && H.data.settings.quotaDays.vacation != null ? ' ' + H.data.settings.quotaDays.vacation + ' วัน/ปี' : '')) + r('สถานะ', e.status + (e.endDate ? ' ' + thDate(e.endDate) : '')) + '</table></div>'
       + '<h5 class="hh">ข้อมูลส่วนตัว</h5><table class="hkt full">' + r('เพศ', e.gender) + r('สัญชาติ / ศาสนา', [e.nationality, e.religion].filter(String).join(' / ')) + r('วันเกิด', e.birthDate ? thDate(e.birthDate) + ' (อายุ ' + yrs(e.birthDate) + ')' : '')
       + r('เลขบัตรประชาชน / พาสปอร์ต', e.idNo) + r('เบอร์โทร', e.phone) + r('วุฒิการศึกษา', e.education) + r('ที่อยู่ตามทะเบียนบ้าน', e.addrReg) + r('ที่อยู่ปัจจุบัน', e.addrNow)
       + r('ผู้ติดต่อฉุกเฉิน', [e.emergencyName, e.emergencyPhone].filter(String).join(' · ')) + '</table>'
       + '<h5 class="hh">เอกสาร</h5><table class="hrt sm"><thead><tr><th>ประเภท</th><th>เลขที่</th><th>วันที่ออก</th><th>วันหมดอายุ</th></tr></thead><tbody>' + (dc.map(function (d) { return '<tr><td>' + esc(DT[d.type] || d.type) + '</td><td>' + esc(d.number) + '</td><td>' + dd(d.issueDate) + '</td><td>' + dd(d.expiryDate) + '</td></tr>'; }).join('') || '<tr><td colspan="4" class="c muted">-</td></tr>') + '</tbody></table>'
       + '<h5 class="hh">สรุปการลา ปี ' + (+y + 543) + ' (ชั่วโมง · มาสาย = ครั้ง)</h5><table class="hrt sm"><thead><tr>' + ['sick', 'personal', 'vacation', 'maternity', 'paternity', 'ordain', 'absent', 'late'].map(function (k) { return '<th>' + LT[k] + '</th>'; }).join('') + '</tr></thead><tbody><tr>'
-      + ['sick', 'personal', 'vacation', 'maternity', 'paternity', 'ordain', 'absent', 'late'].map(function (k) { var qq = (H.data.settings.quotaMap || {})[k]; return '<td class="c">' + r2(used[k] || 0) + (qq ? ' / ' + r2(qq) : '') + '</td>'; }).join('') + '</tr></tbody></table>'
+      + ['sick', 'personal', 'vacation', 'maternity', 'paternity', 'ordain', 'absent', 'late'].map(function (k) { var qq = quotaOf(e, k, y); return '<td class="c">' + r2(used[k] || 0) + (qq ? ' / ' + r2(qq) : '') + '</td>'; }).join('') + '</tr></tbody></table>'
       + '<h5 class="hh">ประวัติการอบรม</h5><table class="hrt sm"><thead><tr><th>วันที่</th><th>หลักสูตร</th><th>ชั่วโมง</th><th>วิทยากร</th></tr></thead><tbody>' + (tr.map(function (t) { return '<tr><td>' + dd(t.date) + '</td><td>' + esc(t.title) + '</td><td class="c">' + t.hours + '</td><td>' + esc(t.trainer) + '</td></tr>'; }).join('') || '<tr><td colspan="4" class="c muted">-</td></tr>') + '</tbody></table>'
       + (ds.length ? '<h5 class="hh">วินัย / ใบเตือน</h5><table class="hrt sm"><thead><tr><th>วันที่</th><th>ระดับ</th><th>เหตุผล</th></tr></thead><tbody>' + ds.map(function (x) { return '<tr><td>' + dd(x.date) + '</td><td>' + esc(DL[x.level]) + '</td><td>' + esc(x.reason) + '</td></tr>'; }).join('') + '</tbody></table>' : '');
     return wrap('ประวัติพนักงาน', printedAt(), H.data.settings.fmProfile, body);
@@ -949,7 +952,7 @@
     });
     var rows = H.data.emps.filter(function (e) { return sum[e.id] || (q.rAll && e.status !== 'ลาออก'); });   // ค่าเริ่มต้น: เฉพาะคนที่มีการลา
     var oneYear = from.slice(0, 4) === to.slice(0, 4) && loadedYear(from.slice(0, 4));   // คงเหลือ = สิทธิ์ทั้งปีของปีนั้น
-    var body = '<table class="hrt"><thead><tr><th>ลำดับ</th><th>ชื่อ-นามสกุล</th><th>ตำแหน่ง</th><th>แผนก</th>' + ks.map(function (k) { return '<th class="c">' + LT[k] + (quotas[k] && k !== 'late' && k !== 'absent' ? '<br><small>สิทธิ์ ' + r2(quotas[k]) + ' ชม.</small>' : k === 'late' ? '<br><small>ครั้ง</small>' : '<br><small>ชม.</small>') + '</th>'; }).join('') + '<th class="c">รวมชั่วโมงลา</th></tr></thead><tbody>'
+    var body = '<table class="hrt"><thead><tr><th>ลำดับ</th><th>ชื่อ-นามสกุล</th><th>ตำแหน่ง</th><th>แผนก</th>' + ks.map(function (k) { return '<th class="c">' + LT[k] + (k === 'vacation' ? '<br><small>สิทธิ์รายคน (ชม.)</small>' : quotas[k] && k !== 'late' && k !== 'absent' ? '<br><small>สิทธิ์ ' + r2(quotas[k]) + ' ชม.</small>' : k === 'late' ? '<br><small>ครั้ง</small>' : '<br><small>ชม.</small>') + '</th>'; }).join('') + '<th class="c">รวมชั่วโมงลา</th></tr></thead><tbody>'
       + rows.map(function (e, i) {
         var s = sum[e.id] || {}, tot = ks.filter(function (k) { return k !== 'late'; }).reduce(function (a, k) { return a + (s[k] || 0); }, 0);
         return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</td><td>' + esc(e.position) + '</td><td>' + esc(e.group) + '</td>'
@@ -993,7 +996,9 @@
       + F('sHS', 'เสาร์ (ชม. / วัน · 0 = ไม่ทำงาน)', s.hoursSat, 'number', ' min="0" max="24" step="0.5"') + '</div>'
       + '<h4>สิทธิ์ลาต่อปี (ชั่วโมง)</h4>'
       + ((s.quotaFromDays || []).length ? '<p class="hqinfo warn" style="margin:0 0 8px">' + s.quotaFromDays.map(function (k) { return LT[k]; }).join(', ') + ' ยังเป็นค่าที่แปลงจากวันเดิม × ' + stdH() + ' ชม. — ตรวจตัวเลขแล้วกด "บันทึกการตั้งค่า" เพื่อยืนยัน</p>' : '')
-      + '<div class="pform">' + ['sick', 'personal', 'vacation', 'ordain'].map(function (k) { return F('q_' + k, LT[k] + ' (ชม.)' + (s.quotaDays && s.quotaDays[k] != null ? ' · เดิม ' + s.quotaDays[k] + ' วัน' : ''), qm[k] == null ? '' : r2(qm[k]), 'number', ' min="0" step="0.5"'); }).join('') + '</div>'
+      + '<div class="pform">' + ['sick', 'personal', 'ordain'].map(function (k) { return F('q_' + k, LT[k] + ' (ชม.)' + (s.quotaDays && s.quotaDays[k] != null ? ' · เดิม ' + s.quotaDays[k] + ' วัน' : ''), qm[k] == null ? '' : r2(qm[k]), 'number', ' min="0" step="0.5"'); }).join('') + '</div>'
+      + '<h4>ลาพักร้อน (แต่ละคนไม่เท่ากัน)</h4><p class="hqinfo" style="margin:0 0 8px">ใส่จำนวนวันพักร้อนของแต่ละคนในทะเบียนพนักงาน (แก้ไขข้อมูล → "วันลาพักร้อน (วัน/ปี)") ระบบคิดเป็นชั่วโมง = วัน × ' + stdH() + ' ชม. · ช่องนี้ใช้กับคนที่ยังไม่ได้ใส่ (เว้นว่าง = ไม่จำกัด)</p><div class="pform">'
+      + F('qVacDef', 'ค่าเริ่มต้น (วัน/ปี)', s.quotaDays && s.quotaDays.vacation != null && s.quotaDays.vacation !== '' ? s.quotaDays.vacation : '', 'number', ' min="0" max="60" step="0.5"') + '</div>'
       + '<h4>ลาคลอด / ลาดูแลบุตร (ชั่วโมง · นับทุกวันรวมวันหยุด 1 วัน = ' + stdH() + ' ชม.)</h4><div class="pform">'
       + F('q_maternity', 'ลาคลอด (ชม.) · ' + r2((qm.maternity || 0) / stdH()) + ' วัน', qm.maternity == null ? '' : r2(qm.maternity), 'number', ' min="0" step="0.5"')
       + F('sMatPaidH', 'ลาคลอด จ่ายค่าจ้าง (ชม.) · ' + r2((s.maternityPaidH || 0) / stdH()) + ' วัน', s.maternityPaidH == null ? '' : r2(s.maternityPaidH), 'number', ' min="0" step="0.5"')
@@ -1006,9 +1011,10 @@
       + '<div class="panel" id="formBox" style="margin-top:14px"><span class="spinner dark"></span> กำลังโหลดลิงก์แบบฟอร์มขอลา…</div>';
     formSettings();
     $('sSave').addEventListener('click', function () {
-      var qq = {}; ['sick', 'personal', 'vacation', 'ordain', 'maternity', 'paternity'].forEach(function (k) { if (v('q_' + k) !== '') qq[k] = Number(v('q_' + k)); });
+      var qq = {}; ['sick', 'personal', 'ordain', 'maternity', 'paternity'].forEach(function (k) { if (v('q_' + k) !== '') qq[k] = Number(v('q_' + k)); });
+      var qd = Object.assign({}, s.quotaDays || {}); if (v('qVacDef') === '') delete qd.vacation; else qd.vacation = Number(v('qVacDef'));
       var b = $('sSave'); b.disabled = true;
-      call('hrSaveSettings', state.token, { quotaHours: JSON.stringify(qq), maternityPaidHours: v('sMatPaidH'), hoursMonThu: v('sHMT'), hoursFri: v('sHF'), hoursSat: v('sHS'), workDays: Number(v('sHS')) > 0 ? 'จ-ส' : 'จ-ศ', groups: v('sGroups'), buildings: v('sBld'), alertDays: v('sAlert'), fmRegister: v('sFmR'), fmProfile: v('sFmP'), fmLeave: v('sFmL') })
+      call('hrSaveSettings', state.token, { quotaHours: JSON.stringify(qq), quotas: JSON.stringify(qd), maternityPaidHours: v('sMatPaidH'), hoursMonThu: v('sHMT'), hoursFri: v('sHF'), hoursSat: v('sHS'), workDays: Number(v('sHS')) > 0 ? 'จ-ส' : 'จ-ศ', groups: v('sGroups'), buildings: v('sBld'), alertDays: v('sAlert'), fmRegister: v('sFmR'), fmProfile: v('sFmP'), fmLeave: v('sFmL') })
         .then(function (r) { b.disabled = false; if (!r.ok) return toast(r.error); H.data.settings = r.settings; toast('บันทึกการตั้งค่าแล้ว'); }).catch(onServerError);
     });
   }

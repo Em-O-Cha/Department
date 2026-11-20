@@ -13,14 +13,15 @@ var HR_TABLES_ = {
     ['addrReg', 'ที่อยู่ตามทะเบียนบ้าน'], ['addrNow', 'ที่อยู่ปัจจุบัน'], ['building', 'อาคาร'], ['position', 'ตำแหน่ง'], ['group', 'แผนก'],
     ['empType', 'ประเภทการจ้าง'], ['startDate', 'วันเริ่มงาน'], ['status', 'สถานะ'], ['endDate', 'วันที่ออก'], ['endReason', 'เหตุผลที่ออก'],
     ['emergencyName', 'ผู้ติดต่อฉุกเฉิน'], ['emergencyPhone', 'เบอร์ผู้ติดต่อฉุกเฉิน'], ['education', 'วุฒิการศึกษา'], ['note', 'หมายเหตุ'],
-    ['photoThumb', 'รูปย่อ'], ['photo', 'รูปถ่าย (ไฟล์)'], ['files', 'เอกสารแนบ'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
+    ['photoThumb', 'รูปย่อ'], ['photo', 'รูปถ่าย (ไฟล์)'], ['files', 'เอกสารแนบ'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด'],
+    ['vacDays', 'วันลาพักร้อน (วัน/ปี)']] },   // พักร้อนรายคน (ผู้ใช้ขอ 20/11/69): ชม. = วัน × ชม. จ.–พฤ. · ว่าง = ใช้ค่าเริ่มต้นในหน้าตั้งค่า
   hr_docs: { tab: 'เอกสารพนักงาน', cols: [
     ['id', 'รหัส'], ['empId', 'รหัสพนักงานในระบบ'], ['type', 'ประเภทเอกสาร'], ['number', 'เลขที่'], ['issueDate', 'วันที่ออก'],
     ['expiryDate', 'วันหมดอายุ'], ['note', 'หมายเหตุ'], ['files', 'ไฟล์แนบ'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
   hr_leaves: { tab: 'การลา', cols: [
     ['id', 'รหัส'], ['empId', 'รหัสพนักงานในระบบ'], ['type', 'ประเภท'], ['dateFrom', 'ตั้งแต่วันที่'], ['dateTo', 'ถึงวันที่'],
     ['days', 'จำนวนวัน'], ['minutes', 'นาที (มาสาย)'], ['reason', 'เหตุผล'], ['status', 'สถานะ'], ['approver', 'ผู้อนุมัติ'],
-    ['files', 'ไฟล์แนบ'], ['createdAt', 'บันทึกเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด'], ['source', 'ช่องทาง'], ['decidedAt', 'วันที่อนุมัติ'], ['supervisor', 'หัวหน้างาน']] },
+    ['files', 'ไฟล์แนบ'], ['createdAt', 'บันทึกเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด'], ['source', 'ช่องทาง'], ['decidedAt', 'วันที่อนุมัติ'], ['supervisor', 'หัวหน้างาน'], ['filledBy', 'ผู้กรอกใบลา']] },
   hr_trainings: { tab: 'การอบรม', cols: [
     ['id', 'รหัส'], ['title', 'หลักสูตร'], ['date', 'วันที่อบรม'], ['hours', 'จำนวนชั่วโมง'], ['kind', 'ประเภท'], ['trainer', 'วิทยากร'],
     ['place', 'สถานที่'], ['attendees', 'ผู้เข้าอบรม'], ['note', 'หมายเหตุ'], ['files', 'ไฟล์แนบ'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
@@ -86,6 +87,9 @@ function hrSettings_(ss) {
   s.quotaDays = q;
   Object.keys(HR_LEAVE_TYPES_).forEach(function (k) {
     // ลาคลอด / ดูแลบุตร: ตั้งเป็นชั่วโมงได้ (ผู้ใช้ขอ 20/11/69) · ยังไม่ตั้ง = วัน × ชม. มาตรฐาน (1 วันปฏิทิน = ชม. จ.–พฤ.)
+    // ลาพักร้อน: สิทธิ์ของแต่ละคนไม่เท่ากัน (ผู้ใช้ขอ 20/11/69) → ใส่จำนวนวันในทะเบียนพนักงาน (vacDays) · ไม่ตั้งเป็นชั่วโมงในหน้าตั้งค่าแล้ว
+    // quotaMap.vacation = ค่าเริ่มต้น (วัน) × ชม. มาตรฐาน ใช้กับคนที่ยังไม่ได้ใส่วันพักร้อน (hrQuota_ / quotaOf ในหน้าเว็บ)
+    if (k === 'vacation') { if (q.vacation != null && q.vacation !== '') qm.vacation = Math.round((Number(q.vacation) || 0) * std * 100) / 100; return; }
     if (HR_CAL_TYPES_[k]) { if (qh[k] !== undefined && qh[k] !== '' && qh[k] !== null) qm[k] = Math.max(0, Number(qh[k]) || 0); else if (q[k] != null && q[k] !== '') qm[k] = Math.round((Number(q[k]) || 0) * std * 100) / 100; return; }
     if (qh[k] !== undefined && qh[k] !== '' && qh[k] !== null) qm[k] = Math.max(0, Number(qh[k]) || 0);
     else if (q[k] !== undefined && q[k] !== '' && q[k] !== null) { qm[k] = Math.round((Number(q[k]) || 0) * std * 100) / 100; s.quotaFromDays.push(k); }
@@ -215,6 +219,7 @@ function hrSaveEmp(token, e) {
     var before = row ? JSON.stringify([row.fullName, row.position, row.group, row.status, row.endDate]) : '';
     Object.keys(HR_EMP_FIELDS_).forEach(function (k) { if (e[k] !== undefined) rec[k] = hrText_(e[k], HR_EMP_FIELDS_[k]); });
     ['birthDate', 'startDate', 'endDate'].forEach(function (k) { if (e[k] !== undefined) rec[k] = purDate_(e[k]); });
+    if (e.vacDays !== undefined) { var vd = String(e.vacDays).trim() === '' ? NaN : Number(e.vacDays); rec.vacDays = isFinite(vd) ? Math.max(0, Math.min(60, Math.round(vd * 2) / 2)) : ''; }
     rec.status = HR_STATUS_[e.status] ? e.status : (rec.status || 'ทำงาน');
     if (rec.status === 'ลาออก' && !rec.endDate) rec.endDate = purToday_();
     if (rec.status !== 'ลาออก') { rec.endDate = ''; }
@@ -402,7 +407,7 @@ function hrRemoveFile(token, ownerType, ownerId, fileId) {
 function hrSaveSettings(token, s) {
   var dept = requireHr_(token);
   s = s || {};
-  if (s.quotaHours !== undefined && s.quotaHours !== '') { try { var qh = JSON.parse(s.quotaHours); Object.keys(qh).forEach(function (k) { if (!HR_LEAVE_TYPES_[k] || qh[k] === '' || qh[k] === null) delete qh[k]; else qh[k] = Math.max(0, Math.round((Number(qh[k]) || 0) * 100) / 100); }); s.quotaHours = JSON.stringify(qh); } catch (e) { return { ok: false, error: 'สิทธิ์ลา (ชั่วโมง) ไม่ถูกต้อง' }; } }
+  if (s.quotaHours !== undefined && s.quotaHours !== '') { try { var qh = JSON.parse(s.quotaHours); Object.keys(qh).forEach(function (k) { if (!HR_LEAVE_TYPES_[k] || k === 'vacation' || qh[k] === '' || qh[k] === null) delete qh[k]; else qh[k] = Math.max(0, Math.round((Number(qh[k]) || 0) * 100) / 100); }); s.quotaHours = JSON.stringify(qh); } catch (e) { return { ok: false, error: 'สิทธิ์ลา (ชั่วโมง) ไม่ถูกต้อง' }; } }
   if (s.maternityPaidHours !== undefined && s.maternityPaidHours !== '') { var mp = Number(s.maternityPaidHours); s.maternityPaidHours = isFinite(mp) && mp >= 0 ? String(mp) : ''; }
   ['hoursMonThu', 'hoursFri', 'hoursSat'].forEach(function (k) { if (s[k] !== undefined) { var n = Number(s[k]); s[k] = String(isFinite(n) && n >= 0 && n <= 24 ? n : HR_SETTINGS_DEFAULT_[k]); } });
   if (s.quotas !== undefined) { try { var q = JSON.parse(s.quotas); Object.keys(q).forEach(function (k) { if (!HR_LEAVE_TYPES_[k]) delete q[k]; else q[k] = Math.max(0, Number(q[k]) || 0); }); s.quotas = JSON.stringify(q); } catch (e) { return { ok: false, error: 'โควตาวันลาไม่ถูกต้อง' }; } }

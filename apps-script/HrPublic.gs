@@ -155,11 +155,16 @@ function hrFormPhotos(key) {   // รูปย่อทุกคน (พนั�
   return { ok: true, photos: out };
 }
 function hrQuota_(st, e, k, year, today) {
-  var q = (st.quotaMap || {})[k];
+  var q = k === 'vacation' ? hrVacQuota_(st, e) : (st.quotaMap || {})[k];
   if (q == null || q === '') return null;
   q = Number(q) || 0;
   if (k === 'vacation' && e && e.startDate) { var ref = year + '-12-31' < today ? year + '-12-31' : today; if (hrDays_(e.startDate, ref) < 365) return 0; }
   return q;
+}
+// ลาพักร้อนรายคน: วัน (ทะเบียน) × ชม. มาตรฐาน · ไม่ได้ใส่ = ค่าเริ่มต้น
+function hrVacQuota_(st, e) {
+  var d = e && e.vacDays !== '' && e.vacDays != null && isFinite(Number(e.vacDays)) ? Number(e.vacDays) : null;
+  return d == null ? (st.quotaMap || {}).vacation : Math.round(d * (st.stdHours || 10) * 100) / 100;
 }
 function hrBalance_(ss, e, year) {
   var st = hrSettings_(ss), today = purToday_(), used = {}, pend = {};
@@ -179,7 +184,7 @@ function hrFormBalance(key, empId) {
   if (!e || !hrActive_(e)) return { ok: false, error: 'ไม่พบชื่อพนักงาน' };
   var year = purToday_().slice(0, 4);
   var mine = purRead_(ss, 'hr_leaves').filter(function (l) { return l.empId === e.id; }).sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).slice(0, 8)
-    .map(function (l) { return { type: l.type, dateFrom: l.dateFrom, dateTo: l.dateTo, days: l.days, hours: hrLeaveHours_(l, st), minutes: l.type === 'late' ? '' : l.minutes, status: l.status, reason: l.reason, supervisor: l.supervisor || '' }; });
+    .map(function (l) { return { type: l.type, dateFrom: l.dateFrom, dateTo: l.dateTo, days: l.days, hours: hrLeaveHours_(l, st), minutes: l.type === 'late' ? '' : l.minutes, status: l.status, reason: l.reason, supervisor: l.supervisor || '', filledBy: l.filledBy || '' }; });
   return { ok: true, year: year, balance: hrBalance_(ss, e, year), recent: mine, emp: hrFormEmp_(e) };
 }
 // r = { empId, type, dateFrom, dateTo, half (true = ครึ่งวัน), reason }
@@ -200,9 +205,11 @@ function hrFormSubmit(key, r) {
     if (!e || !hrActive_(e)) return { ok: false, error: 'ไม่พบชื่อพนักงาน' };
     var all = purRead_(ss, 'hr_leaves');
     if (all.some(function (l) { return l.empId === e.id && l.status !== 'ไม่อนุมัติ' && l.dateFrom <= t && (l.dateTo || l.dateFrom) >= f; })) return { ok: false, error: 'มีการลาในวันที่นี้อยู่แล้ว (รออนุมัติหรืออนุมัติแล้ว)' };
-    // หัวหน้างาน (บังคับเลือก — ผู้ใช้ขอ 20/11/69): ต้องเป็นคนที่ตำแหน่งมีคำว่า "หัวหน้า"
-    var sup = hrSupervisors_(ss).filter(function (x) { return x.id === r.supervisorId; })[0];
-    if (!sup) return { ok: false, error: 'เลือกหัวหน้างาน' };
+    // ใครกรอกใบลานี้ (ผู้ใช้ขอ 20/11/69): กรอกเอง = ชื่อพนักงานคนนั้น · หัวหน้ากรอกให้ = เลือกหัวหน้า (ตำแหน่งมีคำว่า "หัวหน้า") เหมือนเดิม
+    var by = r.filledBy === 'self' ? 'self' : 'sup', sup = null;
+    if (by === 'sup') { sup = hrSupervisors_(ss).filter(function (x) { return x.id === r.supervisorId; })[0]; if (!sup) return { ok: false, error: 'เลือกหัวหน้าที่กรอกใบลาให้' }; }
+    var supTxt = sup ? hrText_(sup.nick ? sup.nick + ' (' + sup.name + ')' : sup.name, 80) : '';
+    var byTxt = by === 'self' ? 'กรอกเอง · ' + hrText_(e.nickname ? e.nickname + ' (' + e.fullName + ')' : e.fullName, 80) : 'หัวหน้ากรอกให้ · ' + supTxt;
     // ลาคลอดสำหรับผู้หญิง · ลาดูแลบุตรสำหรับผู้ชาย (ถ้าทะเบียนระบุเพศไว้)
     if (r.type === 'maternity' && e.gender === 'ชาย') return { ok: false, error: 'ลาคลอดสำหรับพนักงานหญิง' };
     if (r.type === 'paternity' && e.gender === 'หญิง') return { ok: false, error: 'ลาดูแลบุตรสำหรับพนักงานชาย' };
@@ -224,7 +231,7 @@ function hrFormSubmit(key, r) {
     }
     var now = purNow_(), rec = { id: purId_('LV'), empId: e.id, type: r.type, dateFrom: f, dateTo: t, days: days, minutes: mins, reason: hrText_((hrsTxt ? hrsTxt + (r.reason ? ' · ' : '') : '') + (r.reason || ''), 300),
       status: 'รออนุมัติ', approver: '', files: '[]', createdAt: now, updatedAt: now, source: 'แบบฟอร์มพนักงาน', decidedAt: '',
-      supervisor: hrText_(sup.nick ? sup.nick + ' (' + sup.name + ')' : sup.name, 80) };
+      supervisor: supTxt, filledBy: byTxt };
     purWrite_(ss, 'hr_leaves', rec);
     rec.hours = hrLeaveHours_(rec, st); rec.std = st.stdHours;
     purLogWrite_(ss, 'คำขอลาจากแบบฟอร์ม', 'hr_leaves', rec.id, e.fullName + ' · ' + HR_LEAVE_TYPES_[r.type] + ' ' + f + (t !== f ? '–' + t : '') + ' (' + days + ' วัน)');
@@ -282,7 +289,7 @@ function hrLeaveFlex_(l, e, bal, decided) {
   var body = [T((e.fullName || '') + (e.nickname ? ' (' + e.nickname + ')' : ''), { size: 'lg', weight: 'bold' }),
     T([e.position, e.group, e.building].filter(String).join(' · ') || ' ', { size: 'xs', color: '#64748b' }), { type: 'separator', margin: 'md' },
     { type: 'box', layout: 'vertical', margin: 'md', spacing: 'sm', contents: [row('ประเภท', HR_LEAVE_TYPES_[l.type] || l.type), row('วันที่', dates), row('จำนวน', l.hours != null && l.hours !== '' ? hrFmtH_(l.hours, { stdHours: l.std || 10 }) : l.type !== 'late' && Number(l.minutes) ? hrHoursTxt_(Number(l.minutes)) + ' (' + l.days + ' วัน)' : l.days + ' วัน')]
-      .concat(l.supervisor ? [row('หัวหน้างาน', l.supervisor)] : [])
+      .concat(l.filledBy ? [row('ผู้กรอกใบลา', l.filledBy)] : l.supervisor ? [row('หัวหน้างาน', l.supervisor)] : [])
       .concat(l.type === 'maternity' && bal && bal.paidH ? (function () {   // จ่ายค่าจ้างตามชั่วโมงที่ตั้งไว้ (ค่าเริ่มต้น 90 วัน × 10 ชม.)
         var o = { stdHours: bal.std || 10 }, h = Number(l.hours) || 0, paid = Math.max(0, Math.min(h, bal.paidH - (bal.used || 0))), un = Math.round((h - paid) * 100) / 100;
         return [row('ค่าจ้าง', 'จ่าย ' + hrFmtH_(paid, o) + (un > 0 ? ' · ไม่รับค่าจ้าง ' + hrFmtH_(un, o) : ''), un > 0 ? '#c2410c' : '#15803d')]; })() : [])
