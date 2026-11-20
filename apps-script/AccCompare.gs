@@ -31,10 +31,10 @@ function accSources_(dept) {
     var by = {};
     exOrders_(ss).filter(function (o) { return o.status !== 'cancel'; }).forEach(function (o) {
       var c = String(o.customer || 'ไม่ระบุลูกค้า').trim(), g = by[c] = by[c] || { rows: [], cur: o.currency || 'USD' };
-      (o.items || []).forEach(function (it) { g.rows.push({ date: String(o.issueDate || '').slice(0, 10), name: it.name || it.code || '-', color: '', qty: Number(it.qty) || 0, amt: Number(it.amount) || 0, doc: String(o.invNo || '') }); });
+      (o.items || []).forEach(function (it) { g.rows.push({ date: String(o.issueDate || '').slice(0, 10), ddate: String(o.shipDate || o.issueDate || '').slice(0, 10), name: it.name || it.code || '-', color: '', qty: Number(it.qty) || 0, amt: Number(it.amount) || 0, doc: String(o.invNo || '') }); });
     });
     Object.keys(by).sort().forEach(function (c, i) {
-      out.push({ meta: { key: 'ex' + i, name: c, unit: '', currency: by[c].cur, basis: 'ตามวันที่ Invoice', note: 'ออเดอร์ต่างประเทศ · ไม่นับที่ยกเลิก', export: true }, rows: by[c].rows, capToday: false });
+      out.push({ meta: { key: 'ex' + i, name: c, unit: '', currency: by[c].cur, basis: 'ตามวันที่ Invoice', monthBasis: 'ตามกำหนดวันส่ง (ETD) · ที่ยังไม่กำหนด ETD นับตามวันที่ Invoice', monthKey: 'ddate', note: 'ออเดอร์ต่างประเทศ · ไม่นับที่ยกเลิก', export: true }, rows: by[c].rows, capToday: false });
     });
   } catch (e) {}
   return out;
@@ -48,7 +48,7 @@ function accCompareData_(dept) {
 }
 // รายงานสรุปรายเดือน ทุกบริษัท (ผู้ใช้ขอ 19/11/69): ทุกเดือนที่มีข้อมูล · ต่อบริษัท: จำนวน / ยอดเงิน / จำนวนเอกสาร ต่อเดือน + แยกสินค้า
 // CP Ram นับตามวันส่ง (รวมวันส่งที่กำหนดไว้ในอนาคต → หน้าเว็บแสดงว่าเป็นยอดตามกำหนดส่ง)
-// CP ALL ในรายงานนี้นับตามกำหนดวันส่ง (ผู้ใช้ขอ 20/11/69) — หน้าเปรียบเทียบยังนับตามวันที่สั่ง
+// CP ALL / ต่างประเทศ (ETD) ในรายงานนี้นับตามกำหนดวันส่ง (ผู้ใช้ขอ 20/11/69) — หน้าเปรียบเทียบยังนับตามวันที่สั่ง / วันที่ Invoice
 function accMonthly(token) { return accMonthlyData_(requireAcc_(token)); }
 function accMonthlyData_(dept) {
   var today = purToday_();
