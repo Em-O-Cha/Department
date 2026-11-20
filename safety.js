@@ -954,10 +954,16 @@
         : '<div class="sdlh"><span class="muted">ประจำปี ' + q.dYear + ' · ' + fs.length + ' ไฟล์</span><button class="btn btn-sm btn-line" data-dupto="' + esc(l.key) + '">' + icon('up', 15) + ' อัปโหลดเข้าหมวดนี้</button></div>')
         + (fs.length ? fs.map(row).join('') : '<p class="muted sdnone">ยังไม่มีไฟล์</p>') + '</div>';
     };
-    var body = tree.map(function (m) {
+    // แสดงเฉพาะหมวดหลักก่อน แตะเพื่อเปิดดูหมวดย่อย / ไฟล์ (ผู้ใช้ขอ 20/11/69) · ตอนค้นหาเปิดหมวดที่เจอให้เอง
+    q.dOpen = q.dOpen || {};
+    var body = tree.map(function (m, mi) {
       var inner = m.leaves.map(function (l) { return leafBox(l, m.subs.length > 0); }).join('');
       if (term && !inner) return '';
-      return '<div class="panel pbox sdmain"><h4>' + icon('folder', 18) + ' ' + esc(m.name) + '</h4>' + inner + '</div>';
+      var keys = {}; m.leaves.forEach(function (l) { keys[l.key] = 1; });
+      var n = inYear.filter(function (d) { return keys[d.category]; }).length, open = !!term || !!q.dOpen[m.name];
+      return '<div class="panel pbox sdmain' + (open ? ' open' : '') + '"><button class="sdmh" data-dopen="' + mi + '" aria-expanded="' + open + '">' + icon('folder', 20) + '<b>' + esc(m.name) + '</b>'
+        + '<span class="sdcnt">' + (m.subs.length ? m.subs.length + ' หมวดย่อย · ' : '') + n + ' ไฟล์</span><i class="sdchev">' + (open ? '▾' : '▸') + '</i></button>'
+        + (open ? '<div class="sdbody">' + inner + '</div>' : '') + '</div>';
     }).join('');
     var others = shown.filter(function (d) { return !known[d.category]; });
     if (others.length) body += '<div class="panel pbox sdmain"><h4>' + icon('folder', 18) + ' อื่น ๆ / ยังไม่ได้จัดหมวด</h4>' + others.map(function (d) { return row(d) + (d.category ? '' : ''); }).join('') + '<p class="muted">กดปุ่มแก้ไข (ดินสอ) เพื่อย้ายเข้าหมวด</p></div>';
@@ -972,6 +978,7 @@
       + '<div class="pbar noprint"><input id="dTerm" type="search" placeholder="ค้นหาชื่อเอกสาร / หมวด" value="' + esc(q.dTerm || '') + '" aria-label="ค้นหาเอกสาร"><span class="muted">ปี ' + q.dYear + ' · ' + inYear.length + ' ไฟล์</span><button class="btn btn-sm btn-line" id="dCats">' + icon('pen', 15) + ' แก้หมวด</button></div>'
       + (body || '<div class="panel sdempty">ไม่พบเอกสารที่ค้นหา</div>');
     on('[data-dy]', 'click', function (el) { q.dYear = +el.getAttribute('data-dy'); docsPage(); }, $('main'));
+    on('[data-dopen]', 'click', function (el) { var m = tree[+el.getAttribute('data-dopen')]; if (!m || term) return; q.dOpen[m.name] = !q.dOpen[m.name]; docsPage(); }, $('main'));
     on('[data-dupto]', 'click', function (el) { q.dCat = el.getAttribute('data-dupto'); $('dCat').value = q.dCat; $('dUpBox').scrollIntoView({ block: 'center' }); $('dFile').click(); }, $('main'));
     $('dAddYear').addEventListener('click', function () {
       openModal({ title: 'เพิ่มปี', icon: 'folder', color: state.dept.color, ok: 'เพิ่ม', body: F('dNewYear', 'ปี (พ.ศ.)', Math.max.apply(null, years) + 1, 'number', ' min="2500" max="2700"'),
@@ -1034,6 +1041,7 @@
     (function next() {
       if (i >= good.length) {
         toast(fails.length ? 'อัปโหลดได้ ' + done + ' ไฟล์ · ไม่สำเร็จ ' + fails.length + ' (' + fails.join(', ') + ')' : '✓ อัปโหลด ' + done + ' ไฟล์เข้า ปี ' + year + ' แล้ว');
+        q.dOpen = q.dOpen || {}; q.dOpen[String(cat).split(' › ')[0]] = true;   // เปิดหมวดที่เพิ่งอัปโหลดให้เห็นไฟล์
         if (state.page === 's_doc') docsPage();
         return;
       }
@@ -1195,7 +1203,7 @@
     '.smfoot{display:flex;flex-direction:column;gap:8px;margin-top:10px}.smallok{align-self:flex-start;min-height:40px;border:1.5px solid #bbf7d0;background:#f0fdf4;color:#15803d;border-radius:10px;padding:6px 14px;font:inherit;font-weight:700;cursor:pointer}.smnote span{display:block;font-size:13px;color:var(--muted);margin-bottom:3px}.smnote em,.smpt em{font-style:normal;font-weight:400;color:var(--muted);font-size:12.5px}.smnote input{width:100%;padding:10px;border:1.5px solid var(--line);border-radius:10px;font:inherit}',
     '.sdup .pform{margin:8px 0}.sddrop{display:flex;flex-direction:column;align-items:center;gap:4px;border:2px dashed var(--line);border-radius:14px;padding:22px 12px;text-align:center;cursor:pointer;background:#fafafa;color:var(--muted)}.sddrop b{color:var(--ink)}.sddrop.over,.sddrop:hover{border-color:var(--c, #ea580c);background:#fff7ed}',
     '.sdprog{margin-top:10px;font-weight:600}.sdoc{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}.sdoc:first-of-type{border-top:0}.sdic{flex:0 0 44px;height:44px;border-radius:10px;color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:15px}',
-    '#dTerm{flex:1 1 200px;min-width:0;padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;font:inherit}.sdmain h4{margin-bottom:6px}.sdleaf{border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin-top:8px}.sdlh{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}.sdlh .btn{width:auto;margin-left:auto}.sdnone{margin:6px 0 2px}.sdtx{flex:1;min-width:0}.sdtx b{display:block;overflow-wrap:anywhere}.sdtx small{display:block;color:var(--muted);overflow-wrap:anywhere}.sdbt{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.sdbt .btn{width:auto}.sddel{color:#dc2626}.sdempty{color:var(--muted)}',
+    '#dTerm{flex:1 1 200px;min-width:0;padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;font:inherit}.sdmh{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;padding:4px 2px;font:inherit;text-align:left;cursor:pointer;color:var(--ink)}.sdmh b{font-size:17px;flex:1}.sdcnt{color:var(--muted);font-size:13.5px;white-space:nowrap}.sdchev{font-style:normal;font-size:18px;color:var(--muted);width:20px;text-align:center}.sdmain:not(.open):hover{background:#fff7ed}.sdbody{margin-top:6px}.sdmain h4{margin-bottom:6px}.sdleaf{border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin-top:8px}.sdlh{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}.sdlh .btn{width:auto;margin-left:auto}.sdnone{margin:6px 0 2px}.sdtx{flex:1;min-width:0}.sdtx b{display:block;overflow-wrap:anywhere}.sdtx small{display:block;color:var(--muted);overflow-wrap:anywhere}.sdbt{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.sdbt .btn{width:auto}.sddel{color:#dc2626}.sdempty{color:var(--muted)}',
     '@media (max-width:640px){.sdoc{flex-wrap:wrap}.sdbt{flex-basis:100%;justify-content:flex-start;padding-left:56px}}',
     '.smprob{border:1.5px solid #fecaca;background:#fff7f7;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}.smpt{font-weight:700;color:#b91c1c;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline}',
     '.smdet span{display:block;font-size:13px;color:#7f1d1d;margin-bottom:3px}.smdet textarea{width:100%;padding:10px;border:1.5px solid #fca5a5;border-radius:10px;font:inherit;resize:vertical;background:#fff}.smdet.need span{font-weight:700;color:#b91c1c}.smdet.need textarea{border-color:#dc2626;box-shadow:0 0 0 3px #fee2e2}',
