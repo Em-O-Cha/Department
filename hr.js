@@ -27,7 +27,7 @@
     { id: 'h_set', label: 'ตั้งค่า', ic: 'gear' },
     { id: 'h_log', label: 'ประวัติการแก้ไข', ic: 'clock' }
   ];
-  var LT = { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', maternity: 'ลาคลอด', ordain: 'ลาบวช', military: 'ลารับราชการทหาร', training: 'ลาเพื่อฝึกอบรม', other: 'ลาอื่นๆ', absent: 'ขาดงาน', late: 'มาสาย' };
+  var LT = { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', maternity: 'ลาคลอด', paternity: 'ลาดูแลบุตร (ชาย)', ordain: 'ลาบวช', military: 'ลารับราชการทหาร', training: 'ลาเพื่อฝึกอบรม', other: 'ลาอื่นๆ', absent: 'ขาดงาน', late: 'มาสาย' };
   var DT = { idcard: 'บัตรประชาชน', passport: 'พาสปอร์ต', visa: 'วีซ่า', workpermit: 'ใบอนุญาตทำงาน (Work Permit)', pink: 'บัตรชมพู / บัตรประจำตัวคนต่างด้าว',
     health: 'ตรวจสุขภาพประจำปี / ใบรับรองแพทย์', food: 'อบรมสุขาภิบาลอาหาร', driving: 'ใบขับขี่', contract: 'สัญญาจ้าง', other: 'อื่นๆ' };
   var DL = { verbal: 'ตักเตือนด้วยวาจา', written1: 'ใบเตือนครั้งที่ 1', written2: 'ใบเตือนครั้งที่ 2', suspend: 'พักงาน', terminate: 'เลิกจ้าง' };
@@ -85,7 +85,13 @@
     return src ? '<img class="' + (cls || 'hph') + '" src="' + src + '" alt="">' : '<span class="' + (cls || 'hph') + ' none">' + esc(String((e && (e.nickname || e.fullName)) || '?').replace(/^(นาย|นางสาว|นาง|คุณ|MISS\.?|MR\.?|MRS\.?)\s*/i, '').slice(0, 1)) + '</span>';
   }
   // ---------- สิทธิ์วันลา (นับตามปีปฏิทิน ม.ค.–ธ.ค. · ขึ้นปีใหม่เริ่มนับใหม่เอง) ----------
-  var QK = ['sick', 'personal', 'vacation', 'maternity', 'ordain'];
+  var QK = ['sick', 'personal', 'vacation', 'maternity', 'paternity', 'ordain'];
+  var CAL = { maternity: 1, paternity: 1 };   // ลาคลอด / ลาดูแลบุตร (ชาย): นับทุกวันรวมวันหยุด (20/11/69)
+  // ลาคลอด: จ่ายค่าจ้าง n วันแรกของปี (ตั้งค่า maternityPaidDays = 90) — คืนข้อความ "จ่าย x วัน · ไม่รับค่าจ้าง y วัน"
+  function matPay(usedBeforeH, thisH) {
+    var paidMax = Number(H.data.settings.maternityPaidDays) || 90, before = usedBeforeH / stdH(), d = thisH / stdH(), paid = Math.max(0, Math.min(d, paidMax - before)), un = r2(d - paid);
+    return 'จ่ายค่าจ้าง ' + r2(paid) + ' วัน' + (un > 0 ? ' · ไม่รับค่าจ้าง ' + un + ' วัน' : '') + ' (สิทธิ์จ่าย ' + paidMax + ' วันแรก)';
+  }
   function quotaOf(e, k, year) {   // null = ไม่จำกัด/ไม่ได้ตั้ง · พักร้อน: ต้องทำงานครบ 1 ปี (ถ้ารู้วันเริ่มงาน)
     var q = (H.data.settings.quotaMap || {})[k];
     if (q == null || q === '' || QK.indexOf(k) < 0) return null;
@@ -498,7 +504,7 @@
       + '</div></div>'
       + '<div class="pgrid">'
       + '<div class="panel pbox"><h4>' + icon('cal', 18) + ' วันลาปี ' + (+y + 543) + ' <button class="btn btn-sm btn-line" style="margin-left:auto" data-new="leave">' + icon('plus', 14) + ' บันทึกการลา</button></h4><div class="hquota">'
-        + ['sick', 'personal', 'vacation', 'absent', 'late'].map(function (k) {
+        + ['sick', 'personal', 'vacation'].concat(['maternity', 'paternity'].filter(function (k) { return used[k] || (k === 'maternity' ? e.gender !== 'ชาย' : e.gender !== 'หญิง') && e.gender; })).concat(['absent', 'late']).map(function (k) {
           var u = used[k] || 0, qq = quotaOf(e, k, y);
           return '<div><span>' + LT[k] + '</span><b class="' + (qq != null && u > qq ? 'neg' : '') + '">' + r2(u) + (qq != null ? '/' + r2(qq) : '') + '</b><small>' + (k === 'late' ? 'ครั้ง' : 'ชม.') + '</small>'
             + (qq != null ? '<em class="' + (qq - u < 0 ? 'neg' : '') + '">' + (qq - u < 0 ? 'เกิน ' + fh(u - qq) : 'เหลือ ' + fh(qq - u)) + '</em>' : '') + (k === 'vacation' && qq === 0 && e.startDate ? '<em>ยังไม่ครบ 1 ปี</em>' : '') + '</div>';
@@ -644,6 +650,7 @@
     var entryH = function () {
       var k = v('lType'); if (k === 'late') return 1;
       var f = v('lFrom'), to = v('lTo') || f, ri = rangeInfo(f, to), d = Number(v('lDays'));
+      if (CAL[k]) { var cal = f && to >= f ? days(f, to) + 1 : 0; return r2((v('lDays') === '' || isNaN(d) || d >= cal ? cal : d) * stdH()); }   // นับทุกวัน
       if (!isNew && Number(l.minutes) && l.type !== 'late' && f === l.dateFrom && to === (l.dateTo || l.dateFrom) && String(v('lDays')) === String(l.days)) return hrsOf(l);
       if (!ri.n) return 0;
       if (v('lDays') === '' || isNaN(d) || d >= ri.n) return ri.h;
@@ -658,7 +665,7 @@
       if (!e) { box.innerHTML = ''; return 0; }
       if (!loadedYear(y)) { box.innerHTML = '<span class="muted">ปี ' + (+y + 543) + ' เก่ากว่าข้อมูลที่โหลดไว้ — ระบบไม่ได้คำนวณสิทธิ์คงเหลือ</span>'; return 0; }
       var used = usedOf(id, k, y, l.id), qq = quotaOf(e, k, y), now = v('lSt') === 'ไม่อนุมัติ' ? 0 : entryH();
-      var nowTxt = k === 'late' ? '' : ' · ครั้งนี้ <b>' + fh(entryH()) + '</b>';
+      var nowTxt = k === 'late' ? '' : ' · ครั้งนี้ <b>' + fh(entryH()) + '</b>' + (CAL[k] ? ' <small>(นับทุกวันรวมวันหยุด)</small>' : '') + (k === 'maternity' ? '<br><small>' + matPay(used, entryH()) + '</small>' : '');
       if (qq == null) { box.innerHTML = '<b>' + esc(LT[k]) + ' ปี ' + (+y + 543) + '</b> · ' + esc(e.nickname || e.fullName) + ' ใช้ไปแล้ว ' + (k === 'late' ? used + ' ครั้ง' : fh(used)) + ' (ไม่มีกำหนดสิทธิ์)' + nowTxt; box.className = 'hqinfo'; return 0; }
       var left = r2(qq - used), after = r2(left - now);
       box.className = 'hqinfo' + (after < 0 ? ' bad' : after <= stdH() ? ' warn' : ' ok');
@@ -670,7 +677,7 @@
     var calc = function () {
       if (v('lType') === 'late') return;
       var f = v('lFrom'), to = v('lTo') || f; if (!f || to < f) return;
-      $('lDays').value = rangeInfo(f, to).n; quotaInfo();
+      $('lDays').value = CAL[v('lType')] ? days(f, to) + 1 : rangeInfo(f, to).n; quotaInfo();
     };
     wide({
       icon: 'cal', title: isNew ? 'บันทึกการลา' : 'แก้ไขการลา', sub: (emp(l.empId) || {}).fullName || 'การลา / ขาดงาน / มาสาย',
@@ -923,15 +930,15 @@
       + r('เลขบัตรประชาชน / พาสปอร์ต', e.idNo) + r('เบอร์โทร', e.phone) + r('วุฒิการศึกษา', e.education) + r('ที่อยู่ตามทะเบียนบ้าน', e.addrReg) + r('ที่อยู่ปัจจุบัน', e.addrNow)
       + r('ผู้ติดต่อฉุกเฉิน', [e.emergencyName, e.emergencyPhone].filter(String).join(' · ')) + '</table>'
       + '<h5 class="hh">เอกสาร</h5><table class="hrt sm"><thead><tr><th>ประเภท</th><th>เลขที่</th><th>วันที่ออก</th><th>วันหมดอายุ</th></tr></thead><tbody>' + (dc.map(function (d) { return '<tr><td>' + esc(DT[d.type] || d.type) + '</td><td>' + esc(d.number) + '</td><td>' + dd(d.issueDate) + '</td><td>' + dd(d.expiryDate) + '</td></tr>'; }).join('') || '<tr><td colspan="4" class="c muted">-</td></tr>') + '</tbody></table>'
-      + '<h5 class="hh">สรุปการลา ปี ' + (+y + 543) + ' (ชั่วโมง · มาสาย = ครั้ง)</h5><table class="hrt sm"><thead><tr>' + ['sick', 'personal', 'vacation', 'maternity', 'ordain', 'absent', 'late'].map(function (k) { return '<th>' + LT[k] + '</th>'; }).join('') + '</tr></thead><tbody><tr>'
-      + ['sick', 'personal', 'vacation', 'maternity', 'ordain', 'absent', 'late'].map(function (k) { var qq = (H.data.settings.quotaMap || {})[k]; return '<td class="c">' + r2(used[k] || 0) + (qq ? ' / ' + r2(qq) : '') + '</td>'; }).join('') + '</tr></tbody></table>'
+      + '<h5 class="hh">สรุปการลา ปี ' + (+y + 543) + ' (ชั่วโมง · มาสาย = ครั้ง)</h5><table class="hrt sm"><thead><tr>' + ['sick', 'personal', 'vacation', 'maternity', 'paternity', 'ordain', 'absent', 'late'].map(function (k) { return '<th>' + LT[k] + '</th>'; }).join('') + '</tr></thead><tbody><tr>'
+      + ['sick', 'personal', 'vacation', 'maternity', 'paternity', 'ordain', 'absent', 'late'].map(function (k) { var qq = (H.data.settings.quotaMap || {})[k]; return '<td class="c">' + r2(used[k] || 0) + (qq ? ' / ' + r2(qq) : '') + '</td>'; }).join('') + '</tr></tbody></table>'
       + '<h5 class="hh">ประวัติการอบรม</h5><table class="hrt sm"><thead><tr><th>วันที่</th><th>หลักสูตร</th><th>ชั่วโมง</th><th>วิทยากร</th></tr></thead><tbody>' + (tr.map(function (t) { return '<tr><td>' + dd(t.date) + '</td><td>' + esc(t.title) + '</td><td class="c">' + t.hours + '</td><td>' + esc(t.trainer) + '</td></tr>'; }).join('') || '<tr><td colspan="4" class="c muted">-</td></tr>') + '</tbody></table>'
       + (ds.length ? '<h5 class="hh">วินัย / ใบเตือน</h5><table class="hrt sm"><thead><tr><th>วันที่</th><th>ระดับ</th><th>เหตุผล</th></tr></thead><tbody>' + ds.map(function (x) { return '<tr><td>' + dd(x.date) + '</td><td>' + esc(DL[x.level]) + '</td><td>' + esc(x.reason) + '</td></tr>'; }).join('') + '</tbody></table>' : '');
     return wrap('ประวัติพนักงาน', printedAt(), H.data.settings.fmProfile, body);
   }
   function leaveRep(all) {
     var q = H.q, from = q.rFrom, to = q.rTo, quotas = H.data.settings.quotaMap || {};
-    var ks = ['sick', 'personal', 'vacation', 'maternity', 'ordain', 'other', 'absent', 'late'];
+    var ks = ['sick', 'personal', 'vacation', 'maternity', 'paternity', 'ordain', 'other', 'absent', 'late'];
     var sum = {};
     all.filter(function (l) { return l.status !== 'ไม่อนุมัติ' && l.dateFrom <= to && (l.dateTo || l.dateFrom) >= from; }).forEach(function (l) {
       sum[l.empId] = sum[l.empId] || {}; var k = ks.indexOf(l.type) >= 0 ? l.type : 'other';
@@ -984,7 +991,9 @@
       + F('sHS', 'เสาร์ (ชม. / วัน · 0 = ไม่ทำงาน)', s.hoursSat, 'number', ' min="0" max="24" step="0.5"') + '</div>'
       + '<h4>สิทธิ์ลาต่อปี (ชั่วโมง)</h4>'
       + ((s.quotaFromDays || []).length ? '<p class="hqinfo warn" style="margin:0 0 8px">' + s.quotaFromDays.map(function (k) { return LT[k]; }).join(', ') + ' ยังเป็นค่าที่แปลงจากวันเดิม × ' + stdH() + ' ชม. — ตรวจตัวเลขแล้วกด "บันทึกการตั้งค่า" เพื่อยืนยัน</p>' : '')
-      + '<div class="pform">' + ['sick', 'personal', 'vacation', 'maternity', 'ordain'].map(function (k) { return F('q_' + k, LT[k] + ' (ชม.)' + (s.quotaDays && s.quotaDays[k] != null ? ' · เดิม ' + s.quotaDays[k] + ' วัน' : ''), qm[k] == null ? '' : r2(qm[k]), 'number', ' min="0" step="0.5"'); }).join('') + '</div>'
+      + '<div class="pform">' + ['sick', 'personal', 'vacation', 'ordain'].map(function (k) { return F('q_' + k, LT[k] + ' (ชม.)' + (s.quotaDays && s.quotaDays[k] != null ? ' · เดิม ' + s.quotaDays[k] + ' วัน' : ''), qm[k] == null ? '' : r2(qm[k]), 'number', ' min="0" step="0.5"'); }).join('') + '</div>'
+      + '<h4>ลาคลอด / ลาดูแลบุตร (นับทุกวัน รวมวันหยุด)</h4><div class="pform">' + F('qd_maternity', 'ลาคลอด (วัน)', (s.quotaDays || {}).maternity == null ? 120 : s.quotaDays.maternity, 'number', ' min="0"')
+      + F('sMatPaid', 'ลาคลอด จ่ายค่าจ้าง (วันแรก)', s.maternityPaidDays || 90, 'number', ' min="0"') + F('qd_paternity', 'ลาดูแลบุตร · ชาย (วัน)', (s.quotaDays || {}).paternity == null ? 15 : s.quotaDays.paternity, 'number', ' min="0"') + '</div>'
       + '<h4>รายชื่อ / การแจ้งเตือน</h4><div class="pform">' + F('sGroups', 'แผนก (คั่นด้วย , )', s.groups) + F('sBld', 'อาคาร (คั่นด้วย , )', s.buildings)
       + F('sAlert', 'แจ้งเตือนเอกสารล่วงหน้า (วัน)', s.alertDays, 'number', ' min="7"') + '</div>'
       + '<h4>รหัสแบบฟอร์ม (แสดงมุมขวาบนของรายงาน · เว้นว่าง = ไม่แสดง)</h4><div class="pform">' + F('sFmR', 'ทะเบียนประวัติพนักงาน', s.fmRegister, 'text', ' placeholder="เช่น FM-HR-01-01 Rev.00 วันที่ประกาศใช้ 01/01/2026"')
@@ -993,9 +1002,10 @@
       + '<div class="panel" id="formBox" style="margin-top:14px"><span class="spinner dark"></span> กำลังโหลดลิงก์แบบฟอร์มขอลา…</div>';
     formSettings();
     $('sSave').addEventListener('click', function () {
-      var qq = {}; ['sick', 'personal', 'vacation', 'maternity', 'ordain'].forEach(function (k) { if (v('q_' + k) !== '') qq[k] = Number(v('q_' + k)); });
+      var qq = {}; ['sick', 'personal', 'vacation', 'ordain'].forEach(function (k) { if (v('q_' + k) !== '') qq[k] = Number(v('q_' + k)); });
+      var qd = Object.assign({}, s.quotaDays || {}); ['maternity', 'paternity'].forEach(function (k) { if (v('qd_' + k) !== '') qd[k] = Number(v('qd_' + k)); });
       var b = $('sSave'); b.disabled = true;
-      call('hrSaveSettings', state.token, { quotaHours: JSON.stringify(qq), hoursMonThu: v('sHMT'), hoursFri: v('sHF'), hoursSat: v('sHS'), workDays: Number(v('sHS')) > 0 ? 'จ-ส' : 'จ-ศ', groups: v('sGroups'), buildings: v('sBld'), alertDays: v('sAlert'), fmRegister: v('sFmR'), fmProfile: v('sFmP'), fmLeave: v('sFmL') })
+      call('hrSaveSettings', state.token, { quotaHours: JSON.stringify(qq), quotas: JSON.stringify(qd), maternityPaidDays: v('sMatPaid'), hoursMonThu: v('sHMT'), hoursFri: v('sHF'), hoursSat: v('sHS'), workDays: Number(v('sHS')) > 0 ? 'จ-ส' : 'จ-ศ', groups: v('sGroups'), buildings: v('sBld'), alertDays: v('sAlert'), fmRegister: v('sFmR'), fmProfile: v('sFmP'), fmLeave: v('sFmL') })
         .then(function (r) { b.disabled = false; if (!r.ok) return toast(r.error); H.data.settings = r.settings; toast('บันทึกการตั้งค่าแล้ว'); }).catch(onServerError);
     });
   }

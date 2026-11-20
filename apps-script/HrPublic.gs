@@ -7,7 +7,7 @@
 //   ตั้ง Webhook URL ของ OA = URL /exec ของระบบนี้ · เชิญบอทเข้ากลุ่ม แล้วพิมพ์ "ตั้งค่ากลุ่ม HR <รหัสตั้งค่า>" (รหัสดูได้ในหน้าตั้งค่า HR)
 //   Apps Script อ่าน header ลายเซ็นของ LINE ไม่ได้ → ปุ่มอนุมัติใส่ลายเซ็นของระบบเอง (HMAC) · ผูกกลุ่มต้องใช้รหัสตั้งค่า
 
-var HR_FORM_TYPES_ = ['sick', 'personal', 'vacation', 'maternity', 'ordain', 'other'];
+var HR_FORM_TYPES_ = ['sick', 'personal', 'vacation', 'maternity', 'paternity', 'ordain', 'other'];
 var HR_FORM_URL_ = 'https://em-o-cha.github.io/Department/leave.html';
 var HR_APP_URL_ = 'https://em-o-cha.github.io/Department/';
 
@@ -136,7 +136,7 @@ function hrFormInit(key) {
       .map(function (e) { var o = hrFormEmp_(e); delete o.photo; return o; }) };
 }
 function hrFormEmp_(e) {
-  return { id: e.id, name: e.fullName, nick: e.nickname, building: e.building, group: e.group, position: e.position, job: !!e.isJob,
+  return { id: e.id, name: e.fullName, nick: e.nickname, building: e.building, group: e.group, position: e.position, job: !!e.isJob, gender: e.gender || '',
     photo: /^data:image\//.test(String(e.photoThumb)) ? e.photoThumb : '' };
 }
 // ค้นชื่อ / ชื่อเล่น (พิมพ์แล้วค่อยขึ้น) — คืนไม่เกิน 8 คน
@@ -171,6 +171,7 @@ function hrBalance_(ss, e, year) {
   });
   var out = {}, r2 = function (v) { return Math.round((v || 0) * 100) / 100; };
   HR_FORM_TYPES_.forEach(function (k) { var q = hrQuota_(st, e, k, year, today); out[k] = { quota: q, used: r2(used[k]), pending: r2(pend[k]), left: q == null ? null : r2(q - (used[k] || 0)), unit: 'h', std: st.stdHours }; });
+  out.maternity.paidDays = Number(st.maternityPaidDays) || 90;
   return out;
 }
 function hrFormBalance(key, empId) {
@@ -202,11 +203,14 @@ function hrFormSubmit(key, r) {
     // หัวหน้างาน (บังคับเลือก — ผู้ใช้ขอ 20/11/69): ต้องเป็นคนที่ตำแหน่งมีคำว่า "หัวหน้า"
     var sup = hrSupervisors_(ss).filter(function (x) { return x.id === r.supervisorId; })[0];
     if (!sup) return { ok: false, error: 'เลือกหัวหน้างาน' };
-    var days = r.half === true && f === t ? 0.5 : hrWorkDays_(f, t, st);
+    // ลาคลอดสำหรับผู้หญิง · ลาดูแลบุตรสำหรับผู้ชาย (ถ้าทะเบียนระบุเพศไว้)
+    if (r.type === 'maternity' && e.gender === 'ชาย') return { ok: false, error: 'ลาคลอดสำหรับพนักงานหญิง' };
+    if (r.type === 'paternity' && e.gender === 'หญิง') return { ok: false, error: 'ลาดูแลบุตรสำหรับพนักงานชาย' };
+    var days = HR_CAL_TYPES_[r.type] ? hrDays_(f, t) + 1 : r.half === true && f === t ? 0.5 : hrWorkDays_(f, t, st);
     if (!days) return { ok: false, error: 'วันที่เลือกเป็นวันหยุด' };
     // ลาเป็นชั่วโมง (ผู้ใช้ขอ 19/11/69): วันเดียว + เวลาเริ่ม–สิ้นสุด → เก็บนาทีในช่อง "นาที" · จำนวนวัน = ชั่วโมง ÷ 8 (HR_HOURS_PER_DAY_)
     var mins = '', hrsTxt = '';
-    if (r.timeFrom || r.timeTo) {
+    if ((r.timeFrom || r.timeTo) && !HR_CAL_TYPES_[r.type]) {
       var tm = function (v) { var m = String(v || '').match(/^(\d{1,2}):(\d{2})$/); return m ? +m[1] * 60 + +m[2] : -1; };
       var a = tm(r.timeFrom), b = tm(r.timeTo);
       if (f !== t) return { ok: false, error: 'ลาเป็นชั่วโมงได้ทีละ 1 วัน' };
@@ -279,6 +283,9 @@ function hrLeaveFlex_(l, e, bal, decided) {
     T([e.position, e.group, e.building].filter(String).join(' · ') || ' ', { size: 'xs', color: '#64748b' }), { type: 'separator', margin: 'md' },
     { type: 'box', layout: 'vertical', margin: 'md', spacing: 'sm', contents: [row('ประเภท', HR_LEAVE_TYPES_[l.type] || l.type), row('วันที่', dates), row('จำนวน', l.hours != null && l.hours !== '' ? hrFmtH_(l.hours, { stdHours: l.std || 10 }) : l.type !== 'late' && Number(l.minutes) ? hrHoursTxt_(Number(l.minutes)) + ' (' + l.days + ' วัน)' : l.days + ' วัน')]
       .concat(l.supervisor ? [row('หัวหน้างาน', l.supervisor)] : [])
+      .concat(l.type === 'maternity' && bal && bal.paidDays ? (function () {   // จ่ายค่าจ้าง 90 วันแรกของปี
+        var std = bal.std || 10, before = (bal.used || 0) / std, d = (Number(l.hours) || 0) / std, paid = Math.max(0, Math.min(d, bal.paidDays - before)), un = Math.round((d - paid) * 100) / 100;
+        return [row('ค่าจ้าง', 'จ่าย ' + Math.round(paid * 100) / 100 + ' วัน' + (un > 0 ? ' · ไม่รับค่าจ้าง ' + un + ' วัน' : ''), un > 0 ? '#c2410c' : '#15803d')]; })() : [])
       .concat(l.reason ? [row('เหตุผล', l.reason)] : [])
       .concat(bal && bal.quota != null ? (function () { var after = Math.round((bal.left - (Number(l.hours) || 0)) * 100) / 100, o = { stdHours: bal.std || 10 };
         return [row('สิทธิ์คงเหลือ', hrFmtH_(bal.left, o) + ' → หลังอนุมัติ ' + hrFmtH_(after, o), after < 0 ? '#dc2626' : '#15803d')]; })() : []) }];

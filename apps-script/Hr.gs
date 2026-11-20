@@ -29,13 +29,16 @@ var HR_TABLES_ = {
     ['action', 'การดำเนินการ'], ['files', 'ไฟล์แนบ'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
   hr_settings: { tab: 'ตั้งค่า', cols: [['id', 'รายการ'], ['value', 'ค่า']] }
 };
-var HR_LEAVE_TYPES_ = { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', maternity: 'ลาคลอด', ordain: 'ลาบวช', military: 'ลารับราชการทหาร',
+var HR_LEAVE_TYPES_ = { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', maternity: 'ลาคลอด', paternity: 'ลาดูแลบุตร (ชาย)', ordain: 'ลาบวช', military: 'ลารับราชการทหาร',
   training: 'ลาเพื่อฝึกอบรม', other: 'ลาอื่นๆ', absent: 'ขาดงาน', late: 'มาสาย' };
+// ลาคลอด / ลาดูแลบุตร (ชาย) นับทุกวันรวมวันหยุด (ผู้ใช้เลือก 20/11/69) — 1 วัน = ชม. มาตรฐาน (จ.–พฤ.) เพื่อให้ "(x วัน)" ตรงกับวันปฏิทิน
+var HR_CAL_TYPES_ = { maternity: 1, paternity: 1 };
+// ลาคลอดจ่ายค่าจ้าง 90 วันแรกของปี (สิทธิ์ 120 วัน) — ตั้งได้ที่ตั้งค่า maternityPaidDays
 var HR_DOC_TYPES_ = { idcard: 'บัตรประชาชน', passport: 'พาสปอร์ต', visa: 'วีซ่า', workpermit: 'ใบอนุญาตทำงาน (Work Permit)', pink: 'บัตรชมพู / บัตรประจำตัวคนต่างด้าว',
   health: 'ตรวจสุขภาพประจำปี / ใบรับรองแพทย์', food: 'อบรมสุขาภิบาลอาหาร', driving: 'ใบขับขี่', contract: 'สัญญาจ้าง', other: 'อื่นๆ' };
 var HR_DISC_LEVELS_ = { verbal: 'ตักเตือนด้วยวาจา', written1: 'ใบเตือนครั้งที่ 1', written2: 'ใบเตือนครั้งที่ 2', suspend: 'พักงาน', terminate: 'เลิกจ้าง' };
 var HR_SETTINGS_DEFAULT_ = {
-  quotas: JSON.stringify({ sick: 30, personal: 3, vacation: 6, maternity: 98, ordain: 15 }),
+  quotas: JSON.stringify({ sick: 30, personal: 3, vacation: 6, maternity: 120, paternity: 15, ordain: 15 }), maternityPaidDays: '90',
   buildings: 'G1, G2, G3, ออฟฟิศ', groups: 'ผลิต, ออฟฟิศ', alertDays: '60', workDays: 'จ-ศ',
   // ชั่วโมงทำงานต่อวัน (ผู้ใช้กำหนด 20/11/69): จ.–พฤ. 10 ชม. · ศ. 8 ชม. · เสาร์ไม่ทำงาน — การลาคิดเป็นชั่วโมงตามวันจริง
   hoursMonThu: '10', hoursFri: '8', hoursSat: '0',
@@ -78,7 +81,11 @@ function hrSettings_(ss) {
   s.dayHours = dh; s.stdHours = std; s.quotaDays = q; s.quotaHoursSet = qh; s.quotaFromDays = [];
   // quotaMap = สิทธิ์เป็นชั่วโมง (ใช้คำนวณยอดคงเหลือทุกหน้า)
   var qm = {};
+  if (q.maternity == null || Number(q.maternity) === 98) q.maternity = 120;   // สิทธิ์ใหม่ (ผู้ใช้กำหนด 20/11/69)
+  if (q.paternity == null) q.paternity = 15;
+  s.quotaDays = q;
   Object.keys(HR_LEAVE_TYPES_).forEach(function (k) {
+    if (HR_CAL_TYPES_[k]) { if (q[k] != null && q[k] !== '') qm[k] = Math.round((Number(q[k]) || 0) * std * 100) / 100; return; }   // นับเป็นวัน (ปฏิทิน)
     if (qh[k] !== undefined && qh[k] !== '' && qh[k] !== null) qm[k] = Math.max(0, Number(qh[k]) || 0);
     else if (q[k] !== undefined && q[k] !== '' && q[k] !== null) { qm[k] = Math.round((Number(q[k]) || 0) * std * 100) / 100; s.quotaFromDays.push(k); }
   });
@@ -100,6 +107,11 @@ function hrRangeHours_(from, to, st) {
 // ชั่วโมงของใบลา: มาสาย = 0 (นับเป็นครั้ง/นาที) · ลาเป็นชั่วโมง = นาที ÷ 60 · ลาเป็นวัน = ชม. ของวันทำงานจริงในช่วงนั้น (ครึ่งวัน = ครึ่งหนึ่ง)
 function hrLeaveHours_(l, st) {
   if (!l || l.type === 'late') return 0;
+  if (HR_CAL_TYPES_[l.type]) {   // นับทุกวัน: วัน × ชม. มาตรฐาน
+    var cf = purDate_(l.dateFrom), ct = purDate_(l.dateTo) || cf; if (!cf) return 0;
+    var cal = hrDays_(cf, ct) + 1, cd = Number(l.days), stdh = hrDayHours_(st)[1] || 10;
+    return Math.round((isFinite(cd) && String(l.days) !== '' && cd < cal ? cd : cal) * stdh * 100) / 100;
+  }
   var mins = Number(l.minutes) || 0;
   if (mins > 0) return Math.round(mins / 60 * 100) / 100;
   var f = purDate_(l.dateFrom), t = purDate_(l.dateTo) || f;
@@ -274,7 +286,7 @@ function hrSaveLeave(token, x) {
     var d = hrNum_(x.days);
     // ลาเป็นชั่วโมง (นาทีอยู่ในช่อง minutes): ถ้า HR ไม่ได้แก้จำนวนวัน คงชั่วโมงเดิมไว้
     var keepHours = !wasLate && oldMin && x.type !== 'late' && f === t && (d === '' || Number(d) === oldDays);
-    rec.days = x.type === 'late' ? 0 : keepHours ? oldDays : (d === '' ? hrWorkDays_(f, t, st) : Math.max(0, Math.round(d * 2) / 2));
+    rec.days = x.type === 'late' ? 0 : keepHours ? oldDays : (d === '' ? (HR_CAL_TYPES_[x.type] ? hrDays_(f, t) + 1 : hrWorkDays_(f, t, st)) : Math.max(0, Math.round(d * 2) / 2));
     rec.minutes = x.type === 'late' ? Math.max(0, Math.round(Number(x.minutes) || 0)) : keepHours ? oldMin : '';
     rec.reason = hrText_(x.reason, 300); rec.status = ['อนุมัติ', 'รออนุมัติ', 'ไม่อนุมัติ'].indexOf(x.status) >= 0 ? x.status : 'อนุมัติ';
     rec.approver = hrText_(x.approver, 80);
