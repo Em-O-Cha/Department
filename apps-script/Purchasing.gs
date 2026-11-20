@@ -14,7 +14,8 @@ var PUR_TABLES_ = {
     ['bank', 'ธนาคาร'], ['bankAccount', 'เลขบัญชี'], ['items', 'สินค้าที่ขาย'], ['note', 'หมายเหตุ'], ['active', 'ใช้งาน'],
     ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด'],
     ['contractStart', 'สัญญาเริ่ม'], ['contractEnd', 'สัญญาสิ้นสุด'], ['contractNote', 'รายละเอียดสัญญา'], ['files', 'ไฟล์แนบ'],
-    ['category', 'ประเภทผู้ขาย (AVL)'], ['agent', 'Agent/Broker'], ['maker', 'ชื่อผู้ผลิต / ผู้ให้บริการ'], ['avlNo', 'ลำดับใน AVL']] },
+    ['category', 'ประเภทผู้ขาย (AVL)'], ['agent', 'Agent/Broker'], ['maker', 'ชื่อผู้ผลิต / ผู้ให้บริการ'], ['avlNo', 'ลำดับใน AVL'],
+    ['products', 'รายการสินค้า (หน่วย / ราคา)']] },   // JSON [{name, unit, price, date, note}] (ผู้ใช้ขอ 20/11/69)
   materials: { tab: 'วัตถุดิบ', cols: [
     ['id', 'รหัส'], ['name', 'ชื่อวัตถุดิบ'], ['unit', 'หน่วย'], ['category', 'หมวด'], ['vendorId', 'รหัสผู้ขาย'],
     ['minStock', 'จุดสั่งซื้อขั้นต่ำ'], ['price', 'ราคาปัจจุบัน'], ['priceDate', 'ราคา ณ วันที่'], ['note', 'หมายเหตุ'],
@@ -217,7 +218,7 @@ function purLoad(token) {
   invoices.forEach(function (x) { x.items = purJson_(x.items); x.files = purParseFiles_(x.files); });
   rfqs.forEach(function (x) { x.items = purJson_(x.items); });
   quotes.forEach(function (x) { x.items = purJson_(x.items); x.files = purParseFiles_(x.files); });
-  vendors.forEach(function (v) { v.files = purParseFiles_(v.files); });
+  vendors.forEach(function (v) { v.files = purParseFiles_(v.files); v.products = purVendorProducts_(purJson_(v.products)); });
   docs.forEach(function (d) { if (d.type === 'PO') d.match = purMatch_(d, d.items, moves, invoices); });
   var cfg = deptConfig_(dept.key);
   return { ok: true, vendors: vendors, materials: materials, docs: docs, invoices: invoices, rfqs: rfqs, quotes: quotes, evals: evals,
@@ -284,6 +285,7 @@ function purSaveVendor(token, v) {
     ['address', 'items', 'note'].forEach(function (k) { o[k] = purClean_(v[k], 1000); });
     o.contractStart = purDate_(v.contractStart); o.contractEnd = purDate_(v.contractEnd); o.contractNote = purClean_(v.contractNote, 1000);
     o.category = purAvlCats_(v.category); o.agent = purClean_(v.agent, 200); o.maker = purClean_(v.maker, 200);
+    if (v.products !== undefined) o.products = JSON.stringify(purVendorProducts_(v.products));
     if (typeof o.files !== 'string') o.files = JSON.stringify(o.files || []);
     o.name = name; o.creditDays = purNum_(v.creditDays); o.active = v.active === false || v.active === 'ปิด' ? 'ปิด' : 'ใช้งาน'; o.updatedAt = purNow_();
     purWrite_(ss, 'vendors', o);
@@ -291,6 +293,15 @@ function purSaveVendor(token, v) {
     delete o._row; o.files = purParseFiles_(o.files);
     return { ok: true, vendor: o };
   });
+}
+
+// สินค้าที่ผู้ขายขาย: ชื่อ / หน่วย / ราคาต่อหน่วย / วันที่ราคา / หมายเหตุ (ใช้ค้นหาเทียบราคาในหน้าเปรียบเทียบราคา)
+function purVendorProducts_(list) {
+  return (Array.isArray(list) ? list : []).slice(0, 300).map(function (x) {
+    x = x || {};
+    var pr = purNum_(x.price);
+    return { name: purClean_(x.name, 150), unit: purClean_(x.unit, 30), price: pr === '' || pr < 0 ? '' : Math.round(pr * 10000) / 10000, date: purDate_(x.date), note: purClean_(x.note, 150) };
+  }).filter(function (x) { return x.name; });
 }
 
 // ---------- วัตถุดิบ ----------

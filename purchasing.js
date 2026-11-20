@@ -605,7 +605,7 @@
       + '<div class="pchips">' + [['', 'ทั้งหมด']].concat(AVL_CATS.map(function (c) { return [c, c]; })).map(function (c) { return '<button class="chip' + ((P.q.venCat || '') === c[0] ? ' on' : '') + '" data-vc="' + esc(c[0]) + '">' + esc(c[1]) + '</button>'; }).join('') + '</div>'
       + '<div id="pList" class="pcards"></div>';
     var draw = function () {
-      var list = P.data.vendors.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'th'); }).filter(function (x) { return (!P.q.venCat || avlCats(x).indexOf(P.q.venCat) >= 0) && match(P.q.ven, [x.name, x.contact, x.items, x.phone, x.note, x.maker, x.agent].join(' ')); });
+      var list = P.data.vendors.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'th'); }).filter(function (x) { return (!P.q.venCat || avlCats(x).indexOf(P.q.venCat) >= 0) && match(P.q.ven, [x.name, x.contact, x.items, x.phone, x.note, x.maker, x.agent].concat((x.products || []).map(function (p) { return p.name; })).join(' ')); });
       $('pList').innerHTML = list.map(function (x) {
         var mats = P.data.materials.filter(function (m) { return m.vendorId === x.id; });
         var phones = [x.phone, x.phone2].filter(String);
@@ -617,7 +617,7 @@
           + (x.line ? '<span class="btn btn-sm btn-line">' + icon('line', 16) + esc(x.line) + '</span>' : '') + (x.email ? '<a class="btn btn-sm btn-line" href="mailto:' + esc(x.email) + '">' + icon('mail', 16) + 'อีเมล</a>' : '')
           + (!phones.length ? '<span class="muted">ยังไม่มีเบอร์โทร — กดแก้ไขเพื่อเพิ่ม</span>' : '') + '</div>'
           + '<div class="vmeta">' + (x.creditDays !== '' ? '<span>เครดิต ' + x.creditDays + ' วัน</span>' : '') + (x.bank ? '<span>' + esc(x.bank) + ' ' + esc(x.bankAccount) + '</span>' : '')
-          + (mats.length ? '<span>วัตถุดิบ: ' + mats.map(function (m) { return esc(m.name); }).slice(0, 6).join(', ') + (mats.length > 6 ? ' +' + (mats.length - 6) : '') + '</span>' : '') + (x.items ? '<span>สินค้า: ' + esc(x.items) + '</span>' : '') + '</div></div>';
+          + (mats.length ? '<span>วัตถุดิบ: ' + mats.map(function (m) { return esc(m.name); }).slice(0, 6).join(', ') + (mats.length > 6 ? ' +' + (mats.length - 6) : '') + '</span>' : '') + (x.products && x.products.length ? '<span>สินค้า: ' + x.products.slice(0, 6).map(function (p) { return esc(p.name) + (p.price !== '' ? ' <b>' + n3(p.price) + '฿/' + esc(p.unit || 'หน่วย') + '</b>' : ''); }).join(', ') + (x.products.length > 6 ? ' +' + (x.products.length - 6) : '') + '</span>' : x.items ? '<span>สินค้า: ' + esc(x.items) + '</span>' : '') + '</div></div>';
       }).join('') || '<div class="panel muted">ไม่พบผู้ขาย</div>';
       on('[data-ven]', 'click', function (el) { vendorModal(ven(el.getAttribute('data-ven'))); }, $('pList'));
     };
@@ -632,8 +632,12 @@
     wide({ icon: 'phone', title: edit ? x.name : 'เพิ่มผู้ขาย', sub: 'ข้อมูลผู้ขาย',
       body: '<div class="pform">' + F('vnName', 'ชื่อผู้ขาย / บริษัท *', x.name) + F('vnContact', 'ผู้ติดต่อ', x.contact) + F('vnPhone', 'เบอร์โทร', x.phone, 'tel') + F('vnPhone2', 'เบอร์โทร 2', x.phone2, 'tel')
         + F('vnLine', 'LINE ID', x.line) + F('vnEmail', 'อีเมล', x.email, 'email') + F('vnTax', 'เลขผู้เสียภาษี', x.taxId, 'text', ' inputmode="numeric"') + F('vnCredit', 'เครดิต (วัน)', x.creditDays, 'number', ' inputmode="numeric"')
-        + F('vnBank', 'ธนาคาร', x.bank) + F('vnAcc', 'เลขบัญชี', x.bankAccount, 'text', ' inputmode="numeric"') + T('vnAddr', 'ที่อยู่', x.address) + T('vnItems', 'สินค้าที่ขาย', x.items) + T('vnNote', 'หมายเหตุ', x.note)
+        + F('vnBank', 'ธนาคาร', x.bank) + F('vnAcc', 'เลขบัญชี', x.bankAccount, 'text', ' inputmode="numeric"') + T('vnAddr', 'ที่อยู่', x.address) + T('vnNote', 'หมายเหตุ', x.note)
         + S('vnActive', 'สถานะ', [['ใช้งาน', 'ใช้งาน'], ['ปิด', 'เลิกใช้']], x.active) + '</div>'
+        + '<div class="psec"><div class="psec-h"><b>สินค้าที่ขาย · หน่วย · ราคาต่อหน่วย</b><button type="button" class="btn btn-sm btn-line" id="vpAdd">' + icon('plus', 16) + 'เพิ่มสินค้า</button></div>'
+        + '<p class="muted" style="margin:0 0 6px">ใช้ค้นหาเทียบราคาในหน้า "เปรียบเทียบราคา" · ราคาใส่ต่อ 1 หน่วยที่ผู้ขายขาย (เช่น 85 บาท / กก.)</p><div id="vpRows"></div>'
+        + '<datalist id="vpNames">' + P.data.materials.map(function (m) { return '<option value="' + esc(m.name) + '">'; }).join('') + '</datalist>'
+        + '<datalist id="vpUnits">' + uniqUnits().map(function (u) { return '<option value="' + esc(u) + '">'; }).join('') + '</datalist></div>'
         + '<div class="psec"><div class="psec-h"><b>ทะเบียนผู้ขายที่ได้รับการอนุมัติ (AVL · FM-PU-01)</b></div><div class="avlchk">' + AVL_CATS.map(function (c) { return '<label class="pchk"><input type="checkbox" data-avl="' + esc(c) + '"' + (avlCats(x).indexOf(c) >= 0 ? ' checked' : '') + '> ' + esc(c) + '</label>'; }).join('') + '</div>'
         + '<div class="pform">' + F('vnAgent', 'Agent/Broker', x.agent) + F('vnMaker', 'ชื่อผู้ผลิต / ผู้ให้บริการ', x.maker, 'text', ' placeholder="ว่าง = ชื่อเดียวกับผู้ขาย"') + '</div></div>'
         + '<div class="psec"><div class="psec-h"><b>สัญญา / ข้อตกลง</b></div><div class="pform">' + F('vnCs', 'สัญญาเริ่ม', x.contractStart, 'date') + F('vnCe', 'สัญญาสิ้นสุด', x.contractEnd, 'date') + T('vnCn', 'รายละเอียดสัญญา (ราคาตกลง, เงื่อนไข)', x.contractNote) + '</div>'
@@ -641,6 +645,21 @@
         + (edit ? '<div class="psec"><div class="psec-h"><b>ผลประเมินผู้ขาย (รายไตรมาส)</b><button type="button" class="btn btn-sm btn-primary" id="vnEval">' + icon('check', 16) + 'ประเมิน</button></div><div id="vnEvals"></div></div>' : ''),
       ok: 'บันทึก', check: function () { return v('vnName') ? '' : 'กรอกชื่อผู้ขาย'; },
       onOpen: function () {
+        // ตารางสินค้า (ผู้ใช้ขอ 20/11/69) · ผู้ขายเดิมที่มีแค่ข้อความ "สินค้าที่ขาย" → แยกเป็นแถวให้เติมหน่วย / ราคา
+        var prods = (x.products && x.products.length ? x.products : String(x.items || '').split(/[,\n、]+/).map(function (t) { return t.trim(); }).filter(String).map(function (t) { return { name: t }; }))
+          .map(function (p) { return { name: p.name || '', unit: p.unit || '', price: p.price == null ? '' : p.price, date: p.date || '', note: p.note || '' }; });
+        P.vp = prods;
+        var drawP = function () {
+          $('vpRows').innerHTML = prods.length ? '<div class="ptable-wrap"><table class="ptable vptab"><thead><tr><th>สินค้า</th><th>หน่วย</th><th class="r">ราคา / หน่วย (บาท)</th><th>ราคา ณ วันที่</th><th>หมายเหตุ</th><th></th></tr></thead><tbody>'
+            + prods.map(function (p, i) { return '<tr><td><input data-vp="' + i + '" data-k="name" list="vpNames" value="' + esc(p.name) + '" placeholder="ชื่อสินค้า"></td><td><input data-vp="' + i + '" data-k="unit" list="vpUnits" value="' + esc(p.unit) + '" placeholder="กก. / ถุง / ลัง"></td>'
+              + '<td><input data-vp="' + i + '" data-k="price" type="number" step="any" inputmode="decimal" value="' + esc(p.price) + '" class="r"></td><td><input data-vp="' + i + '" data-k="date" type="date" value="' + esc(p.date) + '"></td>'
+              + '<td><input data-vp="' + i + '" data-k="note" value="' + esc(p.note) + '"></td><td><button type="button" class="icon-btn" data-vpx="' + i + '" title="ลบ">' + icon('trash', 16) + '</button></td></tr>'; }).join('') + '</tbody></table></div>'
+            : '<div class="muted">ยังไม่มีรายการสินค้า — กด "เพิ่มสินค้า"</div>';
+          on('[data-vp]', 'input', function (el) { var p = prods[+el.getAttribute('data-vp')], k = el.getAttribute('data-k'); p[k] = el.value; if (k === 'price' && el.value && !p.date) { p.date = todayIso(); var d = el.closest('tr').querySelector('[data-k=date]'); if (d) d.value = p.date; } }, $('vpRows'));
+          on('[data-vpx]', 'click', function (el) { prods.splice(+el.getAttribute('data-vpx'), 1); drawP(); }, $('vpRows'));
+        };
+        drawP();
+        $('vpAdd').addEventListener('click', function () { prods.push({ name: '', unit: '', price: '', date: '', note: '' }); drawP(); var ins = $('vpRows').querySelectorAll('[data-k=name]'); ins[ins.length - 1].focus(); });
         if (!edit) return;
         var drawF = function (files) {
           $('vnFiles').innerHTML = files.length ? files.map(function (f) { return '<div class="pfile">' + fileLink(f) + '<small>' + esc(f.at || '') + '</small><button type="button" class="icon-btn" data-rf="' + esc(f.id) + '">' + icon('trash', 16) + '</button></div>'; }).join('') : '<div class="muted">ยังไม่มีไฟล์แนบ</div>';
@@ -662,7 +681,8 @@
       },
       submit: function () {
         return call('purSaveVendor', state.token, { id: edit ? x.id : '', name: v('vnName'), contact: v('vnContact'), phone: v('vnPhone'), phone2: v('vnPhone2'), line: v('vnLine'), email: v('vnEmail'), taxId: v('vnTax'),
-          creditDays: v('vnCredit'), bank: v('vnBank'), bankAccount: v('vnAcc'), address: v('vnAddr'), items: v('vnItems'), note: v('vnNote'), active: v('vnActive'),
+          creditDays: v('vnCredit'), bank: v('vnBank'), bankAccount: v('vnAcc'), address: v('vnAddr'), note: v('vnNote'), active: v('vnActive'),
+          products: (P.vp || []).filter(function (p) { return String(p.name).trim(); }), items: (P.vp || []).map(function (p) { return String(p.name).trim(); }).filter(String).join(', '),
           contractStart: v('vnCs'), contractEnd: v('vnCe'), contractNote: v('vnCn'), agent: v('vnAgent'), maker: v('vnMaker'),
           category: Array.prototype.filter.call(document.querySelectorAll('[data-avl]'), function (c) { return c.checked; }).map(function (c) { return c.getAttribute('data-avl'); }).join(',') }).then(function (r) { if (!r.ok) return r.error; closeModal(); reload('บันทึกผู้ขายแล้ว'); });
       } });
@@ -723,8 +743,64 @@
   }
 
   // ==================== เปรียบเทียบราคา (ใบเสนอราคาหลายเจ้า) ====================
+  // ==================== ค้นหาสินค้าจากผู้ขาย (ผู้ใช้ขอ 20/11/69) ====================
+  // พิมพ์ชื่อสินค้า → แสดงทุกผู้ขายที่ขายสินค้าที่ชื่อใกล้เคียง พร้อมหน่วย / ราคาต่อหน่วย
+  // แหล่งราคา: สินค้าที่ผู้ขายแจ้ง (หน้าผู้ขาย) · ราคาวัตถุดิบ · ใบเสนอราคา · ใบ PO ล่าสุด
+  function uniqUnits() {
+    var u = {}; ['กก.', 'กรัม', 'ถุง', 'แพ็ค', 'ลัง', 'กล่อง', 'ชิ้น', 'ขวด', 'ลิตร', 'กระป๋อง', 'ม้วน', 'ใบ', 'ถัง', 'กระสอบ'].forEach(function (x) { u[x] = 1; });
+    P.data.materials.forEach(function (m) { if (m.unit) u[m.unit] = 1; });
+    P.data.vendors.forEach(function (x) { (x.products || []).forEach(function (p) { if (p.unit) u[p.unit] = 1; }); });
+    return Object.keys(u);
+  }
+  function pnorm(t) { return String(t || '').toLowerCase().replace(/[ัิ-ฺ็-๎]/g, '').replace(/[\s.,()\-\/_"'*+]/g, ''); }
+  function grams(t) { var g = {}; for (var i = 0; i < t.length - 1; i++) g[t.slice(i, i + 2)] = 1; return g; }
+  // คะแนนความใกล้เคียง 0–2: มีคำค้นอยู่ในชื่อ = สูงสุด · ทุกคำ (เว้นวรรค) อยู่ในชื่อ · ตัวอักษรคู่ของคำค้นที่พบในชื่อ ≥ 60%
+  function pscore(q, name) {
+    var qn = pnorm(q), nn = pnorm(name); if (!qn || !nn) return 0;
+    if (nn.indexOf(qn) >= 0) return 1.5 + qn.length / nn.length / 2;
+    var toks = String(q).trim().split(/\s+/).map(pnorm).filter(String);
+    if (toks.length > 1 && toks.every(function (t) { return nn.indexOf(t) >= 0; })) return 1.2;
+    if (qn.length < 2) return 0;
+    var g = grams(qn), ng = grams(nn), keys = Object.keys(g), hit = keys.filter(function (k) { return ng[k]; }).length / keys.length;
+    return hit >= 0.6 ? hit : 0;
+  }
+  function priceSources() {
+    var out = [], vName = function (id) { var x = ven(id); return x ? x.name : ''; };
+    P.data.vendors.forEach(function (x) { (x.products || []).forEach(function (p) { out.push({ vendor: x.name, vid: x.id, name: p.name, unit: p.unit, price: p.price, date: p.date, src: 'ผู้ขายแจ้ง', note: p.note }); }); });
+    P.data.materials.forEach(function (m) { if (m.vendorId && m.price !== '' && m.price != null) out.push({ vendor: vName(m.vendorId), vid: m.vendorId, name: m.name, unit: m.unit, price: m.price, date: m.priceDate, src: 'ราคาวัตถุดิบ' }); });
+    P.data.quotes.forEach(function (q) {
+      var r = P.data.rfqs.filter(function (x) { return x.id === q.rfqId; })[0]; if (!r) return;
+      r.items.forEach(function (it) { var pr = q.items.filter(function (x) { return x.key === it.key; })[0]; if (pr && pr.price !== '' && pr.price != null) out.push({ vendor: q.vendorName, vid: q.vendorId, name: it.materialName, unit: it.unit, price: pr.price, date: q.quoteDate, src: 'ใบเสนอราคา ' + (q.quoteNo || '') }); });
+    });
+    var po = {};   // PO: เก็บราคาล่าสุดต่อ ผู้ขาย + สินค้า
+    P.data.docs.filter(function (d) { return d.type === 'PO' && d.status !== 'cancelled'; }).forEach(function (d) {
+      d.items.forEach(function (it) { if (it.price === '' || it.price == null) return; var k = (d.vendorId || d.vendorName) + '|' + pnorm(it.materialName); if (!po[k] || String(d.orderDate) > String(po[k].date)) po[k] = { vendor: d.vendorName || vName(d.vendorId), vid: d.vendorId, name: it.materialName, unit: it.unit, price: it.price, date: d.orderDate, src: 'PO ' + (d.docNo || '') }; });
+    });
+    Object.keys(po).forEach(function (k) { out.push(po[k]); });
+    return out.filter(function (x) { return x.name && x.vendor; });
+  }
+  function productSearchHtml(q) {
+    if (!String(q || '').trim()) return '<div class="muted">พิมพ์ชื่อสินค้า เช่น "กระเทียม" "ถุง" "พริก" — ระบบจะหาชื่อที่ใกล้เคียงจากทุกผู้ขาย</div>';
+    var rows = priceSources().map(function (x) { x.score = pscore(q, x.name); return x; }).filter(function (x) { return x.score > 0; });
+    if (!rows.length) return '<div class="muted">ไม่พบสินค้าที่ใกล้เคียง "' + esc(q) + '" — เพิ่มสินค้าที่ผู้ขายขายได้ที่หน้า "ผู้ขาย (Vendor)" → แก้ไข → สินค้าที่ขาย</div>';
+    // กลุ่มตามชื่อสินค้า (ชื่อเหมือนกันแบบไม่สนเว้นวรรค) · ในกลุ่มเรียงราคาต่อหน่วยจากถูกไปแพง · ถูกสุดต่อหน่วยเดียวกัน = ไฮไลต์
+    var groups = {}, order = [];
+    rows.forEach(function (x) { var k = pnorm(x.name); if (!groups[k]) { groups[k] = { name: x.name, score: x.score, list: [] }; order.push(k); } groups[k].list.push(x); groups[k].score = Math.max(groups[k].score, x.score); });
+    order.sort(function (a, b) { return groups[b].score - groups[a].score || groups[a].name.localeCompare(groups[b].name, 'th'); });
+    var nV = {}; rows.forEach(function (x) { nV[x.vendor] = 1; });
+    return '<div class="muted" style="margin-bottom:6px">พบ ' + order.length + ' สินค้า · ' + Object.keys(nV).length + ' ผู้ขาย</div>' + order.map(function (k) {
+      var g = groups[k], best = {};
+      g.list.sort(function (a, b) { return (a.unit || '').localeCompare(b.unit || '') || Number(a.price) - Number(b.price) || String(b.date).localeCompare(String(a.date)); });
+      g.list.forEach(function (x) { var u = x.unit || ''; if (best[u] == null || Number(x.price) < best[u]) best[u] = Number(x.price); });
+      return '<div class="psearch-g"><b>' + esc(g.name) + '</b><div class="ptable-wrap"><table class="ptable"><thead><tr><th>ผู้ขาย</th><th>หน่วย</th><th class="r">ราคา / หน่วย</th><th>ราคา ณ วันที่</th><th>ที่มา</th></tr></thead><tbody>'
+        + g.list.map(function (x) { var low = x.price !== '' && Number(x.price) === best[x.unit || ''] && g.list.filter(function (y) { return (y.unit || '') === (x.unit || ''); }).length > 1;
+          return '<tr class="' + (low ? 'cur' : '') + '"><td>' + (x.vid ? '<a href="#" data-pven="' + esc(x.vid) + '">' + esc(x.vendor) + '</a>' : esc(x.vendor)) + (low ? ' <span class="tag ok">ถูกสุด</span>' : '') + (x.note ? '<br><small class="muted">' + esc(x.note) + '</small>' : '') + '</td><td>' + esc(x.unit || '-') + '</td><td class="r"><b>' + (x.price === '' || x.price == null ? '-' : baht(x.price)) + '</b></td><td>' + (x.date ? dd(x.date) : '-') + '</td><td><small class="muted">' + esc(x.src) + '</small></td></tr>'; }).join('')
+        + '</tbody></table></div></div>';
+    }).join('');
+  }
   function rfqs() {
     $('main').innerHTML = '<h3>เปรียบเทียบราคา</h3><p class="lead">รวบรวมใบเสนอราคาจากผู้ขายหลายเจ้า เทียบราคา ระยะเวลาส่ง เงื่อนไขชำระเงิน และคุณภาพ ก่อนตัดสินใจสั่งซื้อ</p>'
+      + '<div class="panel pbox"><h4>' + icon('search', 18) + ' ค้นหาสินค้า — ผู้ขายไหนขาย ราคาเท่าไหร่</h4><input id="pSrch" class="psearch-in" type="search" placeholder="พิมพ์ชื่อสินค้าที่ต้องการหา" value="' + esc(P.q.prod || '') + '" aria-label="ค้นหาสินค้า"><div id="pSrchOut" style="margin-top:8px"></div></div>'
       + searchBar('rfq', 'ค้นหาเรื่อง / ผู้ขาย', '<button class="btn btn-sm btn-primary" id="pAddRfq">' + icon('plus', 16) + 'เปรียบเทียบใหม่</button>') + '<div id="pList" class="plist"></div>';
     var draw = function () {
       var list = P.data.rfqs.slice().sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).filter(function (r) {
@@ -741,6 +817,12 @@
       on('[data-rfq]', 'click', function (el) { rfqDetail(el.getAttribute('data-rfq')); }, $('pList'));
     };
     bindSearch('rfq', draw);
+    var sdraw = function () {
+      $('pSrchOut').innerHTML = productSearchHtml(P.q.prod);
+      on('[data-pven]', 'click', function (el, e) { e.preventDefault(); vendorModal(ven(el.getAttribute('data-pven'))); }, $('pSrchOut'));
+    };
+    var st; $('pSrch').addEventListener('input', function () { P.q.prod = this.value; clearTimeout(st); st = setTimeout(sdraw, 200); });
+    sdraw();
     $('pAddRfq').addEventListener('click', function () { rfqModal(null); });
     draw();
   }
@@ -1406,6 +1488,7 @@
     '.link-btn.danger{color:#dc2626}.pfoot{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}',
     '.pfile{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px dashed var(--line)}.pfile small{color:var(--muted);flex:1}.flink{display:inline-flex;align-items:center;gap:4px;color:var(--c);font-weight:500;font-size:13px;word-break:break-all}.flink svg{width:14px;height:14px}',
     '.pupload{display:grid;grid-template-columns:1fr 1.4fr;gap:10px;margin-top:8px}',
+    '.psearch-in{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:12px;font:inherit;font-size:16px}.psearch-g{margin-top:12px}.psearch-g>b{display:block;margin-bottom:4px;font-size:15.5px}.vptab input{width:100%;min-width:70px;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;font:inherit;font-size:14px}.vptab td:first-child input{min-width:160px}.vptab input{text-align:left}.vptab input.r{text-align:right}',
     '.ptable-wrap{overflow-x:auto;background:var(--surface);border-radius:10px}.ptable{width:100%;border-collapse:collapse;font-size:13.5px}.ptable th,.ptable td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.ptable th{background:#f8fafc;font-weight:600;white-space:nowrap}.ptable .r{text-align:right;white-space:nowrap}.ptable tfoot td{font-weight:700;background:#f8fafc}.ptable tr.cur td{background:#f0fdf4}',
     '.mt{font-weight:600}.mt.IN{color:#15803d}.mt.OUT,.mt.RETURN{color:#dc2626}.mt.ADJ{color:#7c3aed}',
     '.pcards{display:grid;grid-template-columns:1fr 1fr;gap:12px}.vcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:8px}.vcard.off{opacity:.55}',

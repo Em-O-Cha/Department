@@ -253,11 +253,15 @@
     }).join('') + '</div>';
   }
   function bindPending(root) {
+    // กดแล้วปุ่มทั้งคู่เป็นสีเทาทันที · ถ้ามีคนจัดการไปแล้ว (เช่นกดใน LINE) ขึ้นป้ายสีเทา "อนุมัติไปแล้ว โดย …" แทนปุ่ม (ผู้ใช้ขอ 20/11/69)
     var go2 = function (el, ok) {
-      el.disabled = true;
+      var box = el.closest('.hpr-btns'), btns = box ? box.querySelectorAll('button') : [el];
+      Array.prototype.forEach.call(btns, function (b) { b.disabled = true; b.classList.add('hdone'); });
+      var done = function (st, who) { if (box) box.innerHTML = '<span class="hdone-tag">' + (st === 'อนุมัติ' ? '✓ อนุมัติไปแล้ว' : '✕ ไม่อนุมัติไปแล้ว') + (who ? ' · ' + esc(who) : '') + '</span>'; };
       call('hrDecideLeave', state.token, el.getAttribute(ok ? 'data-ok' : 'data-no'), ok).then(function (r) {
-        reload(r.ok ? (ok ? 'อนุมัติแล้ว' : 'ไม่อนุมัติแล้ว') : r.error).then(function () { renderNav(); });
-      }).catch(onServerError);
+        if (r.ok) done(r.status, ''); else if (r.already) done(r.status, r.approver);
+        setTimeout(function () { reload(r.ok ? (ok ? 'อนุมัติแล้ว' : 'ไม่อนุมัติแล้ว') : r.error).then(function () { renderNav(); }); }, r.already ? 1500 : 300);
+      }).catch(function (e) { Array.prototype.forEach.call(btns, function (b) { b.disabled = false; b.classList.remove('hdone'); }); onServerError(e); });
     };
     on('[data-ok]', 'click', function (el) { go2(el, true); }, root);
     on('[data-no]', 'click', function (el) { ask({ title: 'ไม่อนุมัติคำขอลานี้?', ok: 'ไม่อนุมัติ', tone: 'danger' }).then(function (ok) { if (ok) go2(el, false); }); }, root);
@@ -1179,6 +1183,7 @@
     '.hst{display:inline-block;margin-top:4px;font-size:12px;font-weight:700;padding:2px 9px;border-radius:99px}.hst.ok{background:#dcfce7;color:#15803d}.hst.wait{background:#ffedd5;color:#c2410c}.hst.no{background:#fee2e2;color:#b91c1c}.pprice .hst{display:block;width:max-content;margin-left:auto}',
     '.htype{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;background:#fef3c7;color:#b45309}.htype.sick{background:#dbeafe;color:#1d4ed8}.htype.absent{background:#fee2e2;color:#b91c1c}.htype.late{background:#f1f5f9;color:#475569}.htype.vacation{background:#dcfce7;color:#15803d}',
     '.hpicks{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px;max-height:320px;overflow:auto;margin-top:8px}.hpick{display:flex;align-items:center;gap:8px;border:1.5px solid var(--line);border-radius:10px;padding:5px 8px;font-size:13.5px;cursor:pointer;margin:0}.hpick.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 7%,white)}.hpick small{display:block;font-size:11px;color:var(--muted)}',
+    '.hpr-btns .hdone,.hpr-btns button:disabled{background:#e5e7eb!important;border-color:#d1d5db!important;color:#6b7280!important;cursor:not-allowed}.hdone-tag{display:inline-block;padding:7px 12px;border-radius:10px;background:#e5e7eb;color:#4b5563;font-weight:700;font-size:13.5px}',
     '.hnewph{display:flex;align-items:center;gap:10px;margin-bottom:10px}.xsep{height:1px;background:var(--line);margin:8px 0}.hpend{border:2px solid #f59e0b;margin-bottom:14px}.hpend h4{margin:0 0 6px}.hpr-row{display:flex;gap:10px;align-items:center;border-top:1px solid var(--line);padding:8px 0;flex-wrap:wrap}.hpr-row .pinfo small{display:block}.hpr-btns{display:flex;gap:6px}.hok{background:#16a34a;color:#fff}.hno{background:#fee2e2;color:#b91c1c}.hform{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}.hqr{background:#fff;padding:8px;border-radius:10px;border:1px solid var(--line);min-width:176px;min-height:176px}.hline div{padding:6px 10px;border-radius:8px;background:#fffbeb;margin-bottom:6px;font-size:14px}.hline div.ok{background:#f0fdf4}.hposter{background:#fff;text-align:center;padding:30px;border-radius:14px}.hposter h2{font-size:40px;margin:10px 0 0}.hposter h3{font-size:24px;margin:6px 0 16px;color:#334155}.hposter #qrBig{display:inline-block;padding:14px;border:3px solid #0f172a;border-radius:16px}.hposter p{font-size:17px;margin:10px 0}.hposter .slogo{height:70px}',
     '.hrt{width:100%;border-collapse:collapse;font-size:11.5px;table-layout:auto}.hrt th{background:#f1f5f9;border:1px solid #0f172a;padding:4px;text-align:center;font-size:11px}.hrt th small{font-weight:400;color:#475569}.hrt td{border:1px solid #0f172a;padding:4px;vertical-align:top}.hrt .c{text-align:center}.hrt .r{text-align:right}.hrt .b{font-weight:700}.hrt tfoot td{background:#f1f5f9;font-weight:700}.hrt.sm{font-size:11.5px;margin-bottom:6px}',
     '.hrimg{width:52px;height:65px;object-fit:cover;border-radius:4px;display:inline-grid;place-items:center;background:#e2e8f0;font-size:16px;font-weight:700;color:#64748b}',

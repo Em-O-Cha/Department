@@ -281,8 +281,8 @@ function hrLineReply_(replyToken, messages) {
     headers: { Authorization: 'Bearer ' + token }, payload: JSON.stringify({ replyToken: replyToken, messages: messages }) });
 }
 function hrThDate_(iso) { var m = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'], p = String(iso).split('-'); return p.length === 3 ? (+p[2]) + ' ' + m[+p[1] - 1] + ' ' + ((+p[0] + 543) % 100) : iso; }
-// การ์ดคำขอลา (decided = แสดงผลแล้ว ไม่มีปุ่ม)
-function hrLeaveFlex_(l, e, bal, decided) {
+// การ์ดคำขอลา (decided = แสดงผลแล้ว: ปุ่มสีเทากดไม่ได้ "อนุมัติไปแล้ว" — ผู้ใช้ขอ 20/11/69 · again = ตอบตอนมีคนกดซ้ำ)
+function hrLeaveFlex_(l, e, bal, decided, again) {
   var T = function (t, o) { var x = { type: 'text', text: String(t), wrap: true }; Object.keys(o || {}).forEach(function (k) { x[k] = o[k]; }); return x; };
   var row = function (a, b, color) { return { type: 'box', layout: 'horizontal', contents: [T(a, { size: 'sm', color: '#64748b', flex: 3 }), T(b, { size: 'sm', weight: 'bold', color: color || '#0f172a', flex: 5 })] }; };
   var dates = hrThDate_(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + hrThDate_(l.dateTo) : '');
@@ -300,6 +300,10 @@ function hrLeaveFlex_(l, e, bal, decided) {
     header: { type: 'box', layout: 'vertical', backgroundColor: decided ? (l.status === 'อนุมัติ' ? '#16a34a' : '#dc2626') : '#2563eb', paddingAll: '12px',
       contents: [T(decided ? (l.status === 'อนุมัติ' ? '✅ อนุมัติแล้ว' : '❌ ไม่อนุมัติ') + (l.approver ? ' · ' + l.approver : '') : '📝 คำขอลาใหม่ · รออนุมัติ', { color: '#ffffff', weight: 'bold', size: 'md' })] },
     body: { type: 'box', layout: 'vertical', paddingAll: '14px', contents: body } };
+  if (decided) bubble.footer = { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '10px', contents: [
+    { type: 'box', layout: 'vertical', backgroundColor: '#e5e7eb', cornerRadius: '8px', paddingAll: '10px', contents: [
+      T((l.status === 'อนุมัติ' ? '✓ อนุมัติไปแล้ว' : '✕ ไม่อนุมัติไปแล้ว') + ' · กดซ้ำไม่ได้', { size: 'sm', weight: 'bold', color: '#6b7280', align: 'center' })] }]
+    .concat(again ? [T('มีการกดปุ่มในการ์ดเดิมอีกครั้ง — คำขอนี้จัดการไปแล้ว' + (l.decidedAt ? ' เมื่อ ' + String(l.decidedAt).slice(0, 16) : ''), { size: 'xxs', color: '#94a3b8', align: 'center' })] : []) };
   if (!decided) bubble.footer = { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '10px', contents: [
     { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
       { type: 'button', style: 'primary', color: '#16a34a', height: 'sm', action: { type: 'postback', label: '✅ อนุมัติ', data: 'hr|ok|' + l.id + '|' + hrSign_('ok|' + l.id), displayText: 'อนุมัติการลา' } },
@@ -354,6 +358,7 @@ function hrLineWebhook_(events) {
         var dept = findDept_('HR'), who = hrLineName_(gid, src.userId) + ' (LINE)';
         var r = hrDecideLeave_(dept, p[2], p[1] === 'ok', who);
         if (r.ok) hrLineReply_(ev.replyToken, [hrLeaveFlex_(r.leave, r.emp || {}, null, true)]);
+        else if (r.already && r.leave) hrLineReply_(ev.replyToken, [hrLeaveFlex_(r.leave, r.emp || {}, null, true, true)]);
         else hrLineReply_(ev.replyToken, [{ type: 'text', text: r.error || 'ทำรายการไม่ได้' }]);
       }
     } catch (err) { Logger.log('hrLineWebhook_ ' + err); }

@@ -330,7 +330,11 @@ function hrDecideLeave_(dept, id, approve, who) {
   return purLocked_(function () {
     var ss = hrBook_(dept), row = hrById_(purRead_(ss, 'hr_leaves'), id);
     if (!row) return { ok: false, error: 'ไม่พบคำขอลา' };
-    if (row.status !== 'รออนุมัติ') return { ok: false, already: true, status: row.status, approver: row.approver, error: 'คำขอนี้' + row.status + 'ไปแล้ว' + (row.approver ? ' โดย ' + row.approver : '') };
+    if (row.status !== 'รออนุมัติ') {   // กดซ้ำ: ส่งผลเดิมกลับไป (หน้าเว็บแสดงปุ่มสีเทา / LINE ตอบการ์ดที่จัดการแล้ว)
+      var e0 = hrById_(hrPeople_(ss), row.empId);
+      return { ok: false, already: true, status: row.status, approver: row.approver, error: 'คำขอนี้' + row.status + 'ไปแล้ว' + (row.approver ? ' โดย ' + row.approver : ''),
+        leave: hrLeaveOut_(row, hrSettings_(ss)), emp: e0 ? { fullName: e0.fullName, nickname: e0.nickname } : null };
+    }
     row.status = approve ? 'อนุมัติ' : 'ไม่อนุมัติ'; row.approver = hrText_(who, 80); row.decidedAt = purNow_(); row.updatedAt = purNow_();
     purWrite_(ss, 'hr_leaves', row);
     var emp = hrById_(hrPeople_(ss), row.empId);
