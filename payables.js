@@ -91,13 +91,21 @@
   ];
   var ADDR_RX = /หมู่|ม\.\s*\d|ถนน|ถ\.|ซอย|ซ\.|ตำบล|ต\.|แขวง|อำเภอ|อ\.|เขต|จังหวัด|จ\.|กรุงเทพ|Moo|Road|Soi/i;
   function invToken(s) {
-    s = String(s || '').replace(/^[\s:：.#\-]+/, '');
+    s = String(s || '').replace(/^[\s:：.#\-]+/, '').replace(/^[1l|!]\s?V(?=\s?\d)/, 'IV');
     var m = s.match(/^([A-Za-z]{1,5})\s+(\d[\dA-Za-z\-\/]{2,})/) || s.match(/^([A-Za-z0-9][A-Za-z0-9\-\/.]{2,})/);
     if (!m) return '';
     var v = (m[2] ? m[1] + m[2] : m[1]).replace(/[.\-\/]+$/, '');
     if (!/\d/.test(v) || /^\d{13}$/.test(v) || /^0\d{8,9}$/.test(v)) return '';   // ต้องมีตัวเลข · ไม่ใช่เลขผู้เสียภาษี / เบอร์โทร
     var i = v.search(/\d/);   // หลังตัวเลขตัวแรก OCR มักอ่าน O→0, I/l→1
     return (v.slice(0, i) + v.slice(i).replace(/[Oo]/g, '0').replace(/[Il]/g, '1')).toUpperCase();
+  }
+  // OCR อ่านตัวพิมพ์ดอทเมทริกซ์ผิดบ่อย เช่น IV → 1V / |V / lV หรือมีขยะนำหน้า → หาเลขที่มีตัวเลข 5 หลักขึ้นไปในช่วงต้นข้อความแทน
+  function invLoose(s) {
+    s = String(s || '').slice(0, 40).replace(/(^|[^A-Za-z])[1l|!]\s?V(?=\s?\d)/g, '$1IV');
+    var m = s.match(/([A-Za-z]{0,4})\s?[-\/]?\s?(\d[\d\-\/]{4,}[A-Za-z0-9]*)/);
+    if (!m) return '';
+    var v = (m[1] + m[2]).replace(/[.\-\/]+$/, '').toUpperCase();
+    return /^\d{13}$/.test(v) || /^0\d{8,9}$/.test(v) || /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(v) ? '' : v;   // ไม่ใช่เลขภาษี / เบอร์โทร / วันที่
   }
   P.findInvNo = function (T) {
     for (var k = 0; k < INV_KEYS.length; k++) {
@@ -106,11 +114,13 @@
         var rest = T[i].slice(m.index + m[0].length);
         if (k === INV_KEYS.length - 1 && ADDR_RX.test(rest.slice(0, 40))) continue;   // "เลขที่ 99/9 ถนน…" = ที่อยู่
         var seg = rest.split(/\s{2,}/)[0] || rest, v = invToken(seg) || (!rest.trim() && T[i + 1] ? invToken(T[i + 1].split(/\s{2,}/)[0]) : '');
+        if (!v && k < INV_KEYS.length - 1) v = invLoose(rest) || (T[i + 1] ? invLoose(T[i + 1]) : '');   // คำนำหน้าชัด แต่ค่าอ่านเพี้ยน
+        if (!v && k === INV_KEYS.length - 1) { var lv = invLoose(rest); if (/^[A-Z]{1,4}[-\/]?\d{5,}/.test(lv)) v = lv; }   // "เลขที่" + ขยะ + IV…
         if (k === INV_KEYS.length - 1 && /^\d{1,4}(\/\d{1,4})?$/.test(v)) continue;   // เลขสั้น ๆ แบบบ้านเลขที่
         if (v) return v;
       }
     }
-    var x = T.join('\n').match(/\b((?:IV|INV|IN|TI|TX|BL|SI|RE|RV|DO)[-\/]?\d[\dA-Z\-\/]{3,})\b/i);
+    var x = T.join('\n').replace(/(^|[^A-Za-z])[1l|!]V(?=\d)/g, '$1IV').match(/\b((?:IV|INV|IN|TI|TX|BL|SI|RE|RV|DO)[-\/]?\d[\dA-Z\-\/]{3,})\b/i);
     return x ? x[1].toUpperCase() : '';
   };
   P.parseBill = function (lines) {
@@ -187,7 +197,7 @@
     return new Promise(function (ok, fail) {
       var url = URL.createObjectURL(file), img = new Image();
       img.onload = function () {
-        var s = Math.min(1, 2200 / Math.max(img.width, img.height)), w = Math.round(img.width * s), h = Math.round(img.height * s);
+        var mx = Math.max(img.width, img.height), s = mx < 1600 ? 1800 / mx : Math.min(1, 2200 / mx), /* ภาพเล็ก (สแกนความละเอียดต่ำ) ขยายก่อนอ่าน */ w = Math.round(img.width * s), h = Math.round(img.height * s);
         var cv = document.createElement('canvas'), turn = (rot || 0) % 180 !== 0;
         cv.width = turn ? h : w; cv.height = turn ? w : h;
         var ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
@@ -503,6 +513,7 @@
       if (bill != null) checks += chk(Math.abs(bill - t.total) < 0.06 ? true : 'warn', 'ยอดรวมท้ายบิลที่อ่านได้ ' + m2(bill) + (Math.abs(bill - t.total) < 0.06 ? ' ตรงกับรวมในตาราง' : ' — ในตารางรวม ' + m2(t.total) + ' ตรวจรายการ / ราคา / แบบ VAT อีกครั้ง'));
       if (r.vat != null && b.vatMode !== 'none') checks += chk(Math.abs(r.vat - t.vat) < 0.06 ? true : 'warn', 'VAT ท้ายบิล ' + m2(r.vat) + (Math.abs(r.vat - t.vat) < 0.06 ? ' ตรงกัน' : ' — ในตาราง ' + m2(t.vat)));
       if (!r.lines.length) checks += chk('warn', 'อ่านรายการสินค้าจากภาพไม่ได้ — พิมพ์รายการเองตามภาพ');
+      if (!b.invNo) checks += chk('warn', 'อ่านเลขที่ใบกำกับจากภาพไม่ได้ — พิมพ์เองตามภาพ (กด "ข้อความที่อ่านได้" ใต้ภาพเพื่อดูว่าระบบอ่านได้อะไร)');
       if (!vendorOf(b.vendor)) checks += chk('warn', 'ผู้ขายใหม่ — ระบบจะจำ หมวด เครดิต แบบ VAT % และบัญชีธนาคารไว้ใช้ครั้งต่อไป');
     }
     $('apSum').innerHTML = '<div class="apsum"><span>มูลค่ารายการ<b>' + m2(t.amount) + '</b></span><span>VAT<b>' + m2(t.vat) + '</b></span><span>รวม<b>' + m2(t.total) + '</b></span><span class="apred">หัก ' + (b.pct || 0) + '%<b>' + m2(t.wht) + '</b></span><span class="appay">ชำระ<b>' + m2(pay) + '</b></span></div>' + (checks ? '<div class="a7checks">' + checks + '</div>' : '');
