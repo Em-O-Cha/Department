@@ -9,6 +9,7 @@
     gear2: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
     box: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
     camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+    upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/>',
     x: '<path d="M18 6L6 18M6 6l12 12"/>', back: '<path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/>', chev: '<path d="M9 18l6-6-6-6"/>'
   });
   var MENUS = [
@@ -16,6 +17,7 @@
     { id: 'p_dash', label: 'ภาพรวม / Dashboard', ic: 'chart' },
     { id: 'p_bd', label: 'Breakdown เครื่องจักร', ic: 'gear2' },
     { id: 'p_prod', label: 'สินค้า & มาตรฐาน Yield', ic: 'box' },
+    { id: 'p_imp', label: 'นำเข้าไฟล์ Yield (Excel)', ic: 'upload' },
     { id: 'p_set', label: 'ตั้งค่า / LINE', ic: 'gear' },
     { id: 'p_log', label: 'ประวัติการแก้ไข', ic: 'clock' }
   ];
@@ -113,7 +115,7 @@
       });
       return;
     }
-    ({ p_day: dayPage, p_dash: dash, p_bd: bdPage, p_prod: prodPage, p_set: settings, p_log: logPage }[page] || dayPage)();
+    ({ p_day: dayPage, p_dash: dash, p_bd: bdPage, p_prod: prodPage, p_imp: importPage, p_set: settings, p_log: logPage }[page] || dayPage)();
   };
 
   // ==================== แผนผลิต / บันทึกผล (รายวัน) ====================
@@ -804,6 +806,118 @@
       },
       submit: function () { closeModal(); return Promise.resolve(); } });
   }
+  // ==================== นำเข้าไฟล์ Yield (Excel) ย้อนหลัง ====================
+  // ไฟล์ของฝ่าย: 1 ชีต = 1 วัน (หัว "วันที่ dd/mm/yyyy") · หัวตาราง รายชื่อสินค้า / น้ำหนักวัตถุดิบ / น้ำหนักหลังผัด / น้ำหนักหลังทำเย็น / Yield / จำนวนสินค้า / จำนวนสินค้าที่ได้จริง
+  // ส่งเฉพาะแถวที่มีผลจริง → prdImportYield (ตรวจก่อน dry=true แล้วค่อยบันทึก) · ตัวเลขในไฟล์ = ค่าเฉลี่ยต่อ batch
+  var XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  function loadXlsx() {
+    if (window.XLSX) return Promise.resolve();
+    return new Promise(function (ok, fail) {
+      var sc = document.createElement('script'); sc.src = XLSX_URL; sc.onload = ok; sc.onerror = function () { fail(new Error('โหลดตัวอ่านไฟล์ Excel ไม่ได้ — ตรวจอินเทอร์เน็ต')); };
+      document.head.appendChild(sc);
+    });
+  }
+  function yieldDate(rows, sheetName) {
+    for (var i = 0; i < Math.min(rows.length, 6); i++) for (var j = 0; j < rows[i].length; j++) {
+      var c = rows[i][j];
+      if (typeof c === 'number' && c > 30000 && c < 80000) { var d = XLSX.SSF.parse_date_code(c); return d.y + '-' + pad(d.m) + '-' + pad(d.d); }
+      var m = String(c).match(/(\d{1,2})\s*[\/.]+\s*(\d{1,2})\s*[\/.]+\s*(\d{4})/);
+      if (m) { var y = +m[3]; if (y > 2400) y -= 543; return y + '-' + pad(m[2]) + '-' + pad(m[1]); }
+    }
+    return '';
+  }
+  H.parseYield = function (wb, fileName) {
+    var items = [], skipped = [];
+    wb.SheetNames.forEach(function (sn) {
+      var rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: true, defval: '' }), hi = -1;
+      for (var i = 0; i < Math.min(rows.length, 12); i++) if (rows[i].some(function (c) { return String(c).trim() === 'รายชื่อสินค้า'; })) { hi = i; break; }
+      if (hi < 0) return skipped.push(sn + ' (ไม่พบหัวตาราง)');
+      var hd = rows[hi].map(function (c) { return String(c).replace(/\s+/g, ''); });
+      var col = function (fn) { for (var k = 0; k < hd.length; k++) if (fn(hd[k])) return k; return -1; };
+      var cN = col(function (h) { return h === 'รายชื่อสินค้า'; }), cR = col(function (h) { return /วัตถุดิบ/.test(h); }), cF = col(function (h) { return /หลังผัด/.test(h); }),
+        cC = col(function (h) { return /ทำเย็น/.test(h); }), cA = col(function (h) { return /ได้จริง/.test(h); }), cS = col(function (h) { return /^จำนวนสินค้า$/.test(h); });
+      var date = yieldDate(rows.slice(0, hi + 1), sn);
+      if (!date) return skipped.push(sn + ' (ไม่พบวันที่)');
+      var cat = '', got = 0, at = function (r, k) { return k < 0 ? '' : r[k]; };
+      rows.slice(hi + 1).forEach(function (r) {
+        var name = String(at(r, cN)).trim(); if (!name) return;
+        var vals = [cR, cF, cC, cA, cS].map(function (k) { return at(r, k); });
+        if (vals.every(function (v) { return String(v).trim() === ''; })) { cat = name; return; }
+        var it = { date: date, cat: cat, name: name, rawKg: num(at(r, cR)), fryKg: num(at(r, cF)), coolKg: num(at(r, cC)), actQty: num(at(r, cA)), std: String(at(r, cS)).trim() };
+        if (it.fryKg === '' && it.coolKg === '' && it.actQty === '') return;
+        if (it.actQty !== '') it.actQty = Math.round(it.actQty * 100) / 100;
+        it._sheet = sn; items.push(it); got++;
+      });
+      if (!got) skipped.push(sn + ' (ไม่มีผลผลิต)');
+    });
+    // วันที่ในชีตพิมพ์ผิดเดือน (เช่น ชีต "10.09" เขียนวันที่ 10/10/2026): เดือนไม่ตรงกับเดือนส่วนใหญ่ของไฟล์ แต่ชื่อชีต dd.mm ตรง → ใช้ตามชื่อชีต
+    var cnt = {}; items.forEach(function (x) { var k = x.date.slice(0, 7); cnt[k] = (cnt[k] || 0) + 1; });
+    var main = Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a]; })[0], fixed = {};
+    items.forEach(function (x) {
+      var m = String(x._sheet).match(/^\s*(\d{1,2})\.(\d{1,2})/);
+      if (main && x.date.slice(0, 7) !== main && m && pad(m[2]) === main.slice(5, 7) && +m[1] >= 1 && +m[1] <= 31) { fixed[x._sheet] = x.date + ' → ' + main + '-' + pad(m[1]); x.date = main + '-' + pad(m[1]); }
+      delete x._sheet;
+    });
+    Object.keys(fixed).forEach(function (k) { skipped.push('ชีต ' + k + ': วันที่ในชีตไม่ตรงชื่อชีต ใช้ตามชื่อชีต (' + fixed[k] + ')'); });
+    return { items: items, skipped: skipped, file: fileName };
+  };
+  function importPage() {
+    var st = H.imp || (H.imp = {});
+    var html = '<h3>นำเข้าไฟล์ Yield (Excel)</h3><p class="lead">ไฟล์ Yield รายเดือนของฝ่ายผลิต (1 ชีต = 1 วัน) · ระบบอ่านเฉพาะสินค้าที่มีผลจริงในวันนั้น แล้วบันทึกเป็นผลงานผัด (G2) ย้อนหลัง · เลือกได้หลายไฟล์พร้อมกัน · นำเข้าไฟล์เดิมซ้ำ = แก้ของเดิม ไม่เพิ่มซ้ำ</p>'
+      + '<div class="panel noprint"><label class="btn btn-primary" style="cursor:pointer">' + icon('upload', 16) + ' เลือกไฟล์ Excel<input type="file" id="yFile" accept=".xlsx,.xls" multiple hidden></label>'
+      + (st.files ? ' <span class="muted">' + esc(st.files.join(', ')) + '</span>' : '') + '</div><div id="yOut">' + (st.html || '') + '</div>';
+    $('main').innerHTML = html;
+    $('yFile').addEventListener('change', function () {
+      var files = Array.prototype.slice.call(this.files || []); if (!files.length) return;
+      $('yOut').innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังอ่านไฟล์…</div>';
+      loadXlsx().then(function () {
+        return Promise.all(files.map(function (f) {
+          return new Promise(function (ok, fail) { var fr = new FileReader(); fr.onload = function () { try { ok(H.parseYield(XLSX.read(new Uint8Array(fr.result), { type: 'array' }), f.name)); } catch (e) { fail(new Error(f.name + ': อ่านไฟล์ไม่ได้')); } }; fr.onerror = function () { fail(new Error(f.name + ': อ่านไฟล์ไม่ได้')); }; fr.readAsArrayBuffer(f); });
+        }));
+      }).then(function (res) {
+        var items = [], skipped = [];
+        res.forEach(function (r) { items = items.concat(r.items); r.skipped.forEach(function (x) { skipped.push(r.file + ' · ' + x); }); });
+        st.items = items; st.skipped = skipped; st.files = files.map(function (f) { return f.name; });
+        if (!items.length) { st.html = '<div class="panel">ไม่พบแถวที่มีผลผลิตในไฟล์ — ตรวจว่าเป็นไฟล์ Yield (หัวตาราง "รายชื่อสินค้า")</div>'; return importPage(); }
+        $('yOut').innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังตรวจกับข้อมูลในระบบ…</div>';
+        return call('prdImportYield', state.token, items, true).then(function (r) {
+          if (!r.ok) { st.html = '<div class="panel">' + esc(r.error) + '</div>'; return importPage(); }
+          st.html = yieldPreview(r, skipped); importPage();
+        });
+      }).catch(function (e) { onServerError(e); $('yOut').innerHTML = '<div class="panel">' + esc(e.message) + '</div>'; });
+    });
+    var go2 = $('ySave'); if (go2) go2.addEventListener('click', function () {
+      go2.disabled = true; go2.innerHTML = '<span class="spinner"></span> กำลังบันทึก…';
+      call('prdImportYield', state.token, st.items, false).then(function (r) {
+        if (!r.ok) { go2.disabled = false; go2.textContent = 'บันทึกเข้าระบบ'; return toast(r.error); }
+        var ds = st.items.map(function (x) { return x.date; }).sort();
+        H.imp = null; H.data = null;
+        toast('✓ นำเข้าแล้ว ' + r.total + ' รายการ (' + r.days + ' วัน)');
+        H.q.from = ds[0]; H.q.to = ds[ds.length - 1]; go('p_dash');
+      }).catch(function (e) { go2.disabled = false; go2.textContent = 'บันทึกเข้าระบบ'; onServerError(e); });
+    });
+    var cl = $('yClear'); if (cl) cl.addEventListener('click', function () { H.imp = null; importPage(); });
+  }
+  function yieldPreview(r, skipped) {
+    var byDay = {}; r.rows.forEach(function (x) { (byDay[x.date] = byDay[x.date] || []).push(x); });
+    var tg = Number(S_().target) || 85;
+    var head = '<div class="kpis">' + [[r.days, 'วัน'], [r.total, 'รายการผลผลิต'], [r.fresh, 'รายการใหม่'], [r.update, 'มีอยู่แล้ว (จะแก้ทับ)'], [r.newProducts.length, 'สินค้าใหม่']].map(function (k) { return '<div class="kpi"><b>' + k[0] + '</b><span>' + k[1] + '</span></div>'; }).join('') + '</div>';
+    var np = r.newProducts.length ? '<div class="panel"><b>สินค้าที่ยังไม่มีในระบบ — จะเพิ่มให้พร้อมมาตรฐานจากไฟล์</b><ul>' + r.newProducts.map(function (p) { return '<li>' + esc(p.name) + ' <span class="muted">(' + esc(p.category || '-') + ' · ' + fmt(p.rawKg) + ' กก./batch · ' + fmt(p.qtyMin) + (p.qtyMax !== p.qtyMin ? '–' + fmt(p.qtyMax) : '') + ')</span></li>'; }).join('') + '</ul></div>' : '';
+    var sk = skipped.length ? '<details class="panel"><summary>หมายเหตุการอ่านไฟล์ ' + skipped.length + ' รายการ (ชีตที่ข้าม / วันที่ที่แก้)</summary><ul>' + skipped.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></details>' : '';
+    var tb = '<div class="panel" style="overflow:auto"><table class="ptable"><thead><tr><th>วันที่</th><th>สินค้า</th><th>วัตถุดิบ (กก.)</th><th>หลังผัด</th><th>หลังทำเย็น</th><th>Yield</th><th>ได้จริง</th><th>ควรได้</th></tr></thead><tbody>'
+      + Object.keys(byDay).sort().map(function (d) {
+        return byDay[d].map(function (x, i) {
+          var yc = x.yieldPct === '' ? '' : x.yieldPct >= tg ? 'color:#16a34a' : 'color:#dc2626';
+          var qc = x.actQty === '' || x.expMin === '' ? '' : x.actQty < x.expMin ? 'color:#dc2626' : x.actQty > x.expMax ? 'color:#d97706' : 'color:#16a34a';
+          return '<tr>' + (i ? '' : '<td rowspan="' + byDay[d].length + '"><b>' + dd(d) + '</b></td>') + '<td>' + esc(x.product) + (x.newProduct ? ' <small style="color:#2563eb">ใหม่</small>' : '') + (x.exists ? ' <small class="muted">มีแล้ว</small>' : '') + '</td>'
+            + '<td class="r">' + fmt(x.rawKg, 3) + '</td><td class="r">' + fmt(x.fryKg, 3) + '</td><td class="r">' + fmt(x.coolKg, 3) + '</td><td class="r" style="' + yc + '">' + (x.yieldPct === '' ? '-' : fmt(x.yieldPct, 1) + '%') + '</td>'
+            + '<td class="r" style="' + qc + '">' + fmt(x.actQty) + '</td><td class="r muted">' + (x.expMin === '' ? '-' : fmt(x.expMin) + (x.expMax !== x.expMin ? '–' + fmt(x.expMax) : '')) + '</td></tr>';
+        }).join('');
+      }).join('') + '</tbody></table></div>';
+    return head + '<div class="panel" style="background:#fffbeb;border-color:#fde68a">ตัวเลขในไฟล์เป็นค่าเฉลี่ยต่อ batch (ไฟล์ไม่มีจำนวน batch) — ระบบบันทึกเป็น "ทำจริง 1 batch" สถานะเสร็จแล้ว วันที่เสร็จ = วันผลิต</div>' + np + sk + tb
+      + '<div class="pbar noprint"><button class="btn btn-primary" id="ySave">' + icon('check', 16) + ' บันทึกเข้าระบบ ' + r.total + ' รายการ</button><button class="btn btn-line" id="yClear">เลือกไฟล์ใหม่</button></div>';
+  }
+
   function logPage() {
     $('main').innerHTML = '<h3>ประวัติการแก้ไข</h3><p class="lead">บันทึกทุกครั้งที่เพิ่ม/แก้/ลบข้อมูล และส่ง LINE</p><div id="lOut" class="panel"><span class="spinner dark"></span> กำลังโหลด</div>';
     call('prdLog', state.token, 300).then(function (r) {

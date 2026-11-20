@@ -46,7 +46,7 @@ function apiFunctions_() {
     rdLoad: rdLoad, rdSaveProduct: rdSaveProduct, rdDeleteProduct: rdDeleteProduct, rdSavePartner: rdSavePartner, rdDeletePartner: rdDeletePartner,
     rdSaveSettings: rdSaveSettings, rdLog: rdLog, rdDashboard: rdDashboard,
     rdSaveTrial: rdSaveTrial, rdDeleteTrial: rdDeleteTrial, rdUploadTrialPhoto: rdUploadTrialPhoto, rdRemoveTrialPhoto: rdRemoveTrialPhoto,
-    prdLoad: prdLoad, prdSaveProduct: prdSaveProduct, prdSavePlans: prdSavePlans, prdDeletePlan: prdDeletePlan, prdSaveBreakdown: prdSaveBreakdown, prdUploadBdPhoto: prdUploadBdPhoto, prdRemoveBdPhoto: prdRemoveBdPhoto,
+    prdLoad: prdLoad, prdSaveProduct: prdSaveProduct, prdSavePlans: prdSavePlans, prdImportYield: prdImportYield, prdDeletePlan: prdDeletePlan, prdSaveBreakdown: prdSaveBreakdown, prdUploadBdPhoto: prdUploadBdPhoto, prdRemoveBdPhoto: prdRemoveBdPhoto,
     prdDeleteBreakdown: prdDeleteBreakdown, prdSaveReport: prdSaveReport, prdUploadPhoto: prdUploadPhoto, prdRemovePhoto: prdRemovePhoto,
     prdSaveSettings: prdSaveSettings, prdLog: prdLog, prdDashboard: prdDashboard, prdSendLine: prdSendLine, prdLinePreview: prdLinePreview, prdLineTest: prdLineTest, prdSetLineToken: prdSetLineToken, prdUseAccBot: prdUseAccBot,
     // ผู้บริหาร (Executive.gs)
