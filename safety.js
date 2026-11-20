@@ -19,6 +19,7 @@
     { id: 's_check', label: 'ตรวจเช็คประจำวันแต่ละอาคาร', ic: 'shield' },
     { id: 's_find', label: 'ข้อบกพร่อง / ติดตามแก้ไข', ic: 'warn' },
     { id: 's_inc', label: 'อุบัติเหตุ / เกือบเกิดเหตุ', ic: 'alert' },
+    { id: 's_mon', label: 'ตรวจประจำเดือน (ทางออกฉุกเฉิน / แจ้งเหตุเพลิงไหม้)', ic: 'clock' },
     { id: 's_rep', label: 'รายงาน / พิมพ์ PDF', ic: 'print' },
     { id: 's_set', label: 'ตั้งค่าแบบตรวจ', ic: 'gear' },
     { id: 's_log', label: 'ประวัติการแก้ไข', ic: 'clock' }
@@ -156,7 +157,7 @@
       });
       return;
     }
-    ({ s_dash: dash, s_check: walk, s_find: findings, s_inc: incidents, s_rep: report, s_set: settings, s_log: logPage }[page] || dash)();
+    ({ s_dash: dash, s_check: walk, s_find: findings, s_inc: incidents, s_mon: monthly, s_rep: report, s_set: settings, s_log: logPage }[page] || dash)();
   };
   function landscape(onOff) {
     var el = document.getElementById('sheLandscape');
@@ -615,23 +616,25 @@
     if (!q.rYm) q.rYm = t.slice(0, 7);
     if (!q.rArea) q.rArea = (activeAreas()[0] || {}).id || '';
     var areaOpts = H.data.areas.map(function (a) { return '<option value="' + a.id + '"' + (q.rArea === a.id ? ' selected' : '') + '>' + esc(a.name) + '</option>'; }).join('');
-    var ctl = q.rep === 'f05'
+    var mf = /^m/.test(q.rep) ? q.rep.slice(1) : '';
+    var ctl = mf ? '<label class="pchk">เดือน <input type="month" id="rYm" value="' + q.rYm + '"></label>' : q.rep === 'f05'
       ? '<label class="pchk">ตั้งแต่ <input type="date" id="rFrom" value="' + q.rFrom + '"></label><label class="pchk">ถึง <input type="date" id="rTo" value="' + q.rTo + '"></label>'
         + '<select id="rArea5"><option value="">ทุกพื้นที่</option>' + H.data.areas.map(function (a) { return '<option value="' + a.id + '"' + (q.r5Area === a.id ? ' selected' : '') + '>' + esc(a.name) + '</option>'; }).join('') + '</select>'
         + '<select id="rSt"><option value="">ทุกสถานะ</option><option value="pending"' + (q.rSt === 'pending' ? ' selected' : '') + '>ค้างแก้ไข</option><option value="done"' + (q.rSt === 'done' ? ' selected' : '') + '>แก้ไขเรียบร้อย</option></select>'
       : '<label class="pchk">เดือน <input type="month" id="rYm" value="' + q.rYm + '"></label><select id="rArea">' + areaOpts + '</select>';
-    $('main').innerHTML = '<h3>รายงาน / พิมพ์ PDF</h3><p class="lead">กด "พิมพ์ / บันทึก PDF" แล้วเลือก "บันทึกเป็น PDF" (บน iPad: พิมพ์ → แตะแชร์ → บันทึกไปยังไฟล์) · กระดาษ A4 แนวนอน</p>'
-      + '<div class="pchips noprint">' + [['f05', 'FM-SHE-01-05 สรุปรายงานสำรวจตรวจสอบ'], ['f06', 'FM-SHE-01-06 แบบตรวจความปลอดภัย (รายเดือน)']].map(function (c) { return '<button class="chip' + (q.rep === c[0] ? ' on' : '') + '" data-rep="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>'
+    $('main').innerHTML = '<h3>รายงาน / พิมพ์ PDF</h3><p class="lead">กด "พิมพ์ / บันทึก PDF" แล้วเลือก "บันทึกเป็น PDF" (บน iPad: พิมพ์ → แตะแชร์ → บันทึกไปยังไฟล์) · กระดาษ A4 ตามแบบฟอร์ม (แนวนอน / แนวตั้ง)</p>'
+      + '<div class="pchips noprint">' + [['f05', 'FM-SHE-01-05 สรุปรายงานสำรวจตรวจสอบ'], ['f06', 'FM-SHE-01-06 แบบตรวจความปลอดภัย (รายเดือน)']].concat(Object.keys(SHEM).map(function (k) { return ['m' + k, 'FM-SHE-' + k + ' ' + SHEM[k].name]; })).map(function (c) { return '<button class="chip' + (q.rep === c[0] ? ' on' : '') + '" data-rep="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>'
       + '<div class="pbar noprint">' + ctl + '<button class="btn btn-sm btn-primary" id="rGo">ดูรายงาน</button><button class="btn btn-sm btn-line" id="rPrint">' + icon('print', 16) + ' พิมพ์ / บันทึก PDF</button></div>'
       + '<div id="rOut"></div>';
     on('[data-rep]', 'click', function (el) { q.rep = el.getAttribute('data-rep'); report(); }, $('main'));
     $('rPrint').addEventListener('click', function () {
       if (!$('rOut').innerHTML) return toast('กด "ดูรายงาน" ก่อน');
-      var old = document.title; document.title = q.rep === 'f05' ? 'FM-SHE-01-05_' + q.rFrom + '_' + q.rTo : 'FM-SHE-01-06_' + ((area(q.rArea) || {}).name || '') + '_' + q.rYm;
+      var old = document.title; document.title = mf ? 'FM-SHE-' + mf + '_' + q.rYm : q.rep === 'f05' ? 'FM-SHE-01-05_' + q.rFrom + '_' + q.rTo : 'FM-SHE-01-06_' + ((area(q.rArea) || {}).name || '') + '_' + q.rYm;
       window.print(); setTimeout(function () { document.title = old; }, 1500);
     });
     $('rGo').addEventListener('click', function () {
-      if (q.rep === 'f05') { q.rFrom = v('rFrom'); q.rTo = v('rTo'); q.r5Area = v('rArea5'); q.rSt = v('rSt'); } else { q.rYm = v('rYm'); q.rArea = v('rArea'); }
+      if (mf) q.rYm = v('rYm');
+      else if (q.rep === 'f05') { q.rFrom = v('rFrom'); q.rTo = v('rTo'); q.r5Area = v('rArea5'); q.rSt = v('rSt'); } else { q.rYm = v('rYm'); q.rArea = v('rArea'); }
       runReport();
     });
     runReport();
@@ -639,6 +642,14 @@
   function runReport() {
     var q = H.q;
     $('rOut').innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังสร้างรายงาน…</div>';
+    if (/^m/.test(q.rep)) {
+      var form = q.rep.slice(1); landscape(!!SHEM[form].land);
+      return call('sheMonthly', state.token, q.rYm).then(function (r) {
+        if (!r.ok) { $('rOut').innerHTML = '<div class="panel">' + esc(r.error) + '</div>'; return; }
+        $('rOut').innerHTML = stmHtml(form, r.records[form], r.fm[form], r.ym) + (r.records[form] ? '' : '<p class="muted noprint">ยังไม่ได้บันทึกผลตรวจเดือนนี้ — พิมพ์เป็นแบบฟอร์มเปล่าได้</p>');
+      }).catch(onServerError);
+    }
+    landscape(true);
     var p = q.rep === 'f05' ? call('sheFindingReport', state.token, q.rFrom, q.rTo) : call('sheMonthReport', state.token, q.rYm, q.rArea);
     p.then(function (r) {
       if (!r.ok) { $('rOut').innerHTML = '<div class="panel">' + esc(r.error) + '</div>'; return; }
@@ -709,6 +720,127 @@
     return '<div class="sreport"><table class="rwrap"><thead><tr><td>' + head + '</td></tr></thead><tbody><tr><td>' + body + '</td></tr></tbody></table></div>';
   }
 
+  // ==================== ตรวจประจำเดือน FM-SHE-05-04 … 05-08 (ผู้ใช้ขอ 20/11/69) ====================
+  // หัวข้อ / ช่อง / ผู้ลงนามตามไฟล์ Excel ของฝ่าย · ผล P ปกติ / X ผิดปกติ / - ไม่มีในรายการ / O อยู่ระหว่างแก้ไข (เฉพาะ 05-07) · API ใน SheMonthly.gs
+  var SHEM = {
+    '05-04': { name: 'ไฟส่องทางออกฉุกเฉิน', title: 'บันทึกการตรวจสอบไฟส่องทางออกฉุกเฉิน', no: 'ที่', loc: 'สถานที่ติดตั้ง', group: 'ผลการตรวจสอบ',
+      items: ['สภาพทั่วไป', 'สัญญาณเตือน', 'สัญญาณไฟ', 'อื่น ๆ'], note: 'หมายเหตุ', ok: '/', rows: 24, legend: 'หมายเหตุ&nbsp;&nbsp; 1.) ผลการตรวจสอบ :&nbsp; <b>/</b> ปกติ ;&nbsp; <b>X</b> ผิดปกติ &nbsp;และ&nbsp; <b>-</b> ไม่มีในรายการนั้น' },
+    '05-05': { name: 'ป้ายทางออกฉุกเฉิน', title: 'บันทึกการตรวจสอบป้ายทางออกฉุกเฉิน', no: 'ที่', loc: 'สถานที่ติดตั้ง', group: 'ผลการตรวจสอบ',
+      items: ['สภาพทั่วไป', 'ไฟป้าย'], sum: 'สรุปผลการตรวจสอบ', note: 'หมายเหตุ', ok: '/', rows: 26, legend: 'หมายเหตุ&nbsp;&nbsp; 1.) ผลการตรวจสอบ :&nbsp; <b>/</b> ปกติ ;&nbsp; <b>X</b> ผิดปกติ &nbsp;และ&nbsp; <b>-</b> ไม่มีในรายการนั้น' },
+    '05-06': { name: 'ประตูทางออกฉุกเฉิน', title: 'บันทึกการตรวจสอบประตูทางออกฉุกเฉิน', no: 'ที่', loc: 'สถานที่ติดตั้ง', group: 'ผลการตรวจสอบ',
+      items: ['สภาพทั่วไป', 'สัญญาณเตือน', 'ไฟป้าย', 'สิ่งกีดขวาง', 'บันไดหนีไฟ'], note: 'หมายเหตุ', ok: '/', rows: 25, legend: 'หมายเหตุ&nbsp;&nbsp; 1.) ผลการตรวจสอบ :&nbsp; <b>/</b> ปกติ ;&nbsp; <b>X</b> ผิดปกติ &nbsp;และ&nbsp; <b>-</b> ไม่มีในรายการนั้น' },
+    '05-07': { name: 'ปุ่มกดสัญญาณแจ้งเหตุเพลิงไหม้', title: 'บันทึกการตรวจและทดสอบปุ่มกดสัญญาณแจ้งเหตุเพลิงไหม้', no: 'ลำดับ', loc: 'จุดติดตั้ง (Installation Point)', group: 'รายละเอียดการตรวจสอบ (ITEMS INSPECTION)',
+      items: ['สภาพจุดที่ติดตั้ง<br><small>(Areal)</small>', 'สภาพภายนอกทั่วไป<br><small>(External Conditions)</small>', 'สวิตช์ปุ่มกด<br><small>(Bottons)</small>', 'สภาพของสายไฟ<br><small>(Conditions Wiring)</small>', 'เสียงดัง<br><small>(Noisc)</small>', 'ไม่มีสิ่งกีดขวาง<br><small>(No Obstacleobjects)</small>'],
+      note: 'รายละเอียด / การแก้ไขปรับปรุง (Improvement)', ok: '√', withO: true, rows: 17, land: true, legend: 'หมายเหตุ&nbsp; กรุณาทำเครื่องหมาย :&nbsp;&nbsp; <b>√</b> = ปกติ (Normal)&nbsp;&nbsp;&nbsp; <b>X</b> = ผิดปกติ (Abnormal)&nbsp;&nbsp;&nbsp; <b>O</b> = อยู่ระหว่างการแก้ไข (Improving)' },
+    '05-08': { name: 'เครื่องตรวจจับควัน (Smoke Detector)', title: 'บันทึกการตรวจสอบเครื่องตรวจจับควัน(Smoke Detector)', no: 'ลำดับ', loc: 'สถานที่ติดตั้ง', group: 'รายการตรวจสอบ',
+      items: ['สภาพภายนอก ไม่มีรอยแตก, ชำรุด, หรือสิ่งสกปรกเกาะ', 'เมื่อฉีดพ่นน้ำยาทดสอบการทำงาน Smoke Detector มีไฟกระพริบติดที่ตัวอุปกรณ์นั้น', 'มีการส่งสัญญาณไปยังห้องควบคุมแสดงจุดที่เกิดการทำงานของ Smoke Detector', 'ทำการ reset จุดแจ้งเตือนที่ปุ่มติดตั้งและห้องควบคุม ได้ตามปกติ'],
+      note: 'หมายเหตุ<br>(ระบุให้ชัดเจน)', ok: '✓', rows: 24, smoke: true, legend: 'ผลการตรวจสอบ :&nbsp; <b>✓</b> ปกติ ;&nbsp; <b>X</b> ผิดปกติ &nbsp;และ&nbsp; <b>-</b> ไม่มีในรายการนั้น' }
+  };
+  var TH_MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+  function thd(iso) { if (!iso) return ''; var p = String(iso).split('-'); return +p[2] + '/' + +p[1] + '/' + (+p[0] + 543); }
+  function mSym(def, c) { return c === 'P' ? def.ok : c === 'X' ? 'X' : c === 'O' ? 'O' : c === '-' ? '-' : ''; }
+  function mSum(def, r) { var f = (r || []).slice(0, def.items.length); if (!f.some(String)) return ''; return f.some(function (c) { return c === 'X' || c === 'O'; }) ? 'ไม่ผ่าน' : 'ผ่าน'; }
+  function monthly() {
+    var q = H.q, t = H.data.today;
+    q.mYm = q.mYm || t.slice(0, 7); q.mForm = q.mForm || '05-04';
+    $('main').innerHTML = '<h3>ตรวจประจำเดือน</h3><p class="lead">แบบฟอร์มที่ตรวจเดือนละครั้ง (FM-SHE-05-04 … 05-08) · แตะช่องเพื่อเลือกผล · บันทึกแล้วพิมพ์เป็นแบบฟอร์มได้</p><div class="panel"><span class="spinner dark"></span> กำลังโหลด…</div>';
+    call('sheMonthly', state.token, q.mYm).then(function (r) {
+      if (!r.ok) return toast(r.error);
+      H.mon = r; monthlyForm();
+    }).catch(onServerError);
+  }
+  function monthlyForm() {
+    var q = H.q, r = H.mon, form = q.mForm, def = SHEM[form], rec = r.records[form];
+    var ed = H.mEdit && H.mEdit.form === form && H.mEdit.ym === r.ym ? H.mEdit : null;
+    if (!ed) {
+      var rows = rec ? rec.rows.map(function (x) { return { loc: x.loc, r: x.r.slice(), note: x.note || '' }; })
+        : (r.locs[form] || []).map(function (l) { return { loc: l, r: [], note: '' }; });
+      if (!rows.length) for (var i = 0; i < 5; i++) rows.push({ loc: '', r: [], note: '' });
+      ed = H.mEdit = { form: form, ym: r.ym, rows: rows, inspector: rec ? rec.inspector : inspectors()[0], inspDate: rec ? rec.inspDate : r.today,
+        approver: rec ? rec.approver : '', approveDate: rec ? rec.approveDate : '', tester: rec ? rec.tester : '', testDate: rec ? rec.testDate : (def.smoke ? r.today : ''), dirty: false };
+    }
+    var chips = Object.keys(SHEM).map(function (k) {
+      var x = r.records[k];
+      return '<button class="smf' + (k === form ? ' on' : '') + '" data-mf="' + k + '"><b>FM-SHE-' + k + '</b><span>' + esc(SHEM[k].name) + '</span><small class="' + (x ? (x.badCount ? 'bad' : 'ok') : '') + '">' + (x ? (x.badCount ? '⚠ ผิดปกติ ' + x.badCount + ' ช่อง' : '✓ ตรวจแล้ว') : 'ยังไม่ตรวจ') + '</small></button>';
+    }).join('');
+    var nI = def.items.length;
+    var head = '<tr><th rowspan="2" class="c">' + def.no + '</th><th rowspan="2">' + esc(def.loc) + '</th><th colspan="' + nI + '">' + esc(def.group) + '</th>' + (def.sum ? '<th rowspan="2">' + def.sum + '</th>' : '') + '<th rowspan="2">' + def.note.replace('<br>', ' ') + '</th><th rowspan="2"></th></tr><tr>' + def.items.map(function (x) { return '<th class="smi">' + x + '</th>'; }).join('') + '</tr>';
+    var body = ed.rows.map(function (row, i) {
+      return '<tr><td class="c">' + (i + 1) + '</td><td><input class="sml" data-i="' + i + '" data-k="loc" value="' + esc(row.loc) + '" placeholder="เช่น อาคาร G1 ทางออกด้านหลัง"></td>'
+        + def.items.map(function (x, j) { var c = row.r[j] || ''; return '<td class="c"><button class="smc s' + (c || 'e') + '" data-i="' + i + '" data-j="' + j + '">' + (mSym(def, c) || '·') + '</button></td>'; }).join('')
+        + (def.sum ? '<td class="c smsum">' + mSum(def, row.r) + '</td>' : '')
+        + '<td><input class="sml" data-i="' + i + '" data-k="note" value="' + esc(row.note) + '"></td><td><button class="smx" data-del="' + i + '" title="ลบแถว">✕</button></td></tr>';
+    }).join('');
+    var people = inspectors();
+    var sign = (def.smoke ? F('mTester', 'ผู้ทดสอบ (เจ้าหน้าที่อาคารสถานที่)', ed.tester) + F('mTestDate', 'วันที่ทดสอบ', ed.testDate, 'date') : '')
+      + F('mInsp', def.smoke ? 'ผู้ตรวจสอบ (จป.วิชาชีพ)' : 'ตรวจสอบโดย (จป.วิชาชีพ)', ed.inspector, 'text', ' list="mPeople"') + F('mInspDate', 'วันที่ตรวจสอบ', ed.inspDate, 'date')
+      + F('mAppr', def.smoke ? 'ผู้ตรวจสอบ (ผู้จัดการ)' : 'อนุมัติโดย (ผู้จัดการ)', ed.approver) + F('mApprDate', 'วันที่อนุมัติ', ed.approveDate, 'date');
+    $('main').innerHTML = '<h3>ตรวจประจำเดือน</h3><p class="lead">แบบฟอร์มที่ตรวจเดือนละครั้ง · แตะช่องผลเพื่อสลับ ' + esc(def.ok) + ' ปกติ → X ผิดปกติ' + (def.withO ? ' → O กำลังแก้ไข' : '') + ' → - ไม่มี → ว่าง · บันทึกแล้วพิมพ์เป็นแบบฟอร์มได้</p>'
+      + '<div class="pbar"><label class="pchk">เดือน <input type="month" id="mYm" value="' + r.ym + '"></label><span class="muted">' + TH_MONTHS[+r.ym.slice(5, 7) - 1] + ' ' + (+r.ym.slice(0, 4) + 543) + '</span></div>'
+      + '<div class="smfs">' + chips + '</div>'
+      + '<div class="panel"><h4 style="margin-top:0">' + esc(def.title) + ' <small class="muted">' + esc(r.fm[form] || '') + '</small></h4>'
+      + '<div class="smwrap"><table class="smt"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>'
+      + '<div class="pbar"><button class="btn btn-sm btn-line" id="mAdd">' + icon('plus', 16) + ' เพิ่มจุด</button><button class="btn btn-sm btn-line" id="mAllOk">ช่องที่ว่าง = ' + esc(def.ok) + ' ปกติ</button>'
+      + (rec ? '<button class="btn btn-sm btn-line" id="mDel" style="margin-left:auto;color:#b91c1c">' + icon('trash', 16) + ' ลบผลเดือนนี้</button>' : '') + '</div>'
+      + '<div class="pform">' + sign + '</div>' + datalist('mPeople', people)
+      + '<div class="pbar"><button class="btn btn-primary" id="mSave">' + icon('check', 16) + ' บันทึกผลตรวจ</button><button class="btn btn-line" id="mPrint">' + icon('print', 16) + ' พิมพ์แบบฟอร์ม / PDF</button>'
+      + (rec ? '<span class="muted">บันทึกล่าสุด ' + esc(String(rec.updatedAt).slice(0, 16)) + '</span>' : '') + '</div></div>';
+    var keep = function () { ['tester:mTester', 'testDate:mTestDate', 'inspector:mInsp', 'inspDate:mInspDate', 'approver:mAppr', 'approveDate:mApprDate'].forEach(function (p) { var a = p.split(':'); if ($(a[1])) ed[a[0]] = v(a[1]); }); };
+    $('mYm').addEventListener('change', function () { if (!this.value) return; q.mYm = this.value; H.mEdit = null; monthly(); });
+    on('[data-mf]', 'click', function (el) { keep(); q.mForm = el.getAttribute('data-mf'); monthlyForm(); });
+    on('.sml', 'input', function (el) { ed.rows[+el.getAttribute('data-i')][el.getAttribute('data-k')] = el.value; ed.dirty = true; });
+    on('.smc', 'click', function (el) {
+      var row = ed.rows[+el.getAttribute('data-i')], j = +el.getAttribute('data-j'), seq = def.withO ? ['', 'P', 'X', 'O', '-'] : ['', 'P', 'X', '-'];
+      var c = seq[(seq.indexOf(row.r[j] || '') + 1) % seq.length]; row.r[j] = c; ed.dirty = true;
+      el.className = 'smc s' + (c || 'e'); el.textContent = mSym(def, c) || '·';
+      var sm = el.closest('tr').querySelector('.smsum'); if (sm) sm.textContent = mSum(def, row.r);
+    });
+    on('[data-del]', 'click', function (el) { keep(); ed.rows.splice(+el.getAttribute('data-del'), 1); ed.dirty = true; monthlyForm(); });
+    $('mAdd').addEventListener('click', function () { keep(); ed.rows.push({ loc: '', r: [], note: '' }); monthlyForm(); var x = $('main').querySelectorAll('input[data-k=loc]'); x[x.length - 1].focus(); });
+    $('mAllOk').addEventListener('click', function () { keep(); ed.rows.forEach(function (row) { if (!String(row.loc).trim()) return; for (var j = 0; j < nI; j++) if (!row.r[j]) row.r[j] = 'P'; }); ed.dirty = true; monthlyForm(); });
+    if ($('mDel')) $('mDel').addEventListener('click', function () {
+      ask({ title: 'ลบผลตรวจเดือนนี้?', text: 'FM-SHE-' + form + ' ' + TH_MONTHS[+r.ym.slice(5, 7) - 1] + ' ' + (+r.ym.slice(0, 4) + 543), ok: 'ลบ', cancel: 'ไม่ลบ', tone: 'danger' }).then(function (yes) {
+        if (yes) call('sheDeleteMonthly', state.token, form, r.ym).then(function (x) { if (!x.ok) return toast(x.error); H.mEdit = null; toast('ลบแล้ว'); monthly(); }).catch(onServerError);
+      });
+    });
+    var save = function (then) {
+      keep();
+      var b = $('mSave'); b.disabled = true;
+      return call('sheSaveMonthly', state.token, { form: form, ym: r.ym, rows: ed.rows, inspector: ed.inspector, inspDate: ed.inspDate, approver: ed.approver, approveDate: ed.approveDate, tester: ed.tester, testDate: ed.testDate })
+        .then(function (x) {
+          b.disabled = false; if (!x.ok) return toast(x.error);
+          r.records[form] = x.record; H.mEdit = null; toast('บันทึกผลตรวจแล้ว'); if (then) then(); else monthlyForm();
+        }).catch(function (e) { b.disabled = false; onServerError(e); });
+    };
+    $('mSave').addEventListener('click', function () { save(); });
+    $('mPrint').addEventListener('click', function () {
+      var goPrint = function () { q.rep = 'm' + form; q.rYm = r.ym; go('s_rep'); };
+      if (ed.dirty || !rec) save(goPrint); else goPrint();
+    });
+  }
+  // แบบฟอร์มสำหรับพิมพ์ (หน้าตาตามไฟล์ Excel ของฝ่าย + หัวกระดาษแบบรายงานอื่นของระบบ)
+  function stmHtml(form, rec, fm, ym) {
+    var def = SHEM[form], nI = def.items.length, rows = (rec && rec.rows) || [], n = Math.max(def.rows, rows.length);
+    var y = +ym.slice(0, 4), m = +ym.slice(5, 7);
+    var head = '<div class="shead">' + logoHtml() + '<div class="sco"><b>' + COMPANY_TH + '</b><span>' + COMPANY_EN + '</span></div><div class="stitle">' + esc(def.title) + '</div><div class="sfm">' + esc(fm || '').replace(' วันที่', '<br>วันที่') + '</div></div>'
+      + '<div class="smmonth">ประจำเดือน <b>' + TH_MONTHS[m - 1] + '</b> พ.ศ. <b>' + (y + 543) + '</b></div>';
+    var th = '<tr><th rowspan="2" class="smno">' + def.no + '</th><th rowspan="2" class="smloc">' + esc(def.loc) + '</th><th colspan="' + nI + '">' + esc(def.group) + '</th>' + (def.sum ? '<th rowspan="2" class="smsumh">' + def.sum + '</th>' : '') + '<th rowspan="2" class="smnote">' + def.note + '</th></tr>'
+      + '<tr>' + def.items.map(function (x) { return '<th class="smi' + (def.smoke ? ' long' : '') + '">' + x + '</th>'; }).join('') + '</tr>';
+    var tb = '';
+    for (var i = 0; i < n; i++) {
+      var row = rows[i] || { loc: '', r: [], note: '' };
+      tb += '<tr><td class="c">' + (row.loc ? i + 1 : '') + '</td><td>' + esc(row.loc) + '</td>' + def.items.map(function (x, j) { var c = row.r[j] || ''; return '<td class="c smr s' + (c || 'e') + '">' + mSym(def, c) + '</td>'; }).join('')
+        + (def.sum ? '<td class="c">' + mSum(def, row.r) + '</td>' : '') + '<td>' + esc(row.note) + '</td></tr>';
+    }
+    var line = function (label, name, role, date) { return '<div class="smsg"><b>' + label + '</b><div>ลงชื่อ <span>' + esc(name || '') + '</span></div><div class="smrole">' + role + '</div><div>วันที่ <span>' + thd(date) + '</span></div></div>'; };
+    var sign = def.smoke
+      ? '<div class="smsigns s3">' + line('ผู้ทดสอบ', rec && rec.tester, 'เจ้าหน้าที่อาคารสถานที่', rec && rec.testDate) + line('ผู้ตรวจสอบ', rec && rec.inspector, 'จป.วิชาชีพ', rec && rec.inspDate) + line('ผู้ตรวจสอบ', rec && rec.approver, 'ผู้จัดการ', rec && rec.approveDate) + '</div>'
+      : '<div class="smsigns">' + line('ตรวจสอบโดย', rec && rec.inspector, 'จป.วิชาชีพ', rec && rec.inspDate) + line('อนุมัติโดย', rec && rec.approver, 'ผู้จัดการ', rec && rec.approveDate) + '</div>';
+    var body = '<table class="stm' + (def.land ? ' land' : '') + '"><thead>' + th + '</thead><tbody>' + tb + '</tbody></table>'
+      + '<div class="smleg">' + def.legend + '</div>' + sign;
+    return '<div class="sreport smrep' + (def.land ? '' : ' port') + '"><table class="rwrap"><thead><tr><td>' + head + '</td></tr></thead><tbody><tr><td>' + body + '</td></tr></tbody></table></div>';
+  }
+
   // ==================== ตั้งค่าแบบตรวจ ====================
   function settings() {
     var s = H.data.settings;
@@ -719,6 +851,7 @@
       }).join('') + '</div>'
       + '<div class="panel" style="margin-top:14px"><h4 style="margin-top:0">รหัสแบบฟอร์ม / รายชื่อ / ผู้ลงนาม</h4><div class="pform">'
       + F('sFm05', 'รหัสแบบฟอร์มสรุปรายงานสำรวจ', s.fm05) + F('sFm06', 'รหัสแบบฟอร์มแบบตรวจรายเดือน', s.fm06)
+      + Object.keys(SHEM).map(function (k) { return F('sFm' + k.replace('-', ''), 'รหัสแบบฟอร์ม ' + SHEM[k].name, s['fm' + k.replace('-', '')] || 'FM-SHE-' + k + ' Rev.00 วันที่ประกาศใช้ 05/01/2026'); }).join('')
       + T('sInsp', 'รายชื่อผู้ตรวจ (คั่นด้วย , )', s.inspectors, 'เช่น สมชาย, สมหญิง') + T('sDepts', 'หน่วยงาน / แผนก / ฝ่าย (คั่นด้วย , )', s.depts)
       + F('sPrep', 'FM-05 จัดทำโดย (ตำแหน่ง)', s.signPrep) + F('sAppr', 'FM-05 อนุมัติโดย (ตำแหน่ง)', s.signApprove)
       + F('sChk', 'FM-06 ผู้ตรวจสอบ', s.signCheck) + F('sRev', 'FM-06 ผู้ทวนสอบ', s.signReview)
@@ -727,7 +860,8 @@
     on('[data-area]', 'click', function (el) { areaModal(area(el.getAttribute('data-area'))); }, $('main'));
     $('sSave').addEventListener('click', function () {
       var b = $('sSave'); b.disabled = true;
-      call('sheSaveSettings', state.token, { fm05: v('sFm05'), fm06: v('sFm06'), inspectors: v('sInsp'), depts: v('sDepts'), signPrep: v('sPrep'), signApprove: v('sAppr'), signCheck: v('sChk'), signReview: v('sRev') })
+      var fmx = {}; Object.keys(SHEM).forEach(function (k) { var id = 'fm' + k.replace('-', ''); if ($('sFm' + k.replace('-', ''))) fmx[id] = v('sFm' + k.replace('-', '')); });
+      call('sheSaveSettings', state.token, Object.assign(fmx, { fm05: v('sFm05'), fm06: v('sFm06'), inspectors: v('sInsp'), depts: v('sDepts'), signPrep: v('sPrep'), signApprove: v('sAppr'), signCheck: v('sChk'), signReview: v('sRev') }))
         .then(function (r) { b.disabled = false; if (!r.ok) return toast(r.error); H.data.settings = r.settings; toast('บันทึกการตั้งค่าแล้ว'); }).catch(onServerError);
     });
   }
@@ -822,6 +956,12 @@
     '.st06 .c{text-align:center}.st06 .scat,.st06 .sdet{font-size:9.5px;line-height:1.3}.st06 tr.alt td{background:#f3f4f6}.st06 tr.alt td.off{background:#d1d5db}.smonths{text-align:left;font-size:11px;padding:4px 6px!important}',
     '.s6p{color:#15803d;font-weight:700}.s6o{color:#dc2626;font-weight:700}.s6n{color:#64748b}.sbottom td{height:34px;vertical-align:top}.snote{font-size:10.5px}',
     '@media (max-width:700px){.sbtns{grid-template-columns:1fr 1fr 1fr}.sb{font-size:15px;padding:14px 4px}.sfimg img,.snoimg{width:72px;height:72px}.saitem{grid-template-columns:auto 1fr auto auto}.saitem input[data-k="detail"]{grid-column:2/-1}.shead{grid-template-columns:auto 1fr}.stitle,.sfm{grid-column:1/-1}}',
+    '.smfs{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin:0 0 14px}.smf{border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:9px 11px;text-align:left;cursor:pointer;font:inherit;display:flex;flex-direction:column;gap:2px}.smf b{font-size:12.5px;color:var(--muted)}.smf span{font-weight:700}.smf small{font-size:12px;color:var(--muted)}.smf small.ok{color:#15803d;font-weight:700}.smf small.bad{color:#b91c1c;font-weight:700}.smf.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 10%,white)}',
+    '.smwrap{overflow-x:auto;margin:0 -4px 10px;padding:0 4px}.smt{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}.smt th{background:#f1f5f9;border:1px solid var(--line);padding:6px;font-size:12.5px}.smt th.smi{min-width:66px;max-width:140px;font-weight:600}.smt td{border:1px solid var(--line);padding:3px}.smt .c{text-align:center}',
+    '.sml{width:100%;border:0;padding:8px 6px;font:inherit;background:transparent;min-width:140px}.smc{width:100%;min-width:52px;height:40px;border:0;border-radius:8px;font:inherit;font-size:20px;font-weight:800;cursor:pointer;background:#f8fafc;color:#cbd5e1}.smc.sP{background:#dcfce7;color:#15803d}.smc.sX{background:#fee2e2;color:#b91c1c}.smc.sO{background:#ffedd5;color:#c2410c}.smc.s-{background:#f1f5f9;color:#475569}.smx{border:0;background:none;color:#dc2626;font-size:16px;cursor:pointer;padding:6px}.smsum{font-weight:700;font-size:13px}',
+    '.smrep .smmonth{text-align:center;margin:8px 0;font-size:14px}.stm{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}.stm th{border:1px solid #0f172a;padding:4px;text-align:center;font-weight:700;background:#fff;font-size:12px}.stm th small{font-weight:400}.stm td{border:1px solid #0f172a;padding:3px 5px;height:22px;word-wrap:break-word}.stm .c{text-align:center}',
+    '.stm .smno{width:6%}.stm .smloc{width:30%}.stm .smnote{width:16%}.stm .smsumh{width:14%}.stm.land .smloc{width:22%}.stm.land .smnote{width:20%}.stm th.smi.long{font-size:10.5px;font-weight:600}.stm .smr{font-size:15px;font-weight:700}.stm .smr.sX,.stm .smr.sO{color:#b91c1c}',
+    '.smleg{margin-top:8px;font-size:12.5px}.smsigns{display:flex;justify-content:space-around;gap:16px;margin-top:20px;font-size:12.5px;break-inside:avoid}.smsigns.s3{flex-direction:column;align-items:flex-start;gap:10px;padding-left:6%}.smsigns.s3 .smsg{display:flex;gap:14px;align-items:baseline;text-align:left}.smsg{text-align:center;line-height:2}.smsg span{display:inline-block;min-width:170px;border-bottom:1px dotted #475569;text-align:center;line-height:1.5}.smrole{font-weight:600}',
     '@media print{.sreport{box-shadow:none;padding:0;margin:0;border-radius:0;overflow:visible}.st05{font-size:8.5pt}.st05 th{font-size:8pt}.sph img{max-height:34mm}.st06{font-size:7.5pt}.shead{padding:4px 8px}.slogo{height:36px}.stitle{font-size:11pt}.sfm{font-size:7.5pt}.sinfo{font-size:8.5pt}.st05 tr,.st06 tr{break-inside:avoid}.ssign{font-size:9pt}.ssave,.swalk-h .btn{display:none}}'
   ].join('\n');
   document.head.appendChild(css);

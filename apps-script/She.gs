@@ -72,6 +72,7 @@ function requireShe_(token) {
   return dept;
 }
 function sheRegister_() {
+  if (typeof shemInit_ === 'function') shemInit_();   // ตรวจประจำเดือน FM-SHE-05-04…08 (SheMonthly.gs)
   Object.keys(SHE_TABLES_).forEach(function (k) { PUR_TABLES_[k] = SHE_TABLES_[k]; });
   ['doneDate', 'lastSeen'].forEach(function (k) { PUR_DATE_KEYS_[k] = 1; });
   ['rounds', 'round', 'no', 'order', 'lostDays', 'passCount', 'failCount', 'lastRound', 'seenCount'].forEach(function (k) { PUR_NUM_KEYS_[k] = 1; });
