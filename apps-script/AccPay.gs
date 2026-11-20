@@ -14,7 +14,7 @@ var AP_TABLES_ = {
     ['issueDate', 'วันที่ออก'], ['creditDays', 'เครดิต (วัน)'], ['dueDate', 'วันที่ครบกำหนด'], ['invNo', 'เลขที่ใบกำกับภาษี'], ['lineNo', 'ลำดับ'],
     ['desc', 'คำอธิบาย'], ['qty', 'จำนวน'], ['price', 'ราคา'], ['vatMode', 'ราคา / VAT'], ['pct', '%'], ['wht', 'ส่วนลด/มัดจำ/หัก ณที่จ่าย'],
     ['amount', 'มูลค่ารายการ'], ['vat', 'ภาษีมูลค่าเพิ่ม'], ['lineTotal', 'รวม'], ['note', 'หมายเหตุ'], ['files', 'ไฟล์บิล'],
-    ['createdAt', 'บันทึกเมื่อ'], ['updatedAt', 'แก้ไขเมื่อ']] },
+    ['createdAt', 'บันทึกเมื่อ'], ['updatedAt', 'แก้ไขเมื่อ'], ['kind', 'ประเภท']] },
   ap_vendors: { tab: 'ผู้ขาย (จ่าย)', cols: [
     ['id', 'รหัส'], ['name', 'ชื่อผู้ขาย'], ['taxId', 'เลขผู้เสียภาษี'], ['category', 'หมวด'], ['bank', 'บัญชีธนาคาร (แถวรวม)'],
     ['creditDays', 'เครดิต (วัน)'], ['vatMode', 'ราคา / VAT'], ['pct', '% หัก ณ ที่จ่าย'], ['keywords', 'คำที่ใช้จับในบิล'], ['sort', 'ลำดับ'],
@@ -31,6 +31,8 @@ var AP_CATS_ = [
 ];
 var AP_VAT_ = { inc: 'ราคารวม VAT แล้ว', exc: 'ราคายังไม่รวม VAT', none: 'ไม่มี VAT' };
 var AP_FOLDER_ = 'บิลค่าใช้จ่าย (จ่าย)';
+// PO ล่วงหน้า (ผู้ใช้ขอ 20/11/69): สั่งซื้อแล้วแต่ยังไม่ได้รับบิล — มีแค่ ชื่อสินค้า / จำนวน / ราคา · แสดงตัวแดงในรายงานเหมือนในไฟล์ · รับบิลแล้ว = บันทึกทับ billId เดิมเป็นบิลจริง
+var AP_PO_ = 'PO ล่วงหน้า';
 
 function apRegister_() {
   accRegister_();
@@ -93,7 +95,7 @@ function apLoad(token) {
   return { ok: true, linked: !!ss, error: err, sheetUrl: ss ? ss.getUrl() : '', sheetName: ss ? ss.getName() : '', settings: st,
     cats: AP_CATS_, vatModes: AP_VAT_, lines: lines, vendors: vendors, rounds: apRounds_(st, hol, Object.keys(used)), today: purToday_() };
 }
-function apOut_(l) { l.invNo = apTxt_(l.invNo); l.taxId = apTxt_(l.taxId); delete l._row; return l; }
+function apOut_(l) { l.invNo = apTxt_(l.invNo); l.taxId = apTxt_(l.taxId); l.kind = String(l.kind || '') === AP_PO_ ? 'po' : ''; delete l._row; return l; }
 
 function apSetSheet(token, url) {
   var dept = requireAcc_(token); apRegister_();
@@ -134,8 +136,9 @@ function apCleanBill_(b) {
     billId: accClean_(b.billId, 40), payRound: accDate_(b.payRound), category: apCat_(b.category), vendor: accClean_(b.vendor, 120),
     taxId: String(b.taxId || '').replace(/\D/g, '').slice(0, 13), issueDate: accDate_(b.issueDate), creditDays: Math.max(0, Math.min(365, Math.round(Number(purNum_(b.creditDays)) || 0))),
     invNo: accClean_(b.invNo, 40), vatMode: AP_VAT_[b.vatMode] ? b.vatMode : 'exc', pct: Math.max(0, Math.min(100, Number(purNum_(b.pct)) || 0)),
-    note: accClean_(b.note, 300), bank: accClean_(b.bank, 150)
+    note: accClean_(b.note, 300), bank: accClean_(b.bank, 150), kind: b.kind === 'po' ? 'po' : ''
   };
+  if (x.kind === 'po') { x.invNo = ''; x.issueDate = ''; x.creditDays = 0; }
   x.dueDate = accDate_(b.dueDate) || (x.issueDate ? accAddDays_(x.issueDate, x.creditDays) : '');
   x.lines = (Array.isArray(b.lines) ? b.lines : []).slice(0, 80).map(function (l) {
     var qty = Number(purNum_(l.qty)), price = Number(purNum_(l.price));
@@ -174,7 +177,7 @@ function apSaveBill(token, bill, files) {
   return purLocked_(function () {
     var now = purNow_(), all = purRead_(ss, 'ap_lines');
     var mine = x.billId ? all.filter(function (l) { return l.billId === x.billId; }) : [];
-    var dup = all.filter(function (l) { return l.billId !== x.billId && x.invNo && apTxt_(l.invNo) === x.invNo && accNorm_(l.vendor) === accNorm_(x.vendor); })[0];
+    var dup = x.kind === 'po' ? null : all.filter(function (l) { return l.billId !== x.billId && x.invNo && apTxt_(l.invNo) === x.invNo && accNorm_(l.vendor) === accNorm_(x.vendor); })[0];
     if (dup && !(bill && bill.allowDup)) return { ok: false, dup: true, error: 'บิลเลขที่ ' + x.invNo + ' ของ ' + x.vendor + ' บันทึกไว้แล้ว (รอบจ่าย ' + dup.payRound + ')' };
     var billId = mine.length ? x.billId : purId_('AP');
     var keepFiles = (bill && Array.isArray(bill.keepFiles) ? bill.keepFiles : String(mine[0] && mine[0].files || '').split(/\s+/)).filter(function (u) { return /^https:\/\/drive\.google\.com\//.test(u); });
@@ -189,7 +192,7 @@ function apSaveBill(token, bill, files) {
         id: purId_('APL'), billId: billId, payRound: x.payRound, category: x.category, vendor: x.vendor, taxId: x.taxId ? "'" + x.taxId : '',
         issueDate: x.issueDate, creditDays: x.creditDays, dueDate: x.dueDate, invNo: x.invNo ? "'" + x.invNo : '', lineNo: i + 1,
         desc: l.desc, qty: l.qty, price: l.price, vatMode: x.vatMode, pct: x.pct, wht: c.wht, amount: c.amount, vat: c.vat, lineTotal: c.lineTotal,
-        note: i ? '' : x.note, files: filesTxt, createdAt: createdAt, updatedAt: mine.length ? now : ''
+        note: i ? '' : x.note, files: filesTxt, createdAt: createdAt, updatedAt: mine.length ? now : '', kind: x.kind === 'po' ? AP_PO_ : ''
       }, head);
     });
     sh.getRange(sh.getLastRow() + 1, 1, values.length, values[0].length).setValues(values);
@@ -197,12 +200,13 @@ function apSaveBill(token, bill, files) {
     var vs = purRead_(ss, 'ap_vendors'), v = vs.filter(function (o) { return accNorm_(o.name) === accNorm_(x.vendor); })[0]
       || (x.taxId ? vs.filter(function (o) { return apTxt_(o.taxId) === x.taxId; })[0] : null);
     if (!v) v = { id: purId_('APV'), name: x.vendor, sort: vs.length + 1, keywords: '', note: '' };
-    v.category = x.category; v.creditDays = x.creditDays; v.vatMode = x.vatMode; v.pct = x.pct;
+    v.category = x.category; v.vatMode = x.vatMode; v.pct = x.pct;
+    if (x.kind !== 'po') v.creditDays = x.creditDays;
     if (x.taxId) v.taxId = "'" + x.taxId; else if (v.taxId) v.taxId = "'" + apTxt_(v.taxId);
     if (x.bank) v.bank = x.bank;
     v.updatedAt = now;
     purWrite_(ss, 'ap_vendors', v);
-    purLogWrite_(main, mine.length ? 'แก้บิลค่าใช้จ่าย' : 'บันทึกบิลค่าใช้จ่าย', 'ap_lines', billId, x.vendor + ' ' + x.invNo + ' รอบ ' + x.payRound);
+    purLogWrite_(main, (mine.length ? 'แก้' : 'บันทึก') + (x.kind === 'po' ? 'PO ล่วงหน้า' : (mine.length && String(mine[0].kind) === AP_PO_ ? 'บิลจาก PO ล่วงหน้า' : 'บิลค่าใช้จ่าย')), 'ap_lines', billId, x.vendor + ' ' + x.invNo + ' รอบ ' + x.payRound);
     return { ok: true, billId: billId, files: filesTxt, uploaded: saved.length };
   });
 }
