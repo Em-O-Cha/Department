@@ -18,6 +18,7 @@
   var MENUS = [
     { id: 'a_dash', label: 'Dashboard ฝ่ายบัญชี', ic: 'chart' },
     { id: 'a_mon', label: 'รายงานสรุปรายเดือน (ทุกบริษัท)', ic: 'table' },
+    { section: 'รับ (เงินเข้า)', tone: 'in' },
     { group: 'ออเดอร์ 7-11' },
     { id: 'a_imp', label: 'นำเข้าไฟล์ออเดอร์ 7-11', ic: 'upload' },
     { id: 'a_hist', label: 'รายงาน / ประวัติการนำเข้า 7-11', ic: 'table' },
@@ -27,7 +28,11 @@
     { group: 'ต่างประเทศ' },
     { id: 'a_ex', label: 'นำเข้า Invoice ต่างประเทศ (PDF)', ic: 'upload' },
     { id: 'a_exl', label: 'ออเดอร์ต่างประเทศ', ic: 'table' },
-    { group: 'ตั้งค่า' },
+    { section: 'จ่าย (เงินออก)', tone: 'out' },
+    { id: 'a_apin', label: 'นำเข้าบิล (ภาพถ่าย / สแกน / PDF)', ic: 'upload' },
+    { id: 'a_ap', label: 'รายงานจ่ายตามรอบ', ic: 'table' },
+    { id: 'a_apv', label: 'ผู้ขาย / ตั้งค่า (จ่าย)', ic: 'gear' },
+    { section: 'ตั้งค่า', tone: '' },
     { id: 'a_set', label: 'ตั้งค่าศูนย์ / สินค้า 7-11 / LINE', ic: 'gear' }
   ];
   var MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
@@ -66,8 +71,9 @@
     if (msg) toast(msg);
     return H.load().then(function () { if (String(state.page).indexOf('a_') === 0) H.render(state.page); }).catch(onServerError);
   }
-  H.reset = function () { H.cmp = null; H.cmpSel = ''; if (window.ACCCP) ACCCP.reset(); if (window.ACCEX) ACCEX.reset(); H.data = null; H.q = {}; H.imp = null; H.cur = null; H.pendingCur = null; H.setDraft = null; landscape(false); };
+  H.reset = function () { H.cmp = null; H.cmpSel = ''; if (window.ACCCP) ACCCP.reset(); if (window.ACCEX) ACCEX.reset(); if (window.ACCAP) ACCAP.reset(); H.data = null; H.q = {}; H.imp = null; H.cur = null; H.pendingCur = null; H.setDraft = null; landscape(false); };
   H.menus = function () { return MENUS; };
+  H.exportFile = function (page, kind) { return window.ACCAP && /^a_ap/.test(page) ? ACCAP.exportFile(page, kind) : null; };
   H.render = function (page) {
     landscape(false);
     if (!H.data) {
@@ -80,7 +86,7 @@
     }
     if (page !== 'a_dash') H.cmp = null;
     if (page !== 'a_mon') H.mon = null;   // กลับมาหน้า Dashboard = คำนวณเปรียบเทียบใหม่ (อาจมีออเดอร์ใหม่)
-    ({ a_imp: importPage, a_hist: histPage, a_dash: dash, a_mon: monthly, a_set: settings, a_cp: function () { window.ACCCP.importPage(); }, a_cpl: function () { window.ACCCP.listPage(); }, a_ex: function () { window.ACCEX.importPage(); }, a_exl: function () { window.ACCEX.listPage(); } }[page] || importPage)();
+    ({ a_imp: importPage, a_hist: histPage, a_dash: dash, a_mon: monthly, a_set: settings, a_cp: function () { window.ACCCP.importPage(); }, a_cpl: function () { window.ACCCP.listPage(); }, a_ex: function () { window.ACCEX.importPage(); }, a_exl: function () { window.ACCEX.listPage(); }, a_apin: function () { window.ACCAP.importPage(); }, a_ap: function () { window.ACCAP.roundPage(); }, a_apv: function () { window.ACCAP.vendorPage(); } }[page] || importPage)();
   };
 
   // ==================== ตาราง "ต้นแบบรับออเดอร์ 7-11" ====================

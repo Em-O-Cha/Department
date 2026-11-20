@@ -135,6 +135,9 @@
   .nav button.active { background: color-mix(in srgb, var(--c) 12%, white); color: var(--c); font-weight: 600; }
   .nav button.active svg.ic { color: var(--c); }
   .nav .navg { font-size: 13px; font-weight: 700; color: #fff; background: var(--c); padding: 7px 12px; border-radius: 8px; margin: 12px 0 4px; }
+  .nav .navs { font-size: 16px; font-weight: 800; color: #fff; background: #334155; padding: 10px 12px; border-radius: 10px; margin: 18px 0 2px; letter-spacing: .02em; box-shadow: 0 2px 6px rgba(15,23,42,.18); }
+  .nav .navs.t-in { background: #15803d; } .nav .navs.t-out { background: #b91c1c; }
+  .nav button.t-in { border-left: 4px solid #22c55e; } .nav button.t-out { border-left: 4px solid #ef4444; }
   .main { padding: 28px; max-width: 1000px; width: 100%; min-width: 0; }
   .main h3 { margin: 0 0 4px; font-size: 22px; }
   .main .lead { color: var(--muted); margin: 0 0 22px; }
@@ -209,7 +212,8 @@
     .app { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; }
     .side { border-right: 0; border-bottom: 1px solid var(--line); padding: 10px 16px; overflow-x: auto; }
     .side .cap { display: none; }
-    .nav .navg { display: none; }
+    .nav .navg, .nav .navs { display: none; }
+    .nav button.t-in { background: #dcfce7; } .nav button.t-out { background: #fee2e2; }
     .nav { flex-direction: row; gap: 6px; }
     .nav button { white-space: nowrap; background: #f1f5f9; }
     .main { padding: 20px 16px; }
@@ -484,9 +488,11 @@
       : (deptModule() ? deptModule().menus() : [{ id: 'home', label: 'หน้าหลัก', ic: 'home' }].concat(state.dept.menus.map(function (m, i) {
           return { id: 'm' + i, label: m, ic: 'form' };
         }))).concat([{ id: 'pw', label: 'เปลี่ยนรหัสผ่าน', ic: 'key' }]);
+    var tone = '';
     $('nav').innerHTML = items.map(function (it) {
+      if (it.section != null) { tone = it.tone || ''; return '<div class="navs' + (tone ? ' t-' + tone : '') + '">' + (tone === 'in' ? '⬇ ' : tone === 'out' ? '⬆ ' : '') + esc(it.section) + '</div>'; }   // หัวข้อใหญ่ (เช่น รับ / จ่าย ของฝ่ายบัญชี) — สีเด่นกว่าหัวข้อกลุ่ม
       if (it.group) return '<div class="navg">' + esc(it.group) + '</div>';   // หัวข้อกลุ่มเมนู (โมดูลใส่ { group: 'ชื่อกลุ่ม' })
-      return '<button data-page="' + it.id + '" class="' + (state.page === it.id ? 'active' : '') + '">' + icon(it.ic) + esc(it.label) + '</button>';
+      return '<button data-page="' + it.id + '" class="' + (state.page === it.id ? 'active' : '') + (tone ? ' t-' + tone : '') + '">' + icon(it.ic) + esc(it.label) + '</button>';
     }).join('');
     Array.prototype.forEach.call($('nav').querySelectorAll('button'), function (b) {
       b.addEventListener('click', function () { go(b.getAttribute('data-page')); });
@@ -668,6 +674,8 @@
   function exportExcel() {
     var btn = $('xlsBtn'), mod = deptModule(), page = state.page; xpBusy(btn, true);
     xpLoad(XP_LIB.xlsx, function () { return !!window.XLSX; }).then(function () {
+      var own = mod && mod.exportFile ? mod.exportFile(page, 'xlsx') : null;   // โมดูลสร้างไฟล์เองได้ (เช่น Excel ตามแบบฟอร์มของฝ่ายบัญชี)
+      if (own) return own;
       var data = mod && mod.exportData ? mod.exportData(page) : null;
       return Promise.resolve(data).then(function (d) {
         var sheets = d && d.sheets && d.sheets.length ? d.sheets : xpScreenSheets();
@@ -1021,9 +1029,10 @@
 <script src="hr.js?v=23"></script>
 <script src="hrdaily.js?v=15"></script>
 <script src="hrtime.js?v=2"></script>
-<script src="accounting.js?v=23"></script>
+<script src="accounting.js?v=24"></script>
 <script src="cpram.js?v=7"></script>
 <script src="exportorder.js?v=2"></script>
+<script src="payables.js?v=1"></script>
 <script src="quality.js?v=7"></script>
 <script src="production.js?v=24"></script>
 <script src="rd.js?v=1"></script>
