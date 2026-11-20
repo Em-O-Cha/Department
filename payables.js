@@ -38,7 +38,15 @@
   function norm(s) { return String(s || '').replace(/\u0E4D\u0E32/g, '\u0E33').toLowerCase().replace(/บริษัท|บจก\.?|จำกัด|\(มหาชน\)|มหาชน|ห้างหุ้นส่วน|หจก\.?|co\.?,?|ltd\.?|limited|\s|[.,()\-]/g, ''); }
   // เทียบแบบหลวม: ไม่สนวรรณยุกต์ / สระบน-ล่าง (OCR มักอ่านหล่น เช่น เทรดดิ้ง → เทรดดิง)
   function loose(s) { return norm(String(s || '').replace(/\u0E4D\u0E32/g, '\u0E33')).replace(/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/g, ''); }
-  function vendorOf(name) { var n = loose(name); return n ? (P.data.vendors || []).filter(function (v) { return loose(v.name) === n; })[0] : null; }
+  // ชื่อตรงกันแบบหลวม: เหมือนกัน หรือชื่อหนึ่งอยู่ในอีกชื่อ (เช่น "บริษัท เอ.ที.บี" กับ "บริษัท เอ.ที.บี บรรจุภัณฑ์ จำกัด") — เลือกชื่อที่ใกล้ที่สุด
+  function vendorOf(name) {
+    var n = loose(name), vs = (P.data && P.data.vendors) || [];
+    if (!n) return null;
+    var hit = vs.filter(function (v) { return loose(v.name) === n; })[0];
+    if (hit || n.length < 4) return hit || null;
+    vs.forEach(function (v) { var k = loose(v.name); if (k.length >= 4 && (k.indexOf(n) >= 0 || n.indexOf(k) >= 0) && (!hit || Math.abs(k.length - n.length) < Math.abs(loose(hit.name).length - n.length))) hit = v; });
+    return hit || null;
+  }
   function roundOf(nom) { return (P.data.rounds || []).filter(function (r) { return r.nominal === nom; })[0] || { nominal: nom, actual: nom, why: '' }; }
   // รอบจ่ายเริ่มต้น = วันจ่ายรอบแรกที่ไม่ก่อนวันครบกำหนด (แก้ได้)
   function defaultRound(due) {
@@ -107,6 +115,33 @@
     var v = (m[1] + m[2]).replace(/[.\-\/]+$/, '').toUpperCase();
     return /^\d{13}$/.test(v) || /^0\d{8,9}$/.test(v) || /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(v) ? '' : v;   // ไม่ใช่เลขภาษี / เบอร์โทร / วันที่
   }
+  // เรียนรู้รูปแบบเลขที่จากบิลเดิมของผู้ขายรายนั้น (บิลว่องไท 20/11/69: OCR อ่าน IV6901853 เป็น 156901853 และอ่านคำว่า "เลขที่" ไม่ออก)
+  // เช่นเคยบันทึก IV6901783 → รูปแบบ = ตัวอักษร 2 ตัว + เลข 7 หลัก ขึ้นต้น 69 → หาคำในภาพที่ยาวเท่ากันแล้วใส่ตัวอักษรนำหน้าเดิม
+  function invPatterns(vendor) {
+    var key = loose(vendor), seen = {}, out = [];
+    if (!key || !P.data) return out;
+    P.data.lines.forEach(function (l) {
+      var m = String(l.invNo || '').toUpperCase().match(/^([A-Z]{1,5})([-\/]?)(\d{4,})$/);
+      if (!m || loose(l.vendor) !== key) return;
+      var k = m[1] + m[2] + m[3].length + m[3].slice(0, 2);
+      if (!seen[k]) { seen[k] = 1; out.push({ pre: m[1], sep: m[2], n: m[3].length, head: m[3].slice(0, 2) }); }
+    });
+    return out;
+  }
+  function fitsPattern(v, pats) { return pats.some(function (p) { return new RegExp('^' + p.pre + '\\' + (p.sep || '') + '?\\d{' + p.n + '}$').test(String(v || '').toUpperCase().replace('\\' + p.sep, p.sep)); }); }
+  P.invByPattern = function (T, vendor) {
+    var pats = invPatterns(vendor), text = T.join('  '), best = null;
+    pats.forEach(function (p) {
+      var rx = new RegExp('(?:^|[^A-Za-z0-9])([A-Za-z0-9|!]{' + p.pre.length + '})\\s?[-\\/]?\\s?(\\d{' + p.n + '})(?!\\d)', 'g'), m;
+      while ((m = rx.exec(text))) {
+        var pre = m[1].toUpperCase(), dg = m[2];
+        if (/^0\d{8,9}$/.test(pre + dg) || /^\d{13}$/.test(pre + dg)) continue;
+        var sc = (pre === p.pre ? 3 : /\d/.test(pre) || /[|!]/.test(pre) ? 1 : 0) + (dg.slice(0, 2) === p.head ? 2 : 0);
+        if (sc >= 2 && (!best || sc > best.sc)) best = { sc: sc, v: p.pre + p.sep + dg };
+      }
+    });
+    return best ? best.v : '';
+  };
   P.findInvNo = function (T) {
     for (var k = 0; k < INV_KEYS.length; k++) {
       for (var i = 0; i < T.length; i++) {
@@ -133,7 +168,10 @@
     (all.match(/\d[\d \-]{11,20}\d/g) || []).forEach(function (t) { var d = t.replace(/\D/g, ''); if (d.length === 13 && d !== our && taxes.indexOf(d) < 0) taxes.push(d); });
     // ผู้ขาย: เลขผู้เสียภาษีตรงกับในระบบ → ชื่อตรงกับในระบบ / คำที่ตั้งไว้ → บรรทัดแรกที่มี บริษัท / หจก. / ร้าน
     var vs = (P.data && P.data.vendors) || [], nAll = loose(all), hit = null;
+    (all.match(/\d{13}/g) || []).forEach(function (d) { if (d !== our && taxes.indexOf(d) < 0) taxes.push(d); });
     vs.forEach(function (v) { if (!hit && v.taxId && taxes.indexOf(String(v.taxId)) >= 0) hit = v; });
+    // OCR อ่านเลขผู้เสียภาษีผิด 1 หลัก (เช่น 0745… เป็น 0765…) ยังจับผู้ขายได้
+    if (!hit) vs.forEach(function (v) { var t = String(v.taxId || ''); if (hit || t.length !== 13) return; if (taxes.some(function (d) { var n = 0; for (var i = 0; i < 13; i++) if (d[i] !== t[i]) n++; return n <= 1; })) hit = v; });
     if (!hit) vs.forEach(function (v) {
       var keys = [loose(v.name)].concat(String(v.keywords || '').split(/[,\n]/).map(loose)).filter(function (k) { return k.length >= 4; });
       if (keys.some(function (k) { return nAll.indexOf(k) >= 0; }) && (!hit || norm(v.name).length > norm(hit.name).length)) hit = v;
@@ -146,6 +184,7 @@
     }
     // เลขที่ใบกำกับภาษี — จับจากคำนำหน้า (ผู้ใช้กำหนด 20/11/69): เลขที่ใบกำกับภาษี / เลขที่ใบกำกับ / เลขที่บิล / เลขที่เอกสาร / No. / เลขที่ (เรียงจากชัดที่สุด)
     out.invNo = P.findInvNo(T);
+    if (out.vendor) { var pv = P.invByPattern(T, out.vendor), ps = invPatterns(out.vendor); if (pv && (!out.invNo || (ps.length && !fitsPattern(out.invNo, ps)))) out.invNo = pv; }
     var m;
     // วันที่: หลังคำว่า วันที่ / Date ก่อน ไม่มีค่อยเอาวันแรกที่พบ
     T.some(function (l) { if (/วันที่|Date/i.test(l) && !/ครบกำหนด|Due/i.test(l)) { var d = findDate(l.replace(/^.*?(วันที่|Date)/i, '')); if (d) { out.issueDate = d; return true; } } return false; });
@@ -242,7 +281,7 @@
             if (buf.byteLength < 9 * 1024 * 1024) res.uploads.push({ mime: 'application/pdf', name: f.name, b64: '' , buf: buf });
             return window.pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)) }).promise;
           }).then(function (doc) {
-            var c2 = Promise.resolve(), n = Math.min(doc.numPages, 4);
+            var c2 = Promise.resolve(), n = Math.min(doc.numPages, 20);   /* PDF หลายใบเสร็จ (ผู้ใช้ขอ 20/11/69) → อ่านได้ถึง 20 หน้า */
             for (var k = 1; k <= n; k++) (function (k) {
               c2 = c2.then(function () { return doc.getPage(k); }).then(function (pg) {
                 return pg.getTextContent().then(function (tc) {
@@ -250,10 +289,10 @@
                   var cv = document.createElement('canvas'); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
                   var ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
                   return pg.render({ canvasContext: ctx, viewport: vp }).promise.then(function () {
-                    res.pages.push({ src: jpeg(cv, 1400) });
+                    var pgx = { src: jpeg(cv, 1400), pdf: f.name || 'PDF', pageNo: k, pageCount: doc.numPages, text: [] }; res.pages.push(pgx);
                     var thai = (lines.join('').match(/[ก-๙]/g) || []).length;
-                    if (lines.join('').replace(/\s/g, '').length > 60 && (thai > 20 || !/[^\x00-\x7F]/.test(lines.join('')))) { res.text = res.text.concat(lines); return; }
-                    return ocr(cv, (f.name || 'PDF') + ' หน้า ' + k).then(function (t) { res.text = res.text.concat(t); });
+                    if (lines.join('').replace(/\s/g, '').length > 60 && (thai > 20 || !/[^\x00-\x7F]/.test(lines.join('')))) { pgx.text = lines; res.text = res.text.concat(lines); return; }
+                    return ocr(cv, (f.name || 'PDF') + ' หน้า ' + k + '/' + n).then(function (t) { pgx.text = t; res.text = res.text.concat(t); });
                   });
                 });
               });
@@ -263,9 +302,9 @@
         }
         return canvasOfImage(f, rot && rot[fi]).then(function (cv) {
           var src = jpeg(cv, 1600);
-          res.pages.push({ src: src, file: f, fi: fi });
+          var pgi = { src: src, file: f, fi: fi, text: [] }; res.pages.push(pgi);
           res.uploads.push({ mime: 'image/jpeg', name: f.name, b64: src.split(',')[1] });
-          return ocr(cv, (files.length > 1 ? (fi + 1) + '/' + files.length : '')).then(function (t) { res.text = res.text.concat(t); });
+          return ocr(cv, (files.length > 1 ? (fi + 1) + '/' + files.length : '')).then(function (t) { pgi.text = t; res.text = res.text.concat(t); });
         });
       });
     });
@@ -331,18 +370,43 @@
     return { kind: kind === 'po' ? 'po' : '', billId: '', category: '', vendor: '', taxId: '', invNo: '', issueDate: kind === 'po' ? '' : P.data.today, creditDays: '', payRound: '', vatMode: 'exc', pct: 0, note: '', bank: '',
       lines: [{ desc: '', qty: 1, price: 0 }], pages: [], uploads: [], keepFiles: [], read: null, autoRound: true };
   }
+  // สร้างบิลจากผลการอ่าน · เครดิต: ใช้ของผู้ขายที่เก็บไว้ก่อน (ผู้ใช้ขอ 20/11/69) ไม่มีค่อยใช้ที่อ่านได้จากบิล
+  function billFrom(text, pages, uploads, files) {
+    var r = P.parseBill(text), b = newBill(), v = r.vendorId ? (P.data.vendors || []).filter(function (x) { return x.id === r.vendorId; })[0] : vendorOf(r.vendor);
+    b.files = files; b.pages = pages; b.uploads = uploads; b.read = r; b.text = text;
+    b.vendor = v ? v.name : r.vendor; b.taxId = r.taxId || (v && v.taxId) || ''; b.invNo = r.invNo; b.issueDate = r.issueDate || P.data.today;
+    if (v) { b.category = v.category || ''; b.vatMode = v.vatMode || 'exc'; b.pct = Number(v.pct) || 0; b.bank = v.bank || ''; }
+    b.creditDays = v && v.creditDays !== '' && v.creditDays != null ? v.creditDays : r.creditDays !== '' ? r.creditDays : '';
+    if (r.vatMode) b.vatMode = r.vatMode;
+    if (r.lines.length) b.lines = r.lines.map(function (x) { return { desc: x.desc, qty: x.qty, price: x.price }; });
+    return b;
+  }
   function start(files) {
     msg('<span class="spinner dark"></span> กำลังเปิดไฟล์…');
+    P.queue = null;
     readFiles(files).then(function (res) {
-      var r = P.parseBill(res.text), b = newBill(), v = r.vendorId ? (P.data.vendors || []).filter(function (x) { return x.id === r.vendorId; })[0] : vendorOf(r.vendor);
-      b.files = files; b.pages = res.pages; b.uploads = res.uploads; b.read = r; b.text = res.text;
-      b.vendor = v ? v.name : r.vendor; b.taxId = r.taxId || (v && v.taxId) || ''; b.invNo = r.invNo; b.issueDate = r.issueDate || P.data.today;
-      if (v) { b.category = v.category || ''; b.creditDays = v.creditDays; b.vatMode = v.vatMode || 'exc'; b.pct = Number(v.pct) || 0; b.bank = v.bank || ''; }
-      if (r.creditDays !== '') b.creditDays = r.creditDays;
-      if (r.vatMode) b.vatMode = r.vatMode;
-      if (r.lines.length) b.lines = r.lines.map(function (x) { return { desc: x.desc, qty: x.qty, price: x.price }; });
-      P.cur = b; form();
+      var multi = res.pages.filter(function (p) { return p.pdf; }).length > 1;
+      if (!multi) { P.cur = billFrom(res.text, res.pages, res.uploads, files); return form(); }
+      // PDF หลายหน้า: หลายใบเสร็จ → แยกกรอกทีละใบ (ผู้ใช้ขอ 20/11/69) · ระบบเดาจากเลขที่ใบกำกับที่ต่างกันในแต่ละหน้า
+      var invs = {}; res.pages.forEach(function (p) { var v = P.findInvNo(p.text || []); if (v) invs[v] = 1; });
+      var guess = Object.keys(invs).length > 1 || !Object.keys(invs).length;
+      $('apMsg').innerHTML = '<div class="panel apsplit"><b>ไฟล์นี้มี ' + res.pages.length + ' หน้า</b><span>' + (Object.keys(invs).length > 1 ? 'พบเลขที่ใบกำกับ ' + Object.keys(invs).length + ' เลข (' + esc(Object.keys(invs).slice(0, 4).join(', ')) + ') — น่าจะเป็นหลายใบเสร็จ' : 'ถ้า 1 หน้า = 1 ใบเสร็จ ให้แยกกรอกทีละใบ') + '</span>'
+        + '<div class="apbtns"><button class="btn' + (guess ? ' btn-primary' : '') + '" id="apSplitY">แยกเป็นบิลละหน้า (' + res.pages.length + ' ใบ)</button><button class="btn' + (guess ? '' : ' btn-primary') + '" id="apSplitN">รวมเป็นบิลเดียว</button></div></div>';
+      $('apSplitN').addEventListener('click', function () { P.cur = billFrom(res.text, res.pages, res.uploads, files); form(); });
+      $('apSplitY').addEventListener('click', function () {
+        P.queue = res.pages.map(function (p) {
+          var up = [{ mime: 'image/jpeg', name: (p.pdf || 'บิล').replace(/\.pdf$/i, '') + ' หน้า ' + p.pageNo + '.jpg', b64: p.src.split(',')[1] }];
+          return billFrom(p.text || [], [p], up, null);
+        });
+        P.qi = 0; P.cur = P.queue[0]; form();
+      });
     }).catch(function (e) { msg(esc(e.message || e), 'bad'); });
+  }
+  function queueNext(savedMsg) {
+    if (!P.queue || P.qi >= P.queue.length - 1) { P.queue = null; return false; }
+    P.qi++; P.cur = P.queue[P.qi]; form(); window.scrollTo(0, 0);
+    toast((savedMsg || 'บันทึกแล้ว') + ' · ใบที่ ' + (P.qi + 1) + '/' + P.queue.length);
+    return true;
   }
   function billsOf(lines) {
     var by = {}, out = [];
@@ -406,6 +470,7 @@
         : b.fromPo ? 'ใส่เลขที่ใบกำกับ / วันที่ตามบิลจริง (หรือแนบภาพบิลให้ระบบอ่าน) แล้วบันทึก — PO นี้จะกลายเป็นบิลจริง ตัวแดงหายไป'
         : b.pages.length ? 'ตรวจข้อมูลที่ระบบอ่านได้กับภาพบิล แก้ช่องที่ผิด แล้วกดบันทึก' : 'กรอกข้อมูลบิล แล้วกดบันทึก') + '</p>'
       + (d.linked ? '' : linkPanel())
+      + (P.queue && P.queue.indexOf(b) >= 0 ? '<div class="apqban">' + icon('pdf', 18) + ' ใบที่ <b>' + (P.qi + 1) + ' / ' + P.queue.length + '</b> จากไฟล์ ' + esc((b.pages[0] && b.pages[0].pdf) || '') + ' · หน้า ' + ((b.pages[0] && b.pages[0].pageNo) || '') + '</div>' : '')
       + (po ? '<div class="appoban">' + icon('clock', 18) + ' PO ล่วงหน้า · แสดงเป็น<b>ตัวแดง</b>ในรายงานรอบจ่าย</div>' : '')
       + '<div class="apform' + (b.pages.length || b.keepFiles.length ? '' : ' nofile') + (po ? ' ispo' : '') + '">'
       + (b.pages.length || b.keepFiles.length ? '<div class="apimgs">' + b.pages.map(function (p, i) { return '<figure><img src="' + p.src + '" alt="ภาพบิล" data-zoom="' + i + '">' + (p.file ? '<button type="button" class="btn apsm" data-rot="' + p.fi + '">↻ หมุนภาพแล้วอ่านใหม่</button>' : '') + '</figure>'; }).join('')
@@ -439,6 +504,7 @@
       + '<div class="apbtns"><button class="btn btn-primary" id="apSave">' + icon('check', 18) + (po ? ' บันทึก PO ล่วงหน้า' : ' บันทึกบิล') + '</button>'
       + (po && b.billId ? '<button class="btn" id="apRecv">' + icon('check', 18) + ' ได้รับบิลแล้ว</button>' : '')
       + (b.billId && !b.fromPo ? '<button class="btn apdel" id="apDel">' + icon('trash', 18) + (po ? ' ลบ PO' : ' ลบบิล') + '</button>' : '')
+      + (P.queue && P.queue.indexOf(b) >= 0 && P.qi < P.queue.length - 1 ? '<button class="btn" id="apSkip">ข้ามใบนี้ →</button>' : '')
       + '<button class="btn" id="apBack">ยกเลิก</button></div>'
       + '</div></div>';
     bindLink();
@@ -449,6 +515,7 @@
     on('input[name=apVat]', 'change', function (el) { b.vatMode = el.value; drawLines(); refresh(); });
     $('apVendor').addEventListener('change', function () {
       b.vendor = this.value.trim(); var v = vendorOf(b.vendor);
+      if (b.text && b.text.length && !b.invNo) { var gi = P.invByPattern(b.text, b.vendor); if (gi) { b.invNo = gi; $('apInv').value = gi; dupCheck(); } }   // เลือกผู้ขายเอง → ลองหาเลขที่ตามรูปแบบบิลเดิมของผู้ขายนั้น
       if (v) {
         if (v.category) { b.category = v.category; Array.prototype.forEach.call(document.querySelectorAll('input[name=apCat]'), function (x) { x.checked = x.value === b.category; }); }
         if (v.creditDays !== '' && v.creditDays != null) $('apCredit').value = b.creditDays = v.creditDays;
@@ -471,7 +538,8 @@
     $('apBank').addEventListener('input', function () { b.bank = this.value; });
     $('apNote').addEventListener('input', function () { b.note = this.value; });
     $('apAdd').addEventListener('click', function () { b.lines.push({ desc: '', qty: 1, price: 0 }); drawLines(); refresh(); var x = $('apLines').querySelectorAll('input[data-k=desc]'); x[x.length - 1].focus(); });
-    $('apBack').addEventListener('click', function () { P.cur = null; P.render(); });
+    $('apBack').addEventListener('click', function () { P.cur = null; P.queue = null; P.render(); });
+    if ($('apSkip')) $('apSkip').addEventListener('click', function () { queueNext('ข้ามแล้ว'); });
     $('apSave').addEventListener('click', save);
     if ($('apRecv')) $('apRecv').addEventListener('click', function () { receivePo(b.billId); });
     if ($('apAttach')) $('apAttach').addEventListener('change', function () { var fs = Array.prototype.slice.call(this.files); this.value = ''; if (fs.length) attach(fs); });
@@ -566,7 +634,9 @@
         btn.disabled = false; btn.innerHTML = icon('check', 18) + label;
         if (r.dup) return ask({ title: 'บิลซ้ำ', text: r.error + ' — บันทึกซ้ำอีกใบไหม?', ok: 'บันทึกซ้ำ', cancel: 'ไม่บันทึก' }).then(function (yes) { if (yes) return send(true); });
         if (!r.ok) return toast(r.error);
-        var round = b.payRound; P.cur = null; P.round = round;
+        var round = b.payRound; P.round = round;
+        if (P.queue && P.queue.indexOf(b) >= 0 && P.qi < P.queue.length - 1) return load().then(function () { queueNext('บันทึก ' + payload.vendor + ' ' + (payload.invNo || '') + ' แล้ว'); });
+        P.cur = null; P.queue = null;
         toast((po ? 'บันทึก PO ล่วงหน้าแล้ว' : b.fromPo ? 'บันทึกบิลแล้ว — PO นี้เป็นบิลจริงแล้ว' : 'บันทึกบิลแล้ว') + (b.uploads.length && !r.uploaded ? ' (เก็บไฟล์บิลไม่ได้ — ตรวจโฟลเดอร์ฝ่าย)' : ''));
         if (po || b.fromPo) return load().then(function () { P.poPage(); });
         return load().then(function () { P.importPage(); msg('✓ บันทึก ' + esc(payload.vendor) + ' ' + esc(payload.invNo || '') + ' ลงรอบจ่าย ' + dotAD(roundOf(round).actual) + ' แล้ว · <a href="#" id="apGoRound">ดูรายงานรอบนี้</a>', 'ok'); var g = $('apGoRound'); if (g) g.addEventListener('click', function (e) { e.preventDefault(); go('a_ap'); }); });
@@ -978,7 +1048,7 @@
         + '<label>วันตัดรอบบิล (วันที่)<input id="apCutDay" inputmode="numeric" value="' + (d.settings.cutDay || 19) + '"><small>รอบจ่าย = วันตัดรอบของบิล + เครดิตผู้ขาย → วันจ่ายรอบแรกหลังจากนั้น</small></label>'
         + '<label>เลขผู้เสียภาษีของบริษัทเรา<input id="apOurTax" inputmode="numeric" value="' + esc(d.settings.ourTaxId) + '" placeholder="13 หลัก"><small>ไม่ให้ระบบจับเลขของเราเป็นเลขของผู้ขาย</small></label>'
         + '</div><button class="btn btn-primary" id="apSetSave">บันทึกตั้งค่า</button></div>'
-        + '<div class="apbtns"><button class="btn btn-primary" id="apVAdd">+ เพิ่มผู้ขาย</button><label class="btn">' + icon('upload', 18) + ' นำเข้าผู้ขายจากไฟล์ Excel ค่าใช้จ่ายเดิม<input type="file" id="apVImp" accept=".xlsx,.xls" hidden></label></div>'
+        + '<div class="apbtns"><button class="btn btn-primary" id="apVAdd">+ เพิ่มผู้ขาย</button><label class="btn">' + icon('upload', 18) + ' นำเข้าผู้ขาย / เครดิต Supplier จาก Excel<input type="file" id="apVImp" accept=".xlsx,.xls" hidden></label></div>'
         + '<input type="search" id="apVq" class="apsearch" placeholder="ค้นหาผู้ขาย…" value="' + esc(q) + '">'
         + d.cats.map(function (c, i) {
           var list = vs.filter(function (v) { return (v.category || 'raw') === c.key; });
@@ -1055,10 +1125,35 @@
     });
     return out;
   };
+  // ไฟล์ "รายละเอียด Supplier" (ผู้ใช้ส่ง 20/11/69: แผ่นวัตถุดิบ / บรรจุภัณฑ์และอื่นๆ · คอลัมน์ Suppier + เครดิต/วัน) → เครดิตของแต่ละเจ้า
+  // จับคู่ชื่อกับผู้ขายที่มีแบบหลวม (vendorOf) · ที่ไม่พบ = เพิ่มเป็นผู้ขายใหม่ (หมวดตามชื่อแผ่น)
+  P.parseCreditBook = function (wb) {
+    var out = [];
+    wb.SheetNames.forEach(function (sn) {
+      var rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: '' }), hc = -1, cc = -1;
+      rows.forEach(function (r) {
+        if (hc < 0) { r.forEach(function (v, i) { var t = String(v).trim(); if (/^supp?l?ier$|suppier|ผู้ขาย|ชื่อบริษัท/i.test(t)) hc = i; if (/เครดิต/.test(t)) cc = i; }); if (hc < 0 || cc < 0) hc = cc = -1; return; }
+        var name = String(r[hc] || '').replace(/\s+/g, ' ').trim(), cr = Number(String(r[cc]).replace(/[^\d.]/g, ''));
+        if (!name || !isFinite(cr) || String(r[cc]) === '') return;
+        var v = vendorOf(name);
+        out.push({ name: v ? v.name : name, fileName: name, matched: !!v, creditDays: Math.round(cr), category: v ? v.category : /วัตถุดิบ/.test(sn) ? 'raw' : 'pack' });
+      });
+    });
+    return out;
+  };
   function importVendors(f) {
     toast('กำลังอ่านไฟล์…');
     script(XLSX_URL, function () { return !!window.XLSX; }).then(function () { return f.arrayBuffer(); }).then(function (buf) {
-      var list = P.parseVendorBook(XLSX.read(buf, { type: 'array', cellFormula: true }));
+      var wb = XLSX.read(buf, { type: 'array', cellFormula: true }), cr = P.parseCreditBook(wb);
+      if (cr.length) {
+        var m = cr.filter(function (x) { return x.matched; }).length;
+        return openModal({ title: 'เครดิต Supplier ' + cr.length + ' ราย', icon: 'upload', color: state.dept.color, ok: 'บันทึกเครดิต', wide: true,
+          body: '<p>ตรงกับผู้ขายที่มีอยู่ ' + m + ' ราย (ตั้งเครดิตตามไฟล์) · ผู้ขายใหม่ ' + (cr.length - m) + ' ราย (เพิ่มให้) — บิลที่โหลดเข้ามาของเจ้านั้นจะใส่เครดิตให้อัตโนมัติ</p><div class="apvimp">' + cr.map(function (v) { return '<div class="cprow"><b>' + esc(v.fileName) + '</b><span>เครดิต ' + v.creditDays + ' วัน</span><small>' + (v.matched ? '✓ ' + esc(v.name) : 'ผู้ขายใหม่ · ' + esc(cat(v.category).name)) + '</small></div>'; }).join('') + '</div>',
+          submit: function () {
+            return call('apImportVendors', state.token, cr.map(function (v) { return { name: v.name, category: v.category, creditDays: v.creditDays, vatMode: 'exc' }; }), { credit: true }).then(function (r) { if (!r.ok) return r.error; closeModal(); toast('ตั้งเครดิตแล้ว · เพิ่มใหม่ ' + r.added + ' ราย · อัปเดต ' + r.filled + ' ราย'); load().then(P.vendorPage); });
+          } });
+      }
+      var list = P.parseVendorBook(wb);
       if (!list.length) return toast('ไม่พบรายชื่อผู้ขายในไฟล์');
       openModal({ title: 'นำเข้าผู้ขาย ' + list.length + ' ราย', icon: 'upload', color: state.dept.color, ok: 'นำเข้า', wide: true,
         body: '<p>ผู้ขายที่มีอยู่แล้วจะเติมเฉพาะช่องที่ว่าง</p><div class="apvimp">' + list.map(function (v) { return '<div class="cprow"><b>' + esc(v.name) + '</b><span>' + esc(cat(v.category).name) + (v.creditDays !== '' ? ' · เครดิต ' + v.creditDays : '') + ' · ' + VAT_SHORT[v.vatMode || 'exc'] + (v.pct ? ' · ' + v.pct + '%' : '') + '</span><small>' + esc(v.bank || '-') + '</small></div>'; }).join('') + '</div>',
@@ -1088,7 +1183,8 @@
     '.apbtns{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.apbtns .btn{width:auto}.apdel{color:#dc2626;border-color:#fecaca}.apr{cursor:pointer}.apr:hover{background:#f8fafc}',
     '.rounds{margin:0 0 14px}.apround{border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:8px 12px;text-align:left;cursor:pointer;font:inherit}.apround small{display:block;color:var(--muted);font-size:12px}.apround.on{border-color:var(--c);background:var(--c);color:#fff}.apround.on small{color:#fff}',
     '.apcats{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}.apcats span{flex:1 1 150px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px}.apcats i{font-style:normal;display:inline-block;width:20px;height:20px;border-radius:50%;background:#D9EAD3;text-align:center;margin-right:6px;font-weight:700}.apcats b{display:block;font-size:16px;font-variant-numeric:tabular-nums}',
-    '.apsheet{margin:0 0 22px}.apsn{display:inline-block;background:#1f2937;color:#fff;border-radius:8px 8px 0 0;padding:4px 12px;font-size:13px;font-weight:600}',
+    '.apsheet{margin:0 0 22px}.apsheet .cpwrap{max-height:calc(100vh - 90px);overflow:auto;border:1px solid var(--line);border-radius:0 8px 8px 8px;background:#fff}',
+    '.apqban{display:flex;gap:8px;align-items:center;background:#eff6ff;border:1.5px solid #bfdbfe;color:#1e3a8a;border-radius:12px;padding:10px 12px;margin-bottom:12px}.apsplit{display:flex;flex-direction:column;gap:6px;margin-top:12px}.apsplit span{color:var(--muted)}.apsn{display:inline-block;background:#1f2937;color:#fff;border-radius:8px 8px 0 0;padding:4px 12px;font-size:13px;font-weight:600}',
     '.apx1{border-collapse:collapse;table-layout:fixed;background:#fff;font-variant-numeric:tabular-nums}.apx1 td{padding:1px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;line-height:1.25}.apx1 td.ov{overflow:visible;position:relative;z-index:1}.apx1 tr.apbill{cursor:pointer}.apx1 tr.apbill:hover td{box-shadow:inset 0 0 0 999px rgba(37,99,235,.06)}',
     '.apdup{opacity:.5}.apsearch{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;margin-bottom:12px}.apno{font-style:normal;display:inline-block;width:22px;height:22px;border-radius:50%;background:#D9EAD3;color:#0f172a;text-align:center}.apvimp{max-height:50vh;overflow:auto}',
     '.appob{color:#b91c1c;border-color:#fecaca}.appoban{display:flex;gap:8px;align-items:center;background:#fef2f2;border:1.5px solid #fecaca;color:#991b1b;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-weight:600}.appoban b{color:#dc2626;margin:0 3px}',

@@ -702,7 +702,7 @@
       inner.appendChild(clone); box.appendChild(inner); $('app').appendChild(box);
       box.style.width = '1000px';
       // ตารางที่เลื่อนซ้ายขวาได้ → กางออกให้เห็นครบทุกคอลัมน์
-      Array.prototype.forEach.call(clone.querySelectorAll('*'), function (el) { if (el.scrollWidth > el.clientWidth + 2) { var cs = getComputedStyle(el); if (/auto|scroll|hidden/.test(cs.overflowX)) { el.style.overflow = 'visible'; el.style.maxWidth = 'none'; } } });
+      Array.prototype.forEach.call(clone.querySelectorAll('*'), function (el) { var cs; if (el.scrollWidth > el.clientWidth + 2) { cs = getComputedStyle(el); if (/auto|scroll|hidden/.test(cs.overflowX)) { el.style.overflow = 'visible'; el.style.maxWidth = 'none'; el.style.maxHeight = 'none'; } } else if (el.scrollHeight > el.clientHeight + 2 && el.tagName !== 'TEXTAREA') { cs = getComputedStyle(el); if (/auto|scroll/.test(cs.overflowY) && cs.maxHeight !== 'none') { el.style.overflow = 'visible'; el.style.maxHeight = 'none'; } } });
       var W = Math.min(2400, Math.max(1000, box.scrollWidth, inner.scrollWidth + 48)); box.style.width = W + 'px';
       var land = W > 1150, pw = land ? 297 : 210, ph = land ? 210 : 297, m = 8;
       var cssW = W, pageCss = Math.floor((ph - m * 2 - 6) * cssW / (pw - m * 2));
@@ -1032,7 +1032,7 @@
 <script src="accounting.js?v=25"></script>
 <script src="cpram.js?v=7"></script>
 <script src="exportorder.js?v=2"></script>
-<script src="payables.js?v=5"></script>
+<script src="payables.js?v=6"></script>
 <script src="quality.js?v=7"></script>
 <script src="production.js?v=24"></script>
 <script src="rd.js?v=1"></script>

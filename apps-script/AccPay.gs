@@ -306,7 +306,7 @@ function apDeleteVendor(token, id) {
   });
 }
 // นำเข้าผู้ขายจากไฟล์ Excel แบบฟอร์มเดิม (หน้าเว็บอ่านไฟล์เอง) — เพิ่มเฉพาะชื่อที่ยังไม่มี · ที่มีแล้วเติมเฉพาะช่องที่ว่าง
-function apImportVendors(token, list) {
+function apImportVendors(token, list, opts) {   // opts.credit = ตั้งเครดิตตามไฟล์ทับของเดิม (ไฟล์เครดิต Supplier 20/11/69)
   var dept = requireAcc_(token); apRegister_();
   var main = purBook_(dept), ss = apBook_(main);
   if (!ss) return { ok: false, error: 'ยังไม่ได้เชื่อม Google Sheet ค่าใช้จ่าย' };
@@ -319,6 +319,7 @@ function apImportVendors(token, list) {
       if (old) {
         var ch = false;
         ['bank', 'creditDays', 'pct', 'taxId'].forEach(function (k) { if ((old[k] === '' || old[k] == null) && x[k]) { old[k] = k === 'taxId' ? "'" + x[k] : x[k]; ch = true; } });
+        if (opts && opts.credit && x.creditDays !== '' && Number(old.creditDays) !== Number(x.creditDays)) { old.creditDays = x.creditDays; ch = true; }
         if (ch) { old.updatedAt = now; if (old.taxId) old.taxId = "'" + apTxt_(old.taxId); purWrite_(ss, 'ap_vendors', old); filled++; }
         return;
       }
