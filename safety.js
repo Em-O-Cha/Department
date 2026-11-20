@@ -6,6 +6,10 @@
   var H = window.SHE = { data: null, loading: null, q: {} };
 
   Object.assign(ICONS, {
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    dl: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
+    up: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/>',
+    pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
     shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/>',
     camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
     alert: '<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5h.01"/>',
@@ -20,6 +24,7 @@
     { id: 's_find', label: 'ข้อบกพร่อง / ติดตามแก้ไข', ic: 'warn' },
     { id: 's_inc', label: 'อุบัติเหตุ / เกือบเกิดเหตุ', ic: 'alert' },
     { id: 's_mon', label: 'ตรวจประจำเดือน (ทางออกฉุกเฉิน / แจ้งเหตุเพลิงไหม้)', ic: 'clock' },
+    { id: 's_doc', label: 'แฟ้มเอกสาร (Word / Excel / PowerPoint)', ic: 'folder' },
     { id: 's_rep', label: 'รายงาน / พิมพ์ PDF', ic: 'print' },
     { id: 's_set', label: 'ตั้งค่าแบบตรวจ', ic: 'gear' },
     { id: 's_log', label: 'ประวัติการแก้ไข', ic: 'clock' }
@@ -157,7 +162,7 @@
       });
       return;
     }
-    ({ s_dash: dash, s_check: walk, s_find: findings, s_inc: incidents, s_mon: monthly, s_rep: report, s_set: settings, s_log: logPage }[page] || dash)();
+    ({ s_dash: dash, s_check: walk, s_find: findings, s_inc: incidents, s_mon: monthly, s_doc: docsPage, s_rep: report, s_set: settings, s_log: logPage }[page] || dash)();
   };
   function landscape(onOff) {
     var el = document.getElementById('sheLandscape');
@@ -903,6 +908,144 @@
       if (ed.dirty) save(goPrint); else goPrint();
     });
   }
+  // ==================== แฟ้มเอกสาร (ผู้ใช้ขอ 20/11/69) ====================
+  // เก็บไฟล์ Word / Excel / PowerPoint (+ PDF) แยกตามปี พ.ศ. · อัปโหลดแล้วกด "เปิดดู" ได้ทุกเมื่อ (เปิดในตัวแสดงไฟล์ของ Google Drive) · API SheDocs.gs
+  var DOC_KIND = [[/\.docx?$/i, 'W', 'Word', '#2563eb'], [/\.(xlsx?|xlsm|csv)$/i, 'X', 'Excel', '#16a34a'], [/\.pptx?$/i, 'P', 'PowerPoint', '#ea580c'], [/\.pdf$/i, 'PDF', 'PDF', '#dc2626']];
+  function docKind(name) { for (var i = 0; i < DOC_KIND.length; i++) if (DOC_KIND[i][0].test(name)) return DOC_KIND[i]; return null; }
+  function docSize(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+  function beYear() { return new Date().getFullYear() + 543; }
+  // หมวดเอกสาร: บรรทัดขึ้นต้น "หมวด" = หมวดหลัก · บรรทัดอื่น = หมวดย่อย · ที่เลือกเก็บไฟล์ได้ = หมวดย่อย หรือหมวดหลักที่ไม่มีหมวดย่อย
+  // ค่าที่เก็บในแถว = "หมวดหลัก › หมวดย่อย" (หรือชื่อหมวดหลัก)
+  function docTree(text) {
+    var mains = [];
+    String(text || '').split(/\n/).map(function (l) { return l.trim(); }).filter(String).forEach(function (l) {
+      if (/^หมวด/.test(l) || !mains.length) mains.push({ name: l, subs: [] }); else mains[mains.length - 1].subs.push(l);
+    });
+    mains.forEach(function (m) { m.leaves = m.subs.length ? m.subs.map(function (x) { return { key: m.name + ' › ' + x, label: x }; }) : [{ key: m.name, label: m.name }]; });
+    return mains;
+  }
+  function docsPage() {
+    var D = H.docs;
+    if (!D) {
+      $('main').innerHTML = '<h3>แฟ้มเอกสาร</h3><div class="panel"><span class="spinner dark"></span> กำลังโหลด…</div>';
+      return call('sheDocs', state.token).then(function (r) { if (!r.ok) return toast(r.error); H.docs = r; if (state.page === 's_doc') docsPage(); }).catch(onServerError);
+    }
+    var q = H.q, years = D.years, tree = docTree(D.cats), leaves = [].concat.apply([], tree.map(function (m) { return m.leaves; }));
+    if (!q.dYear || years.indexOf(q.dYear) < 0) q.dYear = years.indexOf(beYear()) >= 0 ? beYear() : years[years.length - 1];
+    if (!q.dCat || !leaves.some(function (l) { return l.key === q.dCat; })) q.dCat = leaves[0] ? leaves[0].key : '';
+    var term = String(q.dTerm || '').toLowerCase();
+    var inYear = D.docs.filter(function (d) { return d.year === q.dYear; });
+    var shown = inYear.filter(function (d) { return !term || (d.title + ' ' + d.fileName + ' ' + d.category + ' ' + d.note).toLowerCase().indexOf(term) >= 0; });
+    var known = {}; leaves.forEach(function (l) { known[l.key] = 1; });
+    var chips = years.map(function (y) { var n = D.docs.filter(function (d) { return d.year === y; }).length; return '<button class="chip' + (y === q.dYear ? ' on' : '') + '" data-dy="' + y + '">ปี ' + y + ' <small>(' + n + ')</small></button>'; }).join('')
+      + '<button class="chip" id="dAddYear">+ เพิ่มปี</button>';
+    var row = function (d) {
+      var k = docKind(d.fileName) || ['', '?', 'ไฟล์', '#64748b'];
+      return '<div class="sdoc"><span class="sdic" style="background:' + k[3] + '">' + k[1] + '</span><div class="sdtx"><b>' + esc(d.title) + '</b><small>' + esc(d.fileName) + ' · ' + docSize(d.size) + ' · อัปโหลด ' + esc(String(d.createdAt).slice(0, 10).split('-').reverse().join('/')) + (d.by ? ' · ' + esc(d.by) : '') + '</small>' + (d.note ? '<small>' + esc(d.note) + '</small>' : '') + '</div>'
+        + '<div class="sdbt"><a class="btn btn-sm btn-primary" href="' + esc(d.url) + '" target="_blank" rel="noopener">เปิดดู</a>'
+        + '<a class="btn btn-sm btn-line" href="https://drive.google.com/uc?export=download&id=' + encodeURIComponent(d.fileId) + '" target="_blank" rel="noopener" aria-label="ดาวน์โหลด ' + esc(d.title) + '" title="ดาวน์โหลด">' + icon('dl', 16) + '</a>'
+        + '<button class="btn btn-sm btn-line" data-dedit="' + esc(d.id) + '" aria-label="แก้ไข ' + esc(d.title) + '" title="แก้ไข">' + icon('pen', 16) + '</button>'
+        + '<button class="btn btn-sm btn-line sddel" data-ddel="' + esc(d.id) + '" aria-label="ลบ ' + esc(d.title) + '" title="ลบ">' + icon('trash', 16) + '</button></div></div>';
+    };
+    var leafBox = function (l, sub) {
+      var fs = shown.filter(function (d) { return d.category === l.key; });
+      if (term && !fs.length) return '';
+      return '<div class="sdleaf">' + (sub ? '<div class="sdlh"><b>' + esc(l.label) + '</b><span class="muted">ประจำปี ' + q.dYear + ' · ' + fs.length + ' ไฟล์</span><button class="btn btn-sm btn-line" data-dupto="' + esc(l.key) + '">' + icon('up', 15) + ' อัปโหลดเข้าหมวดนี้</button></div>'
+        : '<div class="sdlh"><span class="muted">ประจำปี ' + q.dYear + ' · ' + fs.length + ' ไฟล์</span><button class="btn btn-sm btn-line" data-dupto="' + esc(l.key) + '">' + icon('up', 15) + ' อัปโหลดเข้าหมวดนี้</button></div>')
+        + (fs.length ? fs.map(row).join('') : '<p class="muted sdnone">ยังไม่มีไฟล์</p>') + '</div>';
+    };
+    var body = tree.map(function (m) {
+      var inner = m.leaves.map(function (l) { return leafBox(l, m.subs.length > 0); }).join('');
+      if (term && !inner) return '';
+      return '<div class="panel pbox sdmain"><h4>' + icon('folder', 18) + ' ' + esc(m.name) + '</h4>' + inner + '</div>';
+    }).join('');
+    var others = shown.filter(function (d) { return !known[d.category]; });
+    if (others.length) body += '<div class="panel pbox sdmain"><h4>' + icon('folder', 18) + ' อื่น ๆ / ยังไม่ได้จัดหมวด</h4>' + others.map(function (d) { return row(d) + (d.category ? '' : ''); }).join('') + '<p class="muted">กดปุ่มแก้ไข (ดินสอ) เพื่อย้ายเข้าหมวด</p></div>';
+    var catOpts = function (sel) { return tree.map(function (m) { return '<optgroup label="' + esc(m.name) + '">' + m.leaves.map(function (l) { return '<option value="' + esc(l.key) + '"' + (l.key === sel ? ' selected' : '') + '>' + esc(l.label) + '</option>'; }).join('') + '</optgroup>'; }).join(''); };
+    $('main').innerHTML = '<h3>แฟ้มเอกสาร</h3><p class="lead">เก็บไฟล์ Word / Excel / PowerPoint (และ PDF) ของฝ่ายไว้ในระบบ แยกตามหมวดและปี · กด "เปิดดู" ได้ทุกเมื่อ</p>'
+      + '<div class="pchips noprint">' + chips + '</div>'
+      + '<div class="panel noprint sdup" id="dUpBox"><b>อัปโหลดไฟล์เข้า ปี ' + q.dYear + '</b>'
+      + '<div class="pform"><div class="pf"><label for="dCat">หมวด</label><select id="dCat">' + catOpts(q.dCat) + (others.length || !leaves.length ? '' : '') + '</select></div>'
+      + '<div class="pf"><label for="dBy">ผู้อัปโหลด</label><input id="dBy" list="dPeople" value="' + esc(q.dBy || inspectors()[0]) + '">' + datalist('dPeople', inspectors()) + '</div></div>'
+      + '<label class="sddrop" id="dDrop" tabindex="0"><input type="file" id="dFile" multiple hidden accept=".doc,.docx,.xls,.xlsx,.xlsm,.csv,.ppt,.pptx,.pdf">' + icon('up', 30) + '<b>แตะเพื่อเลือกไฟล์ (เลือกได้หลายไฟล์)</b><span>หรือลากไฟล์มาวาง · Word / Excel / PowerPoint / PDF · ไม่เกิน 20 MB ต่อไฟล์</span></label>'
+      + '<div id="dProg"></div></div>'
+      + '<div class="pbar noprint"><input id="dTerm" type="search" placeholder="ค้นหาชื่อเอกสาร / หมวด" value="' + esc(q.dTerm || '') + '" aria-label="ค้นหาเอกสาร"><span class="muted">ปี ' + q.dYear + ' · ' + inYear.length + ' ไฟล์</span><button class="btn btn-sm btn-line" id="dCats">' + icon('pen', 15) + ' แก้หมวด</button></div>'
+      + (body || '<div class="panel sdempty">ไม่พบเอกสารที่ค้นหา</div>');
+    on('[data-dy]', 'click', function (el) { q.dYear = +el.getAttribute('data-dy'); docsPage(); }, $('main'));
+    on('[data-dupto]', 'click', function (el) { q.dCat = el.getAttribute('data-dupto'); $('dCat').value = q.dCat; $('dUpBox').scrollIntoView({ block: 'center' }); $('dFile').click(); }, $('main'));
+    $('dAddYear').addEventListener('click', function () {
+      openModal({ title: 'เพิ่มปี', icon: 'folder', color: state.dept.color, ok: 'เพิ่ม', body: F('dNewYear', 'ปี (พ.ศ.)', Math.max.apply(null, years) + 1, 'number', ' min="2500" max="2700"'),
+        submit: function () {
+          var y = +v('dNewYear'); if (!(y >= 2500 && y <= 2700)) return 'ใส่ปี พ.ศ. เช่น 2571';
+          return call('sheDocYears', state.token, years.concat([y])).then(function (r) { if (!r.ok) return r.error; D.years = r.years; q.dYear = y; closeModal(); docsPage(); });
+        } });
+    });
+    $('dCats').addEventListener('click', function () {
+      openModal({ title: 'แก้หมวดเอกสาร', icon: 'folder', color: state.dept.color, ok: 'บันทึก',
+        body: '<p class="muted">1 บรรทัด = 1 หมวด · บรรทัดที่ขึ้นต้นด้วย "หมวด" เป็นหมวดหลัก บรรทัดถัดไปเป็นหมวดย่อยของหมวดนั้น (เช่น 1.1 …) · ไฟล์เก็บแยกตามปีให้เองอยู่แล้ว</p><textarea id="dCatText" rows="10" style="width:100%;font:inherit;padding:10px;border:1.5px solid var(--line);border-radius:10px">' + esc(D.cats) + '</textarea><p class="muted">ถ้าเปลี่ยนชื่อหมวดที่มีไฟล์อยู่ ไฟล์เดิมจะไปอยู่ใน "อื่น ๆ" ให้ย้ายเข้าหมวดใหม่ด้วยปุ่มแก้ไข</p>',
+        submit: function () {
+          return call('sheDocCats', state.token, $('dCatText').value).then(function (r) { if (!r.ok) return r.error; D.cats = r.cats; closeModal(); toast('บันทึกหมวดแล้ว'); docsPage(); });
+        } });
+    });
+    var t; $('dTerm').addEventListener('input', function () { var val = this.value; clearTimeout(t); t = setTimeout(function () { q.dTerm = val; docsPage(); var el = $('dTerm'); el.focus(); el.setSelectionRange(val.length, val.length); }, 250); });
+    $('dCat').addEventListener('change', function () { q.dCat = this.value; });
+    $('dBy').addEventListener('change', function () { q.dBy = this.value; });
+    var inp = $('dFile'), drop = $('dDrop');
+    inp.addEventListener('change', function () { var fs = Array.prototype.slice.call(inp.files || []); inp.value = ''; if (fs.length) uploadDocs(fs); });
+    drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inp.click(); } });
+    ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
+    ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
+    drop.addEventListener('drop', function (e) { var fs = Array.prototype.slice.call(e.dataTransfer.files || []); if (fs.length) uploadDocs(fs); });
+    on('[data-ddel]', 'click', function (el) {
+      var d = D.docs.filter(function (x) { return x.id === el.getAttribute('data-ddel'); })[0]; if (!d) return;
+      ask({ title: 'ลบเอกสาร "' + d.title + '"?', text: 'ไฟล์ ' + d.fileName + ' จะถูกย้ายไปถังขยะของ Google Drive และหายจากรายการ', ok: 'ลบเอกสาร', cancel: 'ไม่ลบ', tone: 'danger' }).then(function (yes) {
+        if (!yes) return;
+        call('sheDeleteDoc', state.token, d.id).then(function (r) { if (!r.ok) return toast(r.error); D.docs = D.docs.filter(function (x) { return x.id !== d.id; }); toast('ลบแล้ว'); docsPage(); }).catch(onServerError);
+      });
+    }, $('main'));
+    on('[data-dedit]', 'click', function (el) {
+      var d = D.docs.filter(function (x) { return x.id === el.getAttribute('data-dedit'); })[0]; if (!d) return;
+      openModal({ title: 'แก้ข้อมูลเอกสาร', icon: 'pen', color: state.dept.color, ok: 'บันทึก',
+        body: F('deTitle', 'ชื่อเอกสาร', d.title)
+          + '<div class="pf"><label for="deCat">หมวด</label><select id="deCat">' + (known[d.category] ? '' : '<option value="' + esc(d.category) + '" selected>' + esc(d.category || '— ยังไม่ได้จัดหมวด —') + '</option>') + catOpts(d.category) + '</select></div>'
+          + '<div class="pf"><label for="deYear">ปี (พ.ศ.)</label><select id="deYear">' + years.map(function (y) { return '<option' + (y === d.year ? ' selected' : '') + '>' + y + '</option>'; }).join('') + '</select></div>'
+          + F('deNote', 'หมายเหตุ', d.note) + '<p class="muted">ไฟล์: ' + esc(d.fileName) + ' (ถ้าจะเปลี่ยนไฟล์ ให้อัปโหลดไฟล์ใหม่แล้วลบไฟล์เดิม)</p>',
+        submit: function () {
+          if (!v('deTitle')) return 'ใส่ชื่อเอกสาร';
+          return call('sheUpdateDoc', state.token, d.id, { title: v('deTitle'), category: $('deCat').value, year: +$('deYear').value, note: v('deNote') }).then(function (r) {
+            if (!r.ok) return r.error; Object.assign(d, r.doc); closeModal(); toast('บันทึกแล้ว'); docsPage();
+          });
+        } });
+    }, $('main'));
+  }
+  function readB64(file) {
+    return new Promise(function (ok, fail) { var fr = new FileReader(); fr.onload = function () { ok(String(fr.result).split(',')[1] || ''); }; fr.onerror = function () { fail(new Error('อ่านไฟล์ไม่ได้')); }; fr.readAsDataURL(file); });
+  }
+  function uploadDocs(files) {
+    var q = H.q, D = H.docs, year = q.dYear, cat = $('dCat') ? $('dCat').value : q.dCat, by = v('dBy');
+    q.dCat = cat; q.dBy = by;
+    var bad = files.filter(function (f) { return !docKind(f.name) || f.size > 20 * 1024 * 1024; });
+    var good = files.filter(function (f) { return bad.indexOf(f) < 0; });
+    var prog = $('dProg'), done = 0, fails = [];
+    if (bad.length) toast('ข้าม ' + bad.length + ' ไฟล์ (ไม่ใช่ Word / Excel / PowerPoint / PDF หรือใหญ่เกิน 20 MB)');
+    if (!good.length) return;
+    var show = function (cur) { if (prog) prog.innerHTML = '<div class="sdprog"><span class="spinner dark"></span> กำลังอัปโหลด ' + (done + 1) + '/' + good.length + ' · ' + esc(cur) + '</div>'; };
+    var i = 0;
+    (function next() {
+      if (i >= good.length) {
+        toast(fails.length ? 'อัปโหลดได้ ' + done + ' ไฟล์ · ไม่สำเร็จ ' + fails.length + ' (' + fails.join(', ') + ')' : '✓ อัปโหลด ' + done + ' ไฟล์เข้า ปี ' + year + ' แล้ว');
+        if (state.page === 's_doc') docsPage();
+        return;
+      }
+      var f = good[i++]; show(f.name);
+      readB64(f).then(function (b64) {
+        return call('sheUploadDoc', state.token, { year: year, category: cat, by: by }, f.name, f.type || 'application/octet-stream', b64);
+      }).then(function (r) { if (!r.ok) throw new Error(r.error); D.docs.unshift(r.doc); done++; })
+        .catch(function (e) { if (String(e.message).indexOf('SESSION_EXPIRED') >= 0) return onServerError(e); fails.push(f.name); console.warn(e); })
+        .then(next);
+    })();
+  }
+
   // แบบฟอร์มสำหรับพิมพ์ (หน้าตาตามไฟล์ Excel ของฝ่าย + หัวกระดาษแบบรายงานอื่นของระบบ)
   function stmHtml(form, rec, fm, ym) {
     var def = SHEM[form], nI = def.items.length, rows = (rec && rec.rows) || [], n = Math.max(def.rows, rows.length);
@@ -1050,6 +1193,10 @@
     '.smseg{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:6px}.smo{min-height:44px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font:inherit;font-size:14px;font-weight:600;color:#475569;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;padding:4px}.smo i{font-style:normal;font-weight:800}',
     '.smo.oP.on{background:#16a34a;border-color:#16a34a;color:#fff}.smo.oX.on{background:#dc2626;border-color:#dc2626;color:#fff}.smo.oO.on{background:#ea580c;border-color:#ea580c;color:#fff}.smo.oN.on{background:#64748b;border-color:#64748b;color:#fff}.smo:focus-visible{outline:3px solid var(--c);outline-offset:1px}',
     '.smfoot{display:flex;flex-direction:column;gap:8px;margin-top:10px}.smallok{align-self:flex-start;min-height:40px;border:1.5px solid #bbf7d0;background:#f0fdf4;color:#15803d;border-radius:10px;padding:6px 14px;font:inherit;font-weight:700;cursor:pointer}.smnote span{display:block;font-size:13px;color:var(--muted);margin-bottom:3px}.smnote em,.smpt em{font-style:normal;font-weight:400;color:var(--muted);font-size:12.5px}.smnote input{width:100%;padding:10px;border:1.5px solid var(--line);border-radius:10px;font:inherit}',
+    '.sdup .pform{margin:8px 0}.sddrop{display:flex;flex-direction:column;align-items:center;gap:4px;border:2px dashed var(--line);border-radius:14px;padding:22px 12px;text-align:center;cursor:pointer;background:#fafafa;color:var(--muted)}.sddrop b{color:var(--ink)}.sddrop.over,.sddrop:hover{border-color:var(--c, #ea580c);background:#fff7ed}',
+    '.sdprog{margin-top:10px;font-weight:600}.sdoc{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}.sdoc:first-of-type{border-top:0}.sdic{flex:0 0 44px;height:44px;border-radius:10px;color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:15px}',
+    '#dTerm{flex:1 1 200px;min-width:0;padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;font:inherit}.sdmain h4{margin-bottom:6px}.sdleaf{border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin-top:8px}.sdlh{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}.sdlh .btn{width:auto;margin-left:auto}.sdnone{margin:6px 0 2px}.sdtx{flex:1;min-width:0}.sdtx b{display:block;overflow-wrap:anywhere}.sdtx small{display:block;color:var(--muted);overflow-wrap:anywhere}.sdbt{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.sdbt .btn{width:auto}.sddel{color:#dc2626}.sdempty{color:var(--muted)}',
+    '@media (max-width:640px){.sdoc{flex-wrap:wrap}.sdbt{flex-basis:100%;justify-content:flex-start;padding-left:56px}}',
     '.smprob{border:1.5px solid #fecaca;background:#fff7f7;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}.smpt{font-weight:700;color:#b91c1c;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline}',
     '.smdet span{display:block;font-size:13px;color:#7f1d1d;margin-bottom:3px}.smdet textarea{width:100%;padding:10px;border:1.5px solid #fca5a5;border-radius:10px;font:inherit;resize:vertical;background:#fff}.smdet.need span{font-weight:700;color:#b91c1c}.smdet.need textarea{border-color:#dc2626;box-shadow:0 0 0 3px #fee2e2}',
     '.smphs{display:flex;flex-wrap:wrap;gap:8px}.smph{position:relative;width:76px;height:76px;border-radius:10px;overflow:hidden;background:#fee2e2;display:flex;align-items:center;justify-content:center;gap:4px;font-size:12px;color:#7f1d1d;flex-direction:column}.smph img{width:76px;height:76px;object-fit:cover;display:block}',

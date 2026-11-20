@@ -324,7 +324,7 @@
         + '<label class="btn btn-primary apbig">' + icon('upload', 20) + ' ถ่ายรูปบิล<input type="file" id="apCam" accept="image/*" capture="environment" hidden></label>'
         + '<label class="btn apbig">' + icon('pdf', 20) + ' เลือกไฟล์ (รูป / สแกน / PDF)<input type="file" id="apFile" accept="image/*,application/pdf" multiple hidden></label>'
         + '<button class="btn apbig" id="apManual">' + icon('form', 20) + ' กรอกเองโดยไม่มีไฟล์</button>'
-        + '<label class="btn apbig">' + icon('table', 20) + ' นำเข้าจาก Excel ค่าใช้จ่ายเดิม<input type="file" id="apXlsIn" accept=".xlsx" hidden></label>'
+        + '<label class="btn apbig">' + icon('table', 20) + ' นำเข้าจาก Excel ค่าใช้จ่ายเดิม (เลือกได้หลายไฟล์)<input type="file" id="apXlsIn" accept=".xlsx" multiple hidden></label>'
         + '<button class="btn apbig appob" id="apPoNew">' + icon('clock', 20) + ' PO ล่วงหน้า (ยังไม่ได้รับบิล)</button>'
         + '<small>เลือกได้หลายภาพพร้อมกัน (หลายหน้าของบิลเดียวกัน) · ภาพชัด ตรง ไม่เอียง จะอ่านได้แม่นขึ้น</small></div>'
         + '<div id="apMsg"></div>' + recentHtml();
@@ -332,7 +332,7 @@
         $(id).addEventListener('change', function () { var fs = Array.prototype.slice.call(this.files); this.value = ''; if (fs.length) start(fs); });
       });
       $('apManual').addEventListener('click', function () { P.cur = newBill(); form(); });
-      $('apXlsIn').addEventListener('change', function () { var f = this.files[0]; this.value = ''; if (f) importBook(f); });
+      $('apXlsIn').addEventListener('change', function () { var fs = Array.prototype.slice.call(this.files || []); this.value = ''; if (fs.length) importBook(fs); });
       $('apPoNew').addEventListener('click', function () { P.cur = newBill('po'); go('a_appo'); });
       bindLink();
       on('[data-bill]', 'click', function (el) { editBill(el.getAttribute('data-bill')); });
@@ -459,6 +459,95 @@
     }).catch(function (e) { msg(esc(e.message || e), 'bad'); });
   }
 
+  // ==================== อ่านบิลด้วย AI (ผู้ใช้ขอ 20/11/69) ====================
+  // กดเมื่ออ่านแบบปกติแล้วข้อมูลไม่ครบ / ไม่ถูก · ส่งภาพหน้าบิลไป AccPayAi.gs → Claude · คิดเงินตามครั้งที่อ่าน
+  var USD_THB = 34;   // อัตราโดยประมาณ ใช้แสดงค่าใช้จ่ายคร่าว ๆ เท่านั้น
+  function baht(usd) { var t = usd * USD_THB; return t < 1 ? 'ไม่ถึง 1 บาท' : 'ประมาณ ' + (t < 10 ? t.toFixed(1) : Math.round(t)) + ' บาท'; }
+  function aiBox(b) {
+    var r = b.read || {}, weak = !r.invNo || !(r.lines || []).length || !r.vendor;
+    if (b.ai) return '<div class="apai done"><b>✨ อ่านด้วย AI แล้ว</b><small>ครั้งนี้ใช้ ' + baht(b.ai.usd) + (b.ai.note ? ' · ' + esc(b.ai.note) : '') + (b.ai.check ? '<br><span class="apwarn">' + esc(b.ai.check) + '</span>' : '') + '</small><button type="button" class="btn apsm" id="apAi">อ่านด้วย AI อีกครั้ง</button></div>';
+    return '<div class="apai' + (weak ? ' weak' : '') + '"><div><b>' + (weak ? 'ข้อมูลไม่ครบ? ' : '') + 'ให้ AI อ่านบิลนี้</b><small>' + (P.data.ai && P.data.ai.set ? 'แม่นยำกว่าการอ่านแบบปกติ · คิดเงินตามครั้งที่กด ประมาณ 1–3 บาทต่อบิล' : 'ต้องตั้งค่าคีย์ AI ก่อน (หน้า ผู้ขาย / ตั้งค่า)') + '</small></div>'
+      + '<button type="button" class="btn ' + (weak ? 'btn-primary' : '') + ' apsm" id="apAi">✨ อ่านด้วย AI</button></div>';
+  }
+  function smallJpeg(src) {
+    return new Promise(function (ok) {
+      var im = new Image();
+      im.onload = function () {
+        var k = Math.min(1, 1600 / Math.max(im.width, im.height)), c = document.createElement('canvas');
+        c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+        var ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(im, 0, 0, c.width, c.height);
+        ok(c.toDataURL('image/jpeg', 0.85).split(',')[1]);
+      };
+      im.onerror = function () { ok(''); };
+      im.src = src;
+    });
+  }
+  function aiRead() {
+    var b = P.cur, btn = $('apAi');
+    if (!P.data.ai || !P.data.ai.set) return ask({ title: 'ยังไม่ได้ตั้งค่าคีย์ AI', text: 'วางคีย์ (API key) ที่หน้า "ผู้ขาย / ตั้งค่า (จ่าย)" ก่อน แล้วกลับมากดอ่านอีกครั้ง', ok: 'ไปหน้าตั้งค่า', cancel: 'ไว้ก่อน', tone: 'info' }).then(function (y) { if (y) go('a_apv'); });
+    var keep = collect();
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> AI กำลังอ่าน… (10–40 วินาที)';
+    Promise.all(b.pages.slice(0, 6).map(function (p) { return smallJpeg(p.src); })).then(function (imgs) {
+      imgs = imgs.filter(Boolean).map(function (x) { return { b64: x }; });
+      return call('apAiRead', state.token, imgs, (P.data.vendors || []).map(function (v) { return v.name; }));
+    }).then(function (r) {
+      if (r.ai) P.data.ai = r.ai;
+      if (!r.ok) { btn.disabled = false; btn.textContent = '✨ อ่านด้วย AI'; if (r.needKey) P.data.ai = Object.assign({}, P.data.ai, { set: false }); return toast(r.error); }
+      var x = r.bill, vs = P.data.vendors || [];
+      var v = (x.taxId && vs.filter(function (y) { return String(y.taxId || '') === x.taxId; })[0]) || vendorOf(x.vendor);
+      Object.assign(b, keep);
+      b.vendor = v ? v.name : (x.vendor || b.vendor);
+      b.taxId = x.taxId || (v && v.taxId) || b.taxId;
+      if (x.invNo) b.invNo = x.invNo;
+      if (x.issueDate) b.issueDate = x.issueDate;
+      if (v && v.creditDays !== '' && v.creditDays != null) b.creditDays = v.creditDays; else if (x.creditDays >= 0) b.creditDays = x.creditDays;
+      if (v) { if (!b.category) b.category = v.category || ''; if (!b.pct) b.pct = Number(v.pct) || 0; b.bank = v.bank || b.bank; }
+      if (x.vatMode) b.vatMode = x.vatMode; else if (v && v.vatMode) b.vatMode = v.vatMode;
+      if ((x.lines || []).length) b.lines = x.lines.map(function (l) { return { desc: l.desc, qty: Number(l.qty) || 0, price: Number(l.price) || 0 }; });
+      // ตรวจผลรวม: จำนวน × ราคา และยอดรวมรายการ เทียบกับยอดในบิล
+      var check = '', sum = (x.lines || []).reduce(function (s2, l) { return s2 + (Number(l.amount) || 0); }, 0);
+      var off = (x.lines || []).filter(function (l) { return Math.abs((Number(l.qty) || 0) * (Number(l.price) || 0) - (Number(l.amount) || 0)) > 1; }).length;
+      if (off) check = off + ' รายการ จำนวน × ราคา ไม่เท่าจำนวนเงินในบิล — ตรวจอีกครั้ง';
+      else if (x.subtotal && Math.abs(sum - x.subtotal) > 1 && (!x.total || Math.abs(sum - x.total) > 1)) check = 'ยอดรวมรายการ ' + m2(sum) + ' ไม่ตรงกับยอดในบิล ' + m2(x.subtotal || x.total) + ' — อาจขาดบางรายการ';
+      b.ai = { usd: r.usd || 0, note: x.note || '', check: check };
+      b.read = Object.assign({}, b.read || {}, { vendor: x.vendor, invNo: x.invNo, lines: b.lines, sub: x.subtotal || null, vat: x.vat || null, grand: x.total || null });   // คำเตือนยอดรวมเทียบกับที่ AI อ่าน
+      b.autoRound = true; b.payRound = '';
+      form();
+      toast('✨ AI อ่านบิลแล้ว · ครั้งนี้ ' + baht(r.usd || 0) + ' — ตรวจกับภาพก่อนบันทึก');
+    }).catch(function (e) { btn.disabled = false; btn.textContent = '✨ อ่านด้วย AI'; onServerError(e); });
+  }
+  // เก็บค่าที่ผู้ใช้เลือกในฟอร์มไว้ก่อนอ่านใหม่ (หมวด / % / หมายเหตุ)
+  function collect() {
+    var o = {}, c = $('main').querySelector('input[name=apCat]:checked'), pc = $('main').querySelector('input[name=apPct]:checked');
+    if (c) o.category = c.value;
+    if (pc) o.pct = Number(pc.value) || 0;
+    if ($('apPctX') && $('apPctX').value.trim()) o.pct = Number($('apPctX').value) || 0;
+    return o;
+  }
+  function aiPanel() {
+    var a = P.data.ai || { set: false, usage: [] };
+    return '<div class="panel pbox"><h4>✨ อ่านบิลด้วย AI</h4>'
+      + '<p class="muted">ปุ่ม "อ่านด้วย AI" ในหน้าตรวจข้อมูลบิล ใช้เมื่ออ่านแบบปกติแล้วข้อมูลไม่ครบหรือไม่ถูก · ใช้ Claude ของ Anthropic · <b>คิดเงินตามครั้งที่กดอ่าน</b> (ไม่มีค่ารายเดือน): บิล 1 หน้าประมาณ $0.02–0.08 (ราว 1–3 บาท) ขึ้นกับจำนวนหน้าและรายการ · จ่ายผ่านบัญชี Anthropic ที่ผูกบัตรไว้ (เติมเงินล่วงหน้าได้ และตั้งวงเงินสูงสุดต่อเดือนได้ที่ console.anthropic.com)</p>'
+      + '<div class="panel status ' + (a.set ? 'on' : 'off') + ' cpst"><div class="dot">' + icon(a.set ? 'check' : 'warn', 20) + '</div><div><b>' + (a.set ? 'ตั้งค่าคีย์แล้ว — ใช้งานได้' : 'ยังไม่ได้ตั้งค่าคีย์') + '</b><span>' + (a.set ? 'คีย์เก็บไว้ในระบบหลังบ้าน ไม่แสดงในหน้าเว็บ' : 'สมัคร / เข้าสู่ระบบที่ console.anthropic.com → API Keys → Create Key แล้วคัดลอกมาวางด้านล่าง') + '</span></div></div>'
+      + '<div class="cplink"><input id="apAiKey" type="password" autocomplete="off" placeholder="' + (a.set ? 'วางคีย์ใหม่เพื่อเปลี่ยน (sk-ant-…)' : 'วางคีย์ sk-ant-…') + '"><button class="btn btn-primary" id="apAiSave">บันทึกคีย์</button>' + (a.set ? '<button class="btn apdel" id="apAiDel">ลบคีย์</button>' : '') + '</div>'
+      + (a.usage && a.usage.length ? '<p class="muted" style="margin-top:8px">การใช้งาน: ' + a.usage.map(function (u) { return monthTh(u.ym) + ' ' + u.n + ' ครั้ง ≈ $' + u.usd.toFixed(2) + ' (' + baht(u.usd) + ')'; }).join(' · ') + '</p>' : '')
+      + '</div>';
+  }
+  function monthTh(ym) { var M = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']; return M[+ym.slice(5, 7) - 1] + ' ' + String(+ym.slice(0, 4) + 543).slice(2); }
+  function bindAiPanel() {
+    var sv = $('apAiSave'), dl = $('apAiDel');
+    if (sv) sv.addEventListener('click', function () {
+      var k = $('apAiKey').value.trim(); if (!k) { $('apAiKey').focus(); return toast('วางคีย์ก่อน'); }
+      sv.disabled = true; sv.innerHTML = '<span class="spinner"></span> กำลังตรวจคีย์…';
+      call('apSetAiKey', state.token, k).then(function (r) { sv.disabled = false; sv.textContent = 'บันทึกคีย์'; if (!r.ok) return toast(r.error); P.data.ai = r.ai; toast('✓ บันทึกคีย์แล้ว ใช้ปุ่มอ่านด้วย AI ได้'); P.vendorPage(); }).catch(onServerError);
+    });
+    if (dl) dl.addEventListener('click', function () {
+      ask({ title: 'ลบคีย์ AI?', text: 'ปุ่มอ่านด้วย AI จะใช้ไม่ได้จนกว่าจะวางคีย์ใหม่', ok: 'ลบคีย์', cancel: 'ไม่ลบ', tone: 'danger' }).then(function (y) {
+        if (y) call('apSetAiKey', state.token, '').then(function (r) { P.data.ai = r.ai; toast('ลบคีย์แล้ว'); P.vendorPage(); }).catch(onServerError);
+      });
+    });
+  }
+
   function form() {
     var b = P.cur, d = P.data, r = b.read;
     if (!b.payRound) b.payRound = roundFor(b.issueDate || P.data.today, b.creditDays);
@@ -477,6 +566,7 @@
         + b.keepFiles.map(function (u, i) { return '<a class="btn apsm" href="' + esc(u) + '" target="_blank" rel="noopener">' + icon('pdf', 16) + ' ไฟล์บิลที่บันทึกไว้ ' + (b.keepFiles.length > 1 ? i + 1 : '') + '</a>'; }).join('')
         + (b.text && b.text.length ? '<details class="aptext"><summary>ข้อความที่อ่านได้</summary><pre>' + esc(b.text.join('\n')) + '</pre></details>' : '') + '</div>' : '')
       + '<div class="apfields">'
+      + (!po && b.pages.length ? aiBox(b) : '')
       + (!po && !b.pages.length ? '<div class="apatt"><label class="btn apsm">' + icon('upload', 16) + ' ถ่ายรูป / แนบไฟล์บิล<input type="file" id="apAttach" accept="image/*,application/pdf" multiple hidden></label><small>ระบบอ่านเลขที่ใบกำกับ วันที่ และรายการให้</small></div>' : '')
       + '<div class="aphl"><b>1. หมวดของ' + (po ? ' PO' : 'บิล') + 'นี้ <span class="req">*</span></b><div class="apchips" id="apCats">' + d.cats.map(function (c, i) {
           return '<label><input type="radio" name="apCat" value="' + c.key + '"' + (b.category === c.key ? ' checked' : '') + '><span>' + (i + 1) + '. ' + esc(c.name) + '</span></label>'; }).join('') + '</div></div>'
@@ -541,6 +631,7 @@
     $('apBack').addEventListener('click', function () { P.cur = null; P.queue = null; P.render(); });
     if ($('apSkip')) $('apSkip').addEventListener('click', function () { queueNext('ข้ามแล้ว'); });
     $('apSave').addEventListener('click', save);
+    if ($('apAi')) $('apAi').addEventListener('click', aiRead);
     if ($('apRecv')) $('apRecv').addEventListener('click', function () { receivePo(b.billId); });
     if ($('apAttach')) $('apAttach').addEventListener('change', function () { var fs = Array.prototype.slice.call(this.files); this.value = ''; if (fs.length) attach(fs); });
     if ($('apDel')) $('apDel').addEventListener('click', function () {
@@ -1005,22 +1096,32 @@
     });
     return bills;
   };
-  function importBook(f) {
+  // เลือกได้หลายไฟล์ (ผู้ใช้ขอ 20/11/69): อ่านทุกไฟล์ รวมบิล / ผู้ขาย · บิลเดียวกัน (ผู้ขาย + เลขที่) ที่ซ้ำระหว่างไฟล์นับครั้งเดียว
+  function readBook(f) {
+    return f.arrayBuffer().then(function (b) {
+      var wb = new window.ExcelJS.Workbook();
+      return wb.xlsx.load(b.slice(0)).then(function (w) { return { bills: P.parseBillBook(w), vendors: P.parseVendorBook(XLSX.read(b, { type: 'array', cellFormula: true })) }; });
+    }).catch(function (e) { throw new Error(f.name + ': ' + (e.message || e)); });
+  }
+  function importBook(files) {
     if (!P.data.linked) return toast('เชื่อม Google Sheet "ค่าใช้จ่าย (จ่าย) ฝ่ายบัญชี" ก่อน แล้วค่อยนำเข้า');
-    msg('<span class="spinner dark"></span> กำลังอ่านไฟล์ Excel…');
-    var buf;
-    Promise.all([script(XJS_URL, function () { return !!window.ExcelJS; }), script(XLSX_URL, function () { return !!window.XLSX; })]).then(function () { return f.arrayBuffer(); }).then(function (b) {
-      buf = b; var wb = new window.ExcelJS.Workbook(); return wb.xlsx.load(b.slice(0));
-    }).then(function (wb) {
+    msg('<span class="spinner dark"></span> กำลังอ่าน' + (files.length > 1 ? ' ' + files.length + ' ไฟล์' : 'ไฟล์') + ' Excel…');
+    Promise.all([script(XJS_URL, function () { return !!window.ExcelJS; }), script(XLSX_URL, function () { return !!window.XLSX; })]).then(function () {
+      return Promise.all(files.map(readBook));
+    }).then(function (res) {
       msg('');
-      var bills = P.parseBillBook(wb), vendors = P.parseVendorBook(XLSX.read(buf, { type: 'array', cellFormula: true }));
-      if (!bills.length) return toast('ไม่พบบิลในแผ่น "…จ่าย DD.MM.YY" ของไฟล์นี้');
+      var bills = [], vendors = [], vSeen = {}, inBatch = {};
+      res.forEach(function (x) {
+        x.bills.forEach(function (b) { var k = b.invNo && b.kind !== 'po' ? norm(b.vendor) + '|' + b.invNo : ''; if (k && inBatch[k]) return; if (k) inBatch[k] = 1; bills.push(b); });
+        x.vendors.forEach(function (v) { var k = norm(v.name); if (vSeen[k]) return; vSeen[k] = 1; vendors.push(v); });
+      });
+      if (!bills.length) return toast('ไม่พบบิลในแผ่น "…จ่าย DD.MM.YY" ของ' + (files.length > 1 ? 'ไฟล์ที่เลือก' : 'ไฟล์นี้'));
       var have = {}; P.data.lines.forEach(function (l) { if (l.invNo) have[norm(l.vendor) + '|' + l.invNo] = 1; });
       bills.forEach(function (b) { b.dup = !!(b.invNo && b.kind !== 'po' && have[norm(b.vendor) + '|' + b.invNo]); });
       var ok = bills.filter(function (b) { return !b.dup; }), byR = {};
       ok.forEach(function (b) { var x = byR[b.payRound] = byR[b.payRound] || { n: 0, po: 0, pay: 0 }; x.n++; if (b.kind === 'po') x.po++; x.pay += b.pay; });
       openModal({ title: 'นำเข้าบิลจาก Excel', icon: 'table', color: state.dept.color, wide: true, ok: 'นำเข้า ' + ok.length + ' บิล',
-        body: '<p>' + Object.keys(byR).sort().map(function (k) { var x = byR[k]; return '<b>รอบจ่าย ' + dotAD(k, true) + '</b>: ' + x.n + ' บิล' + (x.po ? ' (PO ล่วงหน้า ' + x.po + ' · ตัวแดง)' : '') + ' · ชำระ ' + m2(x.pay); }).join('<br>')
+        body: '<p>' + (files.length > 1 ? 'จาก ' + files.length + ' ไฟล์<br>' : '') + Object.keys(byR).sort().map(function (k) { var x = byR[k]; return '<b>รอบจ่าย ' + dotAD(k, true) + '</b>: ' + x.n + ' บิล' + (x.po ? ' (PO ล่วงหน้า ' + x.po + ' · ตัวแดง)' : '') + ' · ชำระ ' + m2(x.pay); }).join('<br>')
           + (bills.length > ok.length ? '<br><span class="apwarn">ข้าม ' + (bills.length - ok.length) + ' บิลที่มีอยู่แล้ว</span>' : '') + '<br><small>รวมผู้ขาย ' + vendors.length + ' ราย (บัญชีธนาคาร / เครดิต / แบบ VAT / % จากไฟล์ — ที่มีอยู่แล้วเติมเฉพาะช่องว่าง)</small></p>'
           + '<div class="apvimp">' + bills.map(function (b) { return '<div class="cprow' + (b.dup ? ' apdup' : '') + '"><b' + (b.kind === 'po' ? ' class="apred"' : '') + '>' + esc(b.vendor) + '</b><span>' + (b.kind === 'po' ? '<span class="aptag">PO ล่วงหน้า</span>' : esc(b.invNo || '-') + ' · ' + slash(b.issueDate)) + ' · ' + catNo(b.category) + '. ' + esc(cat(b.category).name) + '</span><small>รอบ ' + dotAD(b.payRound, true) + ' · ' + b.lines.length + ' รายการ · ชำระ ' + m2(b.pay) + (b.creditDays !== '' ? ' · เครดิต ' + b.creditDays + ' วัน' : '') + (b.pct ? ' · หัก ' + b.pct + '%' : '') + (b.dup ? ' · มีแล้ว (ข้าม)' : '') + '</small></div>'; }).join('') + '</div>',
         submit: function () {
@@ -1048,7 +1149,8 @@
         + '<label>วันตัดรอบบิล (วันที่)<input id="apCutDay" inputmode="numeric" value="' + (d.settings.cutDay || 19) + '"><small>รอบจ่าย = วันตัดรอบของบิล + เครดิตผู้ขาย → วันจ่ายรอบแรกหลังจากนั้น</small></label>'
         + '<label>เลขผู้เสียภาษีของบริษัทเรา<input id="apOurTax" inputmode="numeric" value="' + esc(d.settings.ourTaxId) + '" placeholder="13 หลัก"><small>ไม่ให้ระบบจับเลขของเราเป็นเลขของผู้ขาย</small></label>'
         + '</div><button class="btn btn-primary" id="apSetSave">บันทึกตั้งค่า</button></div>'
-        + '<div class="apbtns"><button class="btn btn-primary" id="apVAdd">+ เพิ่มผู้ขาย</button><label class="btn">' + icon('upload', 18) + ' นำเข้าผู้ขาย / เครดิต Supplier จาก Excel<input type="file" id="apVImp" accept=".xlsx,.xls" hidden></label></div>'
+        + aiPanel()
+        + '<div class="apbtns"><button class="btn btn-primary" id="apVAdd">+ เพิ่มผู้ขาย</button><label class="btn">' + icon('upload', 18) + ' นำเข้าผู้ขาย / เครดิต Supplier จาก Excel<input type="file" id="apVImp" accept=".xlsx,.xls" multiple hidden></label></div>'
         + '<input type="search" id="apVq" class="apsearch" placeholder="ค้นหาผู้ขาย…" value="' + esc(q) + '">'
         + d.cats.map(function (c, i) {
           var list = vs.filter(function (v) { return (v.category || 'raw') === c.key; });
@@ -1065,8 +1167,9 @@
         call('apSaveSettings', state.token, { payDay: $('apPayDay').value, cutDay: $('apCutDay').value, ourTaxId: $('apOurTax').value }).then(function (r) { b.disabled = false; if (!r.ok) return toast(r.error); toast('บันทึกตั้งค่าแล้ว'); load().then(P.vendorPage); }).catch(onServerError);
       });
       $('apVAdd').addEventListener('click', function () { vendorDialog({}); });
+      bindAiPanel();
       on('[data-v]', 'click', function (el) { vendorDialog((d.vendors || []).filter(function (v) { return v.id === el.getAttribute('data-v'); })[0] || {}); });
-      $('apVImp').addEventListener('change', function () { var f = this.files[0]; this.value = ''; if (f) importVendors(f); });
+      $('apVImp').addEventListener('change', function () { var fs = Array.prototype.slice.call(this.files || []); this.value = ''; if (fs.length) importVendors(fs); });
     });
   };
   function vendorDialog(v) {
@@ -1141,10 +1244,13 @@
     });
     return out;
   };
-  function importVendors(f) {
+  // หลายไฟล์ได้: ไฟล์เครดิต Supplier และไฟล์ค่าใช้จ่ายเดิม รวมกัน (ชื่อซ้ำใช้ค่าจากไฟล์แรก)
+  function importVendors(files) {
     toast('กำลังอ่านไฟล์…');
-    script(XLSX_URL, function () { return !!window.XLSX; }).then(function () { return f.arrayBuffer(); }).then(function (buf) {
-      var wb = XLSX.read(buf, { type: 'array', cellFormula: true }), cr = P.parseCreditBook(wb);
+    script(XLSX_URL, function () { return !!window.XLSX; }).then(function () { return Promise.all(files.map(function (f) { return f.arrayBuffer(); })); }).then(function (bufs) {
+      var books = bufs.map(function (b) { return XLSX.read(b, { type: 'array', cellFormula: true }); });
+      var uniq = function (arr, key) { var seen = {}; return arr.filter(function (x) { var k = norm(key(x)); if (seen[k]) return false; seen[k] = 1; return true; }); };
+      var cr = uniq([].concat.apply([], books.map(P.parseCreditBook)), function (x) { return x.name; });
       if (cr.length) {
         var m = cr.filter(function (x) { return x.matched; }).length;
         return openModal({ title: 'เครดิต Supplier ' + cr.length + ' ราย', icon: 'upload', color: state.dept.color, ok: 'บันทึกเครดิต', wide: true,
@@ -1153,7 +1259,7 @@
             return call('apImportVendors', state.token, cr.map(function (v) { return { name: v.name, category: v.category, creditDays: v.creditDays, vatMode: 'exc' }; }), { credit: true }).then(function (r) { if (!r.ok) return r.error; closeModal(); toast('ตั้งเครดิตแล้ว · เพิ่มใหม่ ' + r.added + ' ราย · อัปเดต ' + r.filled + ' ราย'); load().then(P.vendorPage); });
           } });
       }
-      var list = P.parseVendorBook(wb);
+      var list = uniq([].concat.apply([], books.map(P.parseVendorBook)), function (x) { return x.name; });
       if (!list.length) return toast('ไม่พบรายชื่อผู้ขายในไฟล์');
       openModal({ title: 'นำเข้าผู้ขาย ' + list.length + ' ราย', icon: 'upload', color: state.dept.color, ok: 'นำเข้า', wide: true,
         body: '<p>ผู้ขายที่มีอยู่แล้วจะเติมเฉพาะช่องที่ว่าง</p><div class="apvimp">' + list.map(function (v) { return '<div class="cprow"><b>' + esc(v.name) + '</b><span>' + esc(cat(v.category).name) + (v.creditDays !== '' ? ' · เครดิต ' + v.creditDays : '') + ' · ' + VAT_SHORT[v.vatMode || 'exc'] + (v.pct ? ' · ' + v.pct + '%' : '') + '</span><small>' + esc(v.bank || '-') + '</small></div>'; }).join('') + '</div>',
@@ -1171,6 +1277,7 @@
     '.appick{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.appick small{flex-basis:100%;color:var(--muted)}.apbig{width:auto;flex:1 1 200px;justify-content:center;gap:8px;padding:14px;font-size:16px;cursor:pointer}',
     '.apform{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:18px;align-items:start}.apform.nofile{grid-template-columns:1fr}',
     '.apimgs{position:sticky;top:12px;display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 24px);overflow:auto}.apimgs figure{margin:0}.apimgs img{width:100%;border:1px solid var(--line);border-radius:10px;cursor:zoom-in;background:#fff}',
+    '.apai{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;border:1.5px dashed #a78bfa;background:#f5f3ff;border-radius:14px;padding:10px 12px;margin-bottom:12px}.apai>div{flex:1 1 220px}.apai b{display:block;color:#5b21b6}.apai small{display:block;color:var(--muted)}.apai.weak{border-style:solid;border-color:#7c3aed}.apai.done{background:#f0fdf4;border:1.5px solid #86efac}.apai.done b{color:#15803d}.apai .btn{margin-top:0}',
     '.apsm{width:auto;padding:6px 12px;font-size:14px;margin-top:6px}.aptext pre{white-space:pre-wrap;font-size:12px;max-height:240px;overflow:auto;background:#f8fafc;padding:8px;border-radius:8px}',
     '.apfields{min-width:0}.aphl{border:2px solid var(--c);background:color-mix(in srgb,var(--c) 7%,white);border-radius:14px;padding:12px;margin-bottom:12px}.aphl small{color:var(--muted)}.aphl.apneed,.apneed{outline:3px solid #dc2626}',
     '.apchips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.apchips label{position:relative}.apchips input[type=radio]{position:absolute;opacity:0}.apchips span{display:block;padding:10px 14px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font-weight:600;cursor:pointer}',

@@ -143,16 +143,16 @@
     $('main').innerHTML = '<h3>นำเข้าไฟล์ออเดอร์ 7-11</h3><p class="lead">ดาวน์โหลดไฟล์ใบสั่งซื้อ (po_export) จากระบบ 7-11 แล้วเลือกไฟล์ที่นี่ · ระบบจะจัดเป็นตารางเหมือนต้นแบบรับออเดอร์ให้ตรวจก่อนบันทึก</p>'
       + steps(1)
       + (H.data.hasFolder ? '' : '<div class="panel status off" style="margin-bottom:12px"><div class="dot">' + icon('warn', 20) + '</div><div><b>ยังไม่ได้ตั้งโฟลเดอร์ไฟล์ของฝ่าย</b><span>นำเข้าและบันทึกได้ แต่จะสร้าง PDF / ส่ง LINE พร้อมไฟล์ได้เมื่อผู้ดูแลระบบใส่ลิงก์โฟลเดอร์ Google Drive ของฝ่ายแล้ว</span></div></div>')
-      + '<label class="a7drop" id="aDrop" tabindex="0"><input type="file" id="aFile" accept=".xlsx,.xls,.csv" hidden>'
-      + '<span class="a7dic">' + icon('upload', 34) + '</span><b>แตะเพื่อเลือกไฟล์ Excel</b><span>หรือลากไฟล์มาวางตรงนี้ · ไฟล์ .xlsx จากระบบ 7-11</span></label>'
+      + '<label class="a7drop" id="aDrop" tabindex="0"><input type="file" id="aFile" accept=".xlsx,.xls,.csv" multiple hidden>'
+      + '<span class="a7dic">' + icon('upload', 34) + '</span><b>แตะเพื่อเลือกไฟล์ Excel (เลือกได้หลายไฟล์)</b><span>หรือลากไฟล์มาวางตรงนี้ · ไฟล์ .xlsx จากระบบ 7-11 · หลายไฟล์จะรวมเป็นรอบเดียว</span></label>'
       + '<div id="aMsg"></div>'
       + (H.data.imports.length ? '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('clock', 18) + ' นำเข้าล่าสุด</h4>' + H.data.imports.slice(0, 5).map(impRow).join('') + '</div>' : '');
     var inp = $('aFile'), drop = $('aDrop');
-    inp.addEventListener('change', function () { if (inp.files[0]) readFile(inp.files[0]); });
+    inp.addEventListener('change', function () { if (inp.files.length) readFiles(Array.prototype.slice.call(inp.files)); });
     drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inp.click(); } });
     ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
     ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
-    drop.addEventListener('drop', function (e) { var f = e.dataTransfer.files[0]; if (f) readFile(f); });
+    drop.addEventListener('drop', function (e) { var fs = Array.prototype.slice.call(e.dataTransfer.files || []); if (fs.length) readFiles(fs); });
     on('[data-imp]', 'click', function (el) { openImport(el.getAttribute('data-imp')); }, $('main'));
   }
   function impRow(x) {
@@ -205,24 +205,30 @@
     if (!out.length) throw new Error('ไม่พบรายการสั่งซื้อในไฟล์');
     return out;
   }
-  function readFile(file) {
-    msg('<span class="spinner dark"></span> กำลังอ่านไฟล์ ' + esc(file.name) + '…');
+  // เลือกได้หลายไฟล์ (ผู้ใช้ขอ 20/11/69): อ่านทุกไฟล์แล้วรวมเป็นรอบเดียว · ใบสั่ง + ลำดับรายการเดียวกันที่ซ้ำกันระหว่างไฟล์นับครั้งเดียว
+  function readOne(file) {
+    return new Promise(function (ok, fail) {
+      var fr = new FileReader();
+      fr.onload = function () {
+        try {
+          var wb = XLSX.read(new Uint8Array(fr.result), { type: 'array', cellDates: true });
+          var ws = wb.Sheets[wb.SheetNames[0]];
+          ok(parseRows(XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' })));
+        } catch (e) { fail(new Error(file.name + ': ' + e.message)); }
+      };
+      fr.onerror = function () { fail(new Error(file.name + ': อ่านไฟล์ไม่ได้')); };
+      fr.readAsArrayBuffer(file);
+    });
+  }
+  function readFiles(files) {
+    msg('<span class="spinner dark"></span> กำลังอ่าน ' + (files.length > 1 ? files.length + ' ไฟล์' : 'ไฟล์ ' + esc(files[0].name)) + '…');
     loadXlsx().then(function () {
-      return new Promise(function (ok, fail) {
-        var fr = new FileReader();
-        fr.onload = function () {
-          try {
-            var wb = XLSX.read(new Uint8Array(fr.result), { type: 'array', cellDates: true });
-            var ws = wb.Sheets[wb.SheetNames[0]];
-            ok(parseRows(XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' })));
-          } catch (e) { fail(e); }
-        };
-        fr.onerror = function () { fail(new Error('อ่านไฟล์ไม่ได้')); };
-        fr.readAsArrayBuffer(file);
-      });
-    }).then(function (lines) {
-      H.imp = { fileName: file.name, lines: lines };
-      msg('<span class="spinner dark"></span> อ่านได้ ' + lines.length + ' รายการ — กำลังจัดเป็นตารางตามต้นแบบ…');
+      return Promise.all(files.map(readOne));
+    }).then(function (all) {
+      var seen = {}, lines = [], dup = 0;
+      all.forEach(function (ls) { ls.forEach(function (l) { var k = String(l.poNo) + '|' + Number(l.lineNo); if (seen[k]) { dup++; return; } seen[k] = 1; lines.push(l); }); });
+      H.imp = { fileName: files.map(function (f) { return f.name; }).join(', '), lines: lines, files: files.length, dupAcross: dup };
+      msg('<span class="spinner dark"></span> อ่านได้ ' + lines.length + ' รายการ' + (files.length > 1 ? ' จาก ' + files.length + ' ไฟล์' + (dup ? ' (ตัดรายการซ้ำระหว่างไฟล์ ' + dup + ')' : '') : '') + ' — กำลังจัดเป็นตารางตามต้นแบบ…');
       return runPreview();
     }).catch(function (e) {
       if (String(e.message).indexOf('SESSION_EXPIRED') >= 0) return onServerError(e);
@@ -247,6 +253,8 @@
     checks.push(chk(!unItem.length, unItem.length ? 'มี ' + unItem.length + ' สินค้าที่ยังไม่มีคอลัมน์ในรายงาน — เลือกคอลัมน์ให้ด้านล่าง' : 'จับคู่สินค้าได้ครบทุกรายการ'));
     checks.push(dup ? (r.newLines ? chk('warn', dup + ' รายการเคยบันทึกแล้ว (ใบสั่ง ' + r.duplicatePos.slice(0, 4).join(', ') + (r.duplicatePos.length > 4 ? ' …' : '') + ') — จะบันทึกเฉพาะ ' + r.newLines + ' รายการใหม่')
       : chk(false, 'ไฟล์นี้บันทึกไปแล้วทั้งหมด — ไม่ต้องบันทึกซ้ำ')) : chk(true, 'ไม่มีใบสั่งซื้อซ้ำกับที่บันทึกไว้'));
+    if (I.files > 1) checks.push(chk(true, 'รวม ' + I.files + ' ไฟล์เป็นรอบเดียว' + (I.dupAcross ? ' · ตัดรายการที่ซ้ำกันระหว่างไฟล์ ' + I.dupAcross + ' รายการ' : '')));
+    if (m.deliveryDates && m.deliveryDates.length > 1) checks.push(chk('warn', 'มีวันส่งหลายวัน (' + m.deliveryDates.map(thDate).join(', ') + ') — ถ้าต้องการแยกรายงานตามวันส่ง ให้นำเข้าทีละรอบ'));
     r.warnings.forEach(function (w) { checks.push(chk('warn', w)); });
     var canSave = !blockers && r.newLines > 0;
     var fix = '';

@@ -94,7 +94,7 @@ function apLoad(token) {
   var vendors = ss ? purRead_(ss, 'ap_vendors').map(function (v) { v.taxId = apTxt_(v.taxId); delete v._row; return v; }) : [];
   var used = {}; lines.forEach(function (l) { if (l.payRound) used[l.payRound] = 1; });
   return { ok: true, linked: !!ss, error: err, sheetUrl: ss ? ss.getUrl() : '', sheetName: ss ? ss.getName() : '', settings: st,
-    cats: AP_CATS_, vatModes: AP_VAT_, lines: lines, vendors: vendors, rounds: apRounds_(st, hol, Object.keys(used)), today: purToday_() };
+    cats: AP_CATS_, vatModes: AP_VAT_, lines: lines, vendors: vendors, rounds: apRounds_(st, hol, Object.keys(used)), today: purToday_(), ai: typeof apAiInfo_ === 'function' ? apAiInfo_() : null };
 }
 function apOut_(l) { l.invNo = apTxt_(l.invNo); l.taxId = apTxt_(l.taxId); l.kind = String(l.kind || '') === AP_PO_ ? 'po' : ''; delete l._row; return l; }
 
