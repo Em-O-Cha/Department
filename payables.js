@@ -46,6 +46,15 @@
     var base = due || P.data.today;
     return rs.filter(function (d) { return d >= base; })[0] || rs[rs.length - 1] || '';
   }
+  // ตัดรอบบิล (ผู้ใช้ขอ 20/11/69 · เลือก "วันตัดรอบ + เครดิต"): บิลวันที่ ≤ วันตัดรอบ (19) → ตัดรอบวันที่ 19 เดือนนั้น · หลังวันที่ 19 → วันที่ 19 เดือนถัดไป
+  // แล้วนับเครดิตของผู้ขายจากวันตัดรอบ → รอบจ่าย = วันจ่าย (10) รอบแรกที่ไม่ก่อนวันนั้น
+  function cutOf(iso) {
+    var cd = Number(P.data.settings.cutDay) || 19, p = String(iso || P.data.today).split('-'), y = +p[0], m = +p[1];
+    if (+p[2] > cd) { m++; if (m > 12) { m = 1; y++; } }
+    return y + '-' + pad(m) + '-' + pad(cd);
+  }
+  function roundInfo(iso, credit) { var cut = cutOf(iso), due = addDays(cut, Number(credit) || 0); return { cut: cut, due: due, round: defaultRound(due) }; }
+  function roundFor(iso, credit) { return roundInfo(iso, credit).round; }
   function calc(l, mode, pct) {
     var amount = mode === 'inc' ? l.qty * l.price * 100 / 107 : l.qty * l.price;
     var vat = mode === 'none' ? 0 : r2(amount * 0.07);
@@ -235,6 +244,7 @@
         + '<label class="btn btn-primary apbig">' + icon('upload', 20) + ' ถ่ายรูปบิล<input type="file" id="apCam" accept="image/*" capture="environment" hidden></label>'
         + '<label class="btn apbig">' + icon('pdf', 20) + ' เลือกไฟล์ (รูป / สแกน / PDF)<input type="file" id="apFile" accept="image/*,application/pdf" multiple hidden></label>'
         + '<button class="btn apbig" id="apManual">' + icon('form', 20) + ' กรอกเองโดยไม่มีไฟล์</button>'
+        + '<label class="btn apbig">' + icon('table', 20) + ' นำเข้าจาก Excel ค่าใช้จ่ายเดิม<input type="file" id="apXlsIn" accept=".xlsx" hidden></label>'
         + '<button class="btn apbig appob" id="apPoNew">' + icon('clock', 20) + ' PO ล่วงหน้า (ยังไม่ได้รับบิล)</button>'
         + '<small>เลือกได้หลายภาพพร้อมกัน (หลายหน้าของบิลเดียวกัน) · ภาพชัด ตรง ไม่เอียง จะอ่านได้แม่นขึ้น</small></div>'
         + '<div id="apMsg"></div>' + recentHtml();
@@ -242,6 +252,7 @@
         $(id).addEventListener('change', function () { var fs = Array.prototype.slice.call(this.files); this.value = ''; if (fs.length) start(fs); });
       });
       $('apManual').addEventListener('click', function () { P.cur = newBill(); form(); });
+      $('apXlsIn').addEventListener('change', function () { var f = this.files[0]; this.value = ''; if (f) importBook(f); });
       $('apPoNew').addEventListener('click', function () { P.cur = newBill('po'); go('a_appo'); });
       bindLink();
       on('[data-bill]', 'click', function (el) { editBill(el.getAttribute('data-bill')); });
@@ -345,7 +356,7 @@
 
   function form() {
     var b = P.cur, d = P.data, r = b.read;
-    if (!b.payRound) b.payRound = defaultRound(due());
+    if (!b.payRound) b.payRound = roundFor(b.issueDate || P.data.today, b.creditDays);
     var rounds = d.rounds.filter(function (x) { return x.nominal.slice(8) === pad(d.settings.payDay) || x.nominal === b.payRound; });
     var vlist = '<datalist id="apVlist">' + (d.vendors || []).map(function (v) { return '<option value="' + esc(v.name) + '">'; }).join('') + '</datalist>';
     var po = b.kind === 'po';
@@ -374,7 +385,7 @@
       + '<label>วันที่ออก<input type="date" id="apDate" value="' + esc(b.issueDate) + '"></label>'
       + '<label>เครดิต (วัน)<input id="apCredit" inputmode="numeric" value="' + esc(b.creditDays) + '" placeholder="เช่น 45"></label>'
       + '<label>วันที่ครบกำหนด<input id="apDue" readonly tabindex="-1"></label></div>'
-      + '<label>รอบจ่าย <span class="req">*</span><select id="apRound">' + rounds.map(function (x) { return '<option value="' + x.nominal + '"' + (x.nominal === b.payRound ? ' selected' : '') + '>จ่าย ' + dotAD(x.nominal, true) + (x.actual !== x.nominal ? ' (จ่ายจริง ' + dotAD(x.actual) + ')' : '') + '</option>'; }).join('') + '</select></label>'
+      + '<label>รอบจ่าย <span class="req">*</span><select id="apRound">' + rounds.map(function (x) { return '<option value="' + x.nominal + '"' + (x.nominal === b.payRound ? ' selected' : '') + '>จ่าย ' + dotAD(x.nominal, true) + (x.actual !== x.nominal ? ' (จ่ายจริง ' + dotAD(x.actual) + ')' : '') + '</option>'; }).join('') + '</select><small id="apRoundHint"></small></label>'
       + '</div>'
       + '<div class="aphl"><b>ราคา' + (po ? 'ที่ตกลง' : 'ในบิล') + '</b><div class="apchips sm" id="apVat">' + Object.keys(VAT_SHORT).map(function (k) {
           return '<label><input type="radio" name="apVat" value="' + k + '"' + (b.vatMode === k ? ' checked' : '') + '><span>' + VAT_SHORT[k] + '</span></label>'; }).join('') + '</div></div>'
@@ -408,7 +419,7 @@
         $('apPctX').value = PCTS.indexOf(b.pct) < 0 ? b.pct : '';
         recalcLines();   // ไม่สร้างช่องใหม่ (ผู้ใช้อาจกำลังแตะช่องรายการอยู่)
       }
-      refresh();
+      refresh(true);
     });
     $('apVendor').addEventListener('input', function () { b.vendor = this.value; vhint(); dupCheck(); });
     $('apTax').addEventListener('input', function () { b.taxId = this.value.replace(/\D/g, ''); });
@@ -450,7 +461,9 @@
   function refresh(dates) {
     var b = P.cur;
     $('apDue').value = due() ? slash(due()) : '';
-    if (dates && b.autoRound) { b.payRound = defaultRound(due()); var s = $('apRound'); if (s && s.querySelector('option[value="' + b.payRound + '"]')) s.value = b.payRound; }
+    var ri = roundInfo(b.issueDate || P.data.today, b.creditDays), rh = $('apRoundHint');
+    if (rh) rh.textContent = 'ตัดรอบ ' + slash(ri.cut) + ' + เครดิต ' + (Number(b.creditDays) || 0) + ' วัน = ' + slash(ri.due) + ' → จ่าย ' + dotAD(ri.round, true) + (b.payRound && b.payRound !== ri.round ? ' (เลือกรอบอื่นไว้)' : '');
+    if (dates && b.autoRound) { b.payRound = ri.round; var s = $('apRound'); if (s && s.querySelector('option[value="' + b.payRound + '"]')) s.value = b.payRound; }
     var t = { amount: 0, vat: 0, total: 0, wht: 0 };
     b.lines.forEach(function (l) { var c = calc(l, b.vatMode, b.pct); t.amount += c.amount; t.vat += c.vat; t.total += c.total; t.wht += c.wht; });
     var pay = r2(t.total - t.wht), r = b.read, checks = '';
@@ -820,6 +833,97 @@
     });
   };
 
+  // ==================== นำเข้าบิลจากไฟล์ Excel ค่าใช้จ่ายเดิม (ผู้ใช้ขอ 20/11/69) ====================
+  // อ่านด้วย ExcelJS (ต้องรู้สีตัวอักษร: แถวตัวแดง = PO ล่วงหน้า) · เฉพาะแผ่น "…จ่าย DD.MM.YY" (= รอบจ่าย) · แผ่น "ฟอร์ม …" เป็นแบบฟอร์มเปล่า ข้าม
+  // หมวดจากหัวตาราง "1). … 6)." · ผู้ขายคอลัมน์ B จนถึงแถวรวม (ธ.…) · บิลใหม่เมื่อมีเลขที่ใบกำกับ / วันที่ · แถวที่ไม่มีทั้งสองต่อบิลก่อนหน้าของผู้ขายเดียวกัน
+  function xv(c) {
+    var v = c && c.value;
+    if (v && typeof v === 'object' && !(v instanceof Date)) { if ('result' in v) v = v.result; else if (v.richText) v = v.richText.map(function (t) { return t.text; }).join(''); else if (v.text) v = v.text; else v = null; }
+    return v;
+  }
+  function xf(c) { try { var f = c && c.formula; if (f) return String(f); } catch (e) {} var v = c && c.value; return v && typeof v === 'object' && v.formula ? String(v.formula) : ''; }   // สูตรแบบ shared ก็ได้สูตรจริงของช่องนั้น
+  function xiso(v) { return v instanceof Date && !isNaN(v) ? v.getUTCFullYear() + '-' + pad(v.getUTCMonth() + 1) + '-' + pad(v.getUTCDate()) : ''; }
+  function xred(c) { var col = c && c.font && c.font.color && c.font.color.argb; return /^(FF)?FF0000$/i.test(String(col || '')); }
+  P.parseBillBook = function (wb) {
+    var bills = [], cats = ['raw', 'pack', 'misc', 'ship', 'svc', 'fac'];
+    wb.eachSheet(function (ws) {
+      var m = ws.name.match(/จ่าย\s*(\d{1,2})\.(\d{1,2})\.(\d{2,4})/);
+      if (!m || /ฟอร์ม/.test(ws.name)) return;
+      var y = +m[3]; if (y < 100) y += 2000; if (y > 2400) y -= 543;
+      var round = y + '-' + pad(+m[2]) + '-' + pad(+m[1]);
+      var ck = /วัตถุดิบ/.test(ws.name) ? 'raw' : 'pack', col = null, ven = null, bill = null;
+      for (var r = 1; r <= ws.rowCount; r++) {
+        var row = ws.getRow(r), t = function (i) { var v = xv(row.getCell(i)); return v == null ? '' : String(v).trim(); };
+        var g = t(7);
+        if (/รายการเงินเข้า/.test(g)) break;   // ส่วนสรุป / เงินเข้าท้ายแผ่น
+        var tm = g.match(/^\s*(\d)\s*\)/); if (tm && /ค่า/.test(g)) { ck = cats[+tm[1] - 1] || ck; ven = null; bill = null; continue; }
+        if (t(2) === 'ผู้ขาย/ผู้จ่ายเงิน') {
+          col = {}; for (var c = 2; c <= 16; c++) { var h = t(c); if (h === 'วันที่ออก') col.d = c; else if (/ครบกำหนด/.test(h)) col.e = c; else if (/ใบกำกับ/.test(h)) col.f = c; else if (h === 'คำอธิบาย') col.g = c; else if (h === 'จำนวน') col.h = c; else if (h === 'ราคา') col.i = c; else if (h === '%') col.p = c; else if (/มูลค่ารายการ/.test(h)) col.a = c; else if (/ภาษีมูลค่าเพิ่ม/.test(h)) col.v = c; }
+          continue;
+        }
+        if (!col) continue;
+        var bName = t(2), bank = t(3);
+        if (/^ธ/.test(bank) && !t(col.g)) { ven = null; bill = null; continue; }
+        if (bName && !/^=/.test(bName) && !/ค่าใช้จ่าย|^\d\s*\)/.test(bName)) { ven = bName.replace(/\s+/g, ' '); bill = null; }
+        if (!ven) continue;
+        var qv = xv(row.getCell(col.h)), pv = xv(row.getCell(col.i)), desc = t(col.g);
+        var qty = typeof qv === 'number' ? qv : num(qv), price = typeof pv === 'number' ? pv : num(pv);
+        if (!price || (!desc && !qty)) continue;
+        if (!qty) qty = 1;
+        var inv = col.f ? t(col.f) : '', dv = col.d ? xv(row.getCell(col.d)) : null, iso = xiso(dv), red = xred(row.getCell(col.g));
+        var ef = col.e ? xf(row.getCell(col.e)) : '', cm = ef.match(/D\d+\s*\+\s*(\d+)/), af = col.a ? xf(row.getCell(col.a)) : '', vc = col.v ? row.getCell(col.v) : null;
+        if (!bill || inv || iso || (bill.kind === 'po') !== red) {
+          if (bill && inv && bill.invNo === inv) { /* บรรทัดต่อของใบเดิม */ }
+          else {
+            bill = { category: ck, vendor: ven, payRound: round, invNo: red ? '' : inv, issueDate: red ? '' : iso, creditDays: cm ? +cm[1] : '', kind: red ? 'po' : '',
+              vatMode: /100\s*\/\s*107/.test(af) ? 'inc' : (vc && !xf(vc) && xv(vc) === 0 ? 'none' : 'exc'), pct: col.p ? Number(xv(row.getCell(col.p))) || 0 : 0,
+              note: red && iso ? 'วันที่ในไฟล์ ' + slash(iso) : '', lines: [], sheet: ws.name, row: r };
+            bills.push(bill);
+          }
+        }
+        if (cm && bill.creditDays === '') bill.creditDays = +cm[1];
+        bill.lines.push({ desc: desc || '-', qty: qty, price: r2(price * 10000) / 10000 });
+      }
+    });
+    var vc = {}; bills.forEach(function (b) { if (b.creditDays !== '' && vc[b.vendor] == null) vc[b.vendor] = b.creditDays; });
+    bills.forEach(function (b) {
+      if (b.creditDays === '' && vc[b.vendor] != null) b.creditDays = vc[b.vendor];   // เครดิตของผู้ขายตามไฟล์ (สูตร =D+45 / +60)
+      b.dueDate = b.issueDate ? addDays(b.issueDate, Number(b.creditDays) || 0) : '';
+      var t = { total: 0, wht: 0 }; b.lines.forEach(function (l) { var c = calc(l, b.vatMode, b.pct); t.total += c.total; t.wht += c.wht; }); b.pay = r2(t.total - t.wht);
+    });
+    return bills;
+  };
+  function importBook(f) {
+    if (!P.data.linked) return toast('เชื่อม Google Sheet "ค่าใช้จ่าย (จ่าย) ฝ่ายบัญชี" ก่อน แล้วค่อยนำเข้า');
+    msg('<span class="spinner dark"></span> กำลังอ่านไฟล์ Excel…');
+    var buf;
+    Promise.all([script(XJS_URL, function () { return !!window.ExcelJS; }), script(XLSX_URL, function () { return !!window.XLSX; })]).then(function () { return f.arrayBuffer(); }).then(function (b) {
+      buf = b; var wb = new window.ExcelJS.Workbook(); return wb.xlsx.load(b.slice(0));
+    }).then(function (wb) {
+      msg('');
+      var bills = P.parseBillBook(wb), vendors = P.parseVendorBook(XLSX.read(buf, { type: 'array', cellFormula: true }));
+      if (!bills.length) return toast('ไม่พบบิลในแผ่น "…จ่าย DD.MM.YY" ของไฟล์นี้');
+      var have = {}; P.data.lines.forEach(function (l) { if (l.invNo) have[norm(l.vendor) + '|' + l.invNo] = 1; });
+      bills.forEach(function (b) { b.dup = !!(b.invNo && b.kind !== 'po' && have[norm(b.vendor) + '|' + b.invNo]); });
+      var ok = bills.filter(function (b) { return !b.dup; }), byR = {};
+      ok.forEach(function (b) { var x = byR[b.payRound] = byR[b.payRound] || { n: 0, po: 0, pay: 0 }; x.n++; if (b.kind === 'po') x.po++; x.pay += b.pay; });
+      openModal({ title: 'นำเข้าบิลจาก Excel', icon: 'table', color: state.dept.color, wide: true, ok: 'นำเข้า ' + ok.length + ' บิล',
+        body: '<p>' + Object.keys(byR).sort().map(function (k) { var x = byR[k]; return '<b>รอบจ่าย ' + dotAD(k, true) + '</b>: ' + x.n + ' บิล' + (x.po ? ' (PO ล่วงหน้า ' + x.po + ' · ตัวแดง)' : '') + ' · ชำระ ' + m2(x.pay); }).join('<br>')
+          + (bills.length > ok.length ? '<br><span class="apwarn">ข้าม ' + (bills.length - ok.length) + ' บิลที่มีอยู่แล้ว</span>' : '') + '<br><small>รวมผู้ขาย ' + vendors.length + ' ราย (บัญชีธนาคาร / เครดิต / แบบ VAT / % จากไฟล์ — ที่มีอยู่แล้วเติมเฉพาะช่องว่าง)</small></p>'
+          + '<div class="apvimp">' + bills.map(function (b) { return '<div class="cprow' + (b.dup ? ' apdup' : '') + '"><b' + (b.kind === 'po' ? ' class="apred"' : '') + '>' + esc(b.vendor) + '</b><span>' + (b.kind === 'po' ? '<span class="aptag">PO ล่วงหน้า</span>' : esc(b.invNo || '-') + ' · ' + slash(b.issueDate)) + ' · ' + catNo(b.category) + '. ' + esc(cat(b.category).name) + '</span><small>รอบ ' + dotAD(b.payRound, true) + ' · ' + b.lines.length + ' รายการ · ชำระ ' + m2(b.pay) + (b.creditDays !== '' ? ' · เครดิต ' + b.creditDays + ' วัน' : '') + (b.pct ? ' · หัก ' + b.pct + '%' : '') + (b.dup ? ' · มีแล้ว (ข้าม)' : '') + '</small></div>'; }).join('') + '</div>',
+        submit: function () {
+          if (!ok.length) return 'ไม่มีบิลใหม่';
+          return call('apImportVendors', state.token, vendors.map(function (v) { return Object.assign({}, v, { vatMode: v.vatMode || 'exc' }); })).then(function () {
+            return call('apImportBills', state.token, ok.map(function (b) { return { category: b.category, vendor: b.vendor, payRound: b.payRound, invNo: b.invNo, issueDate: b.issueDate, creditDays: b.creditDays, dueDate: b.dueDate, kind: b.kind, vatMode: b.vatMode, pct: b.pct, note: b.note, lines: b.lines }; }));
+          }).then(function (r) {
+            if (!r.ok) return r.error;
+            closeModal(); toast('นำเข้า ' + r.bills + ' บิล (' + r.lines + ' รายการ)' + (r.skipped ? ' · ข้าม ' + r.skipped : ''));
+            P.round = ok[0].payRound; return load().then(function () { go('a_ap'); });
+          });
+        } });
+    }).catch(function (e) { msg('อ่านไฟล์ไม่ได้: ' + esc(e.message || e), 'bad'); });
+  }
+
   // ==================== หน้า: ผู้ขาย / ตั้งค่า ====================
   P.vendorPage = function () {
     ensure('ผู้ขาย / ตั้งค่า (จ่าย)', function () {
@@ -829,6 +933,7 @@
         + linkPanel()
         + '<div class="panel pbox"><h4>' + icon('gear', 18) + ' ตั้งค่า</h4><div class="apgrid">'
         + '<label>วันจ่ายประจำเดือน (วันที่)<input id="apPayDay" inputmode="numeric" value="' + d.settings.payDay + '"><small>ตรงวันหยุด → จ่ายวันทำการถัดไป (ใช้วันหยุดชุดเดียวกับ 7-11)</small></label>'
+        + '<label>วันตัดรอบบิล (วันที่)<input id="apCutDay" inputmode="numeric" value="' + (d.settings.cutDay || 19) + '"><small>รอบจ่าย = วันตัดรอบของบิล + เครดิตผู้ขาย → วันจ่ายรอบแรกหลังจากนั้น</small></label>'
         + '<label>เลขผู้เสียภาษีของบริษัทเรา<input id="apOurTax" inputmode="numeric" value="' + esc(d.settings.ourTaxId) + '" placeholder="13 หลัก"><small>ไม่ให้ระบบจับเลขของเราเป็นเลขของผู้ขาย</small></label>'
         + '</div><button class="btn btn-primary" id="apSetSave">บันทึกตั้งค่า</button></div>'
         + '<div class="apbtns"><button class="btn btn-primary" id="apVAdd">+ เพิ่มผู้ขาย</button><label class="btn">' + icon('upload', 18) + ' นำเข้าผู้ขายจากไฟล์ Excel ค่าใช้จ่ายเดิม<input type="file" id="apVImp" accept=".xlsx,.xls" hidden></label></div>'
@@ -845,7 +950,7 @@
       $('apVq').addEventListener('input', function () { P.vq = this.value; clearTimeout(P.vqT); P.vqT = setTimeout(function () { P.vendorPage(); var el = $('apVq'); el.focus(); el.setSelectionRange(el.value.length, el.value.length); }, 250); });
       $('apSetSave').addEventListener('click', function () {
         var b = this; b.disabled = true;
-        call('apSaveSettings', state.token, { payDay: $('apPayDay').value, ourTaxId: $('apOurTax').value }).then(function (r) { b.disabled = false; if (!r.ok) return toast(r.error); toast('บันทึกตั้งค่าแล้ว'); load().then(P.vendorPage); }).catch(onServerError);
+        call('apSaveSettings', state.token, { payDay: $('apPayDay').value, cutDay: $('apCutDay').value, ourTaxId: $('apOurTax').value }).then(function (r) { b.disabled = false; if (!r.ok) return toast(r.error); toast('บันทึกตั้งค่าแล้ว'); load().then(P.vendorPage); }).catch(onServerError);
       });
       $('apVAdd').addEventListener('click', function () { vendorDialog({}); });
       on('[data-v]', 'click', function (el) { vendorDialog((d.vendors || []).filter(function (v) { return v.id === el.getAttribute('data-v'); })[0] || {}); });
@@ -943,7 +1048,7 @@
     '.apcats{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}.apcats span{flex:1 1 150px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px}.apcats i{font-style:normal;display:inline-block;width:20px;height:20px;border-radius:50%;background:#D9EAD3;text-align:center;margin-right:6px;font-weight:700}.apcats b{display:block;font-size:16px;font-variant-numeric:tabular-nums}',
     '.apsheet{margin:0 0 22px}.apsn{display:inline-block;background:#1f2937;color:#fff;border-radius:8px 8px 0 0;padding:4px 12px;font-size:13px;font-weight:600}',
     '.apx1{border-collapse:collapse;table-layout:fixed;background:#fff;font-variant-numeric:tabular-nums}.apx1 td{padding:1px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;line-height:1.25}.apx1 td.ov{overflow:visible;position:relative;z-index:1}.apx1 tr.apbill{cursor:pointer}.apx1 tr.apbill:hover td{box-shadow:inset 0 0 0 999px rgba(37,99,235,.06)}',
-    '.apsearch{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;margin-bottom:12px}.apno{font-style:normal;display:inline-block;width:22px;height:22px;border-radius:50%;background:#D9EAD3;color:#0f172a;text-align:center}.apvimp{max-height:50vh;overflow:auto}',
+    '.apdup{opacity:.5}.apsearch{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;margin-bottom:12px}.apno{font-style:normal;display:inline-block;width:22px;height:22px;border-radius:50%;background:#D9EAD3;color:#0f172a;text-align:center}.apvimp{max-height:50vh;overflow:auto}',
     '.appob{color:#b91c1c;border-color:#fecaca}.appoban{display:flex;gap:8px;align-items:center;background:#fef2f2;border:1.5px solid #fecaca;color:#991b1b;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-weight:600}.appoban b{color:#dc2626;margin:0 3px}',
     '.aptab.po td:nth-child(-n+3) input{color:#dc2626;font-weight:600}.aptag{display:inline-block;background:#fee2e2;color:#b91c1c;border-radius:999px;padding:1px 9px;font-size:12.5px;font-weight:700}',
     '.apatt{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.apatt .btn{margin:0}.apatt small{color:var(--muted)}.apinv{display:contents}.apinv.hidden{display:none}',

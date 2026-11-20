@@ -46,8 +46,9 @@ function apSettingRow_(ss, id) { return purRead_(ss, 'acc_settings').filter(func
 function apSettings_(main) {
   var row = apSettingRow_(main, 'apSettings'), s = {};
   try { s = row ? JSON.parse(row.value || '{}') : {}; } catch (e) { s = {}; }
-  var pd = Math.round(Number(s.payDay) || 10);
-  return { payDay: pd >= 1 && pd <= 28 ? pd : 10, ourTaxId: String(s.ourTaxId || '').replace(/\D/g, '').slice(0, 13) };
+  var pd = Math.round(Number(s.payDay) || 10), cd = Math.round(Number(s.cutDay) || 19);
+  // cutDay = วันตัดรอบบิล (ผู้ใช้ขอ 20/11/69: ตัดรอบทุกวันที่ 19) → รอบจ่าย = วันจ่ายรอบแรกที่ไม่ก่อน (วันตัดรอบของบิล + เครดิตของผู้ขาย) — คิดในหน้าเว็บ (payables.js roundFor)
+  return { payDay: pd >= 1 && pd <= 28 ? pd : 10, cutDay: cd >= 1 && cd <= 28 ? cd : 19, ourTaxId: String(s.ourTaxId || '').replace(/\D/g, '').slice(0, 13) };
 }
 function apSheetId_(main) { var r = apSettingRow_(main, 'apSheet'); return r ? String(r.value || '') : ''; }
 function apBook_(main) {
@@ -118,11 +119,13 @@ function apSaveSettings(token, s) {
   var dept = requireAcc_(token); apRegister_();
   var pd = Math.round(Number(s && s.payDay));
   if (!(pd >= 1 && pd <= 28)) return { ok: false, error: 'วันจ่ายต้องเป็นวันที่ 1–28' };
+  var cd = Math.round(Number(s && s.cutDay) || 19);
+  if (!(cd >= 1 && cd <= 28)) return { ok: false, error: 'วันตัดรอบบิลต้องเป็นวันที่ 1–28' };
   var tax = String(s && s.ourTaxId || '').replace(/\D/g, '');
   if (tax && tax.length !== 13) return { ok: false, error: 'เลขผู้เสียภาษีต้องมี 13 หลัก' };
   return purLocked_(function () {
     var main = purBook_(dept), row = apSettingRow_(main, 'apSettings') || { id: 'apSettings' };
-    row.value = JSON.stringify({ payDay: pd, ourTaxId: tax });
+    row.value = JSON.stringify({ payDay: pd, cutDay: cd, ourTaxId: tax });
     purWrite_(main, 'acc_settings', row);
     return { ok: true };
   });
@@ -236,6 +239,37 @@ function apMoveBill(token, billId, payRound) {
     var sh = purSheet_(ss, 'ap_lines'), head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String), c = head.indexOf('รอบจ่าย') + 1;
     rows.forEach(function (l) { sh.getRange(l._row, c).setValue(r); });
     return { ok: true };
+  });
+}
+
+// นำเข้าบิลหลายใบจากไฟล์ Excel ค่าใช้จ่ายเดิม (ผู้ใช้ขอ 20/11/69 · หน้าเว็บอ่านไฟล์เอง: แผ่น "...จ่าย DD.MM.YY" = รอบจ่าย, แถวตัวแดง = PO ล่วงหน้า)
+// ข้ามบิลที่มีอยู่แล้ว (ผู้ขาย + เลขที่ใบกำกับ) · เขียนทีเดียวด้วย setValues
+function apImportBills(token, bills) {
+  var dept = requireAcc_(token); apRegister_();
+  var main = purBook_(dept), ss = apBook_(main);
+  if (!ss) return { ok: false, error: 'ยังไม่ได้เชื่อม Google Sheet ค่าใช้จ่าย' };
+  var list = (Array.isArray(bills) ? bills : []).slice(0, 500).map(apCleanBill_).filter(function (x) { return x.category && x.vendor && x.payRound && x.lines.length; });
+  if (!list.length) return { ok: false, error: 'ไม่พบบิลที่นำเข้าได้' };
+  return purLocked_(function () {
+    var now = purNow_(), all = purRead_(ss, 'ap_lines'), seen = {}, add = [], skipped = 0, nBills = 0;
+    all.forEach(function (l) { if (apTxt_(l.invNo)) seen[accNorm_(l.vendor) + '|' + apTxt_(l.invNo)] = 1; });
+    var sh = purSheet_(ss, 'ap_lines'), head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+    list.forEach(function (x) {
+      var k = accNorm_(x.vendor) + '|' + x.invNo;
+      if (x.invNo && x.kind !== 'po' && seen[k]) { skipped++; return; }
+      if (x.invNo) seen[k] = 1;
+      var billId = purId_('AP'); nBills++;
+      x.lines.forEach(function (l, i) {
+        var c = apCalc_(l, x.vatMode, x.pct);
+        add.push(purRowValues_(sh, 'ap_lines', { id: purId_('APL'), billId: billId, payRound: x.payRound, category: x.category, vendor: x.vendor, taxId: x.taxId ? "'" + x.taxId : '',
+          issueDate: x.issueDate, creditDays: x.creditDays, dueDate: x.dueDate, invNo: x.invNo ? "'" + x.invNo : '', lineNo: i + 1, desc: l.desc, qty: l.qty, price: l.price,
+          vatMode: x.vatMode, pct: x.pct, wht: c.wht, amount: c.amount, vat: c.vat, lineTotal: c.lineTotal, note: i ? '' : x.note, files: '', createdAt: now, updatedAt: '',
+          kind: x.kind === 'po' ? AP_PO_ : '' }, head));
+      });
+    });
+    if (add.length) sh.getRange(sh.getLastRow() + 1, 1, add.length, add[0].length).setValues(add);
+    purLogWrite_(main, 'นำเข้าบิลจาก Excel', 'ap_lines', '', 'บิล ' + nBills + ' · รายการ ' + add.length + ' · ข้าม ' + skipped);
+    return { ok: true, bills: nBills, lines: add.length, skipped: skipped };
   });
 }
 
