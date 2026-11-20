@@ -103,7 +103,24 @@ function hrDailyLoad(token, date) {
   if (prev) { try { (JSON.parse(prev.data || '{}').roles || []).forEach(function (r) { if (!r.names || !r.names.length) lastCounts[r.role] = hrdNet_(r); }); } catch (e) {} }
   return { ok: true, today: purToday_(), date: d, roles: hrdRoles_(ss), day: day, sentAt: row ? row.sentAt : '', lastCounts: lastCounts,
     days: all.slice(0, 14).map(function (x) { return { date: x.d, total: x.total, leaveCount: x.leaveCount, sentAt: x.sentAt }; }),
-    leaveTypes: HRD_LEAVE_TYPES_, line: hrdLineInfo_(), records: hrdRecords_(ss, d) };
+    leaveTypes: HRD_LEAVE_TYPES_, line: hrdLineInfo_(), records: hrdRecords_(ss, d), roleMap: hrdRoleMap_(ss) };
+}
+// คนที่ไม่มีชื่อในตาราง (เช่น พนักงานไลน์ผลิตที่อยู่ในฝ่ายงานแบบกรอกจำนวน): HR เลือกฝ่ายงานครั้งแรกแล้วระบบจำไว้ (ผู้ใช้ถาม 20/11/69)
+// hr_settings "dailyRoleMap" = { empId: ชื่อฝ่ายงาน } → ครั้งต่อไปใบลาของคนนี้เข้าแถวนั้นเอง
+function hrdRoleMap_(ss) {
+  var row = purRead_(ss, 'hr_settings').filter(function (x) { return x.id === 'dailyRoleMap'; })[0];
+  try { var m = JSON.parse((row && row.value) || '{}'); return m && typeof m === 'object' ? m : {}; } catch (e) { return {}; }
+}
+function hrDailyRoleMap(token, empId, role) {
+  var dept = requireHr_(token);
+  return purLocked_(function () {
+    var ss = hrdBook_(dept), m = hrdRoleMap_(ss), id = purClean_(empId, 40), r = hrdClean_(role, 60);
+    if (!id) return { ok: false, error: 'ไม่พบพนักงาน' };
+    if (r) m[id] = r; else delete m[id];
+    var row = purRead_(ss, 'hr_settings').filter(function (x) { return x.id === 'dailyRoleMap'; })[0] || { id: 'dailyRoleMap' };
+    row.value = JSON.stringify(m); purWrite_(ss, 'hr_settings', row);
+    return { ok: true, roleMap: m };
+  });
 }
 // จำนวนพนักงานของฝ่าย = จำนวนตั้งต้น − คนลาออก (หักออก 19/11/69) · คนลายังนับรวม · วันถัดไปฝ่ายที่กรอกจำนวนตั้งต้นจากยอดหลังหัก
 function hrdNet_(r) { return Math.max(0, (Number(r.count) || 0) - ((r.resigns && r.resigns.length) || 0)); }
@@ -112,7 +129,7 @@ function hrdRecords_(ss, d) {
   var emps = {}; hrPeople_(ss).forEach(function (e) { emps[e.id] = e; });   // รวมพนักงาน Job
   return purRead_(ss, 'hr_leaves').filter(function (l) { return l.status !== 'ไม่อนุมัติ' && l.dateFrom <= d && (l.dateTo || l.dateFrom) >= d; }).map(function (l) {
     var e = emps[l.empId] || {};
-    return { id: l.id, job: !!e.isJob, nick: String(e.nickname || ''), full: String(e.fullName || ''), type: HR_LEAVE_TYPES_[l.type] || l.type, late: l.type === 'late',
+    return { id: l.id, empId: String(l.empId || ''), job: !!e.isJob, nick: String(e.nickname || ''), full: String(e.fullName || ''), type: HR_LEAVE_TYPES_[l.type] || l.type, late: l.type === 'late',
       minutes: Number(l.minutes) || 0, reason: String(l.reason || ''), pending: l.status === 'รออนุมัติ' };
   }).filter(function (x) { return x.nick || x.full; });
 }

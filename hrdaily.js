@@ -73,6 +73,10 @@
         if (n) hit = { r: r, n: n };
         return !!n;
       });
+      if (!hit && x.empId && D.data && D.data.roleMap && D.data.roleMap[x.empId]) {   // ฝ่ายงานที่ HR เคยเลือกให้คนนี้ (ระบบจำไว้)
+        var mr = day.roles.filter(function (r) { return r.role === D.data.roleMap[x.empId]; })[0];
+        if (mr) hit = { r: mr, n: x.nick || bare(x.full) };
+      }
       if (!hit && x.job) {   // พนักงาน Job → แถว "job" (ฝ่ายงานที่กรอกเป็นจำนวน)
         var jr = day.roles.filter(function (r) { return !r.names.length && /^job$/i.test(String(r.role).trim()); })[0];
         if (jr) hit = { r: jr, n: x.nick || bare(x.full) };
@@ -85,7 +89,7 @@
   function unmatchedHtml() {
     if (!D.unmatched || !D.unmatched.length) return '';
     var ro = D.day.roles.map(function (r, i) { return '<option value="' + i + '">' + esc(r.role) + '</option>'; }).join('');
-    return '<div class="panel hdun"><h4>📋 มีบันทึกขาด/ลา/มาสายในระบบ แต่ไม่พบชื่อในตาราง — เลือกฝ่ายงานให้</h4>' + D.unmatched.map(function (x, k) {
+    return '<div class="panel hdun"><h4>📋 มีบันทึกขาด/ลา/มาสายในระบบ แต่ไม่พบชื่อในตาราง — เลือกฝ่ายงานให้ (เลือกครั้งเดียว ระบบจำไว้ใช้ครั้งต่อไป)</h4>' + D.unmatched.map(function (x, k) {
       return '<div class="hdunr"><span><b>' + esc(x.nick || bare(x.full)) + '</b> ' + esc(x.type) + (recReason(x) ? ' · ' + esc(recReason(x)) : '') + '</span>'
         + '<select data-unsel="' + k + '">' + ro + '</select><button class="btn btn-sm btn-line" data-unadd="' + k + '">ใส่ในฝ่ายนี้</button><button class="link-btn" data-unskip="' + k + '">ไม่ใส่</button></div>';
     }).join('') + '</div>';
@@ -152,6 +156,7 @@
     on('[data-unadd]', 'click', function (el) {
       var k = +el.getAttribute('data-unadd'), x = D.unmatched[k], r = day.roles[+$('main').querySelector('[data-unsel="' + k + '"]').value];
       r.leaves.push({ name: x.nick || bare(x.full), type: x.type, reason: recReason(x), src: x.id }); D.unmatched.splice(k, 1); D.dirty = true; render();
+      if (x.empId) call('hrDailyRoleMap', state.token, x.empId, r.role).then(function (y) { if (y.ok) { D.data.roleMap = y.roleMap; toast('จำไว้แล้ว: ครั้งต่อไป ' + (x.nick || bare(x.full)) + ' จะอยู่ในฝ่าย ' + r.role + ' เอง'); } }).catch(function () {});
     });
     on('[data-unskip]', 'click', function (el) { var k = +el.getAttribute('data-unskip'); day.skipSrc.push(D.unmatched[k].id); D.unmatched.splice(k, 1); D.dirty = true; render(); });
     on('[data-cnt]', 'change', function (el) { day.roles[+el.getAttribute('data-cnt')].count = Math.max(0, Math.round(Number(el.value) || 0)); D.dirty = true; render(); });
