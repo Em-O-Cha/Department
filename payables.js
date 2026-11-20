@@ -81,6 +81,38 @@
     return '';
   }
   var MONEY_RX = /-?\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|-?\d+\.\d{2}/g;
+  // คำนำหน้าเลขที่ใบกำกับ (ยอมให้ OCR เว้นวรรค / ไม่มีไม้เอก) เรียงจากชัดที่สุด · "เลขที่" เฉย ๆ ข้ามถ้าเป็นที่อยู่ (หมู่ ถนน ซอย …)
+  var INV_KEYS = [
+    /เลข\s*ที่?\s*ใบ\s*กำ\s*กับ(?:\s*ภาษี)?(?:\s*\/\s*ใบ\s*\S+)?/,
+    /เลข\s*ที่?\s*(?:บิล|เอกสาร)/,
+    /(?:Tax\s*)?Invoice\s*No\.?|Bill\s*No\.?|Doc(?:ument)?\.?\s*No\.?/i,
+    /(?:^|[^A-Za-z])No\s*[.:]/i,
+    /เลข\s*ที่?(?!\s*(?:ประจำ|ผู้เสีย|บัญชี|ภาษี))/
+  ];
+  var ADDR_RX = /หมู่|ม\.\s*\d|ถนน|ถ\.|ซอย|ซ\.|ตำบล|ต\.|แขวง|อำเภอ|อ\.|เขต|จังหวัด|จ\.|กรุงเทพ|Moo|Road|Soi/i;
+  function invToken(s) {
+    s = String(s || '').replace(/^[\s:：.#\-]+/, '');
+    var m = s.match(/^([A-Za-z]{1,5})\s+(\d[\dA-Za-z\-\/]{2,})/) || s.match(/^([A-Za-z0-9][A-Za-z0-9\-\/.]{2,})/);
+    if (!m) return '';
+    var v = (m[2] ? m[1] + m[2] : m[1]).replace(/[.\-\/]+$/, '');
+    if (!/\d/.test(v) || /^\d{13}$/.test(v) || /^0\d{8,9}$/.test(v)) return '';   // ต้องมีตัวเลข · ไม่ใช่เลขผู้เสียภาษี / เบอร์โทร
+    var i = v.search(/\d/);   // หลังตัวเลขตัวแรก OCR มักอ่าน O→0, I/l→1
+    return (v.slice(0, i) + v.slice(i).replace(/[Oo]/g, '0').replace(/[Il]/g, '1')).toUpperCase();
+  }
+  P.findInvNo = function (T) {
+    for (var k = 0; k < INV_KEYS.length; k++) {
+      for (var i = 0; i < T.length; i++) {
+        var m = T[i].match(INV_KEYS[k]); if (!m) continue;
+        var rest = T[i].slice(m.index + m[0].length);
+        if (k === INV_KEYS.length - 1 && ADDR_RX.test(rest.slice(0, 40))) continue;   // "เลขที่ 99/9 ถนน…" = ที่อยู่
+        var seg = rest.split(/\s{2,}/)[0] || rest, v = invToken(seg) || (!rest.trim() && T[i + 1] ? invToken(T[i + 1].split(/\s{2,}/)[0]) : '');
+        if (k === INV_KEYS.length - 1 && /^\d{1,4}(\/\d{1,4})?$/.test(v)) continue;   // เลขสั้น ๆ แบบบ้านเลขที่
+        if (v) return v;
+      }
+    }
+    var x = T.join('\n').match(/\b((?:IV|INV|IN|TI|TX|BL|SI|RE|RV|DO)[-\/]?\d[\dA-Z\-\/]{3,})\b/i);
+    return x ? x[1].toUpperCase() : '';
+  };
   P.parseBill = function (lines) {
     // ตัวเลขไทย → อารบิก · "ํา" (OCR แยกสระอำ) → "ำ" · เว้นวรรคหลายช่อง = คนละคอลัมน์ (เก็บไว้ 2 ช่อง)
     var T = lines.map(function (l) { return String(l).replace(/[๐-๙]/g, function (c) { return String(c.charCodeAt(0) - 0x0E50); }).replace(/\u0E4D\u0E32/g, '\u0E33').replace(/\t/g, '  ').replace(/[ \u00a0]{3,}/g, '  ').trim(); }).filter(Boolean);
@@ -102,10 +134,9 @@
       if (vl) out.vendor = vl.replace(/^.*?(บริษัท|บจก\.?|ห้างหุ้นส่วน|หจก\.?|ร้าน)/, '$1').replace(/\s{2,}.*$/, '').replace(/(สำนักงานใหญ่|สาขา).*$/, '').trim().slice(0, 100);
       out.taxId = taxes[0] || '';
     }
-    // เลขที่ใบกำกับภาษี
-    var m = all.match(/(?:เลขที่(?:ใบกำกับ(?:ภาษี)?)?|เล่มที่\/เลขที่|Invoice\s*No\.?|Tax\s*Invoice\s*No\.?|Doc(?:ument)?\.?\s*No\.?|No\.)\s*[:：.]?\s*([A-Z]{0,5}\s?[-\/]?\s?\d[\dA-Z\-\/]{2,})/i);
-    if (m) out.invNo = m[1].replace(/\s/g, '');
-    else if ((m = all.match(/\b((?:IV|INV|IN|TI|TX|BL|SI|RE|RV|DO)[-\/]?\d[\dA-Z\-\/]{3,})\b/i))) out.invNo = m[1].toUpperCase();
+    // เลขที่ใบกำกับภาษี — จับจากคำนำหน้า (ผู้ใช้กำหนด 20/11/69): เลขที่ใบกำกับภาษี / เลขที่ใบกำกับ / เลขที่บิล / เลขที่เอกสาร / No. / เลขที่ (เรียงจากชัดที่สุด)
+    out.invNo = P.findInvNo(T);
+    var m;
     // วันที่: หลังคำว่า วันที่ / Date ก่อน ไม่มีค่อยเอาวันแรกที่พบ
     T.some(function (l) { if (/วันที่|Date/i.test(l) && !/ครบกำหนด|Due/i.test(l)) { var d = findDate(l.replace(/^.*?(วันที่|Date)/i, '')); if (d) { out.issueDate = d; return true; } } return false; });
     if (!out.issueDate) T.some(function (l) { var d = findDate(l); if (d) out.issueDate = d; return !!d; });
