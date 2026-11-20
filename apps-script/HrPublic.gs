@@ -131,7 +131,7 @@ function hrLineTest(token) {
 function hrFormInit(key) {
   var dept = hrFormCheck_(key), ss = hrBook_(dept), st = hrSettings_(ss);
   // รายชื่อให้เลือก (พร้อมรูปจาก hrFormPhotos) — กลับมาแสดงรายชื่อตามที่ผู้ใช้ขอ 19/11/69 · รวมพนักงาน Job
-  return { ok: true, today: purToday_(), workDays: st.workDays,
+  return { ok: true, today: purToday_(), workDays: st.workDays, dayHours: st.dayHours, stdHours: st.stdHours, supervisors: hrSupervisors_(ss),
     emps: hrPeople_(ss).filter(hrActive_).sort(function (a, b) { return (Number(a.seq) || 9999) - (Number(b.seq) || 9999); })
       .map(function (e) { var o = hrFormEmp_(e); delete o.photo; return o; }) };
 }
@@ -165,23 +165,24 @@ function hrBalance_(ss, e, year) {
   var st = hrSettings_(ss), today = purToday_(), used = {}, pend = {};
   purRead_(ss, 'hr_leaves').forEach(function (l) {
     if (l.empId !== e.id || String(l.dateFrom).slice(0, 4) !== year) return;
-    if (l.status === 'อนุมัติ') used[l.type] = (used[l.type] || 0) + (Number(l.days) || 0);
-    if (l.status === 'รออนุมัติ') pend[l.type] = (pend[l.type] || 0) + (Number(l.days) || 0);
+    var h = hrLeaveHours_(l, st);   // ชั่วโมง (20/11/69)
+    if (l.status === 'อนุมัติ') used[l.type] = (used[l.type] || 0) + h;
+    if (l.status === 'รออนุมัติ') pend[l.type] = (pend[l.type] || 0) + h;
   });
-  var out = {};
-  HR_FORM_TYPES_.forEach(function (k) { var q = hrQuota_(st, e, k, year, today); out[k] = { quota: q, used: used[k] || 0, pending: pend[k] || 0, left: q == null ? null : q - (used[k] || 0) }; });
+  var out = {}, r2 = function (v) { return Math.round((v || 0) * 100) / 100; };
+  HR_FORM_TYPES_.forEach(function (k) { var q = hrQuota_(st, e, k, year, today); out[k] = { quota: q, used: r2(used[k]), pending: r2(pend[k]), left: q == null ? null : r2(q - (used[k] || 0)), unit: 'h', std: st.stdHours }; });
   return out;
 }
 function hrFormBalance(key, empId) {
-  var dept = hrFormCheck_(key), ss = hrBook_(dept), e = hrById_(hrPeople_(ss), empId);
+  var dept = hrFormCheck_(key), ss = hrBook_(dept), e = hrById_(hrPeople_(ss), empId), st = hrSettings_(ss);
   if (!e || !hrActive_(e)) return { ok: false, error: 'ไม่พบชื่อพนักงาน' };
   var year = purToday_().slice(0, 4);
   var mine = purRead_(ss, 'hr_leaves').filter(function (l) { return l.empId === e.id; }).sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).slice(0, 8)
-    .map(function (l) { return { type: l.type, dateFrom: l.dateFrom, dateTo: l.dateTo, days: l.days, minutes: l.type === 'late' ? '' : l.minutes, status: l.status, reason: l.reason }; });
+    .map(function (l) { return { type: l.type, dateFrom: l.dateFrom, dateTo: l.dateTo, days: l.days, hours: hrLeaveHours_(l, st), minutes: l.type === 'late' ? '' : l.minutes, status: l.status, reason: l.reason, supervisor: l.supervisor || '' }; });
   return { ok: true, year: year, balance: hrBalance_(ss, e, year), recent: mine, emp: hrFormEmp_(e) };
 }
 // r = { empId, type, dateFrom, dateTo, half (true = ครึ่งวัน), reason }
-var HR_HOURS_PER_DAY_ = 8;   // ลาเป็นชั่วโมง: 8 ชม. = 1 วัน (แก้ได้ถ้าบริษัทนับต่างไป)
+var HR_HOURS_PER_DAY_ = 10;   // (เดิม) ใช้ชั่วโมงทำงานของวันนั้นจากตั้งค่าแทนแล้ว — hrDayHours_
 function hrHoursTxt_(mins) { var h = Math.floor(mins / 60), m = mins % 60; return (h ? h + ' ชม.' : '') + (m ? (h ? ' ' : '') + m + ' นาที' : ''); }
 function hrFormSubmit(key, r) {
   var dept = hrFormCheck_(key);
@@ -198,7 +199,10 @@ function hrFormSubmit(key, r) {
     if (!e || !hrActive_(e)) return { ok: false, error: 'ไม่พบชื่อพนักงาน' };
     var all = purRead_(ss, 'hr_leaves');
     if (all.some(function (l) { return l.empId === e.id && l.status !== 'ไม่อนุมัติ' && l.dateFrom <= t && (l.dateTo || l.dateFrom) >= f; })) return { ok: false, error: 'มีการลาในวันที่นี้อยู่แล้ว (รออนุมัติหรืออนุมัติแล้ว)' };
-    var days = r.half === true && f === t ? 0.5 : hrWorkDays_(f, t, st.workDays);
+    // หัวหน้างาน (บังคับเลือก — ผู้ใช้ขอ 20/11/69): ต้องเป็นคนที่ตำแหน่งมีคำว่า "หัวหน้า"
+    var sup = hrSupervisors_(ss).filter(function (x) { return x.id === r.supervisorId; })[0];
+    if (!sup) return { ok: false, error: 'เลือกหัวหน้างาน' };
+    var days = r.half === true && f === t ? 0.5 : hrWorkDays_(f, t, st);
     if (!days) return { ok: false, error: 'วันที่เลือกเป็นวันหยุด' };
     // ลาเป็นชั่วโมง (ผู้ใช้ขอ 19/11/69): วันเดียว + เวลาเริ่ม–สิ้นสุด → เก็บนาทีในช่อง "นาที" · จำนวนวัน = ชั่วโมง ÷ 8 (HR_HOURS_PER_DAY_)
     var mins = '', hrsTxt = '';
@@ -209,19 +213,23 @@ function hrFormSubmit(key, r) {
       if (a < 0 || b < 0 || b <= a) return { ok: false, error: 'ระบุเวลาเริ่ม–สิ้นสุดให้ถูกต้อง' };
       mins = b - a;
       if (mins > 12 * 60) return { ok: false, error: 'ลาเป็นชั่วโมงได้ไม่เกิน 12 ชั่วโมง' };
-      days = Math.round(mins / 60 / HR_HOURS_PER_DAY_ * 100) / 100;
+      var dayH = hrDayHours_(st)[purToDate_(f).getDay()] || st.stdHours || 10;   // จ.–พฤ. 10 ชม. · ศ. 8 ชม.
+      if (mins > dayH * 60) return { ok: false, error: 'ลาเป็นชั่วโมงได้ไม่เกิน ' + dayH + ' ชม. ในวันนี้' };
+      days = Math.round(mins / 60 / dayH * 100) / 100;
       hrsTxt = 'ลา ' + hrHoursTxt_(mins) + ' (' + r.timeFrom + '–' + r.timeTo + ')';
     }
     var now = purNow_(), rec = { id: purId_('LV'), empId: e.id, type: r.type, dateFrom: f, dateTo: t, days: days, minutes: mins, reason: hrText_((hrsTxt ? hrsTxt + (r.reason ? ' · ' : '') : '') + (r.reason || ''), 300),
-      status: 'รออนุมัติ', approver: '', files: '[]', createdAt: now, updatedAt: now, source: 'แบบฟอร์มพนักงาน', decidedAt: '' };
+      status: 'รออนุมัติ', approver: '', files: '[]', createdAt: now, updatedAt: now, source: 'แบบฟอร์มพนักงาน', decidedAt: '',
+      supervisor: hrText_(sup.nick ? sup.nick + ' (' + sup.name + ')' : sup.name, 80) };
     purWrite_(ss, 'hr_leaves', rec);
+    rec.hours = hrLeaveHours_(rec, st); rec.std = st.stdHours;
     purLogWrite_(ss, 'คำขอลาจากแบบฟอร์ม', 'hr_leaves', rec.id, e.fullName + ' · ' + HR_LEAVE_TYPES_[r.type] + ' ' + f + (t !== f ? '–' + t : '') + ' (' + days + ' วัน)');
     return { ok: true, id: rec.id, rec: rec, emp: e, bal: hrBalance_(ss, e, f.slice(0, 4))[r.type] };
   });
   if (!res.ok) return res;
   var notified = false;
   try { notified = hrLinePush_([hrLeaveFlex_(res.rec, res.emp, res.bal, false)]).ok; } catch (err) {}
-  return { ok: true, id: res.id, sig: hrSign_('up|' + res.id), days: res.rec.days, notified: notified };
+  return { ok: true, id: res.id, sig: hrSign_('up|' + res.id), days: res.rec.days, hours: res.rec.hours, notified: notified };
 }
 // แนบรูปใบรับรองแพทย์ ฯลฯ ให้คำขอที่เพิ่งส่ง (ไม่เกิน 3 ไฟล์ · ภายใน 3 ชม. · ยังรออนุมัติ)
 function hrFormUpload(key, leaveId, sig, fileName, mimeType, base64) {
@@ -269,9 +277,11 @@ function hrLeaveFlex_(l, e, bal, decided) {
   var dates = hrThDate_(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + hrThDate_(l.dateTo) : '');
   var body = [T((e.fullName || '') + (e.nickname ? ' (' + e.nickname + ')' : ''), { size: 'lg', weight: 'bold' }),
     T([e.position, e.group, e.building].filter(String).join(' · ') || ' ', { size: 'xs', color: '#64748b' }), { type: 'separator', margin: 'md' },
-    { type: 'box', layout: 'vertical', margin: 'md', spacing: 'sm', contents: [row('ประเภท', HR_LEAVE_TYPES_[l.type] || l.type), row('วันที่', dates), row('จำนวน', l.type !== 'late' && Number(l.minutes) ? hrHoursTxt_(Number(l.minutes)) + ' (' + l.days + ' วัน)' : l.days + ' วัน')]
+    { type: 'box', layout: 'vertical', margin: 'md', spacing: 'sm', contents: [row('ประเภท', HR_LEAVE_TYPES_[l.type] || l.type), row('วันที่', dates), row('จำนวน', l.hours != null && l.hours !== '' ? hrFmtH_(l.hours, { stdHours: l.std || 10 }) : l.type !== 'late' && Number(l.minutes) ? hrHoursTxt_(Number(l.minutes)) + ' (' + l.days + ' วัน)' : l.days + ' วัน')]
+      .concat(l.supervisor ? [row('หัวหน้างาน', l.supervisor)] : [])
       .concat(l.reason ? [row('เหตุผล', l.reason)] : [])
-      .concat(bal && bal.quota != null ? [row('สิทธิ์คงเหลือ', bal.left + ' วัน → หลังอนุมัติ ' + (bal.left - l.days) + ' วัน', bal.left - l.days < 0 ? '#dc2626' : '#15803d')] : []) }];
+      .concat(bal && bal.quota != null ? (function () { var after = Math.round((bal.left - (Number(l.hours) || 0)) * 100) / 100, o = { stdHours: bal.std || 10 };
+        return [row('สิทธิ์คงเหลือ', hrFmtH_(bal.left, o) + ' → หลังอนุมัติ ' + hrFmtH_(after, o), after < 0 ? '#dc2626' : '#15803d')]; })() : []) }];
   var bubble = { type: 'bubble', size: 'kilo',
     header: { type: 'box', layout: 'vertical', backgroundColor: decided ? (l.status === 'อนุมัติ' ? '#16a34a' : '#dc2626') : '#2563eb', paddingAll: '12px',
       contents: [T(decided ? (l.status === 'อนุมัติ' ? '✅ อนุมัติแล้ว' : '❌ ไม่อนุมัติ') + (l.approver ? ' · ' + l.approver : '') : '📝 คำขอลาใหม่ · รออนุมัติ', { color: '#ffffff', weight: 'bold', size: 'md' })] },

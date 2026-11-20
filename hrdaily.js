@@ -42,6 +42,7 @@
       render();
     }).catch(onServerError);
   }
+  function autoSave() { save().then(function (ok) { if (ok) render(); }); }
   D.page = function () { if (!D.data) return load(''); render(); };
 
   // ---------- ตาราง (หน้าจอ + ภาพ LINE ใช้ตัวเดียวกัน) ----------
@@ -152,7 +153,8 @@
     });
     on('[data-nm]', 'click', function (el) { chip(+el.getAttribute('data-ri'), el.getAttribute('data-nm')); });
     on('[data-addlv]', 'click', function (el) { leaveDialog(+el.getAttribute('data-addlv'), ''); });
-    on('[data-unlv]', 'click', function (el) { var p = el.getAttribute('data-unlv').split(':'), x = day.roles[+p[0]].leaves.splice(+p[1], 1)[0]; if (x && x.src) day.skipSrc.push(x.src); D.dirty = true; render(); });
+    // ยกเลิก = เอาออกจากหน้านี้ทันทีและบันทึกเลย (ผู้ใช้ขอ 20/11/69 — เดิมต้องกดบันทึกเอง ไม่งั้นเปิดใหม่แล้วกลับมา) · ที่มาจากระบบการลาจำไว้ใน skipSrc ไม่ใส่กลับ
+    on('[data-unlv]', 'click', function (el) { var p = el.getAttribute('data-unlv').split(':'), x = day.roles[+p[0]].leaves.splice(+p[1], 1)[0]; if (x && x.src) day.skipSrc.push(x.src); D.dirty = true; render(); autoSave(); });
     on('[data-unadd]', 'click', function (el) {
       var k = +el.getAttribute('data-unadd'), x = D.unmatched[k], r = day.roles[+$('main').querySelector('[data-unsel="' + k + '"]').value];
       r.leaves.push({ name: x.nick || bare(x.full), type: x.type, reason: recReason(x), src: x.id }); D.unmatched.splice(k, 1); D.dirty = true; render();
@@ -201,7 +203,7 @@
   }
   function chip(i, name) {
     var r = D.day.roles[i], j = r.leaves.map(function (l) { return l.name; }).indexOf(name);
-    if (j >= 0) { var x = r.leaves.splice(j, 1)[0]; if (x.src) D.day.skipSrc.push(x.src); D.dirty = true; render(); return; }   // แตะคนที่ลาอยู่ = ยกเลิกการลา (ที่มาจากระบบ: จำไว้ไม่ใส่กลับ)
+    if (j >= 0) { var x = r.leaves.splice(j, 1)[0]; if (x.src) D.day.skipSrc.push(x.src); D.dirty = true; render(); autoSave(); return; }   // แตะคนที่ลาอยู่ = ยกเลิกการลา (ที่มาจากระบบ: จำไว้ไม่ใส่กลับ)
     var g = r.resigns.map(function (x) { return x.name; }).indexOf(name);
     if (g >= 0) { r.resigns.splice(g, 1); D.dirty = true; render(); return; }   // แตะคนที่ลาออก = ยกเลิก
     leaveDialog(i, name);

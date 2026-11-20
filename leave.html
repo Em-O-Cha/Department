@@ -41,6 +41,7 @@
   .types button { border: 2px solid var(--line); background: #fff; border-radius: 12px; padding: 12px 6px; font: inherit; font-size: 15px; font-weight: 600; min-height: 56px; }
   .types button.on { border-color: var(--c); background: #eff6ff; color: var(--c); }
   label { display: block; font-size: 14px; color: var(--muted); margin: 12px 0 4px; }
+  select.sup { width: 100%; padding: 12px; border: 1.5px solid var(--line); border-radius: 12px; font: inherit; background: #fff; }
   input[type=date], input[type=time], textarea { width: 100%; padding: 12px; border: 1.5px solid var(--line); border-radius: 12px; font: inherit; background: #fff; }
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .row2 > div { min-width: 0; }
@@ -76,18 +77,18 @@
       bal: 'สิทธิ์ลาคงเหลือปีนี้', left: 'เหลือ', days: 'วัน', pending: 'รออนุมัติ', type: 'ประเภทการลา', from: 'ตั้งแต่วันที่', to: 'ถึงวันที่', half: 'ลาครึ่งวัน', mFull: 'เต็มวัน', mHalf: 'ครึ่งวัน', mHours: 'เป็นชั่วโมง', tFrom: 'เวลาเริ่ม', tTo: 'ถึงเวลา', hrs: 'ชม.', mins: 'นาที', needTime: 'ระบุเวลาเริ่ม–สิ้นสุดให้ถูกต้อง',
       reason: 'เหตุผล', reasonPh: 'เช่น ไม่สบาย มีไข้ / ธุระที่บ้าน', file: 'รูปใบรับรองแพทย์ / เอกสาร (ถ้ามี)', cam: 'ถ่ายรูป', lib: 'เลือกรูป', send: 'ส่งคำขอลา',
       total: 'รวม', overQ: 'เกินสิทธิ์', willLeft: 'หลังอนุมัติจะเหลือ', sent: 'ส่งคำขอลาแล้ว', sentSub: 'รอฝ่ายบุคคลอนุมัติ — ดูสถานะได้ที่หน้านี้', again: 'ขอลาอีกครั้ง',
-      recent: 'คำขอล่าสุดของฉัน', none: 'ยังไม่มี', hint: 'พิมพ์ชื่อหรือชื่อเล่นของคุณ แล้วแตะชื่อตัวเอง', notFound: 'ไม่พบชื่อ — ลองพิมพ์ใหม่ หรือเลือก "ทั้งหมด"', myReq: 'คำขอที่เพิ่งส่ง', badLink: 'ลิงก์ไม่ถูกต้อง — สแกน QR ที่ฝ่ายบุคคลติดไว้อีกครั้ง', needType: 'เลือกประเภทการลา', needDate: 'เลือกวันที่',
+      recent: 'คำขอล่าสุดของฉัน', none: 'ยังไม่มี', hint: 'พิมพ์ชื่อหรือชื่อเล่นของคุณ แล้วแตะชื่อตัวเอง', notFound: 'ไม่พบชื่อ — ลองพิมพ์ใหม่ หรือเลือก "ทั้งหมด"', myReq: 'คำขอที่เพิ่งส่ง', badLink: 'ลิงก์ไม่ถูกต้อง — สแกน QR ที่ฝ่ายบุคคลติดไว้อีกครั้ง', needType: 'เลือกประเภทการลา', needDate: 'เลือกวันที่', sup: 'หัวหน้างาน', supPh: '— เลือกหัวหน้างาน —', needSup: 'เลือกหัวหน้างาน',
       st: { 'รออนุมัติ': 'รออนุมัติ', 'อนุมัติ': 'อนุมัติแล้ว', 'ไม่อนุมัติ': 'ไม่อนุมัติ' },
       types: { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', maternity: 'ลาคลอด', ordain: 'ลาบวช', other: 'ลาอื่นๆ' } },
     my: { title: 'ခွင့်လွှာ', sub: 'Spunky Food Co., Ltd. · HR', pick: 'သင့်နာမည်ကို ရွေးပါ', search: 'နာမည် ရှာရန်', all: 'အားလုံး', notMe: 'ကျွန်ုပ် မဟုတ်ပါ / နာမည်ပြောင်းရန်',
       bal: 'ယခုနှစ် ကျန်ရှိသော ခွင့်ရက်', left: 'ကျန်', days: 'ရက်', pending: 'အတည်ပြုရန် စောင့်ဆဲ', type: 'ခွင့်အမျိုးအစား', from: 'စတင်သည့်ရက်', to: 'ပြီးဆုံးသည့်ရက်', half: 'နေ့တစ်ဝက် ခွင့်', mFull: 'တစ်နေ့လုံး', mHalf: 'နေ့တစ်ဝက်', mHours: 'နာရီဖြင့်', tFrom: 'စတင်ချိန်', tTo: 'ပြီးဆုံးချိန်', hrs: 'နာရီ', mins: 'မိနစ်', needTime: 'အချိန်ကို မှန်ကန်စွာ ရွေးပါ',
       reason: 'အကြောင်းပြချက်', reasonPh: 'ဥပမာ - နေမကောင်း၊ ဖျား', file: 'ဆရာဝန်လက်မှတ် / စာရွက်စာတမ်း ဓာတ်ပုံ (ရှိလျှင်)', cam: 'ဓာတ်ပုံရိုက်', lib: 'ဓာတ်ပုံရွေး', send: 'ခွင့်တောင်းခံချက် ပို့ရန်',
       total: 'စုစုပေါင်း', overQ: 'ခွင့်ရက်ထက် ကျော်နေသည်', willLeft: 'အတည်ပြုပြီးနောက် ကျန်မည်', sent: 'ခွင့်တောင်းခံချက် ပို့ပြီးပါပြီ', sentSub: 'HR အတည်ပြုရန် စောင့်ပါ — ဤစာမျက်နှာတွင် အခြေအနေ ကြည့်နိုင်သည်', again: 'ထပ်မံ ခွင့်တောင်းရန်',
-      recent: 'ကျွန်ုပ်၏ နောက်ဆုံး ခွင့်တောင်းခံချက်များ', none: 'မရှိသေးပါ', hint: 'သင့်နာမည် (သို့) အမည်ပြောင်ကို ရိုက်ပြီး သင့်နာမည်ကို နှိပ်ပါ', notFound: 'ဤနာမည် မတွေ့ပါ — ထပ်ရိုက်ကြည့်ပါ', myReq: 'ယခုပို့လိုက်သော ခွင့်တောင်းခံချက်', badLink: 'လင့်ခ် မမှန်ပါ — HR ကပ်ထားသော QR ကို ပြန်စကင်ဖတ်ပါ', needType: 'ခွင့်အမျိုးအစား ရွေးပါ', needDate: 'ရက်စွဲ ရွေးပါ',
+      recent: 'ကျွန်ုပ်၏ နောက်ဆုံး ခွင့်တောင်းခံချက်များ', none: 'မရှိသေးပါ', hint: 'သင့်နာမည် (သို့) အမည်ပြောင်ကို ရိုက်ပြီး သင့်နာမည်ကို နှိပ်ပါ', notFound: 'ဤနာမည် မတွေ့ပါ — ထပ်ရိုက်ကြည့်ပါ', myReq: 'ယခုပို့လိုက်သော ခွင့်တောင်းခံချက်', badLink: 'လင့်ခ် မမှန်ပါ — HR ကပ်ထားသော QR ကို ပြန်စကင်ဖတ်ပါ', needType: 'ခွင့်အမျိုးအစား ရွေးပါ', needDate: 'ရက်စွဲ ရွေးပါ', sup: 'အလုပ်ကြီးကြပ်သူ (ခေါင်းဆောင်)', supPh: '— အလုပ်ကြီးကြပ်သူ ရွေးပါ —', needSup: 'အလုပ်ကြီးကြပ်သူကို ရွေးပါ',
       st: { 'รออนุมัติ': 'စောင့်ဆဲ', 'อนุมัติ': 'ခွင့်ပြုပြီး', 'ไม่อนุมัติ': 'ခွင့်မပြုပါ' },
       types: { sick: 'ဖျားနာခွင့်', personal: 'ကိစ္စခွင့်', vacation: 'နှစ်စဉ်ခွင့်', maternity: 'မီးဖွားခွင့်', ordain: 'ရဟန်းခံခွင့်', other: 'အခြားခွင့်' } }
   };
-  var S = { lang: get('lang') || 'th', data: null, photos: {}, me: get('me') || '', emp: null, found: null, bal: null, f: { type: '', from: '', to: '', half: false, mode: 'full', tf: '', tt: '', reason: '', files: [] }, grp: '' };
+  var S = { lang: get('lang') || 'th', data: null, photos: {}, me: get('me') || '', emp: null, found: null, bal: null, f: { type: '', from: '', to: '', half: false, mode: 'full', tf: '', tt: '', reason: '', files: [], sup: get('sup') || '' }, grp: '' };
   function get(k) { try { return localStorage.getItem('leave_' + k) || ''; } catch (e) { return ''; } }
   function set(k, v) { try { localStorage.setItem('leave_' + k, v); } catch (e) {} }
   function t(k) { return TX[S.lang][k]; }
@@ -147,7 +148,12 @@
       S.me = e.id; S.emp = e; set('me', S.me); S.bal = null; S.q = ''; render(); window.scrollTo(0, 0);
     }); });
   }
-  function workDays(f, to) { var n = 0, d = new Date(f + 'T00:00:00'), e = new Date(to + 'T00:00:00'); while (d <= e) { var w = d.getDay(); if (w !== 0 && !(S.data.workDays === 'จ-ศ' && w === 6)) n++; d.setDate(d.getDate() + 1); } return n; }
+  // ลาคิดเป็นชั่วโมง (20/11/69): จ.–พฤ. 10 ชม. · ศ. 8 ชม. · เสาร์–อาทิตย์ไม่นับ (ค่าจากตั้งค่าฝ่ายบุคคล)
+  function dayHrs() { var d = S.data.dayHours; return Array.isArray(d) && d.length === 7 ? d : [0, 10, 10, 10, 10, 8, 0]; }
+  function stdH() { return Number(S.data.stdHours) || 10; }
+  function r2(v) { return Math.round((Number(v) || 0) * 100) / 100; }
+  function rangeInfo(f, to) { var dh = dayHrs(), n = 0, h = 0, d = new Date(f + 'T00:00:00'), e = new Date(to + 'T00:00:00'); while (d <= e) { var w = d.getDay(); if (dh[w] > 0) { n++; h += dh[w]; } d.setDate(d.getDate() + 1); } return { n: n, h: h }; }
+  function fh(h) { return r2(h) + ' ' + t('hrs') + ' (' + r2(h / stdH()) + ' ' + t('days') + ')'; }
   function formView() {
     var e = me(), F = S.f, today = S.data.today;
     if (!F.from) { F.from = today; F.to = today; }
@@ -155,19 +161,21 @@
     var B = S.bal && S.bal.balance;
     if (F.from !== F.to && F.mode !== 'full') F.mode = 'full';
     F.half = F.mode === 'half';
-    var hm = F.mode === 'hours' ? hourMins(F) : 0;
-    var n = F.mode === 'hours' ? Math.round(hm / 60 / 8 * 100) / 100 : F.half && F.from === F.to ? 0.5 : (F.from && F.to && F.to >= F.from ? workDays(F.from, F.to) : 0);
+    var hm = F.mode === 'hours' ? hourMins(F) : 0, ri = F.from && F.to && F.to >= F.from ? rangeInfo(F.from, F.to) : { n: 0, h: 0 };
+    var H = F.mode === 'hours' ? hm / 60 : F.half && F.from === F.to ? ri.h / 2 : ri.h;   // ชั่วโมงของใบลานี้
     var sum = '';
-    if (F.type && n) {
-      var b = B && B[F.type], after = b && b.quota != null ? b.left - b.pending - n : null;
-      sum = '<div class="sum' + (after != null && after < 0 ? ' bad' : '') + '">' + t('total') + ' <b>' + (hm ? hrsTxt(hm) + '</b> (' + n + ' ' + t('days') + ')' : n + '</b> ' + t('days')) + (after != null ? ' · ' + (after < 0 ? t('overQ') + ' <b>' + (-after) + '</b> ' + t('days') : t('willLeft') + ' <b>' + after + '</b> ' + t('days')) : '') + '</div>';
+    if (F.type && H) {
+      var b = B && B[F.type], after = b && b.quota != null ? r2(b.left - b.pending - H) : null;
+      sum = '<div class="sum' + (after != null && after < 0 ? ' bad' : '') + '">' + t('total') + ' <b>' + fh(H) + '</b>' + (after != null ? ' · ' + (after < 0 ? t('overQ') + ' <b>' + fh(-after) + '</b>' : t('willLeft') + ' <b>' + fh(after) + '</b>') : '') + '</div>';
     }
+    var sups = S.data.supervisors || [];
     $('app').innerHTML = '<div class="card"><div class="me">' + ph(e) + '<div><b>' + esc(e.name) + '</b><small>' + esc([e.nick, e.position].filter(String).join(' · ')) + '</small><button class="link" id="notMe">' + t('notMe') + '</button></div></div>'
       + balHtml() + '</div>'
       + '<div class="card"><h2>' + t('type') + '</h2><div class="types">' + ['sick', 'personal', 'vacation', 'maternity', 'ordain', 'other'].map(function (k) { return '<button data-type="' + k + '"' + (F.type === k ? ' class="on"' : '') + '>' + t('types')[k] + '</button>'; }).join('') + '</div>'
       + '<div class="row2"><div><label>' + t('from') + '</label><input type="date" id="fFrom" value="' + F.from + '"></div><div><label>' + t('to') + '</label><input type="date" id="fTo" value="' + F.to + '" min="' + F.from + '"></div></div>'
       + (F.from === F.to ? '<div class="modes">' + [['full', t('mFull')], ['half', t('mHalf')], ['hours', t('mHours')]].map(function (m) { return '<button type="button" data-mode="' + m[0] + '"' + (F.mode === m[0] ? ' class="on"' : '') + '>' + m[1] + '</button>'; }).join('') + '</div>'
         + (F.mode === 'hours' ? '<div class="row2"><div><label>' + t('tFrom') + '</label><input type="time" id="fTF" value="' + esc(F.tf) + '"></div><div><label>' + t('tTo') + '</label><input type="time" id="fTT" value="' + esc(F.tt) + '"></div></div>' : '') : '')
+      + '<label>' + t('sup') + ' *</label><select id="fSup" class="sup"><option value="">' + esc(t('supPh')) + '</option>' + sups.map(function (x) { return '<option value="' + esc(x.id) + '"' + (F.sup === x.id ? ' selected' : '') + '>' + esc((x.nick ? x.nick + ' · ' : '') + x.name + (x.position ? ' (' + x.position + ')' : '')) + '</option>'; }).join('') + '</select>'
       + '<label>' + t('reason') + '</label><textarea id="fReason" rows="2" placeholder="' + esc(t('reasonPh')) + '">' + esc(F.reason) + '</textarea>'
       + '<label>' + t('file') + '</label><div class="files">' + F.files.map(function (x, i) { return '<img src="' + x.url + '" data-rm="' + i + '" alt="">'; }).join('') + (F.files.length < 3 ? '<button class="fbtn" data-pick="cam">📷<br>' + t('cam') + '</button><button class="fbtn" data-pick="lib">🖼️<br>' + t('lib') + '</button>' : '') + '</div>'
       + sum + '<div class="err" id="err"></div><button class="send" id="send">' + t('send') + '</button></div>'
@@ -180,6 +188,7 @@
     if ($('fTF')) $('fTF').addEventListener('change', function () { F.tf = $('fTF').value; formView(); });
     if ($('fTT')) $('fTT').addEventListener('change', function () { F.tt = $('fTT').value; formView(); });
     $('fReason').addEventListener('input', function () { F.reason = $('fReason').value; });
+    $('fSup').addEventListener('change', function () { F.sup = $('fSup').value; set('sup', F.sup); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-pick]'), function (b) { b.addEventListener('click', function () { pick(b.getAttribute('data-pick') === 'cam'); }); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-rm]'), function (im) { im.addEventListener('click', function () { F.files.splice(+im.getAttribute('data-rm'), 1); formView(); }); });
     $('send').addEventListener('click', submit);
@@ -190,13 +199,13 @@
   function hourMins(F) { var a = tmin(F.tf), b = tmin(F.tt); return a >= 0 && b > a ? b - a : 0; }
   function balHtml() {
     var B = S.bal && S.bal.balance;
-    return '<div class="bal">' + ['sick', 'personal', 'vacation'].map(function (k) { var b = B && B[k]; return '<div><span>' + t('types')[k] + '</span><b>' + (b && b.quota != null ? b.left : (S.bal === 'loading' ? '…' : '–')) + '</b><small>' + t('left') + ' (' + t('days') + ')' + (b && b.pending ? ' · ' + t('pending') + ' ' + b.pending : '') + '</small></div>'; }).join('') + '</div>';
+    return '<div class="bal">' + ['sick', 'personal', 'vacation'].map(function (k) { var b = B && B[k]; return '<div><span>' + t('types')[k] + '</span><b>' + (b && b.quota != null ? r2(b.left) + ' ' + t('hrs') : (S.bal === 'loading' ? '…' : '–')) + '</b><small>' + t('left') + (b && b.quota != null ? ' (' + r2(b.left / stdH()) + ' ' + t('days') + ')' : '') + (b && b.pending ? ' · ' + t('pending') + ' ' + r2(b.pending) + ' ' + t('hrs') : '') + '</small></div>'; }).join('') + '</div>';
   }
   function recentHtml() {
     var r = S.bal && S.bal.recent; if (!r) return '';
     return '<div class="card recent"><h2>' + t('recent') + '</h2>' + (r.map(function (l) {
       var c = l.status === 'อนุมัติ' ? 'ok' : l.status === 'ไม่อนุมัติ' ? 'no' : 'wait';
-      return '<div><span>' + esc(t('types')[l.type] || l.type) + ' · ' + dmy(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? '–' + dmy(l.dateTo) : '') + ' (' + (Number(l.minutes) ? hrsTxt(Number(l.minutes)) : l.days) + ')</span><span class="st ' + c + '">' + esc(t('st')[l.status] || l.status) + '</span></div>';
+      return '<div><span>' + esc(t('types')[l.type] || l.type) + ' · ' + dmy(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? '–' + dmy(l.dateTo) : '') + ' (' + (l.hours != null ? fh(l.hours) : Number(l.minutes) ? hrsTxt(Number(l.minutes)) : l.days) + ')</span><span class="st ' + c + '">' + esc(t('st')[l.status] || l.status) + '</span></div>';
     }).join('') || '<div>' + t('none') + '</div>') + '</div>';
   }
   function pick(cam) {
@@ -223,13 +232,14 @@
     if (!F.from) { err.textContent = t('needDate'); return; }
     var hours = F.mode === 'hours' && F.from === (F.to || F.from);
     if (hours && !hourMins(F)) { err.textContent = t('needTime'); return; }
+    if (!F.sup) { err.textContent = t('needSup'); return; }
     btn.disabled = true; btn.innerHTML = '<span class="spin"></span>'; err.textContent = '';
-    call('hrFormSubmit', KEY, { empId: S.me, type: F.type, dateFrom: F.from, dateTo: F.to || F.from, half: F.half && F.from === F.to, timeFrom: hours ? F.tf : '', timeTo: hours ? F.tt : '', reason: F.reason }).then(function (r) {
+    call('hrFormSubmit', KEY, { empId: S.me, type: F.type, dateFrom: F.from, dateTo: F.to || F.from, half: F.half && F.from === F.to, timeFrom: hours ? F.tf : '', timeTo: hours ? F.tt : '', supervisorId: F.sup, reason: F.reason }).then(function (r) {
       var i = 0;
       function next() { if (i >= F.files.length) return Promise.resolve(); var x = F.files[i++]; return call('hrFormUpload', KEY, r.id, r.sig, x.name, x.mime, x.b64).catch(function () {}).then(next); }
       return next().then(function () {
-        S.done = { days: r.days, mins: hours ? hourMins(F) : 0, type: F.type, from: F.from, to: F.to || F.from, reason: F.reason };
-        S.f = { type: '', from: '', to: '', half: false, mode: 'full', tf: '', tt: '', reason: '', files: [] }; S.bal = 'loading'; render(); window.scrollTo(0, 0);
+        S.done = { days: r.days, hours: r.hours, mins: hours ? hourMins(F) : 0, type: F.type, from: F.from, to: F.to || F.from, reason: F.reason };
+        S.f = { type: '', from: '', to: '', half: false, mode: 'full', tf: '', tt: '', reason: '', files: [], sup: F.sup }; S.bal = 'loading'; render(); window.scrollTo(0, 0);
         // ดึงสิทธิ์คงเหลือ + คำขอล่าสุดทันที (ไม่ต้องรีเฟรชหน้า)
         call('hrFormBalance', KEY, S.me).then(function (b) { S.bal = b.ok ? b : null; render(); }).catch(function () { S.bal = null; render(); });
       });
@@ -239,7 +249,7 @@
     var d = S.done, e = me();
     $('app').innerHTML = '<div class="card done"><div class="big">✅</div><b>' + t('sent') + '</b><p>' + t('sentSub') + '</p></div>'
       + '<div class="card"><h2>' + t('myReq') + '</h2>' + (e ? '<div class="me">' + ph(e) + '<div><b>' + esc(e.name) + '</b><small>' + esc([e.nick, e.position].filter(String).join(' · ')) + '</small></div></div>' : '')
-      + '<div class="recent"><div><span>' + esc(t('types')[d.type] || d.type) + ' · ' + dmy(d.from) + (d.to && d.to !== d.from ? '–' + dmy(d.to) : '') + ' (' + (d.mins ? hrsTxt(d.mins) : d.days + ' ' + t('days')) + ')' + (d.reason ? '<br><small>' + esc(d.reason) + '</small>' : '') + '</span><span class="st wait">' + esc(t('st')['รออนุมัติ']) + '</span></div></div>'
+      + '<div class="recent"><div><span>' + esc(t('types')[d.type] || d.type) + ' · ' + dmy(d.from) + (d.to && d.to !== d.from ? '–' + dmy(d.to) : '') + ' (' + (d.hours != null ? fh(d.hours) : d.mins ? hrsTxt(d.mins) : d.days + ' ' + t('days')) + ')' + (d.reason ? '<br><small>' + esc(d.reason) + '</small>' : '') + '</span><span class="st wait">' + esc(t('st')['รออนุมัติ']) + '</span></div></div>'
       + '<h2 style="margin-top:14px">' + t('bal') + '</h2>' + balHtml() + '</div>'
       + recentHtml()
       + '<button class="send" id="again">' + t('again') + '</button>';

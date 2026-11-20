@@ -110,7 +110,7 @@ function hrtSyncLeaves_(ss, rows, now) {
     };
     if (wantLate) { put('late', function (rec) { rec.days = 0; rec.minutes = lateMin; rec.reason = 'สแกนเข้า ' + (r.timeIn || '-') + (r.shift ? ' (กะ ' + r.shift + ')' : ''); }); nLate++; }
     if (off) {
-      put(off, function (rec) { rec.days = hrWorkDays_(r.date, r.date, st.workDays) || 1; rec.minutes = ''; rec.reason = r.kind ? (r.remark || HRT_KINDS_[off] + ' (HR บันทึกในหน้าลงเวลา)') : 'ไม่มีเวลาสแกน (จากเครื่องสแกน)'; });
+      put(off, function (rec) { rec.days = hrWorkDays_(r.date, r.date, st) || 1; rec.minutes = ''; rec.reason = r.kind ? (r.remark || HRT_KINDS_[off] + ' (HR บันทึกในหน้าลงเวลา)') : 'ไม่มีเวลาสแกน (จากเครื่องสแกน)'; });
       if (off === 'absent') nAbs++;
     }
     scan.forEach(function (l) { if (!keep[l.id]) del.push(l._row); });
