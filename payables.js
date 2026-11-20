@@ -47,6 +47,8 @@
     vs.forEach(function (v) { var k = loose(v.name); if (k.length >= 4 && (k.indexOf(n) >= 0 || n.indexOf(k) >= 0) && (!hit || Math.abs(k.length - n.length) < Math.abs(loose(hit.name).length - n.length))) hit = v; });
     return hit || null;
   }
+  // เครดิตที่เก็บไว้ของผู้ขาย: 0 / ว่าง = ยังไม่ได้ตั้ง (ผู้ใช้แจ้ง 20/11/69 ว่าบิลของผู้ขายที่มีอยู่แล้วเครดิตไม่ขึ้น — เดิม 0 จากการนำเข้าทับค่าที่อ่านได้จากบิล)
+  function vCredit(v) { var n = v ? Number(v.creditDays) : 0; return v && v.creditDays !== '' && v.creditDays != null && n > 0 ? n : null; }
   function roundOf(nom) { return (P.data.rounds || []).filter(function (r) { return r.nominal === nom; })[0] || { nominal: nom, actual: nom, why: '' }; }
   // รอบจ่ายเริ่มต้น = วันจ่ายรอบแรกที่ไม่ก่อนวันครบกำหนด (แก้ได้)
   function defaultRound(due) {
@@ -376,7 +378,7 @@
     b.files = files; b.pages = pages; b.uploads = uploads; b.read = r; b.text = text;
     b.vendor = v ? v.name : r.vendor; b.taxId = r.taxId || (v && v.taxId) || ''; b.invNo = r.invNo; b.issueDate = r.issueDate || P.data.today;
     if (v) { b.category = v.category || ''; b.vatMode = v.vatMode || 'exc'; b.pct = Number(v.pct) || 0; b.bank = v.bank || ''; }
-    b.creditDays = v && v.creditDays !== '' && v.creditDays != null ? v.creditDays : r.creditDays !== '' ? r.creditDays : '';
+    b.creditDays = vCredit(v) != null ? vCredit(v) : r.creditDays !== '' ? r.creditDays : v && v.creditDays !== '' && v.creditDays != null ? v.creditDays : '';
     if (r.vatMode) b.vatMode = r.vatMode;
     if (r.lines.length) b.lines = r.lines.map(function (x) { return { desc: x.desc, qty: x.qty, price: x.price }; });
     return b;
@@ -435,7 +437,7 @@
     var b = billsOf(P.data.lines.filter(function (l) { return l.billId === id; }))[0];
     if (!b) return toast('ไม่พบ PO นี้');
     var v = vendorOf(b.vendor);
-    P.cur = Object.assign(newBill(), { billId: b.billId, fromPo: true, category: b.category, vendor: b.vendor, taxId: (v && v.taxId) || '', issueDate: P.data.today, creditDays: v && v.creditDays !== '' && v.creditDays != null ? v.creditDays : '',
+    P.cur = Object.assign(newBill(), { billId: b.billId, fromPo: true, category: b.category, vendor: b.vendor, taxId: (v && v.taxId) || '', issueDate: P.data.today, creditDays: vCredit(v) != null ? vCredit(v) : '',
       payRound: b.payRound, vatMode: b.vatMode || 'exc', pct: b.pct, note: b.note, bank: v ? v.bank || '' : '', autoRound: false,
       lines: b.lines.map(function (l) { return { desc: l.desc, qty: Number(l.qty) || 0, price: Number(l.price) || 0 }; }) });
     if (state.page !== 'a_appo') go('a_appo'); else form();
@@ -500,7 +502,7 @@
       b.taxId = x.taxId || (v && v.taxId) || b.taxId;
       if (x.invNo) b.invNo = x.invNo;
       if (x.issueDate) b.issueDate = x.issueDate;
-      if (v && v.creditDays !== '' && v.creditDays != null) b.creditDays = v.creditDays; else if (x.creditDays >= 0) b.creditDays = x.creditDays;
+      if (vCredit(v) != null) b.creditDays = vCredit(v); else if (x.creditDays >= 0) b.creditDays = x.creditDays;
       if (v) { if (!b.category) b.category = v.category || ''; if (!b.pct) b.pct = Number(v.pct) || 0; b.bank = v.bank || b.bank; }
       if (x.vatMode) b.vatMode = x.vatMode; else if (v && v.vatMode) b.vatMode = v.vatMode;
       if ((x.lines || []).length) b.lines = x.lines.map(function (l) { return { desc: l.desc, qty: Number(l.qty) || 0, price: Number(l.price) || 0 }; });
@@ -608,7 +610,7 @@
       if (b.text && b.text.length && !b.invNo) { var gi = P.invByPattern(b.text, b.vendor); if (gi) { b.invNo = gi; $('apInv').value = gi; dupCheck(); } }   // เลือกผู้ขายเอง → ลองหาเลขที่ตามรูปแบบบิลเดิมของผู้ขายนั้น
       if (v) {
         if (v.category) { b.category = v.category; Array.prototype.forEach.call(document.querySelectorAll('input[name=apCat]'), function (x) { x.checked = x.value === b.category; }); }
-        if (v.creditDays !== '' && v.creditDays != null) $('apCredit').value = b.creditDays = v.creditDays;
+        if (vCredit(v) != null) $('apCredit').value = b.creditDays = vCredit(v);
         if (v.taxId && !$('apTax').value) $('apTax').value = b.taxId = v.taxId;
         if (v.bank) $('apBank').value = b.bank = v.bank;
         b.vatMode = v.vatMode || b.vatMode; b.pct = Number(v.pct) || 0;
@@ -702,7 +704,7 @@
       ['amount', 'vat', 'total', 'wht'].forEach(function (f) { var el = tr.querySelector('[data-c=' + f + ']'); if (el) el.textContent = m2(c[f]); });
     });
   }
-  function vhint() { var el = $('apVhint'); if (!el) return; var v = vendorOf(P.cur.vendor); el.innerHTML = v ? '✓ ผู้ขายในระบบ · ' + esc(cat(v.category).name) + (v.creditDays !== '' ? ' · เครดิต ' + v.creditDays + ' วัน' : '') : (P.cur.vendor ? 'ผู้ขายใหม่' : ''); el.className = v ? 'apok' : 'apwarn'; }
+  function vhint() { var el = $('apVhint'); if (!el) return; var v = vendorOf(P.cur.vendor); el.innerHTML = v ? '✓ ผู้ขายในระบบ · ' + esc(cat(v.category).name) + (vCredit(v) != null ? ' · เครดิต ' + vCredit(v) + ' วัน' : ' · <span class="apwarn">ยังไม่ได้ตั้งเครดิต (ตั้งได้ที่หน้า ผู้ขาย / ตั้งค่า)</span>') : (P.cur.vendor ? 'ผู้ขายใหม่' : ''); el.className = v ? 'apok' : 'apwarn'; }
   function dupCheck() {
     var b = P.cur, el = $('apDup'); if (!el) return;
     var x = b.invNo && P.data.lines.filter(function (l) { return l.billId !== b.billId && String(l.invNo) === b.invNo && norm(l.vendor) === norm(b.vendor); })[0];
@@ -1212,7 +1214,7 @@
         var g = txt(r, 6); if (catByTitle(g)) ck = catByTitle(g);
         if (txt(r, 1) === 'ผู้ขาย/ผู้จ่ายเงิน') { pctCol = -1; for (var c = 7; c <= 16; c++) { if (txt(r, c) === '%') pctCol = c; if (/มูลค่ารายการ/.test(txt(r, c))) kCol = c; } continue; }
         var b = txt(r, 1), bank = txt(r, 2);
-        if (b && !/^=/.test(b) && !/^\d+\)\./.test(b) && !/ค่าใช้จ่าย/.test(b)) {
+        if (b && !/^=/.test(b) && !/^\d+\)\./.test(b) && !/ค่าใช้จ่าย/.test(b) && !/^(supp?l?ier|suppier|ผู้ขาย|ชื่อผู้ขาย|ชื่อบริษัท|ลำดับ)$/i.test(b) && !/^รายละเอียด\s*supp/i.test(b)) {   // ข้ามหัวตาราง (เคยหลุดเข้าเป็นผู้ขายชื่อ "Suppier")
           var k = norm(b); if (!k) continue;
           cur = seen[k] || (seen[k] = { name: b.replace(/\s+/g, ' ').trim(), category: ck || 'raw', bank: '', creditDays: '', vatMode: '', pct: '' });
           if (out.indexOf(cur) < 0) out.push(cur);
@@ -1256,7 +1258,14 @@
         return openModal({ title: 'เครดิต Supplier ' + cr.length + ' ราย', icon: 'upload', color: state.dept.color, ok: 'บันทึกเครดิต', wide: true,
           body: '<p>ตรงกับผู้ขายที่มีอยู่ ' + m + ' ราย (ตั้งเครดิตตามไฟล์) · ผู้ขายใหม่ ' + (cr.length - m) + ' ราย (เพิ่มให้) — บิลที่โหลดเข้ามาของเจ้านั้นจะใส่เครดิตให้อัตโนมัติ</p><div class="apvimp">' + cr.map(function (v) { return '<div class="cprow"><b>' + esc(v.fileName) + '</b><span>เครดิต ' + v.creditDays + ' วัน</span><small>' + (v.matched ? '✓ ' + esc(v.name) : 'ผู้ขายใหม่ · ' + esc(cat(v.category).name)) + '</small></div>'; }).join('') + '</div>',
           submit: function () {
-            return call('apImportVendors', state.token, cr.map(function (v) { return { name: v.name, category: v.category, creditDays: v.creditDays, vatMode: 'exc' }; }), { credit: true }).then(function (r) { if (!r.ok) return r.error; closeModal(); toast('ตั้งเครดิตแล้ว · เพิ่มใหม่ ' + r.added + ' ราย · อัปเดต ' + r.filled + ' ราย'); load().then(P.vendorPage); });
+            // ชื่อในไฟล์อาจเขียนต่างจากชื่อในระบบหลายแบบ (เช่น "บริษัท เอ.ที.บี" / "บริษัท เอ.ที.บี บรรจุภัณฑ์ จำกัด") → ตั้งเครดิตให้ทุกชื่อที่ตรงกันแบบหลวม
+            var all = [], seenN = {};
+            cr.forEach(function (v) {
+              var ln = loose(v.fileName);
+              (P.data.vendors || []).forEach(function (x) { var k = loose(x.name); if (!seenN[x.name] && (k === ln || (ln.length >= 4 && k.length >= 4 && (k.indexOf(ln) >= 0 || ln.indexOf(k) >= 0)))) { seenN[x.name] = 1; all.push({ name: x.name, category: x.category, creditDays: v.creditDays, vatMode: x.vatMode || 'exc' }); } });
+              if (!seenN[v.name]) { seenN[v.name] = 1; all.push({ name: v.name, category: v.category, creditDays: v.creditDays, vatMode: 'exc' }); }
+            });
+            return call('apImportVendors', state.token, all, { credit: true }).then(function (r) { if (!r.ok) return r.error; closeModal(); toast('ตั้งเครดิตแล้ว · เพิ่มใหม่ ' + r.added + ' ราย · อัปเดต ' + r.filled + ' ราย'); load().then(P.vendorPage); });
           } });
       }
       var list = uniq([].concat.apply([], books.map(P.parseVendorBook)), function (x) { return x.name; });
