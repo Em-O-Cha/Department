@@ -749,73 +749,119 @@
       H.mon = r; monthlyForm();
     }).catch(onServerError);
   }
+  // หน้ากรอก (ปรับใหม่ 20/11/69 ตามที่ผู้ใช้บอกว่ากรอกแบบตารางไม่สะดวก): 1 การ์ด = 1 จุดติดตั้ง · แต่ละหัวข้อมีปุ่มผลชัด ๆ ให้แตะครั้งเดียว
+  // แถบความคืบหน้า + ปุ่มบันทึกติดล่างจอ · ผิดปกติแล้วต้องระบุรายละเอียด · เตือนก่อนเปลี่ยนเดือน / แบบฟอร์มถ้ายังไม่บันทึก
+  var M_OPTS = { P: 'ปกติ', X: 'ผิดปกติ', O: 'กำลังแก้ไข', '-': 'ไม่มี' };
+  function mItem(def, j) { return def.items[j].replace(/<br>/g, ' '); }
+  function mState(def, row) {
+    var n = def.items.length, done = 0, bad = 0;
+    for (var j = 0; j < n; j++) { var c = row.r[j] || ''; if (c) done++; if (c === 'X' || c === 'O') bad++; }
+    return { done: done, n: n, bad: bad, full: done === n, empty: !done };
+  }
   function monthlyForm() {
     var q = H.q, r = H.mon, form = q.mForm, def = SHEM[form], rec = r.records[form];
     var ed = H.mEdit && H.mEdit.form === form && H.mEdit.ym === r.ym ? H.mEdit : null;
     if (!ed) {
       var rows = rec ? rec.rows.map(function (x) { return { loc: x.loc, r: x.r.slice(), note: x.note || '' }; })
         : (r.locs[form] || []).map(function (l) { return { loc: l, r: [], note: '' }; });
-      if (!rows.length) for (var i = 0; i < 5; i++) rows.push({ loc: '', r: [], note: '' });
       ed = H.mEdit = { form: form, ym: r.ym, rows: rows, inspector: rec ? rec.inspector : inspectors()[0], inspDate: rec ? rec.inspDate : r.today,
-        approver: rec ? rec.approver : '', approveDate: rec ? rec.approveDate : '', tester: rec ? rec.tester : '', testDate: rec ? rec.testDate : (def.smoke ? r.today : ''), dirty: false };
+        approver: rec ? rec.approver : '', approveDate: rec ? rec.approveDate : '', tester: rec ? rec.tester : '', testDate: rec ? rec.testDate : (def.smoke ? r.today : ''), dirty: false, open: {} };
     }
+    var opts = def.withO ? ['P', 'X', 'O', '-'] : ['P', 'X', '-'];
+    var guard = function (fn) { if (!ed.dirty) return fn(); ask({ title: 'ยังไม่ได้บันทึก', text: 'ผลตรวจที่กรอกไว้ของ ' + def.name + ' จะหายถ้าออกจากหน้านี้', ok: 'ออกโดยไม่บันทึก', cancel: 'กลับไปบันทึก' }).then(function (yes) { if (yes) { ed.dirty = false; fn(); } }); };
     var chips = Object.keys(SHEM).map(function (k) {
       var x = r.records[k];
-      return '<button class="smf' + (k === form ? ' on' : '') + '" data-mf="' + k + '"><b>FM-SHE-' + k + '</b><span>' + esc(SHEM[k].name) + '</span><small class="' + (x ? (x.badCount ? 'bad' : 'ok') : '') + '">' + (x ? (x.badCount ? '⚠ ผิดปกติ ' + x.badCount + ' ช่อง' : '✓ ตรวจแล้ว') : 'ยังไม่ตรวจ') + '</small></button>';
+      return '<button class="smf' + (k === form ? ' on' : '') + '" data-mf="' + k + '" aria-pressed="' + (k === form) + '"><b>FM-SHE-' + k + '</b><span>' + esc(SHEM[k].name) + '</span><small class="' + (x ? (x.badCount ? 'bad' : 'ok') : '') + '">' + (x ? (x.badCount ? '⚠ ผิดปกติ ' + x.badCount + ' ข้อ' : '✓ ตรวจแล้ว') : 'ยังไม่ตรวจเดือนนี้') + '</small></button>';
     }).join('');
-    var nI = def.items.length;
-    var head = '<tr><th rowspan="2" class="c">' + def.no + '</th><th rowspan="2">' + esc(def.loc) + '</th><th colspan="' + nI + '">' + esc(def.group) + '</th>' + (def.sum ? '<th rowspan="2">' + def.sum + '</th>' : '') + '<th rowspan="2">' + def.note.replace('<br>', ' ') + '</th><th rowspan="2"></th></tr><tr>' + def.items.map(function (x) { return '<th class="smi">' + x + '</th>'; }).join('') + '</tr>';
-    var body = ed.rows.map(function (row, i) {
-      return '<tr><td class="c">' + (i + 1) + '</td><td><input class="sml" data-i="' + i + '" data-k="loc" value="' + esc(row.loc) + '" placeholder="เช่น อาคาร G1 ทางออกด้านหลัง"></td>'
-        + def.items.map(function (x, j) { var c = row.r[j] || ''; return '<td class="c"><button class="smc s' + (c || 'e') + '" data-i="' + i + '" data-j="' + j + '">' + (mSym(def, c) || '·') + '</button></td>'; }).join('')
-        + (def.sum ? '<td class="c smsum">' + mSum(def, row.r) + '</td>' : '')
-        + '<td><input class="sml" data-i="' + i + '" data-k="note" value="' + esc(row.note) + '"></td><td><button class="smx" data-del="' + i + '" title="ลบแถว">✕</button></td></tr>';
+    var cards = ed.rows.map(function (row, i) {
+      var st = mState(def, row), cls = st.bad ? ' bad' : st.full ? ' ok' : '';
+      var badge = st.bad ? '<span class="smbadge bad">ผิดปกติ ' + st.bad + '</span>' : st.full ? '<span class="smbadge ok">✓ ครบ</span>' : '<span class="smbadge">' + st.done + '/' + st.n + '</span>';
+      return '<section class="smcard' + cls + '" data-card="' + i + '"><div class="smch"><span class="smnum">' + (i + 1) + '</span>'
+        + '<input class="smloc" data-i="' + i + '" value="' + esc(row.loc) + '" placeholder="ชื่อจุดติดตั้ง" aria-label="จุดติดตั้งที่ ' + (i + 1) + '">' + badge
+        + '<button class="smicon" data-del="' + i + '" aria-label="ลบจุดนี้" title="ลบจุดนี้">' + icon('trash', 18) + '</button></div>'
+        + '<div class="smitems">' + def.items.map(function (x, j) {
+          var c = row.r[j] || '';
+          return '<div class="smrow"><div class="smlab">' + x + '</div><div class="smseg" role="radiogroup" aria-label="' + esc(mItem(def, j)) + '">' + opts.map(function (o) {
+            return '<button class="smo o' + (o === '-' ? 'N' : o) + (c === o ? ' on' : '') + '" role="radio" aria-checked="' + (c === o) + '" data-i="' + i + '" data-j="' + j + '" data-o="' + o + '"><i>' + (o === 'P' ? '✓' : o === 'X' ? '✕' : o === 'O' ? '⟳' : '–') + '</i>' + M_OPTS[o] + '</button>';
+          }).join('') + '</div></div>';
+        }).join('') + '</div>'
+        + '<div class="smfoot"><button class="smallok" data-allok="' + i + '">✓ ทุกข้อปกติ</button>'
+        + '<label class="smnote' + (st.bad && !String(row.note).trim() ? ' need' : '') + '"><span>' + (st.bad ? 'รายละเอียดสิ่งที่ผิดปกติ / การแก้ไข *' : 'หมายเหตุ (ถ้ามี)') + '</span><input data-note="' + i + '" value="' + esc(row.note) + '" placeholder="' + (st.bad ? 'เช่น หลอดไฟไม่ติด แจ้งช่างแล้ว' : '') + '"></label></div></section>';
     }).join('');
-    var people = inspectors();
+    var total = ed.rows.filter(function (x) { return String(x.loc).trim(); }).length;
+    var doneN = ed.rows.filter(function (x) { return String(x.loc).trim() && mState(def, x).full; }).length;
+    var badN = ed.rows.filter(function (x) { return mState(def, x).bad; }).length;
     var sign = (def.smoke ? F('mTester', 'ผู้ทดสอบ (เจ้าหน้าที่อาคารสถานที่)', ed.tester) + F('mTestDate', 'วันที่ทดสอบ', ed.testDate, 'date') : '')
       + F('mInsp', def.smoke ? 'ผู้ตรวจสอบ (จป.วิชาชีพ)' : 'ตรวจสอบโดย (จป.วิชาชีพ)', ed.inspector, 'text', ' list="mPeople"') + F('mInspDate', 'วันที่ตรวจสอบ', ed.inspDate, 'date')
       + F('mAppr', def.smoke ? 'ผู้ตรวจสอบ (ผู้จัดการ)' : 'อนุมัติโดย (ผู้จัดการ)', ed.approver) + F('mApprDate', 'วันที่อนุมัติ', ed.approveDate, 'date');
-    $('main').innerHTML = '<h3>ตรวจประจำเดือน</h3><p class="lead">แบบฟอร์มที่ตรวจเดือนละครั้ง · แตะช่องผลเพื่อสลับ ' + esc(def.ok) + ' ปกติ → X ผิดปกติ' + (def.withO ? ' → O กำลังแก้ไข' : '') + ' → - ไม่มี → ว่าง · บันทึกแล้วพิมพ์เป็นแบบฟอร์มได้</p>'
-      + '<div class="pbar"><label class="pchk">เดือน <input type="month" id="mYm" value="' + r.ym + '"></label><span class="muted">' + TH_MONTHS[+r.ym.slice(5, 7) - 1] + ' ' + (+r.ym.slice(0, 4) + 543) + '</span></div>'
+    $('main').innerHTML = '<h3>ตรวจประจำเดือน</h3><p class="lead">เลือกเดือนและแบบฟอร์ม แล้วเดินตรวจทีละจุด แตะผลของแต่ละข้อ · บันทึกแล้วพิมพ์เป็นแบบฟอร์มได้</p>'
+      + '<div class="pbar"><label class="pchk">เดือน <input type="month" id="mYm" value="' + r.ym + '"></label><b>' + TH_MONTHS[+r.ym.slice(5, 7) - 1] + ' ' + (+r.ym.slice(0, 4) + 543) + '</b></div>'
       + '<div class="smfs">' + chips + '</div>'
-      + '<div class="panel"><h4 style="margin-top:0">' + esc(def.title) + ' <small class="muted">' + esc(r.fm[form] || '') + '</small></h4>'
-      + '<div class="smwrap"><table class="smt"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>'
-      + '<div class="pbar"><button class="btn btn-sm btn-line" id="mAdd">' + icon('plus', 16) + ' เพิ่มจุด</button><button class="btn btn-sm btn-line" id="mAllOk">ช่องที่ว่าง = ' + esc(def.ok) + ' ปกติ</button>'
-      + (rec ? '<button class="btn btn-sm btn-line" id="mDel" style="margin-left:auto;color:#b91c1c">' + icon('trash', 16) + ' ลบผลเดือนนี้</button>' : '') + '</div>'
-      + '<div class="pform">' + sign + '</div>' + datalist('mPeople', people)
-      + '<div class="pbar"><button class="btn btn-primary" id="mSave">' + icon('check', 16) + ' บันทึกผลตรวจ</button><button class="btn btn-line" id="mPrint">' + icon('print', 16) + ' พิมพ์แบบฟอร์ม / PDF</button>'
-      + (rec ? '<span class="muted">บันทึกล่าสุด ' + esc(String(rec.updatedAt).slice(0, 16)) + '</span>' : '') + '</div></div>';
+      + '<div class="smhead"><div><b>' + esc(def.title) + '</b><small>' + esc(r.fm[form] || '') + '</small></div>'
+      + (rec ? '<span class="muted">บันทึกล่าสุด ' + esc(String(rec.updatedAt).slice(0, 16)) + '</span>' : '<span class="muted">ยังไม่ได้บันทึกเดือนนี้</span>') + '</div>'
+      + (ed.rows.length ? '' : '<div class="panel smempty"><b>ยังไม่มีจุดติดตั้ง</b><span>เพิ่มจุดแรกด้านล่าง เช่น "อาคาร G1 ประตูหน้า" — ระบบจะจำรายชื่อจุดไว้ใช้เดือนถัดไป</span></div>')
+      + '<div class="smcards">' + cards + '</div>'
+      + '<div class="smadd"><input id="mNewLoc" placeholder="ชื่อจุดติดตั้งใหม่ เช่น อาคาร G2 ทางออกหลัง" aria-label="ชื่อจุดติดตั้งใหม่"><button class="btn btn-line" id="mAdd">' + icon('plus', 16) + ' เพิ่มจุด</button></div>'
+      + '<details class="panel smsign"' + (ed.inspector && ed.approver ? '' : ' open') + '><summary><b>ผู้ลงนาม</b> <span class="muted">' + esc([ed.tester, ed.inspector, ed.approver].filter(String).join(' · ') || 'ยังไม่ระบุ') + '</span></summary><div class="pform">' + sign + '</div>' + datalist('mPeople', inspectors()) + '</details>'
+      + (rec ? '<div class="pbar"><button class="btn btn-sm btn-line smdel" id="mDel">' + icon('trash', 16) + ' ลบผลตรวจเดือนนี้</button></div>' : '')
+      + '<div class="smbar"><div class="smprog"><div><b>' + doneN + '/' + total + '</b> จุดตรวจครบ' + (badN ? ' · <span class="bad">ผิดปกติ ' + badN + ' จุด</span>' : '') + (ed.dirty ? ' · <span class="dirty">ยังไม่บันทึก</span>' : '') + '</div><i><s style="width:' + (total ? Math.round(doneN / total * 100) : 0) + '%"></s></i></div>'
+      + '<button class="btn btn-line" id="mPrint">' + icon('print', 16) + ' พิมพ์</button><button class="btn btn-primary" id="mSave">' + icon('check', 16) + ' บันทึก</button></div>';
     var keep = function () { ['tester:mTester', 'testDate:mTestDate', 'inspector:mInsp', 'inspDate:mInspDate', 'approver:mAppr', 'approveDate:mApprDate'].forEach(function (p) { var a = p.split(':'); if ($(a[1])) ed[a[0]] = v(a[1]); }); };
-    $('mYm').addEventListener('change', function () { if (!this.value) return; q.mYm = this.value; H.mEdit = null; monthly(); });
-    on('[data-mf]', 'click', function (el) { keep(); q.mForm = el.getAttribute('data-mf'); monthlyForm(); });
-    on('.sml', 'input', function (el) { ed.rows[+el.getAttribute('data-i')][el.getAttribute('data-k')] = el.value; ed.dirty = true; });
-    on('.smc', 'click', function (el) {
-      var row = ed.rows[+el.getAttribute('data-i')], j = +el.getAttribute('data-j'), seq = def.withO ? ['', 'P', 'X', 'O', '-'] : ['', 'P', 'X', '-'];
-      var c = seq[(seq.indexOf(row.r[j] || '') + 1) % seq.length]; row.r[j] = c; ed.dirty = true;
-      el.className = 'smc s' + (c || 'e'); el.textContent = mSym(def, c) || '·';
-      var sm = el.closest('tr').querySelector('.smsum'); if (sm) sm.textContent = mSum(def, row.r);
+    var redraw = function (focusSel) { keep(); var y = window.scrollY; monthlyForm(); window.scrollTo(0, y); if (focusSel) { var el = $('main').querySelector(focusSel); if (el) el.focus(); } };
+    $('mYm').addEventListener('change', function () { var val = this.value; if (!val) return; guard(function () { q.mYm = val; H.mEdit = null; monthly(); }); this.value = r.ym; });
+    on('[data-mf]', 'click', function (el) { var k = el.getAttribute('data-mf'); if (k === form) return; keep(); guard(function () { H.mEdit = null; q.mForm = k; monthlyForm(); }); });
+    on('.smloc', 'input', function (el) { ed.rows[+el.getAttribute('data-i')].loc = el.value; ed.dirty = true; });
+    on('[data-note]', 'input', function (el) { ed.rows[+el.getAttribute('data-note')].note = el.value; ed.dirty = true; el.closest('.smnote').classList.toggle('need', mState(def, ed.rows[+el.getAttribute('data-note')]).bad > 0 && !el.value.trim()); });
+    on('.smo', 'click', function (el) {
+      var i = +el.getAttribute('data-i'), j = +el.getAttribute('data-j'), o = el.getAttribute('data-o'), row = ed.rows[i];
+      row.r[j] = row.r[j] === o ? '' : o; ed.dirty = true;   // แตะซ้ำ = ล้างค่า
+      redraw(row.r[j] === 'X' || row.r[j] === 'O' ? '[data-note="' + i + '"]' : null);
     });
-    on('[data-del]', 'click', function (el) { keep(); ed.rows.splice(+el.getAttribute('data-del'), 1); ed.dirty = true; monthlyForm(); });
-    $('mAdd').addEventListener('click', function () { keep(); ed.rows.push({ loc: '', r: [], note: '' }); monthlyForm(); var x = $('main').querySelectorAll('input[data-k=loc]'); x[x.length - 1].focus(); });
-    $('mAllOk').addEventListener('click', function () { keep(); ed.rows.forEach(function (row) { if (!String(row.loc).trim()) return; for (var j = 0; j < nI; j++) if (!row.r[j]) row.r[j] = 'P'; }); ed.dirty = true; monthlyForm(); });
+    on('[data-allok]', 'click', function (el) { var row = ed.rows[+el.getAttribute('data-allok')]; for (var j = 0; j < def.items.length; j++) if (!row.r[j]) row.r[j] = 'P'; ed.dirty = true; redraw(); });
+    on('[data-del]', 'click', function (el) {
+      var i = +el.getAttribute('data-del'), row = ed.rows[i];
+      var go2 = function () { keep(); ed.rows.splice(i, 1); ed.dirty = true; redraw(); };
+      if (!row.loc && mState(def, row).empty) return go2();
+      ask({ title: 'ลบจุด "' + (row.loc || 'ไม่มีชื่อ') + '"?', text: 'ผลตรวจของจุดนี้ในเดือนนี้จะหายไป (เดือนถัดไปจะไม่มีจุดนี้ในรายการ)', ok: 'ลบจุดนี้', cancel: 'ไม่ลบ', tone: 'danger' }).then(function (yes) { if (yes) go2(); });
+    });
+    var addLoc = function () {
+      var name = v('mNewLoc'); if (!name) { $('mNewLoc').focus(); return toast('พิมพ์ชื่อจุดติดตั้งก่อน'); }
+      if (ed.rows.some(function (x) { return String(x.loc).trim() === name; })) return toast('มีจุดชื่อนี้แล้ว');
+      keep(); ed.rows.push({ loc: name, r: [], note: '' }); ed.dirty = true; redraw('#mNewLoc');
+      var cs = $('main').querySelectorAll('.smcard'); if (cs.length) cs[cs.length - 1].scrollIntoView({ block: 'center' });
+    };
+    $('mAdd').addEventListener('click', addLoc);
+    $('mNewLoc').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addLoc(); } });
     if ($('mDel')) $('mDel').addEventListener('click', function () {
-      ask({ title: 'ลบผลตรวจเดือนนี้?', text: 'FM-SHE-' + form + ' ' + TH_MONTHS[+r.ym.slice(5, 7) - 1] + ' ' + (+r.ym.slice(0, 4) + 543), ok: 'ลบ', cancel: 'ไม่ลบ', tone: 'danger' }).then(function (yes) {
+      ask({ title: 'ลบผลตรวจเดือนนี้?', text: 'FM-SHE-' + form + ' ' + TH_MONTHS[+r.ym.slice(5, 7) - 1] + ' ' + (+r.ym.slice(0, 4) + 543) + ' (รายชื่อจุดยังอยู่)', ok: 'ลบ', cancel: 'ไม่ลบ', tone: 'danger' }).then(function (yes) {
         if (yes) call('sheDeleteMonthly', state.token, form, r.ym).then(function (x) { if (!x.ok) return toast(x.error); H.mEdit = null; toast('ลบแล้ว'); monthly(); }).catch(onServerError);
       });
     });
     var save = function (then) {
       keep();
-      var b = $('mSave'); b.disabled = true;
-      return call('sheSaveMonthly', state.token, { form: form, ym: r.ym, rows: ed.rows, inspector: ed.inspector, inspDate: ed.inspDate, approver: ed.approver, approveDate: ed.approveDate, tester: ed.tester, testDate: ed.testDate })
-        .then(function (x) {
-          b.disabled = false; if (!x.ok) return toast(x.error);
-          r.records[form] = x.record; H.mEdit = null; toast('บันทึกผลตรวจแล้ว'); if (then) then(); else monthlyForm();
-        }).catch(function (e) { b.disabled = false; onServerError(e); });
+      var named = ed.rows.filter(function (x) { return String(x.loc).trim(); });
+      if (!named.length) { $('mNewLoc').focus(); return toast('เพิ่มจุดติดตั้งอย่างน้อย 1 จุด'); }
+      var noName = ed.rows.filter(function (x) { return !String(x.loc).trim() && !mState(def, x).empty; });
+      if (noName.length) { toast('มีจุดที่กรอกผลแล้วแต่ยังไม่มีชื่อ — ใส่ชื่อจุดก่อน'); var e1 = $('main').querySelector('.smloc[value=""]'); if (e1) e1.focus(); return; }
+      var needNote = ed.rows.map(function (x, i) { return i; }).filter(function (i) { return mState(def, ed.rows[i]).bad && !String(ed.rows[i].note).trim(); });
+      if (needNote.length) { toast('ระบุรายละเอียดของจุดที่ผิดปกติก่อนบันทึก'); var e2 = $('main').querySelector('[data-note="' + needNote[0] + '"]'); if (e2) { e2.scrollIntoView({ block: 'center' }); e2.focus(); } return; }
+      if (!ed.inspector) { $('main').querySelector('.smsign').open = true; $('mInsp').focus(); return toast('ใส่ชื่อผู้ตรวจสอบ'); }
+      var part = named.filter(function (x) { return !mState(def, x).full; }).length;
+      var doSave = function () {
+        var b = $('mSave'); b.disabled = true; b.innerHTML = '<span class="spinner"></span> กำลังบันทึก';
+        return call('sheSaveMonthly', state.token, { form: form, ym: r.ym, rows: ed.rows.filter(function (x) { return String(x.loc).trim() || !mState(def, x).empty; }), inspector: ed.inspector, inspDate: ed.inspDate, approver: ed.approver, approveDate: ed.approveDate, tester: ed.tester, testDate: ed.testDate })
+          .then(function (x) {
+            if (!x.ok) { b.disabled = false; b.innerHTML = icon('check', 16) + ' บันทึก'; return toast(x.error); }
+            r.records[form] = x.record; r.locs[form] = named.map(function (y) { return y.loc; }); H.mEdit = null; toast('✓ บันทึกผลตรวจ ' + def.name + ' แล้ว'); if (then) then(); else monthlyForm();
+          }).catch(function (e) { b.disabled = false; b.innerHTML = icon('check', 16) + ' บันทึก'; onServerError(e); });
+      };
+      if (part) return ask({ title: 'ยังตรวจไม่ครบ ' + part + ' จุด', text: 'บันทึกไว้ก่อนแล้วค่อยกลับมากรอกต่อได้', ok: 'บันทึกไว้ก่อน', cancel: 'กลับไปกรอก', tone: 'info' }).then(function (yes) { if (yes) doSave(); });
+      doSave();
     };
     $('mSave').addEventListener('click', function () { save(); });
     $('mPrint').addEventListener('click', function () {
       var goPrint = function () { q.rep = 'm' + form; q.rYm = r.ym; go('s_rep'); };
-      if (ed.dirty || !rec) save(goPrint); else goPrint();
+      if (ed.dirty) save(goPrint); else goPrint();
     });
   }
   // แบบฟอร์มสำหรับพิมพ์ (หน้าตาตามไฟล์ Excel ของฝ่าย + หัวกระดาษแบบรายงานอื่นของระบบ)
@@ -957,8 +1003,17 @@
     '.s6p{color:#15803d;font-weight:700}.s6o{color:#dc2626;font-weight:700}.s6n{color:#64748b}.sbottom td{height:34px;vertical-align:top}.snote{font-size:10.5px}',
     '@media (max-width:700px){.sbtns{grid-template-columns:1fr 1fr 1fr}.sb{font-size:15px;padding:14px 4px}.sfimg img,.snoimg{width:72px;height:72px}.saitem{grid-template-columns:auto 1fr auto auto}.saitem input[data-k="detail"]{grid-column:2/-1}.shead{grid-template-columns:auto 1fr}.stitle,.sfm{grid-column:1/-1}}',
     '.smfs{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin:0 0 14px}.smf{border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:9px 11px;text-align:left;cursor:pointer;font:inherit;display:flex;flex-direction:column;gap:2px}.smf b{font-size:12.5px;color:var(--muted)}.smf span{font-weight:700}.smf small{font-size:12px;color:var(--muted)}.smf small.ok{color:#15803d;font-weight:700}.smf small.bad{color:#b91c1c;font-weight:700}.smf.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 10%,white)}',
-    '.smwrap{overflow-x:auto;margin:0 -4px 10px;padding:0 4px}.smt{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}.smt th{background:#f1f5f9;border:1px solid var(--line);padding:6px;font-size:12.5px}.smt th.smi{min-width:66px;max-width:140px;font-weight:600}.smt td{border:1px solid var(--line);padding:3px}.smt .c{text-align:center}',
-    '.sml{width:100%;border:0;padding:8px 6px;font:inherit;background:transparent;min-width:140px}.smc{width:100%;min-width:52px;height:40px;border:0;border-radius:8px;font:inherit;font-size:20px;font-weight:800;cursor:pointer;background:#f8fafc;color:#cbd5e1}.smc.sP{background:#dcfce7;color:#15803d}.smc.sX{background:#fee2e2;color:#b91c1c}.smc.sO{background:#ffedd5;color:#c2410c}.smc.s-{background:#f1f5f9;color:#475569}.smx{border:0;background:none;color:#dc2626;font-size:16px;cursor:pointer;padding:6px}.smsum{font-weight:700;font-size:13px}',
+    '.smhead{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap;margin:4px 0 10px}.smhead b{display:block;font-size:17px}.smhead small{color:var(--muted)}.smempty{display:flex;flex-direction:column;gap:4px}.smempty span{color:var(--muted)}',
+    '.smcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(420px,100%),1fr));gap:12px}.smcard{min-width:0}.smcard{background:#fff;border:1.5px solid var(--line);border-left:6px solid #cbd5e1;border-radius:14px;padding:12px;box-shadow:var(--shadow)}.smcard.ok{border-left-color:#16a34a}.smcard.bad{border-left-color:#dc2626;background:#fffafa}',
+    '.smch{display:flex;align-items:center;gap:8px;margin-bottom:8px}.smnum{flex:none;width:28px;height:28px;border-radius:50%;background:#f1f5f9;display:grid;place-items:center;font-weight:700;font-size:13px}.smloc{flex:1;min-width:0;border:1.5px solid transparent;border-radius:8px;padding:8px;font:inherit;font-weight:700;font-size:16px;background:transparent}.smloc:hover,.smloc:focus{border-color:var(--line);background:#fff;outline:none}.smloc:placeholder-shown{border-color:#fca5a5}',
+    '.smbadge{flex:none;font-size:12.5px;font-weight:700;padding:3px 10px;border-radius:999px;background:#f1f5f9;color:#475569}.smbadge.ok{background:#dcfce7;color:#15803d}.smbadge.bad{background:#fee2e2;color:#b91c1c}.smicon{flex:none;width:40px;height:40px;border:0;border-radius:10px;background:none;color:#94a3b8;cursor:pointer}.smicon:hover{background:#fef2f2;color:#dc2626}',
+    '.smitems{display:flex;flex-direction:column;gap:8px}.smrow{display:flex;flex-direction:column;gap:5px;padding:8px 0;border-top:1px dashed var(--line)}.smlab{font-size:14px;font-weight:600;color:#334155}.smlab small{font-weight:400;color:var(--muted)}',
+    '.smseg{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:6px}.smo{min-height:44px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font:inherit;font-size:14px;font-weight:600;color:#475569;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;padding:4px}.smo i{font-style:normal;font-weight:800}',
+    '.smo.oP.on{background:#16a34a;border-color:#16a34a;color:#fff}.smo.oX.on{background:#dc2626;border-color:#dc2626;color:#fff}.smo.oO.on{background:#ea580c;border-color:#ea580c;color:#fff}.smo.oN.on{background:#64748b;border-color:#64748b;color:#fff}.smo:focus-visible{outline:3px solid var(--c);outline-offset:1px}',
+    '.smfoot{display:flex;flex-direction:column;gap:8px;margin-top:10px}.smallok{align-self:flex-start;min-height:40px;border:1.5px solid #bbf7d0;background:#f0fdf4;color:#15803d;border-radius:10px;padding:6px 14px;font:inherit;font-weight:700;cursor:pointer}.smnote span{display:block;font-size:13px;color:var(--muted);margin-bottom:3px}.smnote input{width:100%;padding:10px;border:1.5px solid var(--line);border-radius:10px;font:inherit}.smnote.need span{color:#b91c1c;font-weight:700}.smnote.need input{border-color:#dc2626;background:#fef2f2}',
+    '.smadd{display:flex;gap:8px;margin:14px 0}.smadd input{flex:1;min-width:0;padding:11px 12px;border:1.5px dashed #94a3b8;border-radius:12px;font:inherit}.smadd .btn{width:auto}.smsign{margin-bottom:12px}.smsign summary{cursor:pointer;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;padding:2px 0}.smsign[open] summary{margin-bottom:10px}.smdel{color:#b91c1c;width:auto}',
+    '.smbar{position:sticky;bottom:0;z-index:5;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-top:12px;box-shadow:0 -4px 16px rgba(15,23,42,.10)}.smbar .btn{width:auto}.smprog{flex:1;min-width:0;font-size:14px}.smprog .bad{color:#b91c1c;font-weight:700}.smprog .dirty{color:#c2410c;font-weight:700}.smprog i{display:block;height:6px;background:#e2e8f0;border-radius:99px;margin-top:5px;overflow:hidden}.smprog s{display:block;height:100%;background:#16a34a;text-decoration:none}',
+    '@media (max-width:700px){.smcards{grid-template-columns:minmax(0,1fr)}.smo{font-size:13px;gap:3px}.smbar{margin:12px -4px 0;border-radius:12px}.smbar .btn{padding:10px 12px}}',
     '.smrep .smmonth{text-align:center;margin:8px 0;font-size:14px}.stm{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}.stm th{border:1px solid #0f172a;padding:4px;text-align:center;font-weight:700;background:#fff;font-size:12px}.stm th small{font-weight:400}.stm td{border:1px solid #0f172a;padding:3px 5px;height:22px;word-wrap:break-word}.stm .c{text-align:center}',
     '.stm .smno{width:6%}.stm .smloc{width:30%}.stm .smnote{width:16%}.stm .smsumh{width:14%}.stm.land .smloc{width:22%}.stm.land .smnote{width:20%}.stm th.smi.long{font-size:10.5px;font-weight:600}.stm .smr{font-size:15px;font-weight:700}.stm .smr.sX,.stm .smr.sO{color:#b91c1c}',
     '.smleg{margin-top:8px;font-size:12.5px}.smsigns{display:flex;justify-content:space-around;gap:16px;margin-top:20px;font-size:12.5px;break-inside:avoid}.smsigns.s3{flex-direction:column;align-items:flex-start;gap:10px;padding-left:6%}.smsigns.s3 .smsg{display:flex;gap:14px;align-items:baseline;text-align:left}.smsg{text-align:center;line-height:2}.smsg span{display:inline-block;min-width:170px;border-bottom:1px dotted #475569;text-align:center;line-height:1.5}.smrole{font-weight:600}',
