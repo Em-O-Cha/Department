@@ -13,9 +13,9 @@ function accSources_(dept) {
   var pn = {}, pc = {};
   map.products.forEach(function (p) { pn[p.key] = (p.l1 || '') + (p.l2 ? ' ' + p.l2 : ''); pc[p.key] = p.color || ''; });
   var l711 = purRead_(ss, 'acc_711').map(function (l) {
-    return { date: String(l.poDate || '').slice(0, 10), name: pn[l.product] || l.itemName || l.product || '-', color: pc[l.product] || '', qty: Number(l.cases) || 0, amt: Number(l.amount) || 0, doc: String(l.poNo || '') };
+    return { date: String(l.poDate || '').slice(0, 10), ddate: String(l.deliveryDate || '').slice(0, 10), name: pn[l.product] || l.itemName || l.product || '-', color: pc[l.product] || '', qty: Number(l.cases) || 0, amt: Number(l.amount) || 0, doc: String(l.poNo || '') };
   });
-  out.push({ meta: { key: 'cpall', name: 'CP ALL (7-Eleven)', unit: 'ลัง', currency: 'บาท', basis: 'ตามวันที่สั่ง', note: 'ยอดเงินไม่รวม VAT', order: map.products.map(function (p) { return pn[p.key]; }) }, rows: l711, capToday: false });
+  out.push({ meta: { key: 'cpall', name: 'CP ALL (7-Eleven)', unit: 'ลัง', currency: 'บาท', basis: 'ตามวันที่สั่ง', monthBasis: 'ตามกำหนดวันส่ง', monthKey: 'ddate', note: 'ยอดเงินไม่รวม VAT', order: map.products.map(function (p) { return pn[p.key]; }) }, rows: l711, capToday: false });
   try {
     cpRegister_();
     var cs = cpBook_(ss);
@@ -48,6 +48,7 @@ function accCompareData_(dept) {
 }
 // รายงานสรุปรายเดือน ทุกบริษัท (ผู้ใช้ขอ 19/11/69): ทุกเดือนที่มีข้อมูล · ต่อบริษัท: จำนวน / ยอดเงิน / จำนวนเอกสาร ต่อเดือน + แยกสินค้า
 // CP Ram นับตามวันส่ง (รวมวันส่งที่กำหนดไว้ในอนาคต → หน้าเว็บแสดงว่าเป็นยอดตามกำหนดส่ง)
+// CP ALL ในรายงานนี้นับตามกำหนดวันส่ง (ผู้ใช้ขอ 20/11/69) — หน้าเปรียบเทียบยังนับตามวันที่สั่ง
 function accMonthly(token) { return accMonthlyData_(requireAcc_(token)); }
 function accMonthlyData_(dept) {
   var today = purToday_();
@@ -55,9 +56,11 @@ function accMonthlyData_(dept) {
     var m = s.meta;
     if (s.error) return { key: m.key, name: m.name, error: s.error };
     var months = {}, prods = {}, order = [];
+    var mk = m.monthKey || 'date';
     s.rows.forEach(function (r) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date)) return;
-      var ym = r.date.slice(0, 7), x = months[ym] = months[ym] || { qty: 0, amt: 0, docs: {} };
+      var d = r[mk] || '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+      var ym = d.slice(0, 7), x = months[ym] = months[ym] || { qty: 0, amt: 0, docs: {} };
       x.qty += r.qty; x.amt += r.amt; if (r.doc) x.docs[r.doc] = 1;
       var p = prods[r.name];
       if (!p) { p = prods[r.name] = { name: r.name, color: r.color, m: {} }; order.push(r.name); }
@@ -68,7 +71,7 @@ function accMonthlyData_(dept) {
     var rank = m.order || [];
     var products = order.map(function (k) { var p = prods[k]; Object.keys(p.m).forEach(function (ym) { p.m[ym] = [r2(p.m[ym][0]), r2(p.m[ym][1])]; }); return p; })
       .sort(function (a, b) { var ia = rank.indexOf(a.name), ib = rank.indexOf(b.name); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.name.localeCompare(b.name); });
-    return { key: m.key, name: m.name, unit: m.unit, currency: m.currency, basis: m.basis, note: m.note, export: !!m.export, future: !!s.capToday, months: mo, products: products };
+    return { key: m.key, name: m.name, unit: m.unit, currency: m.currency, basis: m.monthBasis || m.basis, note: m.note, export: !!m.export, future: !!s.capToday || mk === 'ddate', months: mo, products: products };
   }) };
 }
 function accCmpMonthBefore_(ym) { var y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1; if (!m) { y--; m = 12; } return y + '-' + ('0' + m).slice(-2); }
