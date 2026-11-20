@@ -277,7 +277,7 @@ function apImportBills(token, bills) {
 function apCleanVendor_(v) {
   v = v || {};
   return { id: accClean_(v.id, 40), name: accClean_(v.name, 120), taxId: String(v.taxId || '').replace(/\D/g, '').slice(0, 13), category: apCat_(v.category) || 'raw',
-    bank: accClean_(v.bank, 150), creditDays: Math.max(0, Math.min(365, Math.round(Number(purNum_(v.creditDays)) || 0))), vatMode: AP_VAT_[v.vatMode] ? v.vatMode : 'exc',
+    bank: accClean_(v.bank, 150), creditDays: v.creditDays === '' || v.creditDays == null ? '' : Math.max(0, Math.min(365, Math.round(Number(purNum_(v.creditDays)) || 0))), vatMode: AP_VAT_[v.vatMode] ? v.vatMode : 'exc',
     pct: Math.max(0, Math.min(100, Number(purNum_(v.pct)) || 0)), keywords: accClean_(v.keywords, 200), note: accClean_(v.note, 200), sort: Number(v.sort) || '' };
 }
 function apSaveVendor(token, v) {
@@ -320,6 +320,8 @@ function apImportVendors(token, list, opts) {   // opts.credit = ตั้งเ
         var ch = false;
         ['bank', 'creditDays', 'pct', 'taxId'].forEach(function (k) { if ((old[k] === '' || old[k] == null) && x[k]) { old[k] = k === 'taxId' ? "'" + x[k] : x[k]; ch = true; } });
         if (opts && opts.credit && x.creditDays !== '' && Number(old.creditDays) !== Number(x.creditDays)) { old.creditDays = x.creditDays; ch = true; }
+        // ไฟล์ Supplier มีเลขผู้เสียภาษี (ผู้ใช้ขอ 20/11/69) → ใช้ตามไฟล์ (13 หลัก) ทับของเดิม
+        if (opts && opts.credit && x.taxId.length === 13 && apTxt_(old.taxId) !== x.taxId) { old.taxId = x.taxId; ch = true; }
         if (ch) { old.updatedAt = now; if (old.taxId) old.taxId = "'" + apTxt_(old.taxId); purWrite_(ss, 'ap_vendors', old); filled++; }
         return;
       }

@@ -1235,13 +1235,17 @@
   P.parseCreditBook = function (wb) {
     var out = [];
     wb.SheetNames.forEach(function (sn) {
-      var rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: '' }), hc = -1, cc = -1;
+      var rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: '', raw: false }), hc = -1, cc = -1, tc = -1;
       rows.forEach(function (r) {
-        if (hc < 0) { r.forEach(function (v, i) { var t = String(v).trim(); if (/^supp?l?ier$|suppier|ผู้ขาย|ชื่อบริษัท/i.test(t)) hc = i; if (/เครดิต/.test(t)) cc = i; }); if (hc < 0 || cc < 0) hc = cc = -1; return; }
-        var name = String(r[hc] || '').replace(/\s+/g, ' ').trim(), cr = Number(String(r[cc]).replace(/[^\d.]/g, ''));
-        if (!name || !isFinite(cr) || String(r[cc]) === '') return;
-        var v = vendorOf(name);
-        out.push({ name: v ? v.name : name, fileName: name, matched: !!v, creditDays: Math.round(cr), category: v ? v.category : /วัตถุดิบ/.test(sn) ? 'raw' : 'pack' });
+        // หัวตาราง: ชื่อผู้ขาย + เครดิต และ/หรือ เลขผู้เสียภาษี (ผู้ใช้ขอเก็บเลขผู้เสียภาษีด้วย 20/11/69)
+        if (hc < 0) { r.forEach(function (v, i) { var t = String(v).trim(); if (/^supp?l?ier$|suppier|ผู้ขาย|ชื่อบริษัท/i.test(t)) hc = i; else if (/เครดิต/.test(t)) cc = i; else if (/ภาษี|tax/i.test(t)) tc = i; }); if (hc < 0 || (cc < 0 && tc < 0)) hc = cc = tc = -1; return; }
+        var name = String(r[hc] || '').replace(/\s+/g, ' ').trim(), rawC = cc < 0 ? '' : String(r[cc]).trim(), cr = Number(rawC.replace(/[^\d.]/g, ''));
+        var tax = tc < 0 ? '' : String(r[tc]).replace(/[๐-๙]/g, function (c) { return String(c.charCodeAt(0) - 0x0E50); }).replace(/\D/g, '');
+        if (tax.length !== 13) tax = '';
+        var hasC = rawC !== '' && /\d/.test(rawC) && isFinite(cr);
+        if (!name || /^supp?l?ier$|suppier|ผู้ขาย|ชื่อบริษัท|ลำดับ/i.test(name) || (!hasC && !tax)) return;
+        var v = (tax && (P.data.vendors || []).filter(function (x) { return String(x.taxId || '').replace(/\D/g, '') === tax; })[0]) || vendorOf(name);
+        out.push({ name: v ? v.name : name, fileName: name, matched: !!v, creditDays: hasC ? Math.round(cr) : '', taxId: tax, category: v ? v.category : /วัตถุดิบ/.test(sn) ? 'raw' : 'pack' });
       });
     });
     return out;
@@ -1255,17 +1259,18 @@
       var cr = uniq([].concat.apply([], books.map(P.parseCreditBook)), function (x) { return x.name; });
       if (cr.length) {
         var m = cr.filter(function (x) { return x.matched; }).length;
-        return openModal({ title: 'เครดิต Supplier ' + cr.length + ' ราย', icon: 'upload', color: state.dept.color, ok: 'บันทึกเครดิต', wide: true,
-          body: '<p>ตรงกับผู้ขายที่มีอยู่ ' + m + ' ราย (ตั้งเครดิตตามไฟล์) · ผู้ขายใหม่ ' + (cr.length - m) + ' ราย (เพิ่มให้) — บิลที่โหลดเข้ามาของเจ้านั้นจะใส่เครดิตให้อัตโนมัติ</p><div class="apvimp">' + cr.map(function (v) { return '<div class="cprow"><b>' + esc(v.fileName) + '</b><span>เครดิต ' + v.creditDays + ' วัน</span><small>' + (v.matched ? '✓ ' + esc(v.name) : 'ผู้ขายใหม่ · ' + esc(cat(v.category).name)) + '</small></div>'; }).join('') + '</div>',
+        var nTax = cr.filter(function (x) { return x.taxId; }).length;
+        return openModal({ title: 'ข้อมูล Supplier ' + cr.length + ' ราย', icon: 'upload', color: state.dept.color, ok: 'บันทึกเครดิต / เลขผู้เสียภาษี', wide: true,
+          body: '<p>ตรงกับผู้ขายที่มีอยู่ ' + m + ' ราย (ตั้งตามไฟล์) · ผู้ขายใหม่ ' + (cr.length - m) + ' ราย (เพิ่มให้)' + (nTax ? ' · มีเลขผู้เสียภาษี ' + nTax + ' ราย' : ' · <span class="apwarn">ไฟล์นี้ไม่มีคอลัมน์เลขผู้เสียภาษี</span>') + ' — บิลที่โหลดเข้ามาของเจ้านั้นจะใส่เครดิตและจับชื่อจากเลขผู้เสียภาษีให้อัตโนมัติ</p><div class="apvimp">' + cr.map(function (v) { return '<div class="cprow"><b>' + esc(v.fileName) + '</b><span>' + (v.creditDays !== '' ? 'เครดิต ' + v.creditDays + ' วัน' : 'ไม่มีเครดิตในไฟล์') + (v.taxId ? ' · เลขผู้เสียภาษี ' + esc(v.taxId) : '') + '</span><small>' + (v.matched ? '✓ ' + esc(v.name) : 'ผู้ขายใหม่ · ' + esc(cat(v.category).name)) + '</small></div>'; }).join('') + '</div>',
           submit: function () {
             // ชื่อในไฟล์อาจเขียนต่างจากชื่อในระบบหลายแบบ (เช่น "บริษัท เอ.ที.บี" / "บริษัท เอ.ที.บี บรรจุภัณฑ์ จำกัด") → ตั้งเครดิตให้ทุกชื่อที่ตรงกันแบบหลวม
             var all = [], seenN = {};
             cr.forEach(function (v) {
               var ln = loose(v.fileName);
-              (P.data.vendors || []).forEach(function (x) { var k = loose(x.name); if (!seenN[x.name] && (k === ln || (ln.length >= 4 && k.length >= 4 && (k.indexOf(ln) >= 0 || ln.indexOf(k) >= 0)))) { seenN[x.name] = 1; all.push({ name: x.name, category: x.category, creditDays: v.creditDays, vatMode: x.vatMode || 'exc' }); } });
-              if (!seenN[v.name]) { seenN[v.name] = 1; all.push({ name: v.name, category: v.category, creditDays: v.creditDays, vatMode: 'exc' }); }
+              (P.data.vendors || []).forEach(function (x) { var k = loose(x.name); if (!seenN[x.name] && (k === ln || (ln.length >= 4 && k.length >= 4 && (k.indexOf(ln) >= 0 || ln.indexOf(k) >= 0)))) { seenN[x.name] = 1; all.push({ name: x.name, category: x.category, creditDays: v.creditDays, taxId: v.taxId, vatMode: x.vatMode || 'exc' }); } });
+              if (!seenN[v.name]) { seenN[v.name] = 1; all.push({ name: v.name, category: v.category, creditDays: v.creditDays, taxId: v.taxId, vatMode: 'exc' }); }
             });
-            return call('apImportVendors', state.token, all, { credit: true }).then(function (r) { if (!r.ok) return r.error; closeModal(); toast('ตั้งเครดิตแล้ว · เพิ่มใหม่ ' + r.added + ' ราย · อัปเดต ' + r.filled + ' ราย'); load().then(P.vendorPage); });
+            return call('apImportVendors', state.token, all, { credit: true }).then(function (r) { if (!r.ok) return r.error; closeModal(); toast('บันทึกแล้ว · เพิ่มใหม่ ' + r.added + ' ราย · อัปเดต ' + r.filled + ' ราย'); load().then(P.vendorPage); });
           } });
       }
       var list = uniq([].concat.apply([], books.map(P.parseVendorBook)), function (x) { return x.name; });
