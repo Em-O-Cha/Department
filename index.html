@@ -222,6 +222,51 @@
   .spinner { width: 18px; height: 18px; border: 2.5px solid rgba(255, 255, 255, .4); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+
+  /* ---------- หน้า Dashboard ทุกฝ่าย: การ์ดแบบใหม่ (ผู้ใช้ขอ 21/11/69 ตามภาพตัวอย่าง) — ใช้เฉพาะ #main.dash ---------- */
+  .main.dash { --dcard: #ffffff; --dline: #eef0f4; --dsh: 0 1px 2px rgba(15,23,42,.04), 0 10px 28px rgba(15,23,42,.07); }
+  .main.dash .page-head { border-radius: 20px; }
+  .main.dash .kpis { gap: 14px; margin-bottom: 18px; }
+  .main.dash .kpi { display: flex; flex-direction: column; gap: 2px; background: var(--dcard); border: 1px solid var(--dline); border-top: 1px solid var(--dline); border-radius: 20px; padding: 16px 18px 16px; box-shadow: var(--dsh); position: relative; overflow: hidden; }
+  .main.dash .kpi > span { order: -1; display: flex; align-items: center; gap: 9px; font-size: 13.5px; font-weight: 600; color: #334155; margin-bottom: 8px; line-height: 1.3; }
+  .main.dash .kpi > span::before { content: ''; flex: none; width: 30px; height: 30px; border-radius: 10px; background: color-mix(in srgb, var(--k, var(--c)) 14%, white); box-shadow: inset 0 0 0 10px color-mix(in srgb, var(--k, var(--c)) 14%, white), inset 0 0 0 30px var(--k, var(--c)); border-radius: 50%; }
+  .main.dash .kpi b { font-size: 30px; line-height: 1.15; font-weight: 700; letter-spacing: -.01em; color: color-mix(in srgb, var(--k, var(--c)) 55%, #0f172a); }
+  .main.dash .kpi small { margin-top: 6px; font-size: 12.5px; color: #64748b; line-height: 1.45; }
+  .main.dash button.kpi { cursor: pointer; transition: transform .15s, box-shadow .15s; }
+  .main.dash button.kpi:hover { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(15,23,42,.05), 0 16px 32px rgba(15,23,42,.1); }
+  .main.dash .pgrid { gap: 16px; }
+  .main.dash .panel, .main.dash .panel.pbox { background: var(--dcard); border: 1px solid var(--dline); border-radius: 20px; padding: 20px 22px; box-shadow: var(--dsh); }
+  .main.dash .pbox h4 { font-size: 16.5px; font-weight: 600; gap: 12px; margin: 0 0 14px; color: #0f172a; }
+  .main.dash .pbox h4 svg, .main.dash .pbox h4 svg.ic { flex: none; width: 38px !important; height: 38px !important; box-sizing: border-box; padding: 9px; border-radius: 12px; background: color-mix(in srgb, var(--c) 12%, white); color: var(--c); }
+  .main.dash .li { padding: 11px 0; border-top: 1px solid #f1f5f9; font-size: 14.5px; gap: 2px 12px; }
+  .main.dash .pbox h4 + .li, .main.dash .pbox h4 + div > .li:first-child { border-top: 0; }
+  .main.dash .li > b { font-weight: 600; }
+  .main.dash .li small { font-size: 12.5px; color: #64748b; }
+  .main.dash .li.click { border-radius: 12px; margin: 0 -10px; padding-left: 10px; padding-right: 10px; }
+  .main.dash .li.click:hover { background: #f8fafc; }
+  .main.dash .sbar { gap: 10px; padding: 6px 0; font-size: 14px; }
+  .main.dash .sbar span { color: #334155; }
+  .main.dash .sbar b { font-weight: 600; text-align: right; }
+  .main.dash .sbar i { height: 9px; background: #eef2f6; border-radius: 99px; }
+  .main.dash .sbar em { border-radius: 99px; }
+  .main.dash .sins .sin { display: flex; gap: 12px; align-items: flex-start; border-left: 0; border-radius: 14px; padding: 11px 12px; margin-top: 8px; font-size: 14.5px; line-height: 1.45; color: #0f172a; }
+  .main.dash .sins .sin::before { flex: none; width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; font-size: 15px; background: #fff; }
+  .main.dash .sin.ok { background: #f0fdf4; } .main.dash .sin.ok::before { content: '✓'; color: #16a34a; }
+  .main.dash .sin.warn { background: #fffbeb; } .main.dash .sin.warn::before { content: '!'; color: #d97706; }
+  .main.dash .sin.bad { background: #fef2f2; } .main.dash .sin.bad::before { content: '✕'; color: #dc2626; }
+  .main.dash .stbars { border-bottom: 1px dashed #e2e8f0; }
+  .main.dash .stbars em { border-radius: 6px 6px 2px 2px; }
+  .main.dash .chip { border-radius: 99px; padding: 6px 14px; font-size: 13.5px; border-color: #e5e7eb; }
+  .main.dash .pbar { border-radius: 16px; box-shadow: var(--dsh); border: 1px solid var(--dline); background: #fff; }
+  .main.dash table th { color: #64748b; font-weight: 600; }
+  .main.dash .xhead, .main.dash .xsec { border-radius: 14px; }
+  @media (max-width: 560px) {
+    .main.dash .kpi { padding: 14px 15px; border-radius: 18px; }
+    .main.dash .kpi b { font-size: 24px; }
+    .main.dash .panel, .main.dash .panel.pbox { padding: 16px; border-radius: 18px; }
+    .main.dash .sbar { grid-template-columns: 1fr auto; grid-template-areas: 'n v' 't t'; gap: 5px 10px; }
+    .main.dash .sbar span { grid-area: n; } .main.dash .sbar b { grid-area: v; } .main.dash .sbar i { grid-area: t; }
+  }
   @media (max-width: 1000px) {
     .grid { grid-template-columns: repeat(2, 1fr); }
   }
@@ -586,6 +631,7 @@
 
   function renderPage() {
     xpShow();
+    $('main').classList.toggle('dash', !state.admin && /(^|_)dash$/.test(String(state.page)));   // หน้า Dashboard ทุกฝ่ายใช้การ์ดแบบใหม่
     if (state.admin) { renderAdminPage(); return; }
     var d = state.dept, html;
     if (state.page === 'pw') { renderChangePw(); return; }
