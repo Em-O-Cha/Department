@@ -116,6 +116,9 @@
   .topbar .sub { opacity: .85; font-size: 12px; }
   .topbar .spacer { flex: 1; }
   .topbar .lock { font-size: 12px; opacity: .9; display: flex; align-items: center; gap: 6px; }
+  .topbar { position: relative; }
+  .topbar .pg { display: none; }
+  @media (max-width: 1023px) { .topbar .lock { display: none; } .topbar .sub { display: none; } .topbar .pg { display: block; font-size: 12.5px; opacity: .92; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 52vw; } .topbar > div:nth-child(3) { min-width: 0; } }
   .topbar .lock svg.ic { width: 16px; height: 16px; }
   .topbar .dl { padding: 8px 12px; font-size: 13px; gap: 5px; white-space: nowrap; }
   .topbar .dl svg.ic { width: 16px; height: 16px; }
@@ -126,18 +129,32 @@
   .xp-head b { font-size: 18px; } .xp-head small { color: var(--muted); font-size: 12px; display: block; margin-top: 2px; }
   .btn-out { background: rgba(255, 255, 255, .16); color: #fff; border: 1px solid rgba(255, 255, 255, .35); }
   .btn-out:hover { background: rgba(255, 255, 255, .26); }
-  .side { background: var(--surface); border-right: 1px solid var(--line); padding: 18px 12px; }
-  .side .cap { font-size: 12px; color: var(--muted); padding: 0 12px 8px; text-transform: uppercase; letter-spacing: .04em; }
+  /* เมนู (ปรับ 21/11/69): คอม = แถบซ้ายติดจอ (ไม่เลื่อนหายตามหน้า) · iPad แนวตั้ง / มือถือ = ปุ่ม ☰ เปิดลิ้นชักเมนูเต็ม (เห็นทุกเมนู + หัวข้อกลุ่ม) */
+  .side { background: var(--surface); border-right: 1px solid var(--line); padding: 14px 10px 24px; position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto; overscroll-behavior: contain; }
+  .side .cap { font-size: 12px; font-weight: 600; color: #64748b; padding: 0 12px 6px; letter-spacing: .02em; }
+  .side .dhead { display: none; }
   .nav { display: flex; flex-direction: column; gap: 2px; }
-  .nav button { text-align: left; border: 0; background: none; padding: 10px 12px; border-radius: 9px; color: var(--ink); display: flex; gap: 10px; align-items: center; }
-  .nav button svg.ic { width: 18px; height: 18px; color: var(--muted); }
+  .nav button { position: relative; text-align: left; border: 0; background: none; padding: 9px 12px 9px 14px; min-height: 42px; border-radius: 10px; color: var(--ink); display: flex; gap: 10px; align-items: center; font-size: 14.5px; line-height: 1.3; cursor: pointer; }
+  .nav button svg.ic { width: 18px; height: 18px; color: #64748b; flex: none; }
   .nav button:hover { background: #f1f5f9; }
-  .nav button.active { background: color-mix(in srgb, var(--c) 12%, white); color: var(--c); font-weight: 600; }
+  .nav button:focus-visible { outline: 3px solid color-mix(in srgb, var(--c) 40%, transparent); outline-offset: 1px; }
+  .nav button.active { background: color-mix(in srgb, var(--c) 13%, white); color: color-mix(in srgb, var(--c) 80%, black); font-weight: 700; }
+  .nav button.active::before { content: ''; position: absolute; left: 3px; top: 8px; bottom: 8px; width: 4px; border-radius: 4px; background: var(--c); }
   .nav button.active svg.ic { color: var(--c); }
-  .nav .navg { font-size: 13px; font-weight: 700; color: #fff; background: var(--c); padding: 7px 12px; border-radius: 8px; margin: 12px 0 4px; }
-  .nav .navs { font-size: 16px; font-weight: 800; color: #fff; background: #334155; padding: 10px 12px; border-radius: 10px; margin: 18px 0 2px; letter-spacing: .02em; box-shadow: 0 2px 6px rgba(15,23,42,.18); }
-  .nav .navs.t-in { background: #15803d; } .nav .navs.t-out { background: #b91c1c; }
-  .nav button.t-in { border-left: 4px solid #22c55e; } .nav button.t-out { border-left: 4px solid #ef4444; }
+  .nav .navs { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 800; color: #334155; background: #f1f5f9; padding: 8px 12px; border-radius: 10px; margin: 16px 0 4px; }
+  .nav .navs.t-in { color: #166534; background: #dcfce7; }
+  .nav .navs.t-out { color: #991b1b; background: #fee2e2; }
+  .nav .navg { font-size: 12.5px; font-weight: 700; color: #64748b; padding: 10px 14px 2px; letter-spacing: .02em; }
+  .nav .navs + .navg { padding-top: 4px; }
+  .nav button.t-in, .nav button.t-out { margin-left: 8px; }
+  .navbtn, .morebtn { display: none; }
+  .moremenu { position: absolute; right: 12px; top: calc(100% + 6px); background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 12px 32px rgba(15,23,42,.22); padding: 6px; min-width: 220px; z-index: 40; }
+  .moremenu button { width: 100%; border: 0; background: none; text-align: left; display: flex; gap: 10px; align-items: center; padding: 12px; min-height: 46px; border-radius: 10px; font: inherit; font-size: 15px; cursor: pointer; color: var(--ink); }
+  .moremenu button:hover { background: #f1f5f9; }
+  .moremenu button svg.ic { width: 18px; height: 18px; color: #64748b; }
+  .moremenu .sep { height: 1px; background: var(--line); margin: 4px 6px; }
+  .moremenu .danger, .moremenu .danger svg.ic { color: #b91c1c; }
+  .navback { display: none; }
   .main { padding: 28px; max-width: 1000px; width: 100%; min-width: 0; }
   .main h3 { margin: 0 0 4px; font-size: 22px; }
   .main .lead { color: var(--muted); margin: 0 0 22px; }
@@ -208,15 +225,27 @@
   @media (max-width: 1000px) {
     .grid { grid-template-columns: repeat(2, 1fr); }
   }
-  @media (max-width: 860px) {
-    .app { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; }
-    .side { border-right: 0; border-bottom: 1px solid var(--line); padding: 10px 16px; overflow-x: auto; }
+  @media (max-width: 1023px) {
+    /* iPad แนวตั้ง + มือถือ: เมนูเป็นลิ้นชักด้านซ้าย เปิดด้วยปุ่ม ☰ */
+    .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .topbar { position: sticky; top: 0; z-index: 30; }
+    .navbtn { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-width: 52px; min-height: 48px; padding: 4px 8px; border-radius: 12px; border: 1px solid rgba(255,255,255,.4); background: rgba(255,255,255,.16); color: #fff; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+    .navbtn svg.ic { width: 22px; height: 22px; }
+    .app.exec-theme .navbtn { color: var(--ink); border-color: var(--line); background: #f8fafc; }
+    .topbar .icon { display: none; }
+    .side { position: fixed; z-index: 50; left: 0; top: 0; bottom: 0; width: min(330px, 88vw); max-height: none; height: 100%; padding: 0 10px 28px; border-right: 0; box-shadow: 8px 0 30px rgba(15,23,42,.25); transform: translateX(-105%); transition: transform .22s ease; visibility: hidden; }
+    .app.nav-open .side { transform: none; visibility: visible; }
+    .side .dhead { display: flex; align-items: center; gap: 10px; position: sticky; top: 0; background: var(--surface); padding: 14px 6px 10px; margin: 0 -2px 4px; border-bottom: 1px solid var(--line); z-index: 1; }
+    .side .dhead b { flex: 1; font-size: 16px; } .side .dhead small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+    .side .dhead .x { width: 44px; height: 44px; border: 0; border-radius: 12px; background: #f1f5f9; display: grid; place-items: center; cursor: pointer; }
     .side .cap { display: none; }
-    .nav .navg, .nav .navs { display: none; }
-    .nav button.t-in { background: #dcfce7; } .nav button.t-out { background: #fee2e2; }
-    .nav { flex-direction: row; gap: 6px; }
-    .nav button { white-space: nowrap; background: #f1f5f9; }
+    .nav button { min-height: 48px; font-size: 15.5px; }
+    .navback { display: block; position: fixed; inset: 0; z-index: 45; background: rgba(15,23,42,.45); opacity: 0; pointer-events: none; transition: opacity .2s; }
+    .app.nav-open .navback { opacity: 1; pointer-events: auto; }
     .main { padding: 20px 16px; }
+  }
+  @media (min-width: 1024px) and (max-width: 1199px) {
+    .app { grid-template-columns: 228px 1fr; }
   }
   @media (max-width: 560px) {
     .home { padding: 28px 16px; }
@@ -228,13 +257,14 @@
     .card .en { margin-top: 0; }
     .card .foot { display: none; }
     .card.exec-card .go { font-size: 0; padding: 8px; gap: 0; } .exec-card .go svg.ic:first-child { display: none; }
-    .topbar { padding: 12px 16px; gap: 10px; }
+    .topbar { padding: 10px 12px; gap: 10px; }
     .topbar .title { font-size: 15px; }
-    .btn-out .lbl { display: none; }
-    .btn-out { padding: 10px; }
     .topbar .lock { display: none; }
-    .topbar .dl { padding: 8px 9px; font-size: 12px; gap: 3px; }
-    .topbar .dl svg.ic { width: 14px; height: 14px; }
+    /* มือถือ: Excel / PDF / ออกจากระบบ ย้ายไปไว้ในปุ่ม ⋯ (กันกดออกจากระบบพลาด และให้ชื่อหน้ามีที่แสดง) */
+    .topbar .dl, #logoutBtn { display: none !important; }
+    .morebtn { display: inline-grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; border: 1px solid rgba(255,255,255,.4); background: rgba(255,255,255,.16); color: #fff; cursor: pointer; }
+    .app.exec-theme .morebtn { color: var(--ink); border-color: var(--line); background: #f8fafc; }
+    .morebtn svg.ic { width: 22px; height: 22px; }
   }
 </style>
 </head>
@@ -306,18 +336,29 @@
 <!-- หน้าแผนก -->
 <section id="app" class="app hidden">
   <header class="topbar">
+    <button class="navbtn" id="navOpen" aria-label="เปิดเมนู" aria-controls="sideNav" aria-expanded="false"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>เมนู</button>
     <div class="icon" id="topIcon"></div>
     <div>
       <div class="title" id="topTitle"></div>
       <div class="sub" id="topSub"></div>
+      <div class="pg" id="topPage"></div>
     </div>
     <div class="spacer"></div>
     <div class="lock"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>ไม่ใช้งาน 30 นาที ออกจากระบบอัตโนมัติ</div>
     <button class="btn btn-out dl" id="xlsBtn" title="โหลดหน้านี้เป็นไฟล์ Excel"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>Excel</button>
     <button class="btn btn-out dl" id="pdfBtn" title="โหลดหน้านี้เป็นไฟล์ PDF"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>PDF</button>
     <button class="btn btn-out" id="logoutBtn" aria-label="ออกจากระบบ" title="ออกจากระบบ"><svg class="ic" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg><span class="lbl">ออกจากระบบ</span></button>
+    <button class="morebtn" id="moreBtn" aria-label="ดาวน์โหลด / ออกจากระบบ" aria-haspopup="true" aria-expanded="false"><svg class="ic" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+    <div class="moremenu hidden" id="moreMenu" role="menu">
+      <button data-more="xls" role="menuitem"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>โหลดหน้านี้เป็น Excel</button>
+      <button data-more="pdf" role="menuitem"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>โหลดหน้านี้เป็น PDF</button>
+      <div class="sep" data-more-sep></div>
+      <button data-more="out" role="menuitem" class="danger"><svg class="ic" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>ออกจากระบบ</button>
+    </div>
   </header>
-  <aside class="side">
+  <div class="navback" id="navBack"></div>
+  <aside class="side" id="sideNav" aria-label="เมนู">
+    <div class="dhead"><div class="icon" id="drIcon" style="color:var(--c)"></div><b id="drTitle"></b><button class="x" id="navClose" aria-label="ปิดเมนู"><svg class="ic" viewBox="0 0 24 24" style="width:22px;height:22px"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div class="cap">เมนู</div>
     <nav class="nav" id="nav"></nav>
   </aside>
@@ -491,16 +532,54 @@
       : (deptModule() ? deptModule().menus() : [{ id: 'home', label: 'หน้าหลัก', ic: 'home' }].concat(state.dept.menus.map(function (m, i) {
           return { id: 'm' + i, label: m, ic: 'form' };
         }))).concat([{ id: 'pw', label: 'เปลี่ยนรหัสผ่าน', ic: 'key' }]);
-    var tone = '';
+    var tone = '', curLabel = '';
     $('nav').innerHTML = items.map(function (it) {
       if (it.section != null) { tone = it.tone || ''; return '<div class="navs' + (tone ? ' t-' + tone : '') + '">' + (tone === 'in' ? '⬇ ' : tone === 'out' ? '⬆ ' : '') + esc(it.section) + '</div>'; }   // หัวข้อใหญ่ (เช่น รับ / จ่าย ของฝ่ายบัญชี) — สีเด่นกว่าหัวข้อกลุ่ม
       if (it.group) return '<div class="navg">' + esc(it.group) + '</div>';   // หัวข้อกลุ่มเมนู (โมดูลใส่ { group: 'ชื่อกลุ่ม' })
-      return '<button data-page="' + it.id + '" class="' + (state.page === it.id ? 'active' : '') + (tone ? ' t-' + tone : '') + '">' + icon(it.ic) + esc(it.label) + '</button>';
+      if (state.page === it.id) curLabel = it.label;
+      return '<button data-page="' + it.id + '" class="' + (state.page === it.id ? 'active' : '') + (tone ? ' t-' + tone : '') + '"' + (state.page === it.id ? ' aria-current="page"' : '') + '>' + icon(it.ic) + esc(it.label) + '</button>';
     }).join('');
     Array.prototype.forEach.call($('nav').querySelectorAll('button'), function (b) {
-      b.addEventListener('click', function () { go(b.getAttribute('data-page')); });
+      b.addEventListener('click', function () { navClose(); go(b.getAttribute('data-page')); });
     });
+    // ชื่อหน้าปัจจุบันใต้ชื่อฝ่าย (iPad / มือถือ) + หัวลิ้นชักเมนู
+    $('topPage').textContent = curLabel ? '› ' + String(curLabel).replace(/\s*🔴.*$/, '') : '';
+    $('drTitle').innerHTML = esc($('topTitle').textContent) + '<small>' + esc($('topSub').textContent) + '</small>';
+    $('drIcon').innerHTML = $('topIcon').innerHTML;
   }
+  // ---------- ลิ้นชักเมนู (จอแคบกว่า 1024px) + เมนู ⋯ (มือถือ) ----------
+  function navIsDrawer() { return window.matchMedia('(max-width: 1023px)').matches; }
+  function navOpen() {
+    $('app').classList.add('nav-open'); $('navOpen').setAttribute('aria-expanded', 'true'); document.body.style.overflow = 'hidden';
+    var a = $('nav').querySelector('button.active'); if (a) a.scrollIntoView({ block: 'center' });
+    setTimeout(function () { ($('nav').querySelector('button.active') || $('navClose')).focus({ preventScroll: true }); }, 60);
+  }
+  function navClose() {
+    if (!$('app').classList.contains('nav-open')) return;
+    $('app').classList.remove('nav-open'); $('navOpen').setAttribute('aria-expanded', 'false'); document.body.style.overflow = '';
+    if (navIsDrawer()) $('navOpen').focus({ preventScroll: true });
+  }
+  function moreToggle(open) {
+    var m = $('moreMenu'); open = open == null ? m.classList.contains('hidden') : open;
+    if (open) {   // ปุ่มดาวน์โหลดซ่อนอยู่ในหน้าที่ไม่รองรับ (เช่น เปลี่ยนรหัส) — ซ่อนในเมนู ⋯ ด้วย
+      var dlOff = $('xlsBtn').classList.contains('hidden');
+      Array.prototype.forEach.call(m.querySelectorAll('[data-more=xls],[data-more=pdf],[data-more-sep]'), function (x) { x.classList.toggle('hidden', dlOff); });
+    }
+    m.classList.toggle('hidden', !open); $('moreBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) setTimeout(function () { var f = m.querySelector('button:not(.hidden)'); if (f) f.focus(); }, 30);
+  }
+  $('navOpen').addEventListener('click', navOpen);
+  $('navClose').addEventListener('click', navClose);
+  $('navBack').addEventListener('click', navClose);
+  $('moreBtn').addEventListener('click', function (e) { e.stopPropagation(); moreToggle(); });
+  $('moreMenu').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-more]'); if (!b) return;
+    moreToggle(false);
+    ({ xls: 'xlsBtn', pdf: 'pdfBtn', out: 'logoutBtn' })[b.getAttribute('data-more')] && $(({ xls: 'xlsBtn', pdf: 'pdfBtn', out: 'logoutBtn' })[b.getAttribute('data-more')]).click();
+  });
+  document.addEventListener('click', function (e) { if (!$('moreMenu').classList.contains('hidden') && !e.target.closest('#moreMenu')) moreToggle(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { navClose(); moreToggle(false); } });
+  window.matchMedia('(max-width: 1023px)').addEventListener('change', function () { navClose(); moreToggle(false); });
   function go(page) { state.page = page; renderNav(); renderPage(); window.scrollTo(0, 0); keepSave(); }
   // แผนกที่มีระบบงานแล้ว (โมดูล) — เช่น PUR = purchasing.js
   function deptModule() { var m = state.dept && state.dept.module; return (m === 'purchasing' && window.PUR) || (m === 'safety' && window.SHE) || (m === 'hr' && window.HRM) || (m === 'accounting' && window.ACC) || (m === 'quality' && window.QAM) || (m === 'production' && window.PRDM) || (m === 'rd' && window.RDM) || (m === 'executive' && window.EXEC) || null; }
