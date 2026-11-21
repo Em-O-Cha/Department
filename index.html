@@ -360,7 +360,7 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function $(id) { return document.getElementById(id); }
 
-  // ตั๋วอยู่ในหน่วยความจำ + sessionStorage ของแท็บนี้ 15 นาที (ค้างหน้าเดิมเมื่อสลับแอป) — ปิดแท็บ / เกิน 15 นาที = ต้องกรอกรหัสใหม่
+  // ตั๋วอยู่ในหน่วยความจำ + localStorage ของเครื่องนี้ 15 นาที (ค้างหน้าเดิมเมื่อสลับแอป / ปิดแล้วเปิดใหม่) — เกิน 15 นาที / กดออกจากระบบ = ต้องกรอกรหัสใหม่
   var state = { depts: [], picked: null, token: null, dept: null, page: 'home', single: false, admin: false, adminData: null };
   var ADMIN_COLOR = '#0f172a';
 
@@ -536,16 +536,17 @@
 
   // ---------- ค้างหน้าเดิมไว้ 15 นาที (ผู้ใช้ขอ 21/11/69) ----------
   // สลับไปแอปอื่นแล้วกลับมา: ภายใน 15 นาที = อยู่หน้าเดิม (ถ้ามือถือโหลดหน้าเว็บใหม่ จะเข้าระบบให้เองที่เมนูเดิม)
-  // เกิน 15 นาที = ออกจากระบบ กลับไปหน้ากรอกรหัส · ตั๋วเก็บใน sessionStorage ของแท็บนี้เท่านั้น (ปิดแท็บ = หาย) และเซิร์ฟเวอร์ตัดตั๋วเองเมื่อไม่ใช้ 30 นาที
+  // ปิดหน้าเว็บ / ปิดเบราว์เซอร์แล้วเปิดใหม่ภายใน 15 นาทีก็กลับหน้าเดิม (ผู้ใช้ขอ 21/11/69 → เก็บใน localStorage ของเครื่องนี้ ไม่ใช่ sessionStorage)
+  // เกิน 15 นาที = ออกจากระบบ กลับไปหน้ากรอกรหัส · กดออกจากระบบ = ลบทันที · เซิร์ฟเวอร์ตัดตั๋วเองเมื่อไม่ใช้ 30 นาที
   var KEEP_KEY = 'dept_keep_v1', KEEP_MS = 15 * 60 * 1000, hiddenAt = 0;
-  function keepGet() { try { var k = JSON.parse(sessionStorage.getItem(KEEP_KEY) || 'null'); return k && k.token && Date.now() - k.t < KEEP_MS ? k : null; } catch (e) { return null; } }
-  function keepClear() { try { sessionStorage.removeItem(KEEP_KEY); } catch (e) {} }
+  function keepGet() { try { var k = JSON.parse(localStorage.getItem(KEEP_KEY) || 'null'); return k && k.token && Date.now() - k.t < KEEP_MS ? k : null; } catch (e) { return null; } }
+  function keepClear() { try { localStorage.removeItem(KEEP_KEY); sessionStorage.removeItem(KEEP_KEY); } catch (e) {} }
   function keepSave() {
     if (!state.token || state.admin || !state.dept) return;
     var q = {}, m = deptModule();
     // ค่าที่เลือกไว้ในหน้า (แท็บ / ตัวกรอง / คำค้น) เก็บเฉพาะค่าธรรมดา
     if (m && m.q) Object.keys(m.q).forEach(function (k) { var v = m.q[k]; if (v == null || /^(string|number|boolean)$/.test(typeof v) || (Array.isArray(v) && v.every(function (x) { return x == null || typeof x !== 'object'; }))) q[k] = v; });
-    try { sessionStorage.setItem(KEEP_KEY, JSON.stringify({ t: Date.now(), token: state.token, dept: state.dept, single: state.single, page: state.page, y: window.scrollY || 0, q: q })); } catch (e) {}
+    try { localStorage.setItem(KEEP_KEY, JSON.stringify({ t: Date.now(), token: state.token, dept: state.dept, single: state.single, page: state.page, y: window.scrollY || 0, q: q })); } catch (e) {}
   }
   function keepApply(k) {
     var m = deptModule(), ok = !m || m.menus().some(function (x) { return x.id === k.page; }) || k.page === 'pw';
@@ -567,6 +568,8 @@
     hiddenAt = 0;
   });
   window.addEventListener('pagehide', keepSave);
+  // ระหว่างใช้งานบันทึกเวลาล่าสุดทุก 30 วินาที (มือถือบางรุ่นปิดเบราว์เซอร์โดยไม่แจ้ง pagehide)
+  setInterval(function () { if (document.visibilityState === 'visible' && state.token) keepSave(); }, 30000);
 
   function backToHome(msg) {
     keepClear();
