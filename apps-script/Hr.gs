@@ -481,7 +481,10 @@ function hrDashboard_(dept, from, to) {
   var band = function (arr, cuts, labels) { var o = labels.map(function (l) { return { name: l, n: 0 }; }); arr.forEach(function (v) { for (var i = 0; i < cuts.length; i++) if (v < cuts[i]) { o[i].n++; return; } o[o.length - 1].n++; }); return o; };
   // การลา
   // นับเฉพาะใบลาที่อนุมัติแล้ว และเฉพาะวันที่อยู่ในช่วงที่เลือก (ผู้ใช้ขอ 21/11/69 — เดิมนับใบรออนุมัติ + ทั้งใบที่คร่อมช่วง)
-  var allApproved = purRead_(ss, 'hr_leaves').filter(function (l) { return l.status === 'อนุมัติ'; });
+  var allLeaveRows = purRead_(ss, 'hr_leaves'), allApproved = allLeaveRows.filter(function (l) { return l.status === 'อนุมัติ'; });
+  // ใบที่ยังรออนุมัติ (ไม่นับในตัวเลข) — แสดงเป็นบรรทัดสีเทาในกล่องการลา (ผู้ใช้ขอ 21/11/69)
+  var pendAll = allLeaveRows.filter(function (l) { return l.status === 'รออนุมัติ'; }), pend = { n: 0, h: 0, d: 0, all: pendAll.length };
+  pendAll.forEach(function (l) { if (!(l.dateFrom <= to && (l.dateTo || l.dateFrom) >= from)) return; var pt = hrLeavePart_(l, st, from, to); pend.n++; pend.h = Math.round((pend.h + pt.h) * 100) / 100; pend.d = Math.round((pend.d + pt.d) * 100) / 100; });
   var leaves = allApproved.filter(function (l) { return l.dateFrom <= to && (l.dateTo || l.dateFrom) >= from; });
   var r2 = function (x) { return Math.round(x * 100) / 100; };
   var byType = {}, perEmp = {}, pidx = null;
@@ -560,7 +563,7 @@ function hrDashboard_(dept, from, to) {
       hireList: hires.map(function (e) { return { name: e.fullName, position: e.position, date: e.startDate }; }),
       exitList: exits.map(function (e) { return { name: e.fullName, position: e.position, date: e.endDate, reason: e.endReason }; }) },
     leave: { byType: Object.keys(byType).map(function (k) { return byType[k]; }).sort(function (a, b) { return b.hours - a.hours || b.times - a.times; }), absenteeism: absenteeism, stdHours: st.stdHours,
-      top: topLeave.slice(0, 8) },
+      top: topLeave.slice(0, 8), pending: pend },
     docs: { expiring: exp.slice(0, 30), expired: expired.length, soon: exp.length - expired.length, alertDays: alertDays, noWorkPermit: noWP.length },
     training: { sessions: trains.length, people: Object.keys(trained).length, hours: trainHours, coverage: active.length ? Math.round(Object.keys(trained).filter(function (id) { return idx[id] && hrActive_(idx[id]); }).length / active.length * 100) : null,
       list: trains.sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); }).slice(0, 8).map(function (t) { return { title: t.title, date: t.date, hours: t.hours, n: sheJson_(t.attendees, []).length }; }) },
