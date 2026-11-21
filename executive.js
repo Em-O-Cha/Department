@@ -28,8 +28,8 @@
     if (!X.depts) {
       $('main').innerHTML = '<h3>Dashboard ผู้บริหาร</h3><p class="lead">กำลังโหลด…</p>';
       call('execOverview', state.token).then(function (r) {
-        X.depts = r.depts;
-        if (!X.q.dept || !r.depts.some(function (d) { return d.key === X.q.dept; })) X.q.dept = (r.depts.filter(function (d) { return d.ready; })[0] || r.depts[0]).key;
+        X.depts = r.depts.filter(function (d) { return !d.embed; }).concat(r.depts.filter(function (d) { return d.embed; }));   // ฝ่ายขาย / ฝ่ายการตลาด (หน้าฝัง) ไว้ล่างสุด (ผู้ใช้ขอ 21/11/69)
+        if (!X.q.dept || !X.depts.some(function (d) { return d.key === X.q.dept; })) X.q.dept = (X.depts.filter(function (d) { return d.ready; })[0] || X.depts[0]).key;
         state.page = 'x_dash_' + X.q.dept; renderNav();   // เมนูเปลี่ยนเป็นรายชื่อฝ่าย + ไฮไลต์ฝ่ายที่เปิดอยู่
         if (typeof keepSave === 'function') keepSave();
         X.render();
