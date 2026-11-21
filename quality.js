@@ -16,7 +16,6 @@
   });
   var MENUS = [
     { id: 'q_dash', label: 'ภาพรวม / Dashboard', ic: 'home' },
-    { id: 'q_cost', label: 'Dashboard ค่าใช้จ่าย', ic: 'chart' },
     { id: 'q_list', label: 'ข้อร้องเรียนลูกค้า', ic: 'msg' },
     { id: 'q_test', label: 'ตรวจวิเคราะห์ / ค่าใช้จ่าย', ic: 'flask' },
     { id: 'q_np', label: 'ผลิตภัณฑ์ใหม่', ic: 'box' },
@@ -120,7 +119,7 @@
       return;
     }
     if (page === 'q_list' && H.open) { var id = H.open; H.open = null; return caseForm(id === 'new' ? null : H.data.complaints.filter(function (c) { return c.id === id; })[0]); }
-    ({ q_dash: dash, q_cost: costDash, q_list: listPage, q_test: testPage, q_np: npPage, q_rep: report, q_set: settings, q_log: logPage }[page] || dash)();
+    ({ q_dash: dash, q_cost: dash, q_list: listPage, q_test: testPage, q_np: npPage, q_rep: report, q_set: settings, q_log: logPage }[page] || dash)();
   };
   function openCase(id) { H.open = id || 'new'; go('q_list'); }
 
@@ -131,13 +130,16 @@
     var lm = addDays(t.slice(0, 8) + '01', -1);
     var quick = [['เดือนนี้', t.slice(0, 8) + '01', t], ['เดือนก่อน', lm.slice(0, 8) + '01', lm], ['3 เดือน', addDays(t, -89), t], ['ปีนี้', t.slice(0, 4) + '-01-01', t]];
     var open = H.data.complaints.filter(function (c) { return !done(c); });
-    $('main').innerHTML = '<h3>ภาพรวม ข้อร้องเรียนลูกค้า</h3><p class="lead">ข้อมูล ณ ' + dd(t) + ' · <a href="' + esc(H.data.sheetUrl) + '" target="_blank" rel="noopener">เปิด Google Sheet</a></p>'
+    $('main').innerHTML = '<h3>ภาพรวม ฝ่ายประกันคุณภาพ</h3><p class="lead">ข้อร้องเรียนลูกค้า + ค่าใช้จ่าย QA · ข้อมูล ณ ' + dd(t) + ' · <a href="' + esc(H.data.sheetUrl) + '" target="_blank" rel="noopener">เปิด Google Sheet</a></p>'
       + '<div class="qtop"><button class="btn btn-primary qbig" id="dNew">' + icon('plus', 20) + ' รับเรื่องร้องเรียนใหม่</button>'
       + '<button class="btn btn-line" id="dOpen">' + icon('msg', 18) + ' เรื่องที่ยังไม่ปิด <b>' + open.length + '</b></button></div>'
       + '<div class="pbar noprint"><div class="pchips" style="margin:0">' + quick.map(function (x) { return '<button class="chip' + (q.from === x[1] && q.to === x[2] ? ' on' : '') + '" data-q="' + x[1] + '|' + x[2] + '">' + x[0] + '</button>'; }).join('') + '</div>'
       + '<input type="date" id="dFrom" value="' + q.from + '" aria-label="ตั้งแต่"> – <input type="date" id="dTo" value="' + q.to + '" aria-label="ถึง">'
       + '<button class="btn btn-sm btn-line" id="dPrint">' + icon('print', 16) + ' พิมพ์</button></div>'
-      + '<div id="dOut"><div class="panel"><span class="spinner dark"></span> กำลังสรุป…</div></div>';
+      + '<h4 class="qsec">' + icon('msg', 18) + ' ข้อร้องเรียนลูกค้า</h4>'
+      + '<div id="dOut"><div class="panel"><span class="spinner dark"></span> กำลังสรุป…</div></div>'
+      + '<div id="dCost"></div>';   // ค่าใช้จ่าย QA อยู่หน้าเดียวกัน (ผู้ใช้ขอ 21/11/69 รวม 2 Dashboard)
+    drawCost();
     $('dNew').addEventListener('click', function () { openCase(null); });
     $('dOpen').addEventListener('click', function () { H.q.lst = 'open'; go('q_list'); });
     on('[data-q]', 'click', function (el) { var p = el.getAttribute('data-q').split('|'); q.from = p[0]; q.to = p[1]; dash(); }, $('main'));
@@ -496,6 +498,15 @@
   // ==================== Dashboard ค่าใช้จ่าย (18/11/69) ====================
   // รวม 3 ก้อน: ค่าตรวจวิเคราะห์ (qa_tests kind test) · ค่าใช้จ่ายอื่น (kind other) · ค่าชดเชยลูกค้า (remedyCost ของข้อร้องเรียน)
   // ปีตามช่อง "ปี" ของรายการตรวจ / ปีของวันที่รับเรื่อง · เดือนตามวันที่ส่งตรวจ/จ่าย (ไม่มีวันที่ = "ยังไม่กำหนดเดือน") · ไม่นับรายการยกเลิก
+  // ส่วนค่าใช้จ่าย QA ในหน้าภาพรวม (เลือกปีของตัวเอง)
+  function drawCost() {
+    var box = $('dCost'); if (!box) return;
+    var y = curYear();
+    var yearsT = H.data.tests.concat(H.data.complaints.filter(function (c) { return Number(c.remedyCost) > 0 && c.recvDate; }).map(function (c) { return { year: +String(c.recvDate).slice(0, 4) }; }));
+    box.innerHTML = '<div class="qsecbar"><h4 class="qsec">' + icon('chart', 18) + ' ค่าใช้จ่าย QA ปี ' + (y + 543) + ' <small class="muted">(ค่าตรวจวิเคราะห์ · ค่าใช้จ่ายอื่น · ชดเชยลูกค้า · ไม่นับรายการที่ยกเลิก)</small></h4><div class="noprint">' + yearChips(yearsT) + '</div></div>'
+      + H.costHtml(H.data, y);
+    on('[data-yr]', 'click', function (el) { H.q.ty = +el.getAttribute('data-yr'); drawCost(); }, box);
+  }
   function costDash() {
     var y = curYear();
     var yearsT = H.data.tests.concat(H.data.complaints.filter(function (c) { return Number(c.remedyCost) > 0 && c.recvDate; }).map(function (c) { return { year: +String(c.recvDate).slice(0, 4) }; }));
@@ -797,6 +808,7 @@
     '.qsave{position:sticky;bottom:0;display:flex;gap:10px;padding:12px 0;background:linear-gradient(transparent,rgba(244,246,250,.96) 30%);z-index:5}.qsave .btn-primary{flex:1;font-size:17px;padding:15px}.qsave .btn-line{flex:none}',
     '.qnext{display:flex;gap:8px;align-items:center;background:#f5f3ff;border:1px dashed #c4b5fd;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:14px;color:#4c1d95}',
     '.qdel{text-align:right;margin-top:6px}.qerr{outline:3px solid #dc2626!important;outline-offset:2px;border-radius:10px}',
+    '.qsecbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:22px 0 12px}.qsecbar .qsec{margin:0}.qsec{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0 12px;font-size:16px;background:rgba(255,255,255,.94);padding:9px 14px;border-radius:14px;box-shadow:var(--shadow)}.qsec svg.ic{width:18px;height:18px;color:var(--c)}.qsec small{font-weight:400}',
     '.qtrend{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;align-items:end}.qtm{text-align:center;font-size:11.5px}.qtm b{display:block;font-size:13px}.qtm span{color:var(--muted)}.qtb{height:100px;display:flex;align-items:flex-end;justify-content:center;gap:3px;border-bottom:1px solid var(--line)}',
     '.qctrend{display:grid;grid-template-columns:repeat(12,1fr);gap:6px;align-items:end}.qcm{text-align:center;font-size:11.5px;min-width:0}.qcm b{display:block;font-size:12px;white-space:nowrap}.qcm span{color:var(--muted)}.qcb{height:144px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;border-bottom:1px solid var(--line)}.qcb em{width:min(26px,70%);display:block}.qcb em:first-child{border-radius:4px 4px 0 0}.qcb .c1,.slegend .c1{background:#2563eb}.qcb .c2,.slegend .c2{background:#0891b2}.qcb .c3,.slegend .c3{background:#dc2626}@media (max-width:600px){.qcm b{font-size:10px}.qctrend{gap:2px}}',
     '.qtb em{width:12px;border-radius:3px 3px 0 0;min-height:1px}.qtb .b1{background:#7c3aed}.qtb .b2{background:#16a34a}.qtb .b3{background:#dc2626}.slegend .b1{background:#7c3aed}',
