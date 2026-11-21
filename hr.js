@@ -239,7 +239,7 @@
     return MENUS.map(function (m) { return m.id === 'h_leave' && n ? Object.assign({}, m, { label: m.label + ' 🔴 ' + n }) : m; });
   };
   function pendingLeaves() { return H.data.leaves.filter(function (l) { return l.status === 'รออนุมัติ'; }).sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); }); }
-  // กล่องคำขอลาที่รออนุมัติ (หน้าภาพรวม + หน้าการลา)
+  // กล่องคำขอลาที่รออนุมัติ (หน้าการลา)
   function pendingBox() {
     var rows = pendingLeaves(); if (!rows.length) return '';
     return '<div class="panel hpend"><h4>🔔 คำขอลารออนุมัติ (' + rows.length + ')</h4>' + rows.map(function (l) {
@@ -292,12 +292,11 @@
     if (!q.from) { q.from = t.slice(0, 8) + '01'; q.to = t; }
     var quick = [['เดือนนี้', t.slice(0, 8) + '01', t], ['เดือนก่อน', addDays(t.slice(0, 8) + '01', -1).slice(0, 8) + '01', addDays(t.slice(0, 8) + '01', -1)],
       ['3 เดือน', addDays(t, -89), t], ['ปีนี้', t.slice(0, 4) + '-01-01', t]];
-    $('main').innerHTML = '<h3>ภาพรวม ฝ่ายบุคคล</h3><p class="lead">ข้อมูล ณ ' + dd(t) + ' · <a href="' + esc(H.data.sheetUrl) + '" target="_blank" rel="noopener">เปิด Google Sheet</a></p>' + pendingBox()
+    $('main').innerHTML = '<h3>ภาพรวม ฝ่ายบุคคล</h3><p class="lead">ข้อมูล ณ ' + dd(t) + ' · <a href="' + esc(H.data.sheetUrl) + '" target="_blank" rel="noopener">เปิด Google Sheet</a></p>'   // คำขอลารออนุมัติอยู่หน้าการลาเท่านั้น (ผู้ใช้ขอ 21/11/69: ซ้ำซ้อน)
       + '<div class="pbar noprint"><div class="pchips" style="margin:0">' + quick.map(function (x) { return '<button class="chip' + (q.from === x[1] && q.to === x[2] ? ' on' : '') + '" data-q="' + x[1] + '|' + x[2] + '">' + x[0] + '</button>'; }).join('') + '</div>'
       + '<input type="date" id="dFrom" value="' + q.from + '"> – <input type="date" id="dTo" value="' + q.to + '"><button class="btn btn-sm btn-line" id="dPrint">' + icon('print', 16) + ' พิมพ์</button></div>'
       + '<div id="dOut"><div class="panel"><span class="spinner dark"></span> กำลังสรุป…</div></div>';
     on('[data-q]', 'click', function (el) { var p = el.getAttribute('data-q').split('|'); q.from = p[0]; q.to = p[1]; dash(); }, $('main'));
-    bindPending($('main'));
     ['dFrom', 'dTo'].forEach(function (id) { $(id).addEventListener('change', function () { if (v('dFrom') && v('dTo') && v('dFrom') <= v('dTo')) { q.from = v('dFrom'); q.to = v('dTo'); dash(); } }); });
     $('dPrint').addEventListener('click', function () { window.print(); });
     var my = H.dseq = (H.dseq || 0) + 1;
