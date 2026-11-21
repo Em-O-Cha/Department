@@ -360,7 +360,7 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function $(id) { return document.getElementById(id); }
 
-  // ตั๋วเก็บในหน่วยความจำเท่านั้น (ไม่ใช้ localStorage/cookie) — ปิด/รีเฟรชหน้า = ต้องกรอกรหัสใหม่
+  // ตั๋วอยู่ในหน่วยความจำ + sessionStorage ของแท็บนี้ 15 นาที (ค้างหน้าเดิมเมื่อสลับแอป) — ปิดแท็บ / เกิน 15 นาที = ต้องกรอกรหัสใหม่
   var state = { depts: [], picked: null, token: null, dept: null, page: 'home', single: false, admin: false, adminData: null };
   var ADMIN_COLOR = '#0f172a';
 
@@ -465,7 +465,7 @@
   });
 
   // ---------- หน้าแผนก ----------
-  function openApp() {
+  function openApp(keep) {
     var d = state.dept;
     $('app').style.setProperty('--c', d.color);
     $('app').classList.toggle('exec-theme', d.module === 'executive');
@@ -476,7 +476,10 @@
     $('app').classList.remove('hidden');
     state.page = deptModule() ? deptModule().menus()[0].id : 'home';
     if (deptModule()) deptModule().reset();
+    if (keep) keepApply(keep);
     renderNav(); renderPage();
+    if (keep && keep.y) setTimeout(function () { window.scrollTo(0, keep.y); }, 1500);
+    keepSave();
     call('getDepartmentHome', state.token).then(function (res) {
       state.dept = res.dept; if (state.page === 'home') renderPage();
     }).catch(onServerError);
@@ -498,7 +501,7 @@
       b.addEventListener('click', function () { go(b.getAttribute('data-page')); });
     });
   }
-  function go(page) { state.page = page; renderNav(); renderPage(); window.scrollTo(0, 0); }
+  function go(page) { state.page = page; renderNav(); renderPage(); window.scrollTo(0, 0); keepSave(); }
   // แผนกที่มีระบบงานแล้ว (โมดูล) — เช่น PUR = purchasing.js
   function deptModule() { var m = state.dept && state.dept.module; return (m === 'purchasing' && window.PUR) || (m === 'safety' && window.SHE) || (m === 'hr' && window.HRM) || (m === 'accounting' && window.ACC) || (m === 'quality' && window.QAM) || (m === 'production' && window.PRDM) || (m === 'rd' && window.RDM) || (m === 'executive' && window.EXEC) || null; }
 
@@ -531,7 +534,42 @@
     });
   }
 
+  // ---------- ค้างหน้าเดิมไว้ 15 นาที (ผู้ใช้ขอ 21/11/69) ----------
+  // สลับไปแอปอื่นแล้วกลับมา: ภายใน 15 นาที = อยู่หน้าเดิม (ถ้ามือถือโหลดหน้าเว็บใหม่ จะเข้าระบบให้เองที่เมนูเดิม)
+  // เกิน 15 นาที = ออกจากระบบ กลับไปหน้ากรอกรหัส · ตั๋วเก็บใน sessionStorage ของแท็บนี้เท่านั้น (ปิดแท็บ = หาย) และเซิร์ฟเวอร์ตัดตั๋วเองเมื่อไม่ใช้ 30 นาที
+  var KEEP_KEY = 'dept_keep_v1', KEEP_MS = 15 * 60 * 1000, hiddenAt = 0;
+  function keepGet() { try { var k = JSON.parse(sessionStorage.getItem(KEEP_KEY) || 'null'); return k && k.token && Date.now() - k.t < KEEP_MS ? k : null; } catch (e) { return null; } }
+  function keepClear() { try { sessionStorage.removeItem(KEEP_KEY); } catch (e) {} }
+  function keepSave() {
+    if (!state.token || state.admin || !state.dept) return;
+    var q = {}, m = deptModule();
+    // ค่าที่เลือกไว้ในหน้า (แท็บ / ตัวกรอง / คำค้น) เก็บเฉพาะค่าธรรมดา
+    if (m && m.q) Object.keys(m.q).forEach(function (k) { var v = m.q[k]; if (v == null || /^(string|number|boolean)$/.test(typeof v) || (Array.isArray(v) && v.every(function (x) { return x == null || typeof x !== 'object'; }))) q[k] = v; });
+    try { sessionStorage.setItem(KEEP_KEY, JSON.stringify({ t: Date.now(), token: state.token, dept: state.dept, single: state.single, page: state.page, y: window.scrollY || 0, q: q })); } catch (e) {}
+  }
+  function keepApply(k) {
+    var m = deptModule(), ok = !m || m.menus().some(function (x) { return x.id === k.page; }) || k.page === 'pw';
+    if (ok && k.page) state.page = k.page;
+    if (m && m.q && k.q) Object.keys(k.q).forEach(function (x) { m.q[x] = k.q[x]; });
+  }
+  function keepRestore() {
+    var k = keepGet(); if (!k) { keepClear(); return false; }
+    state.token = k.token; state.dept = k.dept; state.admin = false;
+    $('loginOverlay').classList.add('hidden');
+    openApp(k);
+    return true;
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); keepSave(); return; }
+    if (hiddenAt && state.token && !state.admin && Date.now() - hiddenAt >= KEEP_MS) {
+      var t = state.token; backToHome('ไม่ได้ใช้งานเกิน 15 นาที กรุณาเข้าสู่ระบบใหม่'); call('logout', t).catch(function () {});
+    } else if (state.token) keepSave();
+    hiddenAt = 0;
+  });
+  window.addEventListener('pagehide', keepSave);
+
   function backToHome(msg) {
+    keepClear();
     state.token = null; state.dept = null; state.admin = false; state.adminData = null;
     if (window.PUR) window.PUR.reset();
     if (window.ACC) window.ACC.reset();
@@ -1019,9 +1057,9 @@
   call('getDepartments').then(function (list) {
     state.depts = list; renderHome();
     // ระบบของแผนกเดียว (แบบ 2): เปิดหน้ากรอกรหัสทันที
-    if (list.length === 1 && !list[0].appUrl) {
-      state.single = true; $('cancelBtn').classList.add('hidden'); openLogin(list[0].key);
-    }
+    if (list.length === 1 && !list[0].appUrl) { state.single = true; $('cancelBtn').classList.add('hidden'); }
+    if (keepRestore()) return;   // กลับมาภายใน 15 นาที → หน้าเดิม
+    if (state.single) openLogin(list[0].key);
   }).catch(function () { toast('โหลดรายชื่อแผนกไม่ได้'); });
 </script>
 <script src="purchasing.js?v=27"></script>
