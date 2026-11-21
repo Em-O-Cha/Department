@@ -78,6 +78,16 @@
   .grid .card { background: color-mix(in srgb, var(--c) 9%, white); }
   .grid .card .icon { background: #fff; }
   .grid .card .foot { background: #fff; margin: auto -22px -18px; padding: 12px 22px 16px; border-radius: 0 0 var(--radius) var(--radius); }
+  /* หน้าแรก: กล่องฝ่ายสีเข้มขึ้น ตัวอักษรเด่นขึ้น (ผู้ใช้ขอ 21/11/69) */
+  .grid .card { background: color-mix(in srgb, var(--c) 20%, white); border: 1.5px solid color-mix(in srgb, var(--c) 40%, white); border-left: 7px solid var(--c); box-shadow: 0 4px 14px color-mix(in srgb, var(--c) 18%, transparent); }
+  .grid .card .icon { background: var(--c); color: #fff; box-shadow: 0 4px 10px color-mix(in srgb, var(--c) 35%, transparent); }
+  .grid .card .name { font-weight: 800; font-size: 19px; color: color-mix(in srgb, var(--c) 72%, #0f172a); }
+  .grid .card .en { color: #334155; font-weight: 600; }
+  .card.exec-card { background: linear-gradient(90deg, #fbc9c9 0%, #fff5ef 50%, #bfe5c3 100%); border: 1.5px solid #e9a3a3; box-shadow: 0 6px 18px rgba(198, 40, 40, .16); }
+  .card.exec-card .icon { background: #c62828; color: #fff; }
+  .card.exec-card .name { font-weight: 800; color: #9f1c1c; }
+  .card.exec-card .en { color: #334155; font-weight: 600; }
+  .card.exec-card .go { background: #2e7d32; color: #fff; }
   .card .foot { display: flex; align-items: center; justify-content: space-between; border-top: 1px dashed var(--line); padding-top: 12px; color: var(--muted); font-size: 13px; }
   .card .foot .go { color: var(--c); font-weight: 600; display: flex; align-items: center; gap: 4px; }
   .card .foot svg.ic { width: 16px; height: 16px; }
@@ -509,7 +519,7 @@
     // การ์ดผู้บริหาร (Dashboard ทุกฝ่าย) แยกไว้ด้านบน
     $('execSlot').innerHTML = state.depts.filter(function (d) { return d.exec; }).map(function (d) {
       return '<button class="card exec-card" style="--c:' + d.color + '" data-key="' + d.key + '"><div class="icon">' + icon('EXEC') + '</div>'
-        + '<div class="meta"><p class="name">Dashboard ผู้บริหาร</p><div class="en">ดูข้อมูลสรุปของทุกฝ่าย · เลือกฝ่ายและช่วงวันที่ได้</div></div>'
+        + '<div class="meta"><p class="name">Dashboard ผู้บริหาร</p><div class="en">ดูข้อมูลสรุปของทุกฝ่าย</div></div>'
         + '<span class="go">' + icon('lock', 15) + 'ใช้รหัสผู้บริหาร ' + icon('arrow') + '</span></button>';
     }).join('');
     $('grid').innerHTML = state.depts.filter(function (d) { return !d.exec; }).map(function (d) {
