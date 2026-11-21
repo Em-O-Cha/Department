@@ -40,6 +40,27 @@
   function prodOf(id) { return H.data.products.filter(function (p) { return p.id === id; })[0]; }
   function me() { try { return localStorage.getItem('prd_by') || ''; } catch (e) { return ''; } }
   function setMe(v) { try { localStorage.setItem('prd_by', v); } catch (e) {} }
+  // ช่องผู้บันทึก: เลือกจากรายชื่อ (ตั้งค่า → รายชื่อผู้บันทึก) หรือ "＋ เพิ่มชื่อใหม่" แล้วชื่อนั้นเข้ารายชื่อให้ทุกเครื่อง (ผู้ใช้ขอ 21/11/69)
+  function meOpts() {
+    var names = list(S_().people), cur = me();
+    if (cur && names.indexOf(cur) < 0) names.push(cur);
+    return '<option value=""' + (cur ? '' : ' selected') + '>— เลือกชื่อ —</option>' + names.map(function (n) { return '<option value="' + esc(n) + '"' + (n === cur ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('')
+      + '<option value="__add">＋ เพิ่มชื่อใหม่…</option>';
+  }
+  function addPerson() {
+    wide({ icon: 'users', title: 'เพิ่มชื่อผู้บันทึก', sub: 'ชื่อนี้จะอยู่ในรายชื่อให้เลือกได้ทุกเครื่อง (ลบ / แก้ได้ที่เมนู ตั้งค่า)', ok: 'เพิ่มชื่อ',
+      body: '<div class="pf full"><label for="nmNew">ชื่อ</label><input id="nmNew" maxlength="40" placeholder="เช่น ชื่อเล่น หรือชื่อจริง" autocomplete="off"></div>',
+      check: function () { var v = $('nmNew').value.trim(); return !v ? 'พิมพ์ชื่อก่อน' : /[,\n]/.test(v) ? 'ชื่อห้ามมีเครื่องหมาย ,' : ''; },
+      submit: function () {
+        var v = $('nmNew').value.trim(), names = list(S_().people);
+        var done = function () { setMe(v); closeModal(); if ($('dMe')) $('dMe').innerHTML = meOpts(); toast('ผู้บันทึก: ' + v); };
+        if (names.indexOf(v) >= 0) { done(); return; }
+        return call('prdSaveSettings', state.token, { people: names.concat([v]).join(', ') }).then(function (r) {
+          if (!r.ok) return r.error || 'บันทึกชื่อไม่ได้';
+          H.data.settings = r.settings; done();
+        });
+      } });
+  }
   function wide(cfg) { cfg.wide = true; cfg.color = cfg.color || state.dept.color; openModal(cfg); }
   // แผน = จำนวน + หน่วย (ตรงกับ prdPlanUnit_ / prdPlanText_ ใน Prod.gs): G1/G2 จำนวนอยู่ใน planBatch (เริ่มต้น batch) · G3 อยู่ใน planQty (เริ่มต้น ลัง)
   function planUnit(x) { return String(x.planUnit || '').trim() || (x.grp === 'G3' ? 'ลัง' : 'batch'); }
@@ -154,8 +175,7 @@
     $('main').innerHTML = '<div class="xdhead"><h3>แผนผลิต / บันทึกผล</h3>'
       + '<div class="xdate"><button class="icon-btn" id="dPrev" aria-label="วันก่อนหน้า">‹</button><label><span>' + dayName(D.date) + '</span><input type="date" id="dDate" value="' + D.date + '"></label><button class="icon-btn" id="dNext" aria-label="วันถัดไป">›</button>'
       + (D.date !== t ? '<button class="btn btn-line btn-sm" id="dToday">วันนี้</button>' : '') + '</div>'
-      + '<label class="xme">ผู้บันทึก <input id="dMe" list="xPeople" value="' + esc(me()) + '" placeholder="เลือกหรือพิมพ์ชื่อ" maxlength="40"></label>'
-      + '<datalist id="xPeople">' + list(S_().people).map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist></div>'
+      + '<label class="xme">ผู้บันทึก <select id="dMe" aria-label="ผู้บันทึก">' + meOpts() + '</select></label></div>'
       // เช้า = ใส่แผน + ส่งแผน · เย็น = ใส่ผลจริงทีละกลุ่ม + ส่งสรุปของกลุ่ม (ไม่ปนกัน)
       + '<div class="xmode" role="tablist">' + [['m', '🌅 แผนเช้า', 'ใส่แผนผลิตของวันนี้ แล้วส่งแผนเข้า LINE', mr && mr.sentAt], ['e', '🌙 สรุปเย็น', 'ใส่ผลผลิตจริงของแต่ละกลุ่ม แล้วส่งสรุป', null]].map(function (x) {
         return '<button role="tab" class="xmb' + (q.mode === x[0] ? ' on' : '') + '" data-mode="' + x[0] + '" aria-selected="' + (q.mode === x[0]) + '"><b>' + x[1] + (x[3] ? ' <small class="xok">✓ ส่งแล้ว</small>' : '') + '</b><span>' + x[2] + '</span></button>';
@@ -176,7 +196,10 @@
     $('dNext').addEventListener('click', function () { goDate(addDays(D.date, 1)); });
     $('dDate').addEventListener('change', function () { goDate(this.value); });
     if ($('dToday')) $('dToday').addEventListener('click', function () { goDate(t); });
-    $('dMe').addEventListener('change', function () { setMe(this.value.trim()); });
+    $('dMe').addEventListener('change', function () {
+      if (this.value !== '__add') { setMe(this.value.trim()); return; }
+      this.value = me(); addPerson();
+    });
     on('[data-tab]', 'click', function (el) { collect(); H.q.tab = el.getAttribute('data-tab'); dayPage(); }, $('main'));
     on('[data-mode]', 'click', function (el) { collect(); H.q.mode = el.getAttribute('data-mode'); dayPage(); window.scrollTo(0, 0); }, $('main'));
     $('dSave').addEventListener('click', saveDay);
@@ -936,8 +959,8 @@
   css.textContent = [
     '.xdhead{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-bottom:12px}.xdhead h3{margin:0;flex:1 1 auto}',
     '.xdate{display:flex;gap:6px;align-items:center;background:#fff;border-radius:12px;padding:6px 8px;box-shadow:var(--shadow)}.xdate label{display:flex;flex-direction:column;font-size:11px;color:var(--muted);margin:0}.xdate input{border:0;font:inherit;font-size:15px;font-weight:600;padding:0;background:none}.xdate .icon-btn{font-size:20px;line-height:1;width:36px;height:36px;justify-content:center}',
-    '.xme{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:#334155;margin:0;background:#fff;border-radius:12px;padding:6px 8px 6px 12px;box-shadow:var(--shadow)}.xme input{border:1.5px solid var(--line);border-radius:9px;padding:7px 10px;font:inherit;width:170px}',
-    '@media (max-width:760px){.xdhead h3{flex:1 1 100%}.xdhead .xdate{flex:1 1 100%;justify-content:space-between}.xdhead .xdate label{flex:1;align-items:center}.xdhead .xme{flex:1 1 100%}.xdhead .xme input{flex:1;width:auto;min-width:0}}',
+    '.xme{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:#334155;margin:0;background:#fff;border-radius:12px;padding:6px 8px 6px 12px;box-shadow:var(--shadow)}.xme input,.xme select{border:1.5px solid var(--line);border-radius:9px;padding:7px 10px;font:inherit;width:190px;background:#fff;color:var(--ink);min-height:40px}',
+    '@media (max-width:760px){.xdhead h3{flex:1 1 100%}.xdhead .xdate{flex:1 1 100%;justify-content:space-between}.xdhead .xdate label{flex:1;align-items:center}.xdhead .xme{flex:1 1 100%}.xdhead .xme input,.xdhead .xme select{flex:1;width:auto;min-width:0}}',
     '.xtabs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}.xtab{border:2px solid transparent;background:#fff;border-radius:12px;padding:10px 12px;text-align:left;box-shadow:var(--shadow);cursor:pointer;font:inherit;color:var(--ink);border-top:4px solid var(--g);min-height:56px}',
     '.xtab b{display:block;font-size:14px}.xtab small{color:var(--muted);font-size:12px}.xtab{background:color-mix(in srgb,var(--g) 7%,white)}.xtab.on{border-color:var(--g);background:var(--g);color:#fff}.xtab.on small{color:#fff;opacity:.9}',
     '.xmode{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}.xmb{border:2px solid var(--line);background:#fff;border-radius:14px;padding:12px 14px;text-align:left;cursor:pointer;font:inherit;color:var(--ink);box-shadow:var(--shadow);min-height:64px}.xmb b{display:block;font-size:17px}.xmb span{display:block;font-size:12.5px;color:var(--muted);margin-top:2px}.xmb.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 10%,white)}.xmb .xok{font-size:12px}',

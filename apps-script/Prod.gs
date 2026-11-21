@@ -126,6 +126,19 @@ function prdSettings_(ss) {
   purRead_(ss, 'prd_settings').forEach(function (x) { if (x.id) s[x.id] = String(x.value == null ? '' : x.value); });
   // ชุดสาเหตุเสร็จช้าเดิม (ยังไม่เคยแก้เอง) → ใช้ชุดใหม่ที่ครบกว่า
   if (!String(s.people || '').trim() && typeof PRD_PEOPLE_DEFAULT_ !== 'undefined') s.people = PRD_PEOPLE_DEFAULT_;   // รายชื่อผู้บันทึกเริ่มต้น (ProdPeople.gs)
+  // ผู้ใช้ขอ 21/11/69: ให้รายชื่อผู้บันทึกมี 5 ชื่อนี้ (ณิชกมล พรชัย ธัญญลักษณ์ ชัชชัย นงลักษณ์) — เติมชื่อที่ขาดลงชีตครั้งเดียว (หลังจากนั้นลบ / แก้เองได้ในตั้งค่า)
+  if (typeof PRD_PEOPLE_DEFAULT_ !== 'undefined' && String(s.people || '').trim() && s.people !== PRD_PEOPLE_DEFAULT_) {
+    var pp = PropertiesService.getScriptProperties();
+    if (!pp.getProperty('PRD_PEOPLE_MERGED_691121')) {
+      var cur = String(s.people).split(/[,\n]/).map(function (x) { return x.trim(); }).filter(String);
+      var add = PRD_PEOPLE_DEFAULT_.split(',').map(function (x) { return x.trim(); }).filter(function (x) { return x && cur.indexOf(x) < 0; });
+      if (add.length) {
+        s.people = cur.concat(add).join(', ');
+        try { var row = purRead_(ss, 'prd_settings').filter(function (x) { return x.id === 'people'; })[0]; if (row) purWrite_(ss, 'prd_settings', Object.assign(row, { value: s.people })); } catch (e) {}
+      }
+      pp.setProperty('PRD_PEOPLE_MERGED_691121', '1');
+    }
+  }
   if (s.checks === 'ปิดน้ำ, ปิดไฟ, ปิดแอร์') s.checks = PRD_SETTINGS_DEFAULT_.checks;   // ชุดเดิม → เพิ่มปิดแก๊ส
   if (s.lateCauses === 'Breakdown เครื่องจักร, วัตถุดิบไม่พอ / มาช้า, คนไม่พอ, งานแทรก / เปลี่ยนแผน') s.lateCauses = PRD_SETTINGS_DEFAULT_.lateCauses;
   return s;
