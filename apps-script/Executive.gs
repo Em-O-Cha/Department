@@ -5,7 +5,7 @@
 // ฝ่ายที่มีระบบข้อมูลแล้วจะมีตัวสรุปของฝ่ายนั้น (เช่น PUR = purDashboard_ ใน Purchasing.gs)
 
 // ส่วนที่เพิ่มในหน้าฝ่ายภายหลัง ให้ขึ้นในหน้าผู้บริหารด้วย (ผู้ใช้ขอ 19/11/69): PUR ราคาปรับขึ้น · QA ค่าใช้จ่าย · ACC เปรียบเทียบ + สรุปรายเดือนทุกบริษัท
-function execExtra_(d, fn) { try { fn(d); } catch (e) { d.extraError = (d.extraError ? d.extraError + ' · ' : '') + String(e.message || e); } return d; }
+function execExtra_(d) { for (var i = 1; i < arguments.length; i++) { try { arguments[i](d); } catch (e) { d.extraError = (d.extraError ? d.extraError + ' · ' : '') + String(e.message || e); } } return d; }
 var EXEC_DASHBOARDS_ = { PUR: function (dept, from, to) { return execExtra_(purDashboard_(dept, from, to), function (d) { var ss = purBook_(dept); d.rises = purPriceReport_(ss, from, to); d.vendorInfo = purVendorDash_(ss); }); },
   HR: function (dept, from, to) { return hrDashboard_(dept, from, to); },
   SHE: function (dept, from, to) { var d = sheDashboard_(dept, from, to); d.kind = 'safety'; return d; },
@@ -14,7 +14,7 @@ var EXEC_DASHBOARDS_ = { PUR: function (dept, from, to) { return execExtra_(purD
     d.cost = { today: purToday_(), tests: purRead_(ss, 'qa_tests').map(function (t) { return { year: t.year, kind: t.kind, status: t.status, price: t.price, sentDate: t.sentDate, testType: t.testType, sample: t.sample, lab: t.lab }; }),
       complaints: purRead_(ss, 'qa_complaints').filter(function (c) { return Number(c.remedyCost) > 0; }).map(function (c) { return { recvDate: c.recvDate, remedyCost: c.remedyCost, product: c.product }; }) };
   }); },
-  ACC: function (dept, from, to) { return execExtra_(accDashboard_(dept, from, to, 'po', ''), function (d) { d.compare = accCompareData_(dept); d.monthly = accMonthlyData_(dept); }); },
+  ACC: function (dept, from, to) { return execExtra_(accDashboard_(dept, from, to, 'po', ''), function (d) { d.compare = accCompareData_(dept); d.monthly = accMonthlyData_(dept); }, function (d) { d.payables = apDashData_(dept); }); },
   PROD: function (dept, from, to) { return prdDashboard_(dept, from, to); },
   RD: function (dept, from, to) { return rdDashboard_(dept, from, to); } };
 

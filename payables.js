@@ -367,7 +367,7 @@
       }).catch(onServerError);
     });
   }
-  P.render = function () { ({ a_apin: P.importPage, a_ap: P.roundPage, a_apv: P.vendorPage, a_appo: P.poPage }[state.page] || P.importPage)(); };
+  P.render = function () { ({ a_ap_dash: P.dashPage, a_apin: P.importPage, a_ap: P.roundPage, a_apv: P.vendorPage, a_appo: P.poPage }[state.page] || P.importPage)(); };
   function newBill(kind) {
     return { kind: kind === 'po' ? 'po' : '', billId: '', category: '', vendor: '', taxId: '', invNo: '', issueDate: kind === 'po' ? '' : P.data.today, creditDays: '', payRound: '', vatMode: 'exc', pct: 0, note: '', bank: '',
       lines: [{ desc: '', qty: 1, price: 0 }], pages: [], uploads: [], keepFiles: [], read: null, autoRound: true };
@@ -1284,10 +1284,123 @@
   }
 
   // ปุ่ม Excel ด้านบน (index.html) ในหน้ารายงานรอบจ่าย → ไฟล์ตามแบบฟอร์ม
+  // ==================== Dashboard การจ่าย (ผู้ใช้ขอ 21/11/69: ทั้งหน้าฝ่ายบัญชี a_ap_dash และหน้าผู้บริหาร) ====================
+  // ข้อมูล d = { linked, lines [{payRound, category, vendor, billId, kind, amount, vat, lineTotal, wht}], rounds [{nominal, actual, why}], cats, today }
+  // ยอดชำระต่อบิล = Σ รวม − Σ หัก ณ ที่จ่าย (เหมือนรายงานตามรอบ) · รอบที่วันจ่ายจริง ≥ วันนี้ = รอจ่าย · ก่อนหน้า = จ่ายแล้ว (ตามรอบ)
+  var MS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  var CAT_C = { raw: '#16a34a', pack: '#f97316', misc: '#eab308', ship: '#0ea5e9', svc: '#6366f1', fac: '#ec4899' };
+  function thd(iso, noYear) { if (!iso) return '-'; var p = String(iso).split('-'); return +p[2] + ' ' + MS[+p[1] - 1] + (noYear ? '' : ' ' + String(+p[0] + 543).slice(2)); }
+  var DAYS = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
+  function wday(iso) { var p = String(iso).split('-'); return DAYS[new Date(+p[0], +p[1] - 1, +p[2]).getDay()]; }
+  function b0(v) { return Math.round(Number(v) || 0).toLocaleString('en-US'); }
+  var RANGES = [['6m', '6 เดือนล่าสุด'], ['12m', '12 เดือน'], ['y', 'ปีนี้'], ['all', 'ทั้งหมด']];
+  P.dashModel = function (d, range) {
+    var today = d.today, rmap = {}, cats = d.cats || [];
+    (d.rounds || []).forEach(function (r) { rmap[r.nominal] = r; });
+    var by = {};
+    (d.lines || []).forEach(function (l) {
+      if (!l.payRound) return;
+      var r = by[l.payRound] = by[l.payRound] || { nominal: l.payRound, actual: (rmap[l.payRound] || {}).actual || l.payRound, why: (rmap[l.payRound] || {}).why || '', pay: 0, vat: 0, wht: 0, bills: {}, po: {}, poPay: 0, cat: {}, ven: {} };
+      var pay = (Number(l.lineTotal) || 0) - (Number(l.wht) || 0);
+      r.pay += pay; r.vat += Number(l.vat) || 0; r.wht += Number(l.wht) || 0; r.bills[l.billId] = 1;
+      if (l.kind === 'po') { r.po[l.billId] = 1; r.poPay += pay; }
+      r.cat[l.category || ''] = (r.cat[l.category || ''] || 0) + pay;
+      var v = r.ven[l.vendor || '-'] = r.ven[l.vendor || '-'] || { pay: 0, bills: {} }; v.pay += pay; v.bills[l.billId] = 1;
+    });
+    var all = Object.keys(by).sort().map(function (k) { return by[k]; });
+    var t = today.split('-'), y = +t[0], mo = +t[1];
+    var back = function (n) { var m = mo - n, yy = y + Math.floor((m - 1) / 12); m = ((m - 1) % 12 + 12) % 12 + 1; return yy + '-' + pad(m) + '-01'; };
+    var lo = range === '6m' ? back(6) : range === '12m' ? back(12) : range === 'y' ? y + '-01-01' : '', hi = range === 'y' ? y + '-12-31' : '9999';
+    var list = all.filter(function (r) { return r.actual >= lo && r.actual <= hi; });
+    var up = all.filter(function (r) { return r.actual >= today; }), past = list.filter(function (r) { return r.actual < today; });
+    var sum = function (a, f) { return a.reduce(function (s, r) { return s + f(r); }, 0); };
+    var cnt = function (a, f) { var o = {}; a.forEach(function (r) { Object.keys(f(r)).forEach(function (k) { o[k] = 1; }); }); return Object.keys(o).length; };
+    var cat = {}, ven = {};
+    list.forEach(function (r) {
+      Object.keys(r.cat).forEach(function (k) { cat[k] = (cat[k] || 0) + r.cat[k]; });
+      Object.keys(r.ven).forEach(function (k) { var v = ven[k] = ven[k] || { name: k, pay: 0, bills: 0 }; v.pay += r.ven[k].pay; v.bills += Object.keys(r.ven[k].bills).length; });
+    });
+    var next = up[0] || null, prevOfNext = next ? all[all.indexOf(next) - 1] || null : null;
+    return {
+      all: all, list: list, up: up, next: next, prevOfNext: prevOfNext,
+      upPay: sum(up, function (r) { return r.pay; }), upBills: cnt(up, function (r) { return r.bills; }),
+      upPo: cnt(up, function (r) { return r.po; }), upPoPay: sum(up, function (r) { return r.poPay; }),
+      pastPay: sum(past, function (r) { return r.pay; }), pastN: past.length,
+      vat: sum(list, function (r) { return r.vat; }), wht: sum(list, function (r) { return r.wht; }), pay: sum(list, function (r) { return r.pay; }),
+      cats: cats.map(function (c) { return { key: c.key, name: c.name, n: r2(cat[c.key] || 0), color: CAT_C[c.key] } }).concat(cat[''] ? [{ key: '', name: 'ไม่ระบุหมวด', n: r2(cat['']), color: '#94a3b8' }] : []),
+      vendors: Object.keys(ven).map(function (k) { return ven[k]; }).sort(function (a, b) { return b.pay - a.pay; })
+    };
+  };
+  P.dashHtml = function (d, opt) {
+    opt = opt || {};
+    if (!d || !d.linked) return '<div class="panel">ยังไม่ได้เชื่อมชีตค่าใช้จ่าย (จ่าย) — ตั้งได้ที่หน้า "นำเข้าบิล" ของฝ่ายบัญชี</div>';
+    var range = opt.range || '6m', M = P.dashModel(d, range), DCH = window.DCH;
+    var tile = function (v, label, color, sub) { return '<div class="kpi" style="--k:' + color + '"><b>' + v + '</b><span>' + label + '</span>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>'; };
+    var nx = M.next, rangeName = RANGES.filter(function (x) { return x[0] === range; })[0][1];
+    var html = '<div class="pbar noprint apdr"><div class="pchips" style="margin:0">' + RANGES.map(function (x) { return '<button class="chip' + (x[0] === range ? ' on' : '') + '" data-apdr="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>'
+      + '<small class="muted">ช่วงเวลาใช้กับกราฟ / หมวด / ผู้ขาย · ยอดรอจ่ายนับทุกรอบที่ยังไม่ถึง</small></div>';
+    if (!M.all.length) return html + '<div class="empty"><div class="icon">' + icon('chart', 28) + '</div><h4>ยังไม่มีบิลค่าใช้จ่าย</h4><div>นำเข้าบิลที่หน้า "นำเข้าบิล" แล้วข้อมูลจะขึ้นที่นี่</div></div>';
+    html += '<div class="kpis">'
+      + tile(nx ? b0(nx.pay) : '–', 'รอบจ่ายถัดไป (บาท)', '#dc2626', nx ? wday(nx.actual) + ' ' + thd(nx.actual) + ' · ' + Object.keys(nx.bills).length + ' บิล' + (Object.keys(nx.po).length ? ' (PO ' + Object.keys(nx.po).length + ')' : '') + (M.prevOfNext && DCH ? ' ' + DCH.delta(nx.pay, M.prevOfNext.pay, { good: 'down', label: 'จากรอบก่อน' }) : '') : 'ยังไม่มีบิลในรอบที่จะถึง')
+      + tile(b0(M.upPay), 'ยอดรอจ่ายทั้งหมด (บาท)', '#ea580c', M.up.length + ' รอบ · ' + M.upBills + ' บิล')
+      + tile(M.upPo ? M.upPo + ' ใบ' : '0', 'PO ล่วงหน้า (รอบิล)', '#b91c1c', M.upPo ? b0(M.upPoPay) + ' บาท · ยังไม่ได้รับบิล' : 'ไม่มีรายการรอบิล')
+      + tile(b0(M.pay), 'ยอดจ่ายตามรอบ · ' + rangeName, '#2563eb', M.list.length + ' รอบ · จ่ายไปแล้ว ' + b0(M.pastPay))
+      + tile(b0(M.vat), 'ภาษีซื้อ (VAT) · ' + rangeName, '#0d9488', 'จากบิลที่มี VAT')
+      + tile(b0(M.wht), 'หัก ณ ที่จ่าย / ส่วนลด · ' + rangeName, '#7c3aed', 'หักออกจากยอดชำระแล้ว')
+      + '</div>';
+    var chart = M.list.length && DCH ? DCH.area({
+      labels: M.list.map(function (r) { return thd(r.actual, true); }), unit: ' บาท', height: 200, fmt: function (v) { return b0(v); },
+      calloutLabel: function (i) { return 'จ่าย ' + thd(M.list[i].actual); },
+      series: [{ name: 'ยอดชำระรวม', color: '#dc2626', values: M.list.map(function (r) { return r2(r.pay); }), fill: true },
+        { name: 'วัตถุดิบ', color: '#16a34a', values: M.list.map(function (r) { return r2(r.cat.raw || 0); }) }]
+    }) : '<div class="muted">ไม่มีรอบจ่ายในช่วงนี้</div>';
+    var catHtml = DCH ? DCH.donut(M.cats, { sub: 'บาท', center: DCH.short(M.pay), unit: ' บาท', fmt: b0, max: 7, title: 'แยกตามหมวด' }) : '';
+    var top = M.vendors.slice(0, 8), mx = top.length ? top[0].pay : 1;
+    var venHtml = top.length ? top.map(function (v, i) {
+      return '<div class="apdv"><span><em>' + (i + 1) + '</em>' + esc(v.name) + '<small>' + v.bills + ' บิล</small></span><i><b style="width:' + Math.max(3, Math.round(v.pay / mx * 100)) + '%"></b></i><strong>' + b0(v.pay) + '</strong></div>';
+    }).join('') + (M.vendors.length > 8 ? '<small class="muted">และผู้ขายอื่นอีก ' + (M.vendors.length - 8) + ' ราย · รวม ' + M.vendors.length + ' ราย</small>' : '') : '<div class="muted">ไม่มีข้อมูล</div>';
+    var upHtml = M.up.length ? M.up.slice(0, 5).map(function (r) {
+      var nb = Object.keys(r.bills).length, np = Object.keys(r.po).length, days = Math.round((new Date(r.actual) - new Date(d.today)) / 864e5);
+      var bar = (d.cats || []).map(function (c) { var v = r.cat[c.key] || 0; return v > 0 ? '<i style="width:' + (v / r.pay * 100).toFixed(1) + '%;background:' + CAT_C[c.key] + '" title="' + esc(c.name) + ' ' + b0(v) + '"></i>' : ''; }).join('');
+      return '<div class="apdu' + (opt.click ? ' clk" role="button" tabindex="0" data-apdgo="' + r.nominal : '') + '"><div><b>' + wday(r.actual) + ' ' + thd(r.actual) + '</b><small>' + (days <= 0 ? 'วันนี้' : 'อีก ' + days + ' วัน') + ' · ' + nb + ' บิล' + (np ? ' · <span class="apred">PO ' + np + '</span>' : '')
+        + (r.why ? '<br><em>เลื่อนจาก ' + thd(r.nominal) + ' (' + esc(r.why) + ')</em>' : '') + '</small><span class="apdcb">' + bar + '</span></div><strong>' + b0(r.pay) + '</strong></div>';
+    }).join('') : '<div class="muted">ไม่มีรอบจ่ายที่จะถึง</div>';
+    html += '<div class="pgrid">'
+      + '<div class="panel pbox"><h4>' + icon('chart', 18) + ' ยอดจ่ายตามรอบ <small class="muted">' + rangeName + '</small></h4>' + chart + '</div>'
+      + '<div class="panel pbox"><h4>' + icon('clock', 18) + ' รอบจ่ายที่จะถึง' + (opt.click ? ' <small class="muted">แตะเพื่อเปิดรายงาน</small>' : '') + '</h4>' + upHtml
+      + '<div class="apdleg">' + (d.cats || []).map(function (c) { return '<span><i style="background:' + CAT_C[c.key] + '"></i>' + esc(c.name.replace(/^ค่าใช้จ่าย\s*/, '')) + '</span>'; }).join('') + '</div></div>'
+      + '<div class="panel pbox"><h4>' + icon('chart', 18) + ' แยกตามหมวด <small class="muted">' + rangeName + '</small></h4>' + catHtml + '</div>'
+      + '<div class="panel pbox"><h4>' + icon('table', 18) + ' ผู้ขายที่จ่ายมากที่สุด <small class="muted">' + rangeName + '</small></h4>' + venHtml + '</div>'
+      + '</div>';
+    return html;
+  };
+  // วาด + ผูกปุ่มช่วงเวลา ในกล่องใดก็ได้ (หน้าฝ่าย / หน้าผู้บริหาร)
+  P.mountDash = function (box, d, opt) {
+    opt = opt || {};
+    var draw = function () {
+      box.innerHTML = P.dashHtml(d, opt);
+      on('[data-apdr]', 'click', function (el) { opt.range = el.getAttribute('data-apdr'); try { localStorage.setItem('ap_dash_range', opt.range); } catch (e) {} draw(); }, box);
+      if (opt.click) on('[data-apdgo]', 'click', function (el) { opt.click(el.getAttribute('data-apdgo')); }, box);
+    };
+    if (!opt.range) { try { opt.range = localStorage.getItem('ap_dash_range') || '6m'; } catch (e) { opt.range = '6m'; } }
+    draw();
+  };
+  P.dashPage = function () {
+    ensure('Dashboard การจ่าย', function () {
+      $('main').innerHTML = '<h3>Dashboard การจ่าย</h3><p class="lead">ภาพรวมค่าใช้จ่ายตามรอบจ่าย · ยอดชำระ = รวม − หัก ณ ที่จ่าย (เหมือนรายงานจ่ายตามรอบ)</p>'
+        + (P.data.linked ? '' : linkPanel()) + '<div id="apDash"></div>';
+      bindLink();
+      P.mountDash($('apDash'), P.data, { click: function (nom) { P.round = nom; go('a_ap'); } });
+    });
+  };
   P.exportFile = function (page, kind) { return page === 'a_ap' && kind === 'xlsx' && P.model ? P.excel() : null; };
 
   var css = document.createElement('style');
   css.textContent = [
+    '.apdr{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-bottom:12px}.apdr small{font-size:12px}',
+    '.apdv{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(60px,1fr) auto;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:13.5px}.apdv span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.apdv em{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#fee2e2;color:#b91c1c;font-style:normal;font-size:11px;font-weight:700;margin-right:6px}.apdv small{color:var(--muted);margin-left:6px;font-size:11.5px}.apdv i{height:8px;border-radius:6px;background:#f1f5f9;overflow:hidden}.apdv i b{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,#f87171,#dc2626)}.apdv strong{font-variant-numeric:tabular-nums;font-size:13.5px}',
+    '.apdu{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:12px;background:#fff7f7;border:1px solid #fee2e2;margin-bottom:8px}.apdu>div{flex:1;min-width:0}.apdu b{font-size:14px}.apdu small{display:block;color:var(--muted);font-size:12px;margin-top:2px}.apdu em{color:#b45309;font-style:normal}.apdu strong{font-size:16px;color:#b91c1c;font-variant-numeric:tabular-nums;white-space:nowrap}.apdu.clk{cursor:pointer}.apdu.clk:hover{border-color:#fca5a5;background:#fff1f1}',
+    '.apdcb{display:flex;height:6px;border-radius:6px;overflow:hidden;background:#f1f5f9;margin-top:7px}.apdcb i{display:block;height:100%}.apdleg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--muted);margin-top:4px}.apdleg i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:4px;vertical-align:-1px}',
     '.appick{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.appick small{flex-basis:100%;color:var(--muted)}.apbig{width:auto;flex:1 1 200px;justify-content:center;gap:8px;padding:14px;font-size:16px;cursor:pointer}',
     '.apform{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:18px;align-items:start}.apform.nofile{grid-template-columns:1fr}',
     '.apimgs{position:sticky;top:12px;display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 24px);overflow:auto}.apimgs figure{margin:0}.apimgs img{width:100%;border:1px solid var(--line);border-radius:10px;cursor:zoom-in;background:#fff}',

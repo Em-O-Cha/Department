@@ -29,6 +29,7 @@
     { id: 'a_ex', label: 'นำเข้า Invoice ต่างประเทศ (PDF)', ic: 'upload' },
     { id: 'a_exl', label: 'ออเดอร์ต่างประเทศ', ic: 'table' },
     { section: 'จ่าย (เงินออก)', tone: 'out' },
+    { id: 'a_ap_dash', label: 'Dashboard การจ่าย', ic: 'chart' },
     { id: 'a_apin', label: 'นำเข้าบิล (ภาพถ่าย / สแกน / PDF)', ic: 'upload' },
     { id: 'a_appo', label: 'PO ล่วงหน้า (รอบิล)', ic: 'clock' },
     { id: 'a_ap', label: 'รายงานจ่ายตามรอบ', ic: 'table' },
@@ -87,7 +88,7 @@
     }
     if (page !== 'a_dash') H.cmp = null;
     if (page !== 'a_mon') H.mon = null;   // กลับมาหน้า Dashboard = คำนวณเปรียบเทียบใหม่ (อาจมีออเดอร์ใหม่)
-    ({ a_imp: importPage, a_hist: histPage, a_dash: dash, a_mon: monthly, a_set: settings, a_cp: function () { window.ACCCP.importPage(); }, a_cpl: function () { window.ACCCP.listPage(); }, a_ex: function () { window.ACCEX.importPage(); }, a_exl: function () { window.ACCEX.listPage(); }, a_apin: function () { window.ACCAP.importPage(); }, a_ap: function () { window.ACCAP.roundPage(); }, a_apv: function () { window.ACCAP.vendorPage(); }, a_appo: function () { window.ACCAP.poPage(); } }[page] || importPage)();
+    ({ a_imp: importPage, a_hist: histPage, a_dash: dash, a_mon: monthly, a_set: settings, a_cp: function () { window.ACCCP.importPage(); }, a_cpl: function () { window.ACCCP.listPage(); }, a_ex: function () { window.ACCEX.importPage(); }, a_exl: function () { window.ACCEX.listPage(); }, a_ap_dash: function () { window.ACCAP.dashPage(); }, a_apin: function () { window.ACCAP.importPage(); }, a_ap: function () { window.ACCAP.roundPage(); }, a_apv: function () { window.ACCAP.vendorPage(); }, a_appo: function () { window.ACCAP.poPage(); } }[page] || importPage)();
   };
 
   // ==================== ตาราง "ต้นแบบรับออเดอร์ 7-11" ====================

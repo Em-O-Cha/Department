@@ -96,6 +96,7 @@
     }
     if (r.kind === 'accounting' && window.ACC) {
       if (r.compare && window.ACC.mountCmp) { var c = add('เปรียบเทียบยอดสั่งซื้อ แยกบริษัท / สินค้า', '<div class="panel pbox a7cmp"><div class="xcmp"></div></div>'); window.ACC.mountCmp(c.querySelector('.xcmp'), r.compare); }
+      if (r.payables && window.ACCAP && window.ACCAP.mountDash) { var pd = add('การจ่าย (ค่าใช้จ่ายตามรอบจ่าย) <small class="muted">(ช่วงเวลาเลือกในกล่องนี้)</small>', '<div class="xap"></div>'); window.ACCAP.mountDash(pd.querySelector('.xap'), r.payables, {}); }
       if (r.monthly && window.ACC.mountMonthly) { var m = add('สรุปรายเดือน ทุกบริษัท', '<div class="xmon"></div>'); window.ACC.mountMonthly(m.querySelector('.xmon'), r.monthly); }
     }
     if (r.extraError) add('', '<div class="a7msg bad">บางส่วนโหลดไม่ได้: ' + esc(r.extraError) + '</div>');

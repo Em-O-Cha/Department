@@ -96,6 +96,19 @@ function apLoad(token) {
   return { ok: true, linked: !!ss, error: err, sheetUrl: ss ? ss.getUrl() : '', sheetName: ss ? ss.getName() : '', settings: st,
     cats: AP_CATS_, vatModes: AP_VAT_, lines: lines, vendors: vendors, rounds: apRounds_(st, hol, Object.keys(used)), today: purToday_(), ai: typeof apAiInfo_ === 'function' ? apAiInfo_() : null };
 }
+// Dashboard การจ่าย (ผู้ใช้ขอ 21/11/69): ข้อมูลเบา ๆ ของทุกบรรทัดบิล + รอบจ่าย — ใช้ในหน้าผู้บริหาร (หน้าฝ่ายใช้ apLoad)
+function apDashData_(dept) {
+  apRegister_();
+  var main = purBook_(dept), st = apSettings_(main), ss = apBook_(main);
+  if (!ss) return { linked: false };
+  var hol = accHolidaySet_(accMap_(main)), used = {};
+  var lines = purRead_(ss, 'ap_lines').map(function (l) {
+    if (l.payRound) used[l.payRound] = 1;
+    return { payRound: l.payRound, category: l.category, vendor: l.vendor, billId: l.billId, kind: String(l.kind || '') === AP_PO_ ? 'po' : '',
+      amount: Number(l.amount) || 0, vat: Number(l.vat) || 0, lineTotal: Number(l.lineTotal) || 0, wht: Number(l.wht) || 0 };
+  });
+  return { linked: true, settings: { payDay: st.payDay }, cats: AP_CATS_, lines: lines, rounds: apRounds_(st, hol, Object.keys(used)), today: purToday_() };
+}
 function apOut_(l) { l.invNo = apTxt_(l.invNo); l.taxId = apTxt_(l.taxId); l.kind = String(l.kind || '') === AP_PO_ ? 'po' : ''; delete l._row; return l; }
 
 function apSetSheet(token, url) {
