@@ -170,16 +170,21 @@
       + box(icon('warn', 18) + ' เรื่องค้างเกินกำหนด', r.overdueList.map(function (o) {
         return '<div class="li' + (interactive ? ' click" data-cc="' + esc(o.id) : '') + '"><span>' + esc(o.code) + ' · ' + esc(o.product) + ' · ' + esc(o.issueType) + '</span><b class="neg">' + o.days + ' วัน</b><small>รับเรื่อง ' + dd(o.recvDate) + ' · ' + (ST[o.status] || '') + ' · แก้ไขแล้ว ' + o.rounds + ' รอบ · ความรุนแรง' + (SEV[o.severity] || '') + '</small></div>';
       }), 'ไม่มีเรื่องค้างเกินกำหนด 👍')
-      + box(icon('chart', 18) + ' ประเภทปัญหา', bars(r.byIssue, '#7c3aed'), 'ไม่มีข้อร้องเรียนในช่วงนี้')
+      + box(icon('chart', 18) + ' ประเภทปัญหา', r.byIssue.length && window.DCH ? [window.DCH.donut(r.byIssue, { sub: 'เรื่อง', unit: ' เรื่อง', title: 'ประเภทปัญหา' })] : bars(r.byIssue, '#7c3aed'), 'ไม่มีข้อร้องเรียนในช่วงนี้')
       + box(icon('chart', 18) + ' สินค้าที่ถูกร้องเรียน', bars(r.byProduct, '#2563eb'), 'ไม่มีข้อร้องเรียนในช่วงนี้')
       + box(icon('chart', 18) + ' หมวดสาเหตุ (4M1E)', bars(r.byCause, '#d97706'), 'ยังไม่มีการระบุสาเหตุ')
       + box(icon('chart', 18) + ' ช่องทางที่รับเรื่อง', bars(r.byChannel, '#0891b2'), 'ไม่มีข้อร้องเรียนในช่วงนี้')
       + box(icon('chart', 18) + ' ความรุนแรง · มูลค่าชดเชย', r.bySeverity.map(function (x) { return bar(x.name, x.n, Math.max.apply(null, r.bySeverity.map(function (y) { return y.n; }).concat([1])), { C: '#991b1b', H: '#dc2626', M: '#d97706', L: '#16a34a' }[x.key]); })
         .concat(['<div class="li"><span>มูลค่าชดเชยลูกค้ารวม</span><b>฿' + Number(k.cost || 0).toLocaleString('th-TH') + '</b></div>', '<div class="li"><span>ข้อร้องเรียนที่เป็นจริง (ปัญหาจากโรงงาน)</span><b>' + (k.validPct == null ? '–' : k.validPct + '%') + '</b></div>']), '')
       + '</div>'
-      + '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('chart', 18) + ' แนวโน้ม 6 เดือน</h4><div class="qtrend">' + r.trend.map(function (m) {
-        return '<div class="qtm" title="' + ymLabel(m.ym) + ': ' + m.n + ' เรื่อง · ปิดแล้ว ' + m.closed + ' · สูง/วิกฤต ' + m.critical + '"><b>' + m.n + '</b><div class="qtb"><em class="b1" style="height:' + Math.round(m.n / mxT * 100) + '%"></em><em class="b2" style="height:' + Math.round(m.closed / mxT * 100) + '%"></em><em class="b3" style="height:' + Math.round(m.critical / mxT * 100) + '%"></em></div><span>' + ymLabel(m.ym) + '</span></div>';
-      }).join('') + '</div><div class="slegend"><i class="b1"></i>รับเรื่อง <i class="b2"></i>ปิดแล้ว <i class="b3"></i>ความรุนแรงสูง/วิกฤต</div></div>';
+      + (window.DCH ? (function () {   // กราฟเส้นแบบใหม่ (21/11/69)
+        var T = r.trend, last = T[T.length - 1] || {}, prev = T[T.length - 2] || {};
+        return '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('chart', 18) + ' แนวโน้ม 6 เดือน</h4>'
+          + '<div class="dch-head"><b>' + (last.n || 0) + '</b><span>เรื่องร้องเรียน เดือนล่าสุด</span>' + window.DCH.delta(last.n, prev.n, { good: 'down', pct: false, unit: ' เรื่อง', label: 'จากเดือนก่อน' }) + '</div>'
+          + window.DCH.area({ labels: T.map(function (m) { return MONTHS[+m.ym.slice(5, 7) - 1]; }), calloutLabel: function (i) { return ymLabel(T[i].ym); }, unit: ' เรื่อง',
+            series: [{ name: 'รับเรื่อง', color: '#7c3aed', values: T.map(function (m) { return m.n; }) }, { name: 'ปิดแล้ว', color: '#16a34a', fill: false, values: T.map(function (m) { return m.closed; }) },
+              { name: 'ความรุนแรงสูง / วิกฤต', color: '#dc2626', fill: false, dash: true, values: T.map(function (m) { return m.critical; }) }] }) + '</div>';
+      })() : '');
     return html;
   };
 
@@ -540,12 +545,12 @@
     var box = function (title, inner) { return '<div class="panel pbox"><h4>' + icon('chart', 18) + ' ' + title + '</h4>' + inner + '</div>'; };
     var stRow = function (label, v, color) { return '<div class="sbar"><span>' + label + '</span><i><em style="width:' + (v ? Math.max(2, Math.round(v / Math.max(1, tT + tO) * 100)) : 0) + '%;background:' + color + '"></em></i><b>' + baht(v) + '</b></div>'; };
     return ''
-      + '<div class="kpis">' + tile(baht(all), 'ค่าใช้จ่ายรวมปี ' + (y + 543), '#7c3aed', prev ? 'ปีก่อน ' + baht(prev) + ' (' + (diff >= 0 ? '+' : '') + diff + '%)' : 'ปีก่อนไม่มีข้อมูล')
+      + '<div class="kpis">' + tile(baht(all), 'ค่าใช้จ่ายรวมปี ' + (y + 543), '#7c3aed', prev ? (window.DCH ? window.DCH.delta(all, prev, { good: 'down', label: 'จากปีก่อน' }) + ' ปีก่อน ' + baht(prev) : 'ปีก่อน ' + baht(prev) + ' (' + (diff >= 0 ? '+' : '') + diff + '%)') : 'ปีก่อนไม่มีข้อมูล')
       + tile(baht(tT), 'ค่าตรวจวิเคราะห์', '#2563eb', D.test.length + ' รายการ')
       + tile(baht(tO), 'ค่าใช้จ่ายอื่น', '#0891b2', D.other.length + ' รายการ (อย. / สอบเทียบ ฯลฯ)')
       + tile(baht(tC), 'ค่าชดเชยลูกค้า', tC ? '#dc2626' : '#16a34a', D.comp.length + ' เรื่องร้องเรียน')
       + tile(baht(plan + pend), 'ยังไม่จ่าย / รอผล', plan + pend ? '#d97706' : '#16a34a', 'จ่ายแล้ว ' + baht(paid)) + '</div>'
-      + '<div class="panel pbox" style="margin-bottom:14px"><h4>' + icon('chart', 18) + ' ค่าใช้จ่ายรายเดือน ปี ' + (y + 543) + '</h4>' + trend + '</div>'
+      + '<div class="panel pbox" style="margin-bottom:14px"><h4>' + icon('chart', 18) + ' ค่าใช้จ่ายรายเดือน ปี ' + (y + 543) + '</h4>' + (window.DCH ? window.DCH.area({ labels: MS, unit: ' บาท', height: 210, maxTicks: 12, calloutLabel: function (i) { return MS[i] + ' ' + String(y + 543).slice(2); }, series: [{ name: 'รวม', color: '#7c3aed', values: M.map(function (m) { return m.t + m.o + m.c; }) }, { name: 'ตรวจวิเคราะห์', color: '#2563eb', fill: false, values: M.map(function (m) { return m.t; }) }, { name: 'ค่าใช้จ่ายอื่น', color: '#0891b2', fill: false, dash: true, values: M.map(function (m) { return m.o; }) }, { name: 'ชดเชยลูกค้า', color: '#dc2626', fill: false, values: M.map(function (m) { return m.c; }) }] }) + (noDate || outYear ? '<p class="muted" style="margin:8px 0 0;font-size:13px">' + [noDate ? 'ยังไม่ใส่วันที่ส่งตรวจ / จ่าย ' + baht(noDate) : '', outYear ? 'ส่งตรวจ / จ่ายนอกปี ' + (y + 543) + ' ' + baht(outYear) : ''].filter(String).join(' · ') + '</p>' : '') : trend) + '</div>'
       + '<div class="pgrid">'
       + box('สถานะการจ่าย (ตรวจ + อื่น ๆ)', stRow('ยังไม่ส่ง / ยังไม่จ่าย', plan, '#d97706') + stRow('ส่งแล้ว รอผล', pend, '#2563eb') + stRow('ได้ผล / จ่ายแล้ว', paid, '#16a34a'))
       + box('ค่าตรวจแยกตามรายการตรวจ', bars(group(D.test, 'testType'), '#2563eb'))

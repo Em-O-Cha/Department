@@ -636,6 +636,7 @@
     if (!m.cases) return '<div class="empty"><div class="icon">' + icon('chart', 28) + '</div><h4>ไม่มีออเดอร์ในช่วงนี้</h4><div>' + thDate(r.from) + ' – ' + thDate(r.to) + (r.dc ? ' · ศูนย์ ' + esc(r.dc) : '') + ' (นับ' + (r.basis === 'po' ? 'ตามวันที่สั่ง' : 'ตามวันที่ส่ง') + ')</div></div>';
     var delta = function (now, before) {
       if (!before) return 'ช่วงก่อนหน้าไม่มีข้อมูล';
+      if (window.DCH) return window.DCH.delta(now, before, { label: 'จากช่วงก่อน' }) + ' (' + n0(before) + ')';
       var p = Math.round((now - before) / before * 100);
       return '<span class="' + (p >= 0 ? 'pos' : 'neg') + '">' + (p >= 0 ? '▲ ' : '▼ ') + Math.abs(p) + '%</span> จากช่วงก่อน (' + n0(before) + ')';
     };
@@ -658,12 +659,12 @@
       + '<div class="panel pbox"><h4>' + icon('chart', 18) + ' จำนวนลังแยกศูนย์' + (interactive ? ' <small class="muted">แตะเพื่อกรอง</small>' : '') + '</h4>' + m.dcs.slice().sort(function (a, b) { return b.cases - a.cases; }).map(function (d) {
         return bar(esc(d.name), d.cases, maxDc, '#059669', d.cases ? n0(d.cases) + ' <small>(' + Math.round(d.cases / m.cases * 100) + '%)</small>' : '–', d.cases && interactive ? ' data-dcf="' + esc(d.name) + '" role="button" tabindex="0"' : '');
       }).join('') + '</div>'
-      + '<div class="panel pbox"><h4>' + icon('chart', 18) + ' จำนวนลังแยกสินค้า</h4>' + prods.map(function (x) {
+      + '<div class="panel pbox"><h4>' + icon('chart', 18) + ' จำนวนลังแยกสินค้า</h4>' + (window.DCH && prods.length ? window.DCH.donut(prods.map(function (x) { return { name: pname(x.p), n: x.n, color: x.p.color }; }), { sub: 'ลังทั้งหมด', unit: ' ลัง', max: 8, title: 'จำนวนลังแยกสินค้า' }) + '<div class="xsep" style="margin:12px 0 4px"></div>' : '') + prods.map(function (x) {
         return bar('<i class="a7sw" style="background:' + x.p.color + '"></i>' + esc(pname(x.p)), x.n, maxP, x.p.color, n0(x.n));
       }).join('') + '</div>'
-      + '<div class="panel pbox"><h4>' + icon('chart', 18) + ' ลังต่อวัน (' + (r.basis === 'po' ? 'วันที่สั่ง' : 'วันที่ส่ง') + ')</h4><div class="a7days">' + r.days.map(function (d) {
+      + '<div class="panel pbox"><h4>' + icon('chart', 18) + ' ลังต่อวัน (' + (r.basis === 'po' ? 'วันที่สั่ง' : 'วันที่ส่ง') + ')</h4>' + (window.DCH ? window.DCH.area({ labels: r.days.map(function (d) { return thDate(d.date).replace(/ \d+$/, ''); }), calloutLabel: function (i) { return thDate(r.days[i].date); }, unit: ' ลัง', height: 200, series: [{ name: 'ลัง', color: '#059669', values: r.days.map(function (d) { return d.cases; }) }] }) : '<div class="a7days">' + r.days.map(function (d) {
         return '<div class="a7day" title="' + thDate(d.date) + ': ' + n0(d.cases) + ' ลัง · ' + baht(d.amount) + '"><b>' + n0(d.cases) + '</b><em style="height:' + Math.max(3, Math.round(d.cases / maxDay * 100)) + '%"></em><span>' + thDate(d.date).replace(/ \d+$/, '') + '</span></div>';
-      }).join('') + '</div></div>'
+      }).join('') + '</div>') + '</div>'
       + '<div class="panel pbox"><h4>' + icon('clock', 18) + ' กำหนดรับเงิน (ประมาณการ)</h4>' + (r.due.length ? r.due.slice(0, 10).map(function (d) {
         return '<div class="a7due"><div><b>' + dayName(d.date) + ' ' + thDate(d.date) + '</b><small>สินค้าส่ง ' + (d.from === d.to ? thDate(d.from) : thDate(d.from).replace(/ \S+ \d+$/, '') + '–' + thDate(d.to)) + ' · ' + d.poCount + ' ใบสั่ง'
           + (d.base && d.base !== d.date ? '<br><em>เลื่อนจาก ' + thDate(d.base) + (d.why ? ' (' + esc(d.why) + ')' : '') + '</em>' : '') + '</small></div><b>' + baht(d.amount) + '</b></div>';

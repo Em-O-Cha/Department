@@ -577,10 +577,15 @@
       }).join('') : '<div class="muted">ไม่มี</div>')
       + '<h4 style="margin-top:16px">' + icon('box', 18) + ' งานบรรจุ</h4><div class="li"><span>บรรจุลงซอง/ถ้วย (G1)</span><b>' + fmt(k.packed, 0) + ' ชิ้น</b></div><div class="li"><span>บรรจุลงลัง (G3)</span><b>' + fmt(k.cases, 0) + ' ลัง</b></div></div></div>';
     if (r.days.length > 1) {
-      html += '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('chart', 18) + ' Yield รายวัน</h4><div class="xdays">' + r.days.map(function (d) {
+      html += '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('chart', 18) + ' Yield รายวัน</h4>' + (window.DCH ? (function () {   // กราฟเส้น + เส้นเป้า (21/11/69)
+        var D2 = r.days, ys = D2.map(function (d) { return d.yieldPct; }).filter(function (v) { return v != null; });
+        var lo = ys.length ? Math.max(0, Math.floor((Math.min.apply(null, ys.concat([tg])) - 5) / 5) * 5) : 0;
+        return window.DCH.area({ labels: D2.map(function (d) { return dd(d.date).replace(/ \d+$/, ''); }), calloutLabel: function (i) { return dd(D2[i].date); }, unit: '%', target: tg, targetLabel: 'เป้า ' + tg + '%', yMin: lo, yMax: 100, height: 210,
+          series: [{ name: 'Yield', color: '#16a34a', values: D2.map(function (d) { return d.yieldPct; }) }], fmt: function (v) { return fmt(v, 1); } });
+      })() : '<div class="xdays">' + r.days.map(function (d) {
         var ok = d.yieldPct != null && d.yieldPct >= tg;
         return '<div class="xday" title="' + dd(d.date) + ': ' + (d.yieldPct == null ? '-' : d.yieldPct + '%') + '"><b>' + (d.yieldPct == null ? '-' : fmt(d.yieldPct, 0)) + '</b><em style="height:' + Math.max(3, Math.min(100, d.yieldPct || 0)) + '%;background:' + (ok ? '#16a34a' : '#dc2626') + '"></em><span>' + dd(d.date).replace(/ \d+$/, '') + '</span></div>';
-      }).join('') + '</div></div>';
+      }).join('') + '</div>') + '</div>';
     }
     return html;
   };

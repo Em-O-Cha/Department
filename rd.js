@@ -432,7 +432,7 @@
       + tile(k.launched, 'วางจำหน่ายแล้ว', '#0891b2', 'ทั้งหมด')
       + tile(k.trials, 'การทดลองในช่วงนี้', '#ea580c', 'ผ่าน ' + k.trialPass + ' · ไม่ผ่าน ' + k.trialFail)
       + tile(k.partners, 'คู่ค้า', '#7c3aed', 'ในประเทศ ' + k.partnersDom + ' · ต่างประเทศ ' + k.partnersExp)
-      + '</div><div class="pgrid"><div class="panel pbox"><h4>' + icon('chart', 18) + ' ผลิตภัณฑ์ใหม่ในช่วงนี้ (' + k.inRange + ')</h4><div class="xsub2">แยกประเภท</div>' + bars(r.byCategory, '#db2777')
+      + '</div><div class="pgrid"><div class="panel pbox"><h4>' + icon('chart', 18) + ' ผลิตภัณฑ์ใหม่ในช่วงนี้ (' + k.inRange + ')</h4><div class="xsub2">แยกประเภท</div>' + (window.DCH && r.byCategory.length ? window.DCH.donut(r.byCategory, { sub: 'ผลิตภัณฑ์', unit: ' รายการ', title: 'ผลิตภัณฑ์ใหม่แยกประเภท' }) : bars(r.byCategory, '#db2777'))
       + '<div class="xsub2">แยกตลาด</div>' + bars(r.byMarket, '#7c3aed') + '<div class="xsub2">แยกสถานะ</div>' + bars(r.byStatus, '#0891b2') + '</div>'
       + '<div class="panel pbox"><h4>' + icon('clock', 18) + ' กำหนดเสร็จ (กำลังพัฒนา)</h4>' + (r.dueList.length ? r.dueList.map(function (p) {
         return '<div class="li"><span>' + esc(p.name) + '<small>' + esc([p.code, p.category, MKT[p.market]].filter(String).join(' · ')) + '</small></span><b class="' + (p.overdue ? 'neg' : '') + '">' + dd(p.endDate) + '<small>' + dl(p.endDate) + '</small></b></div>';

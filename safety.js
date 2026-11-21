@@ -226,11 +226,15 @@
         return '<div class="li click" data-fd="' + esc(o.id) + '"><span>' + esc(o.code) + ' · ' + esc(o.location) + ' · ' + esc(o.problem) + '</span><b class="neg">' + dd(o.dueDate) + '</b><small>ผู้รับผิดชอบ ' + esc(o.responsible || '-') + ' · ความเสี่ยง' + (RISK[o.risk] || '') + '</small></div>';
       }), 'ไม่มีรายการเกินกำหนด')
       + box(icon('chart', 18) + ' ข้อบกพร่องแยกพื้นที่ / ความเสี่ยง', f.byArea.map(function (a) { return bar(a.name, a.n, f.byArea[0].n, '#d97706'); })
-        .concat(f.byRisk.length ? ['<div class="srisk">' + f.byRisk.map(function (rk) { return '<span>' + esc(rk.name) + ' <b>' + rk.n + '</b></span>'; }).join('') + '</div>'] : []), 'ไม่มีข้อบกพร่องในช่วงนี้')
-      + box(icon('chart', 18) + ' แนวโน้ม 6 เดือน', ['<div class="strend">' + r.trend.map(function (m) {
-        return '<div class="stm"><div class="stbars"><em class="b1" style="height:' + Math.round(m.findings / maxT * 100) + '%" title="ข้อบกพร่อง ' + m.findings + '"></em><em class="b2" style="height:' + Math.round(m.closed / maxT * 100) + '%" title="แก้เสร็จ ' + m.closed + '"></em><em class="b3" style="height:' + Math.round((m.incidents + m.near) / maxT * 100) + '%" title="อุบัติเหตุ/เกือบเกิด ' + (m.incidents + m.near) + '"></em></div>'
-          + '<b>' + (m.pass == null ? '–' : m.pass + '%') + '</b><span>' + ymLabel(m.ym) + '</span></div>';
-      }).join('') + '</div><div class="slegend"><i class="b1"></i>ข้อบกพร่อง <i class="b2"></i>แก้เสร็จ <i class="b3"></i>อุบัติเหตุ/เกือบเกิด · ตัวเลข = % ผ่าน</div>'], '')
+        .concat(f.byRisk.length ? ['<div class="xsep" style="margin:12px 0"></div>' + (window.DCH ? window.DCH.donut(f.byRisk.map(function (rk) { return { name: 'ความเสี่ยง' + rk.name, n: rk.n, color: /สูง|วิกฤต/.test(rk.name) ? '#dc2626' : /กลาง/.test(rk.name) ? '#f59e0b' : /ต่ำ/.test(rk.name) ? '#16a34a' : null }; }), { sub: 'ข้อบกพร่อง', unit: ' เรื่อง', title: 'ข้อบกพร่องแยกความเสี่ยง' }) : '<div class="srisk">' + f.byRisk.map(function (rk) { return '<span>' + esc(rk.name) + ' <b>' + rk.n + '</b></span>'; }).join('') + '</div>')] : []), 'ไม่มีข้อบกพร่องในช่วงนี้')
+      + (window.DCH ? (function () {   // กราฟเส้นแบบใหม่ (21/11/69)
+        var T = r.trend, last = T[T.length - 1] || {}, prev = T[T.length - 2] || {};
+        return '<div class="panel pbox"><h4>' + icon('chart', 18) + ' แนวโน้ม 6 เดือน</h4>'
+          + '<div class="dch-head"><b>' + (last.pass == null ? '–' : last.pass + '%') + '</b><span>ผลตรวจผ่าน เดือนล่าสุด</span>' + (last.pass != null && prev.pass != null ? window.DCH.delta(last.pass, prev.pass, { pct: false, unit: '%', label: 'จากเดือนก่อน' }) : '') + '</div>'
+          + window.DCH.area({ labels: T.map(function (m) { return MONTHS[+m.ym.slice(5, 7) - 1]; }), calloutLabel: function (i) { return ymLabel(T[i].ym); },
+            series: [{ name: 'ข้อบกพร่อง', color: '#f97316', values: T.map(function (m) { return m.findings; }) }, { name: 'แก้เสร็จ', color: '#16a34a', fill: false, values: T.map(function (m) { return m.closed; }) },
+              { name: 'อุบัติเหตุ / เกือบเกิด', color: '#dc2626', fill: false, dash: true, values: T.map(function (m) { return m.incidents + m.near; }) }], unit: ' เรื่อง' }) + '</div>';
+      })() : '')
       + box(icon('alert', 18) + ' อุบัติเหตุ / เกือบเกิดเหตุ', (x.byType.length ? ['<div class="srisk">' + x.byType.map(function (t) { return '<span>' + esc(t.name) + ' <b>' + t.n + '</b></span>'; }).join('') + '</div>'] : [])
         .concat(x.list.map(function (o) { return '<div class="li"><span>' + dd(o.date) + ' · ' + esc(o.type) + '</span><b>' + esc(o.location || '') + '</b><small>' + esc([o.person, o.injury, o.lostDays ? 'หยุดงาน ' + o.lostDays + ' วัน' : ''].filter(String).join(' · ')) + '</small></div>'; })), 'ไม่มีเหตุการณ์ในช่วงนี้')
       + '</div>';

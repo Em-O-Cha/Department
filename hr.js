@@ -43,6 +43,8 @@
   function days(a, b) { var p = a.split('-'), q = b.split('-'); return Math.round((new Date(+q[0], +q[1] - 1, +q[2]) - new Date(+p[0], +p[1] - 1, +p[2])) / 864e5); }
   function yrs(a) { if (!a) return ''; var n = days(a, H.data.today) / 365.25; return n < 1 ? Math.max(0, Math.round(n * 12)) + ' เดือน' : (Math.floor(n * 10) / 10) + ' ปี'; }
   function ymLabel(ym) { return MONTHS[+ym.slice(5, 7) - 1] + ' ' + (+ym.slice(0, 4) + 543); }
+  function ymShort(ym) { return MONTHS[+ym.slice(5, 7) - 1]; }
+  function fmtD(v) { return String(Math.round((Number(v) || 0) * 100) / 100); }
   function F(id, label, value, type, attrs) { return '<div class="pf"><label for="' + id + '">' + label + '</label><input id="' + id + '" type="' + (type || 'text') + '" value="' + esc(value == null ? '' : value) + '"' + (attrs || '') + '></div>'; }
   function S(id, label, options, value, attrs) {
     return '<div class="pf"><label for="' + id + '">' + label + '</label><select id="' + id + '"' + (attrs || '') + '>' + options.map(function (o) {
@@ -343,7 +345,7 @@
     var maxLd = Math.max.apply(null, r.trend.map(function (m) { return m.leaveDays; }).concat([1]));
     html += '<div class="pgrid">'
       + box(icon('users', 18) + ' พนักงานแยกแผนก / อาคาร', bars(h.byGroup, '#2563eb', ' คน').concat(['<div class="xsep"></div>']).concat(bars(h.byBuilding, '#0891b2', ' คน')), 'ยังไม่มีข้อมูล')
-      + (h.natGender ? box(icon('users', 18) + ' สัญชาติ แยกชาย / หญิง <small class="muted">(รวม Job)</small>', h.natGender.length ? [natTable(h.natGender)] : [], 'ยังไม่มีข้อมูล')
+      + (h.natGender ? box(icon('users', 18) + ' สัญชาติ แยกชาย / หญิง <small class="muted">(รวม Job)</small>', h.natGender.length ? [(window.DCH ? window.DCH.donut(h.natGender.map(function (x) { return { name: x.name, n: x.n, color: /ไทย/.test(x.name) ? '#16a34a' : /Job/.test(x.name) ? '#f59e0b' : /เมียนมา|พม่า/.test(x.name) ? '#f97316' : null }; }), { center: h.natGender.reduce(function (s2, x) { return s2 + x.n; }, 0), sub: 'คนทั้งหมด', unit: ' คน', title: 'สัดส่วนสัญชาติ' }) + '<div class="xsep" style="margin:14px 0 6px"></div>' : '') + natTable(h.natGender)] : [], 'ยังไม่มีข้อมูล')
         : box(icon('users', 18) + ' สัญชาติ / เพศ', bars(h.byNationality, '#7c3aed', ' คน').concat(['<div class="xsep"></div>']).concat(bars(h.byGender, '#db2777', ' คน')), 'ยังไม่มีข้อมูล'))
       + box(icon('cal', 18) + ' การลาแยกประเภท <small class="muted">(ช่วงนี้ · อนุมัติแล้ว)</small>', L.byType.map(function (x) { var hv = function (y) { return y.name === 'มาสาย' ? y.times : (y.hours != null ? y.hours : y.days); }; return bar(x.name, hv(x), Math.max.apply(null, L.byType.map(hv).concat([1])), x.name === 'ขาดงาน' ? '#dc2626' : '#d97706', x.name === 'มาสาย' ? x.times + ' ครั้ง' + (x.minutes ? ' · ' + x.minutes + ' นาที' : '') : (x.dayN != null ? fhN(x.hours, x.dayN) : x.hours != null ? fhD(x.hours, L.stdHours) : x.days + ' วัน') + ' · ' + x.times + ' ครั้ง'); }).concat(L.pending && L.pending.all ? ['<div class="hpendl' + (state.dept && state.dept.module === 'hr' ? ' click' : '') + '" data-golv="1">⏳ รออนุมัติในช่วงนี้ <b>' + L.pending.n + ' ใบ</b>' + (L.pending.n ? ' · ' + fhN(L.pending.h, L.pending.d) : '') + ' — ยังไม่นับในตัวเลขด้านบน' + (L.pending.all !== L.pending.n ? '<br><small>รออนุมัติทั้งหมด ' + L.pending.all + ' ใบ (รวมวันอื่น)</small>' : '') + '</div>'] : []), 'ไม่มีการลาที่อนุมัติแล้วในช่วงนี้')
       + box(icon('warn', 18) + ' ลา / ขาด / สาย มากที่สุด', L.top.map(function (x) {   // ตัวเลขที่มีการลา / ขาด / สาย เป็นตัวแดง (ผู้ใช้ขอ 19/11/69)
@@ -351,10 +353,19 @@
         var tot = Math.round((x.sick + x.personal + x.absent) * 100) / 100;   // ชั่วโมง (20/11/69)
         return '<div class="li click" data-emp="' + esc(x.id) + '"><span>' + esc(x.name) + '</span><b' + (tot ? ' class="hred"' : '') + '>' + (x.days != null ? fhN(tot, x.days) : fhD(tot, L.stdHours)) + '</b><small>' + rd('ป่วย', x.sick, ' ชม.') + ' · ' + rd('กิจ', x.personal, ' ชม.') + ' · ' + rd('ขาด', x.absent, ' ชม.') + ' · ' + rd('สาย', x.late, ' ครั้ง') + '</small></div>'; }), 'ไม่มีข้อมูล')
       + box(icon('idcard', 18) + ' เอกสารหมดอายุ / ใกล้หมดอายุ', D.expiring.map(function (x) { return '<div class="li click" data-emp="' + esc(x.empId) + '"><span>' + esc(x.name) + '</span><b class="' + (x.left < 0 ? 'neg' : 'warn') + '">' + (x.left < 0 ? 'หมดแล้ว ' + (-x.left) + ' วัน' : 'อีก ' + x.left + ' วัน') + '</b><small>' + esc(x.type) + (x.number ? ' ' + esc(x.number) : '') + ' · หมด ' + dd(x.expiryDate) + '</small></div>'; }), 'ไม่มีเอกสารที่หมดอายุใน ' + D.alertDays + ' วัน')
-      + box(icon('chart', 18) + ' แนวโน้ม 6 เดือน', ['<div class="strend">' + r.trend.map(function (m) {
-        return '<div class="stm"><div class="stbars"><em class="b2" style="height:' + Math.round(m.hires / maxT * 100) + '%" title="เข้าใหม่ ' + m.hires + '"></em><em class="b3" style="height:' + Math.round(m.exits / maxT * 100) + '%" title="ลาออก ' + m.exits + '"></em><em class="b1" style="height:' + Math.round(m.leaveDays / maxLd * 100) + '%" title="ลา ' + m.leaveDays + ' ชม.' + (m.leaveDaysN != null ? ' (' + m.leaveDaysN + ' วัน)' : '') + '"></em></div>'
-          + '<b>' + m.head + '</b><span>' + ymLabel(m.ym) + '</span></div>';
-      }).join('') + '</div><div class="slegend"><i class="b2"></i>เข้าใหม่ <i class="b3"></i>ลาออก <i class="b1"></i>ชั่วโมงลา · ตัวเลข = จำนวนพนักงานสิ้นเดือน</div>'], '')
+      + (window.DCH ? (function () {   // กราฟเส้นแบบใหม่ (21/11/69): จำนวนพนักงาน + วันลา / เข้า-ออก รายเดือน
+        var T = r.trend, lab = T.map(function (m) { return ymShort(m.ym); }), last = T[T.length - 1] || {}, prev = T[T.length - 2] || {};
+        var sumOf = function (k) { return T.reduce(function (s2, m) { return s2 + (Number(m[k]) || 0); }, 0); };
+        return '<div class="panel pbox"><h4>' + icon('users', 18) + ' จำนวนพนักงาน 6 เดือน</h4>'
+          + '<div class="dch-head"><b>' + (last.head || 0) + '</b><span>คน (สิ้นเดือนล่าสุด)</span>' + window.DCH.delta(last.head, prev.head, { pct: false, unit: ' คน', label: 'จากเดือนก่อน' }) + '</div>'
+          + window.DCH.area({ labels: lab, series: [{ name: 'พนักงาน', color: '#7c3aed', values: T.map(function (m) { return m.head; }) }], unit: ' คน', height: 190, calloutLabel: function (i) { return ymLabel(T[i].ym); } })
+          + '<div class="dch-stats"><div><b>' + sumOf('hires') + '</b><span>เข้าใหม่ (6 เดือน)</span></div><div><b>' + sumOf('exits') + '</b><span>ลาออก (6 เดือน)</span></div><div><b>' + (h.turnover == null ? '–' : h.turnover + '%') + '</b><span>อัตราลาออก (ช่วงที่เลือก)</span></div></div></div>'
+          + '<div class="panel pbox"><h4>' + icon('cal', 18) + ' วันลา / เข้า-ออก รายเดือน <small class="muted">(อนุมัติแล้ว)</small></h4>'
+          + '<div class="dch-head"><b>' + fmtD(last.leaveDaysN != null ? last.leaveDaysN : 0) + '</b><span>วันลา เดือนล่าสุด</span>' + window.DCH.delta(last.leaveDaysN, prev.leaveDaysN, { good: 'down', label: 'จากเดือนก่อน' }) + '</div>'
+          + window.DCH.area({ labels: lab, series: [{ name: 'วันลา', color: '#f97316', values: T.map(function (m) { return m.leaveDaysN != null ? m.leaveDaysN : m.leaveDays; }) },
+            { name: 'เข้าใหม่ (คน)', color: '#16a34a', fill: false, values: T.map(function (m) { return m.hires; }) }, { name: 'ลาออก (คน)', color: '#dc2626', fill: false, dash: true, values: T.map(function (m) { return m.exits; }) }],
+            height: 190, calloutLabel: function (i) { return ymLabel(T[i].ym); }, fmt: function (v) { return fmtD(v); } }) + '</div>';
+      })() : box(icon('chart', 18) + ' แนวโน้ม 6 เดือน', ['<div class="muted">โหลดกราฟไม่ได้</div>'], ''))
       + box(icon('users', 18) + ' อายุงาน / อายุตัว', (h.tenureKnown ? bars(h.tenure, '#16a34a', ' คน').concat(['<small class="muted">เฉลี่ย ' + h.avgTenure + ' ปี (' + h.tenureKnown + ' คนที่มีวันเริ่มงาน)</small>']) : ['<div class="muted">ยังไม่มีวันเริ่มงาน — ใส่ได้ในทะเบียนพนักงาน</div>'])
         .concat(['<div class="xsep"></div>']).concat(h.agesKnown ? bars(h.ages, '#0891b2', ' คน') : ['<div class="muted">ยังไม่มีวันเกิด</div>']), '')
       + box(icon('book', 18) + ' การอบรมล่าสุด', Tn.list.map(function (t) { return '<div class="li"><span>' + esc(t.title) + '</span><b>' + t.n + ' คน</b><small>' + dd(t.date) + ' · ' + t.hours + ' ชม.</small></div>'; }), 'ยังไม่มีการอบรมในช่วงนี้')

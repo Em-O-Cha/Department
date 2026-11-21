@@ -211,7 +211,8 @@
       + '<div class="pvk">' + tile(act.length, 'ผู้ขายที่ใช้งาน', '#0f766e') + tile(act.length - noList.length, 'มีรายการสินค้าแล้ว', '#2563eb')
       + tile(items.length, 'รายการสินค้าทั้งหมด', '#0891b2') + tile(noList.length, 'ยังไม่มีรายการสินค้า', noList.length ? '#d97706' : '#64748b')
       + tile(noPrice.length, 'สินค้ายังไม่ใส่ราคา', noPrice.length ? '#dc2626' : '#64748b') + tile(stale.length, 'ราคาเก่าเกิน 6 เดือน', stale.length ? '#7c3aed' : '#64748b') + '</div>'
-      + '<div class="pvcat">' + Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a]; }).map(function (c) { return '<span>' + esc(c) + ' <b>' + cats[c] + '</b></span>'; }).join('') + '</div>';
+      + (window.DCH && Object.keys(cats).length ? '<div style="margin:16px 0 6px">' + window.DCH.donut(Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a]; }).map(function (c) { return { name: c, n: cats[c], color: /ไม่ระบุ/.test(c) ? '#94a3b8' : null }; }), { sub: 'ผู้ขาย (นับตามหมวด)', unit: ' ราย', title: 'ผู้ขายแยกหมวด' }) + '</div>'
+        : '<div class="pvcat">' + Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a]; }).map(function (c) { return '<span>' + esc(c) + ' <b>' + cats[c] + '</b></span>'; }).join('') + '</div>');
     var list = function (title, rows, empty) { return '<div class="pvl"><h5>' + title + '</h5>' + (rows.length ? rows.slice(0, 40).join('') + (rows.length > 40 ? '<div class="muted">… อีก ' + (rows.length - 40) + ' รายการ</div>' : '') : '<div class="muted">' + empty + '</div>') + '</div>'; };
     var miss = {};
     noPrice.concat(stale).forEach(function (p) { (miss[p.vid] = miss[p.vid] || { id: p.vid, name: p.vendor, np: [], st: [] })[priced(p.price) ? 'st' : 'np'].push(p); });
