@@ -1385,6 +1385,12 @@
     if (!opt.range) { try { opt.range = localStorage.getItem('ap_dash_range') || '6m'; } catch (e) { opt.range = '6m'; } }
     draw();
   };
+  // ส่วนการจ่ายในหน้า Dashboard ฝ่ายบัญชี (ผู้ใช้ขอ 21/11/69: รวมรับ + จ่ายไว้หน้าเดียว)
+  P.mountInto = function (box) {
+    var draw = function () { if (!box.isConnected) return; P.mountDash(box, P.data, { click: function (nom) { P.round = nom; go('a_ap'); } }); };
+    if (P.data) return draw();
+    load().then(draw).catch(function (e) { if (box.isConnected) box.innerHTML = '<div class="panel">โหลดค่าใช้จ่ายไม่ได้: ' + esc(e.message || e) + '</div>'; });
+  };
   P.dashPage = function () {
     ensure('Dashboard การจ่าย', function () {
       $('main').innerHTML = '<h3>Dashboard การจ่าย</h3><p class="lead">ภาพรวมค่าใช้จ่ายตามรอบจ่าย · ยอดชำระ = รวม − หัก ณ ที่จ่าย (เหมือนรายงานจ่ายตามรอบ)</p>'

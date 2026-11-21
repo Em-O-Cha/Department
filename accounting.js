@@ -29,7 +29,6 @@
     { id: 'a_ex', label: 'นำเข้า Invoice ต่างประเทศ (PDF)', ic: 'upload' },
     { id: 'a_exl', label: 'ออเดอร์ต่างประเทศ', ic: 'table' },
     { section: 'จ่าย (เงินออก)', tone: 'out' },
-    { id: 'a_ap_dash', label: 'Dashboard การจ่าย', ic: 'chart' },
     { id: 'a_apin', label: 'นำเข้าบิล (ภาพถ่าย / สแกน / PDF)', ic: 'upload' },
     { id: 'a_appo', label: 'PO ล่วงหน้า (รอบิล)', ic: 'clock' },
     { id: 'a_ap', label: 'รายงานจ่ายตามรอบ', ic: 'table' },
@@ -88,7 +87,7 @@
     }
     if (page !== 'a_dash') H.cmp = null;
     if (page !== 'a_mon') H.mon = null;   // กลับมาหน้า Dashboard = คำนวณเปรียบเทียบใหม่ (อาจมีออเดอร์ใหม่)
-    ({ a_imp: importPage, a_hist: histPage, a_dash: dash, a_mon: monthly, a_set: settings, a_cp: function () { window.ACCCP.importPage(); }, a_cpl: function () { window.ACCCP.listPage(); }, a_ex: function () { window.ACCEX.importPage(); }, a_exl: function () { window.ACCEX.listPage(); }, a_ap_dash: function () { window.ACCAP.dashPage(); }, a_apin: function () { window.ACCAP.importPage(); }, a_ap: function () { window.ACCAP.roundPage(); }, a_apv: function () { window.ACCAP.vendorPage(); }, a_appo: function () { window.ACCAP.poPage(); } }[page] || importPage)();
+    ({ a_imp: importPage, a_hist: histPage, a_dash: dash, a_mon: monthly, a_set: settings, a_cp: function () { window.ACCCP.importPage(); }, a_cpl: function () { window.ACCCP.listPage(); }, a_ex: function () { window.ACCEX.importPage(); }, a_exl: function () { window.ACCEX.listPage(); }, a_ap_dash: function () { go('a_dash'); }, a_apin: function () { window.ACCAP.importPage(); }, a_ap: function () { window.ACCAP.roundPage(); }, a_apv: function () { window.ACCAP.vendorPage(); }, a_appo: function () { window.ACCAP.poPage(); } }[page] || importPage)();
   };
 
   // ==================== ตาราง "ต้นแบบรับออเดอร์ 7-11" ====================
@@ -495,7 +494,8 @@
     if (!q.from) { q.from = t.slice(0, 8) + '01'; q.to = monthEnd(t); q.basis = 'po'; q.dc = ''; }
     var lm = addDays(t.slice(0, 8) + '01', -1);
     var quick = [['7 วัน', addDays(t, -6), t], ['เดือนนี้', t.slice(0, 8) + '01', monthEnd(t)], ['เดือนก่อน', lm.slice(0, 8) + '01', lm], ['3 เดือน', addDays(t.slice(0, 8) + '01', -61).slice(0, 8) + '01', monthEnd(t)], ['ปีนี้', t.slice(0, 4) + '-01-01', t.slice(0, 4) + '-12-31']];
-    $('main').innerHTML = '<h3>Dashboard ฝ่ายบัญชี</h3><p class="lead">เปรียบเทียบยอดสั่งซื้อทุกบริษัท และสรุปออเดอร์ 7-11 ตามช่วงวันที่</p>'
+    $('main').innerHTML = '<h3>Dashboard ฝ่ายบัญชี</h3><p class="lead">รับ (เงินเข้า): ยอดสั่งซื้อทุกบริษัท + ออเดอร์ 7-11 · จ่าย (เงินออก): ค่าใช้จ่ายตามรอบจ่าย — <a href="javascript:void 0" class="a7jump" onclick="document.getElementById(\'apDashBoxH\').scrollIntoView({behavior:\'smooth\'})">ไปส่วนการจ่าย ↓</a></p>'
+      + '<div class="a7band in">⬇ รับ (เงินเข้า)</div>'
       + '<div class="panel pbox a7cmp" id="cmpBox"><h4>' + icon('chart', 18) + ' เปรียบเทียบยอดสั่งซื้อ แยกบริษัท / สินค้า</h4><div id="cmpOut"><span class="spinner dark"></span> กำลังคำนวณ…</div></div>'
       + '<h4 class="a7h4">' + icon('chart', 18) + ' ออเดอร์ 7-11 ตามช่วงวันที่</h4>'
       + '<div class="pbar noprint a7filter"><div class="pchips" style="margin:0">' + quick.map(function (x) { return '<button class="chip' + (q.from === x[1] && q.to === x[2] ? ' on' : '') + '" data-q="' + x[1] + '|' + x[2] + '">' + x[0] + '</button>'; }).join('') + '</div>'
@@ -503,7 +503,9 @@
       + '<select id="dBasis" aria-label="นับตามวันที่"><option value="po"' + (q.basis === 'po' ? ' selected' : '') + '>ตามวันที่สั่ง</option><option value="delivery"' + (q.basis === 'delivery' ? ' selected' : '') + '>ตามวันที่ส่ง</option></select>'
       + '<select id="dDc" aria-label="ศูนย์กระจายสินค้า"><option value="">ทุกศูนย์</option>' + H.data.map.dcs.map(function (d) { return '<option' + (q.dc === d.name ? ' selected' : '') + '>' + esc(d.name) + '</option>'; }).join('') + '</select>'
       + '<button class="btn btn-sm btn-line" id="dPrint">' + icon('print', 16) + ' พิมพ์</button></div>'
-      + '<div id="dOut"><div class="panel"><span class="spinner dark"></span> กำลังสรุป…</div></div>';
+      + '<div id="dOut"><div class="panel"><span class="spinner dark"></span> กำลังสรุป…</div></div>'
+      + '<div class="a7band out" id="apDashBoxH">⬆ จ่าย (เงินออก)</div><div id="apDashBox"><div class="panel"><span class="spinner dark"></span> กำลังโหลดค่าใช้จ่าย…</div></div>';
+    if (window.ACCAP && window.ACCAP.mountInto) window.ACCAP.mountInto($('apDashBox'));
     on('[data-q]', 'click', function (el) { var p = el.getAttribute('data-q').split('|'); q.from = p[0]; q.to = p[1]; dash(); }, $('main'));
     ['dFrom', 'dTo'].forEach(function (id) { $(id).addEventListener('change', function () {
       var f = $('dFrom').value, to = $('dTo').value;
@@ -815,6 +817,7 @@
   // ---------- CSS ของโมดูล ----------
   var css = document.createElement('style');
   css.textContent = [
+    '.a7band{margin:22px 0 12px;padding:10px 16px;border-radius:14px;font-weight:800;font-size:16px;color:#fff;letter-spacing:.2px}.a7band.in{background:linear-gradient(90deg,#15803d,#22c55e)}.a7band.out{background:linear-gradient(90deg,#b91c1c,#ef4444);margin-top:30px}.a7band:first-of-type{margin-top:6px}.a7jump{color:#b91c1c;font-weight:700;white-space:nowrap}',
     '.a7steps{display:flex;gap:6px;list-style:none;padding:0;margin:0 0 14px;flex-wrap:wrap}.a7steps li{display:flex;align-items:center;gap:6px;background:#fff;border:1.5px solid var(--line);border-radius:99px;padding:5px 12px 5px 5px;font-size:13.5px;color:var(--muted)}',
     '.a7steps i{font-style:normal;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#f1f5f9;font-weight:700;font-size:12.5px}.a7steps li.on{border-color:var(--c);color:var(--ink);font-weight:600}.a7steps li.on i{background:var(--c);color:#fff}.a7steps li.done i{background:#16a34a;color:#fff}',
     '.a7drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:200px;border:2.5px dashed var(--c);border-radius:18px;background:color-mix(in srgb,var(--c) 6%,white);cursor:pointer;text-align:center;padding:24px;color:var(--ink)}',
