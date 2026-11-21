@@ -649,7 +649,7 @@
 
   function renderPage() {
     xpShow();
-    $('main').classList.toggle('dash', !state.admin && /(^|_)dash$/.test(String(state.page)));   // หน้า Dashboard ทุกฝ่ายใช้การ์ดแบบใหม่
+    $('main').classList.toggle('dash', !state.admin && /(^|_)dash(_|$)/.test(String(state.page)));   // หน้า Dashboard ทุกฝ่ายใช้การ์ดแบบใหม่
     if (state.admin) { renderAdminPage(); return; }
     var d = state.dept, html;
     if (state.page === 'pw') { renderChangePw(); return; }
@@ -1221,6 +1221,6 @@
 <script src="quality.js?v=9"></script>
 <script src="production.js?v=28"></script>
 <script src="rd.js?v=2"></script>
-<script src="executive.js?v=19"></script>
+<script src="executive.js?v=20"></script>
 </body>
 </html>

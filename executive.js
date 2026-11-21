@@ -14,31 +14,35 @@
   function baht(v) { return '฿' + Number(v || 0).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
   var TH_M = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 
-  X.menus = function () { return [{ id: 'x_dash', label: 'Dashboard ทุกฝ่าย', ic: 'chart' }]; };
+  // เมนู = รายชื่อฝ่าย (ผู้ใช้ขอ 21/11/69: เลือกฝ่ายจากแถบเมนู) · ก่อนโหลดรายชื่อฝ่ายเสร็จมีแค่ "Dashboard ทุกฝ่าย"
+  X.menus = function () {
+    if (!X.depts) return [{ id: 'x_dash', label: 'Dashboard ทุกฝ่าย', ic: 'chart' }];
+    return [{ group: 'เลือกฝ่าย' }].concat(X.depts.map(function (d) { return { id: 'x_dash_' + d.key, label: d.name + (d.ready ? '' : ' (ยังไม่มีข้อมูล)'), ic: d.key }; }));
+  };
   X.reset = function () { X.depts = null; X.data = null; X.q = {}; };
 
-  X.render = function () {
+  X.render = function (page) {
     var t = today();
+    if (page && String(page).indexOf('x_dash_') === 0) X.q.dept = String(page).slice(7);
     X.q.from = X.q.from || t.slice(0, 8) + '01'; X.q.to = X.q.to || t;
     if (!X.depts) {
       $('main').innerHTML = '<h3>Dashboard ผู้บริหาร</h3><p class="lead">กำลังโหลด…</p>';
       call('execOverview', state.token).then(function (r) {
         X.depts = r.depts;
-        if (!X.q.dept) X.q.dept = (r.depts.filter(function (d) { return d.ready; })[0] || r.depts[0]).key;
+        if (!X.q.dept || !r.depts.some(function (d) { return d.key === X.q.dept; })) X.q.dept = (r.depts.filter(function (d) { return d.ready; })[0] || r.depts[0]).key;
+        state.page = 'x_dash_' + X.q.dept; renderNav();   // เมนูเปลี่ยนเป็นรายชื่อฝ่าย + ไฮไลต์ฝ่ายที่เปิดอยู่
+        if (typeof keepSave === 'function') keepSave();
         X.render();
       }).catch(onServerError);
       return;
     }
     var lastM = shift(t.slice(0, 8) + '01', -1);
     var quick = [['เดือนนี้', t.slice(0, 8) + '01', t], ['เดือนก่อน', lastM.slice(0, 8) + '01', lastM], ['7 วัน', shift(t, -6), t], ['30 วัน', shift(t, -29), t], ['90 วัน', shift(t, -89), t], ['ปีนี้', t.slice(0, 4) + '-01-01', t]];
-    $('main').innerHTML = '<h3>Dashboard ผู้บริหาร</h3><p class="lead">เลือกฝ่ายและช่วงวันที่ · ดูข้อมูลได้อย่างเดียว แก้ไขไม่ได้</p>'
-      + '<div class="panel xfilter"><div class="xdepts">' + X.depts.map(function (d) {
-        return '<button class="xdept' + (X.q.dept === d.key ? ' on' : '') + '" data-d="' + d.key + '" style="--dc:' + d.color + '"><span class="xi">' + icon(d.key, 18) + '</span>' + esc(d.name) + (d.ready ? '' : '<small>ยังไม่มีข้อมูล</small>') + '</button>';
-      }).join('') + '</div>'
+    $('main').innerHTML = '<h3>Dashboard ผู้บริหาร · ' + esc(curDept().name || '') + '</h3><p class="lead">เลือกฝ่ายที่เมนู · เลือกช่วงวันที่ด้านล่าง · ดูข้อมูลได้อย่างเดียว แก้ไขไม่ได้</p>'
+      + '<div class="panel xfilter"' + (curDept().embed ? ' style="display:none"' : '') + '>'
       + '<div class="xdates"' + (curDept().embed ? ' style="display:none"' : '') + '><label>ตั้งแต่<input type="date" id="xFrom" value="' + X.q.from + '"></label><label>ถึง<input type="date" id="xTo" value="' + X.q.to + '"></label>'
       + '<div class="pchips">' + quick.map(function (q) { return '<button class="chip' + (X.q.from === q[1] && X.q.to === q[2] ? ' on' : '') + '" data-q="' + q[1] + '|' + q[2] + '">' + q[0] + '</button>'; }).join('') + '</div></div></div>'
       + '<div id="xOut"></div>';
-    on('[data-d]', function (el) { X.q.dept = el.getAttribute('data-d'); X.render(); });
     on('[data-q]', function (el) { var p = el.getAttribute('data-q').split('|'); X.q.from = p[0]; X.q.to = p[1]; X.render(); });
     ['xFrom', 'xTo'].forEach(function (id) { $(id).addEventListener('change', function () {
       var f = $('xFrom').value, to = $('xTo').value;
@@ -57,7 +61,7 @@
     var my = ++X.seq;
     $('xOut').innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังโหลดข้อมูล…</div>';
     call('execDashboard', state.token, X.q.dept, X.q.from, X.q.to).then(function (r) {
-      if (my !== X.seq || state.page !== 'x_dash') return;
+      if (my !== X.seq || String(state.page).indexOf('x_dash') !== 0) return;
       if (!r.ok) { $('xOut').innerHTML = '<div class="panel err">' + esc(r.error) + '</div>'; return; }
       r.key = key; X.data = r; draw(r);
     }).catch(onServerError);
