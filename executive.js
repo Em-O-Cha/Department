@@ -85,6 +85,7 @@
     var add = function (title, inner) { var el = document.createElement('div'); el.innerHTML = '<h4 class="xsec">' + title + '</h4>' + (inner || ''); out.appendChild(el); return el; };
     var range = dd(r.from) + ' – ' + dd(r.to);
     if (r.kind === 'purchasing' && r.rises && r.rises.ok && window.PUR && window.PUR.risesHtml) add('ราคาปรับขึ้น แยกตามสินค้า', '<div class="panel pbox">' + window.PUR.risesHtml(r.rises, range) + '</div>');
+    if (r.kind === 'purchasing' && r.vendorInfo && window.PUR && window.PUR.vendorDashHtml) add('ผู้ขาย: สรุปข้อมูล + เทียบราคา <small class="muted">(ข้อมูลปัจจุบัน ไม่ขึ้นกับช่วงวันที่)</small>', '<div class="panel pbox">' + window.PUR.vendorDashHtml(r.vendorInfo.vendors, r.vendorInfo.mats, r.vendorInfo.today) + '</div>');
     if (r.kind === 'quality' && r.cost && window.QAM && window.QAM.costHtml) {
       var y = +String(r.to).slice(0, 4);
       add('ค่าใช้จ่าย QA ปี ' + (y + 543) + ' <small class="muted">(ค่าตรวจวิเคราะห์ · ค่าใช้จ่ายอื่น · ชดเชยลูกค้า)</small>', window.QAM.costHtml(r.cost, y));

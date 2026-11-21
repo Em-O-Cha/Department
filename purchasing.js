@@ -153,11 +153,13 @@
         return '<div class="li click" data-doc="' + x.id + '"><span>' + esc(x.docNo) + ' · ' + esc(x.vendorName) + '</span><b class="' + (over ? 'neg' : '') + '">' + baht((Number(x.total) || 0) - (Number(x.paidAmount) || 0)) + '</b><small>ครบกำหนด ' + dd(x.dueDate) + (over ? ' (เลยกำหนด)' : '') + '</small></div>';
       }), 'ไม่มียอดค้างชำระ')
       + '</div>'
-      + '<div class="panel pbox prise" id="pRise"></div>';
+      + '<div class="panel pbox prise" id="pRise"></div>'
+      + '<div class="panel pbox prise" id="pVen"></div>';
     $('main').innerHTML = html;
     on('[data-go]', 'click', function (el) { go(el.getAttribute('data-go')); }, $('main'));
     on('[data-doc]', 'click', function (el) { docModal(P.idx.doc[el.getAttribute('data-doc')]); }, $('main'));
     priceRises();
+    vendorDash();
   }
   // ---- Dashboard ราคาปรับขึ้น แยกตามสินค้า (จากประวัติราคา: ราคาที่มีผลในช่วง เทียบราคาก่อนหน้า) ----
   // ใช้ร่วมกับหน้า Dashboard ผู้บริหาร (executive.js) — r = ผล purPriceReport · label = ช่วงเวลาที่แสดง
@@ -185,6 +187,84 @@
       : '<div class="muted">ไม่มีสินค้าที่ราคาปรับขึ้นในช่วงนี้' + (r.rows.length ? '' : ' (ยังไม่มีการบันทึกราคาในช่วงนี้ — บันทึกราคาได้ที่เมนูวัตถุดิบ & ราคา)') + '</div>';
 
   };
+  // ---- Dashboard ผู้ขาย (ผู้ใช้ขอ 21/11/69): สรุปข้อมูลผู้ขาย + ตารางเทียบราคาผู้ขาย · ใช้ทั้งหน้าแผนกและหน้าผู้บริหาร ----
+  // v = ผู้ขาย [{id, name, category, active, items, products:[{name, unit, price, date}]}] · mats = วัตถุดิบที่มีผู้ขาย + ราคา [{name, unit, vendorId, price, priceDate}]
+  // opt.click = หน้าแผนก (กดชื่อผู้ขาย / สินค้าได้)
+  P.vendorDashHtml = function (v, mats, today, opt) {
+    opt = opt || {};
+    var dth = function (iso) { if (!iso) return '-'; var p = String(iso).slice(0, 10).split('-'); return +p[2] + '/' + +p[1] + '/' + String(+p[0] + 543).slice(2); };
+    var priced = function (x) { return x !== '' && x != null && !isNaN(Number(x)); };
+    var t = today || todayIso(), d0 = new Date(+t.slice(0, 4), +t.slice(5, 7) - 1, +t.slice(8, 10) - 182);
+    var old = d0.getFullYear() + '-' + ('0' + (d0.getMonth() + 1)).slice(-2) + '-' + ('0' + d0.getDate()).slice(-2);
+    var act = (v || []).filter(function (x) { return x.active !== 'ปิด'; }), byId = {};
+    act.forEach(function (x) { byId[x.id] = x; });
+    var prodsOf = function (x) { return x.products && x.products.length ? x.products : String(x.items || '').split(/[,\n、]+/).map(function (s) { return s.trim(); }).filter(String).map(function (s) { return { name: s, unit: '', price: '', date: '' }; }); };
+    var items = [], noList = [];
+    act.forEach(function (x) { var ps = prodsOf(x); if (!ps.length) noList.push(x); ps.forEach(function (p) { items.push({ vendor: x.name, vid: x.id, name: p.name, unit: p.unit || '', price: p.price, date: p.date || '' }); }); });
+    var noPrice = items.filter(function (p) { return !priced(p.price); });
+    var stale = items.filter(function (p) { return priced(p.price) && (!p.date || p.date < old); });
+    var cats = {};
+    act.forEach(function (x) { var cs = String(x.category || '').split(/\s*[,،]\s*/).filter(String); (cs.length ? cs : ['ไม่ระบุหมวด']).forEach(function (c) { cats[c] = (cats[c] || 0) + 1; }); });
+    var vlink = function (id, name) { return opt.click ? '<a href="#" data-pven="' + esc(id) + '">' + esc(name) + '</a>' : esc(name); };
+    var tile = function (n, label, color) { return '<div style="--k:' + color + '"><b>' + n + '</b><span>' + label + '</span></div>'; };
+    var html = '<div class="prh"><h4>' + icon('users', 18) + ' สรุปข้อมูลผู้ขาย</h4></div>'
+      + '<div class="pvk">' + tile(act.length, 'ผู้ขายที่ใช้งาน', '#0f766e') + tile(act.length - noList.length, 'มีรายการสินค้าแล้ว', '#2563eb')
+      + tile(items.length, 'รายการสินค้าทั้งหมด', '#0891b2') + tile(noList.length, 'ยังไม่มีรายการสินค้า', noList.length ? '#d97706' : '#64748b')
+      + tile(noPrice.length, 'สินค้ายังไม่ใส่ราคา', noPrice.length ? '#dc2626' : '#64748b') + tile(stale.length, 'ราคาเก่าเกิน 6 เดือน', stale.length ? '#7c3aed' : '#64748b') + '</div>'
+      + '<div class="pvcat">' + Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a]; }).map(function (c) { return '<span>' + esc(c) + ' <b>' + cats[c] + '</b></span>'; }).join('') + '</div>';
+    var list = function (title, rows, empty) { return '<div class="pvl"><h5>' + title + '</h5>' + (rows.length ? rows.slice(0, 40).join('') + (rows.length > 40 ? '<div class="muted">… อีก ' + (rows.length - 40) + ' รายการ</div>' : '') : '<div class="muted">' + empty + '</div>') + '</div>'; };
+    var miss = {};
+    noPrice.concat(stale).forEach(function (p) { (miss[p.vid] = miss[p.vid] || { id: p.vid, name: p.vendor, np: [], st: [] })[priced(p.price) ? 'st' : 'np'].push(p); });
+    html += '<div class="pvls">'
+      + list('ผู้ขายที่ยังไม่มีรายการสินค้า', noList.map(function (x) { return '<div class="li"><span>' + vlink(x.id, x.name) + '</span><b class="warn">ยังไม่มี</b></div>'; }), 'ผู้ขายทุกรายมีรายการสินค้าแล้ว')
+      + list('ราคาที่ต้องอัปเดต (ยังไม่ใส่ / เก่าเกิน 6 เดือน)', Object.keys(miss).map(function (k) {
+        var m = miss[k];
+        return '<div class="li"><span>' + vlink(m.id, m.name) + '</span><b class="' + (m.np.length ? 'neg' : 'warn') + '">' + (m.np.length ? m.np.length + ' ไม่มีราคา' : '') + (m.np.length && m.st.length ? ' · ' : '') + (m.st.length ? m.st.length + ' ราคาเก่า' : '') + '</b>'
+          + '<small>' + m.np.concat(m.st).slice(0, 6).map(function (p) { return esc(p.name) + (priced(p.price) ? ' (' + (p.date ? dth(p.date) : 'ไม่มีวันที่') + ')' : ''); }).join(' · ') + (m.np.length + m.st.length > 6 ? ' …' : '') + '</small></div>';
+      }), 'ราคาสินค้าของผู้ขายเป็นปัจจุบันทั้งหมด') + '</div>';
+    // ---- เทียบราคา: สินค้าชื่อเดียวกัน (ไม่สนเว้นวรรค / วรรณยุกต์) + หน่วยเดียวกัน (กรัม → กก.) ที่มีผู้ขาย ≥ 2 ราย ----
+    var unitOf = function (u, price) {
+      u = String(u || '').trim();
+      if (/^(กรัม|ก\.|g|gr|gram)$/i.test(u)) return { u: 'กก.', p: Number(price) * 1000 };
+      if (/^(กก\.?|กิโล(กรัม)?|kg\.?)$/i.test(u)) return { u: 'กก.', p: Number(price) };
+      return { u: u, p: Number(price) };
+    };
+    var src = items.filter(function (p) { return priced(p.price); }).map(function (p) { p.src = 'ผู้ขายแจ้ง'; return p; });
+    (mats || []).forEach(function (m) { var x = byId[m.vendorId]; if (x && priced(m.price)) src.push({ vendor: x.name, vid: x.id, name: m.name, unit: m.unit || '', price: m.price, date: m.priceDate || '', src: 'ราคาวัตถุดิบ' }); });
+    var groups = {};
+    src.forEach(function (p) {
+      var u = unitOf(p.unit, p.price), k = pnorm(p.name) + '|' + u.u; if (!pnorm(p.name)) return;
+      var g = groups[k] = groups[k] || { name: p.name, unit: u.u, by: {} }, cur = g.by[p.vid];
+      // ผู้ขายเดียวกันมีหลายราคา: ใช้ราคาล่าสุด (วันที่ใหม่กว่า) · วันเท่ากัน: ราคาที่ผู้ขายแจ้งก่อนราคาวัตถุดิบ แล้วเอาราคาต่ำกว่า
+      var rank = function (x) { return x.src === 'ผู้ขายแจ้ง' ? 1 : 0; };
+      if (!cur || String(p.date) > String(cur.date) || (String(p.date) === String(cur.date) && (rank(p) > rank(cur) || (rank(p) === rank(cur) && u.p < cur.price)))) g.by[p.vid] = { vendor: p.vendor, vid: p.vid, price: u.p, date: p.date, src: p.src };
+    });
+    var cmp = Object.keys(groups).map(function (k) {
+      var g = groups[k], l = Object.keys(g.by).map(function (id) { return g.by[id]; }).sort(function (a, b) { return a.price - b.price; });
+      if (l.length < 2) return null;
+      var lo = l[0], hi = l[l.length - 1];
+      return { name: g.name, unit: g.unit, list: l, lo: lo, hi: hi, diff: lo.price ? Math.round((hi.price - lo.price) / lo.price * 1000) / 10 : '' };
+    }).filter(Boolean).sort(function (a, b) { return (Number(b.diff) || 0) - (Number(a.diff) || 0) || a.name.localeCompare(b.name, 'th'); });
+    html += '<div class="prh" style="margin-top:16px"><h4>' + icon('chart', 18) + ' ตารางเทียบราคาผู้ขาย</h4></div>'
+      + '<p class="muted" style="margin:0 0 8px;font-size:13px">สินค้าที่มีผู้ขายตั้งแต่ 2 รายขึ้นไป (ชื่อสินค้าและหน่วยเดียวกัน · กรัมแปลงเป็น กก.) · เรียงตามส่วนต่างราคามากไปน้อย'
+      + (opt.click ? ' · กดชื่อสินค้าเพื่อดูทุกผู้ขาย' : '') + '</p>'
+      + (cmp.length ? '<div class="ptable-wrap pvcmp"><table class="ptable"><thead><tr><th>สินค้า</th><th>หน่วย</th><th>ถูกสุด</th><th>แพงสุด</th><th class="r">ต่างกัน</th><th class="r">ผู้ขาย</th></tr></thead><tbody>'
+        + cmp.map(function (c) {
+          var cell = function (x) { return '<b>' + baht(x.price) + '</b><br><small>' + vlink(x.vid, x.vendor) + (x.date ? ' · ' + dth(x.date) : '') + '</small>'; };
+          return '<tr><td>' + (opt.click ? '<a href="#" data-pcmp="' + esc(c.name) + '">' + esc(c.name) + '</a>' : esc(c.name)) + '</td><td>' + esc(c.unit || '-') + '</td>'
+            + '<td class="pvlo">' + cell(c.lo) + '</td><td class="pvhi">' + cell(c.hi) + '</td>'
+            + '<td class="r"><b class="' + (c.diff >= 10 ? 'neg' : c.diff > 0 ? 'warn' : '') + '">' + (c.diff === '' ? '-' : c.diff > 0 ? '+' + c.diff + '%' : 'เท่ากัน') + '</b>' + (c.diff > 0 ? '<br><small>' + baht(c.hi.price - c.lo.price) + '</small>' : '') + '</td>'
+            + '<td class="r">' + c.list.length + ' ราย</td></tr>';
+        }).join('') + '</tbody></table></div>'
+        : '<div class="muted">ยังไม่มีสินค้าที่มีผู้ขายตั้งแต่ 2 รายขึ้นไป — ใส่สินค้าที่ขาย + หน่วย + ราคาต่อหน่วยได้ที่หน้า "ผู้ขาย (Vendor)" → แก้ไข</div>');
+    return html;
+  };
+  function vendorDash() {
+    var box = $('pVen'); if (!box) return;
+    box.innerHTML = P.vendorDashHtml(P.data.vendors, P.data.materials.filter(function (m) { return m.active !== 'ปิด' && m.vendorId; }), P.data.today, { click: true });
+    on('[data-pven]', 'click', function (el, e) { e.preventDefault(); var x = ven(el.getAttribute('data-pven')); if (x) vendorModal(x); }, box);
+    on('[data-pcmp]', 'click', function (el, e) { e.preventDefault(); P.q.prod = el.getAttribute('data-pcmp'); go('p_rfq'); }, box);
+  }
   function priceRises() {
     var dth = function (iso) { if (!iso) return '-'; var p = String(iso).slice(0, 10).split('-'); return +p[2] + '/' + +p[1] + '/' + String(+p[0] + 543).slice(2); };
     var t = P.data.today || todayIso(), box = $('pRise'); if (!box) return;
@@ -1520,6 +1600,8 @@
     '@media (max-width:560px){.pform{grid-template-columns:1fr}.prow{flex-wrap:wrap}.pbtns{width:100%}.pbtns .btn{flex:1}.hide-sm{display:none}.pitem{grid-template-columns:1fr 1fr 1fr;}.pitem .iname{grid-column:1/-1}.pupload{grid-template-columns:1fr}.dialog.wide .dialog-body{max-height:none}}',
     '@page{size:A4 portrait;margin:10mm 11mm 13mm 11mm;@bottom-right{content:"หน้า " counter(page) " / " counter(pages);font:8pt "IBM Plex Sans Thai",sans-serif;color:#64748b}}',
     '.rwrap{width:100%;border-collapse:collapse}.rwrap>thead>tr>td,.rwrap>tbody>tr>td{padding:0;border:0;background:none}.rwrap>thead>tr>td{padding-bottom:4px}',
+    '.pvk{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}.pvk>div{border:1.5px solid var(--line);border-left:5px solid var(--k);border-radius:12px;padding:8px 11px;background:#fff}.pvk b{display:block;font-size:22px;color:var(--k)}.pvk span{font-size:12.5px;color:#475569}.pvcat{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}.pvcat span{font-size:12.5px;background:#f1f5f9;border-radius:99px;padding:3px 10px;color:#334155}',
+    '.pvls{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px 18px;margin-top:8px}.pvl h5{margin:8px 0 2px;font-size:14px}.pvcmp{max-height:560px;overflow:auto}.pvcmp td{vertical-align:top}.pvcmp small{color:var(--muted)}.pvlo b{color:#15803d}.pvhi b{color:#b91c1c}',
     '.prise{margin-top:14px}.prh{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}.prh h4{margin:0}.prgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}',
     '.prc{border:1.5px solid var(--line);border-left:5px solid #dc2626;border-radius:12px;padding:10px 12px;background:#fff}.prct{display:flex;flex-direction:column;gap:2px;margin-bottom:6px}.prct > b{font-size:15px}.prct span{font-size:13px;color:#334155}.prct em{font-style:normal;font-size:12px;font-weight:700;color:#b91c1c;background:#fef2f2;border-radius:99px;padding:1px 8px;align-self:flex-start}',
     '.prr{display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;align-items:center;padding:5px 0;border-top:1px dashed var(--line);font-size:13px}.prd{color:var(--muted);white-space:nowrap}.prr small{grid-column:1/-1;color:var(--muted);font-size:12px}',

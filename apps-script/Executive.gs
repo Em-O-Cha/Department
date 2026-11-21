@@ -6,7 +6,7 @@
 
 // ส่วนที่เพิ่มในหน้าฝ่ายภายหลัง ให้ขึ้นในหน้าผู้บริหารด้วย (ผู้ใช้ขอ 19/11/69): PUR ราคาปรับขึ้น · QA ค่าใช้จ่าย · ACC เปรียบเทียบ + สรุปรายเดือนทุกบริษัท
 function execExtra_(d, fn) { try { fn(d); } catch (e) { d.extraError = (d.extraError ? d.extraError + ' · ' : '') + String(e.message || e); } return d; }
-var EXEC_DASHBOARDS_ = { PUR: function (dept, from, to) { return execExtra_(purDashboard_(dept, from, to), function (d) { d.rises = purPriceReport_(purBook_(dept), from, to); }); },
+var EXEC_DASHBOARDS_ = { PUR: function (dept, from, to) { return execExtra_(purDashboard_(dept, from, to), function (d) { var ss = purBook_(dept); d.rises = purPriceReport_(ss, from, to); d.vendorInfo = purVendorDash_(ss); }); },
   HR: function (dept, from, to) { return hrDashboard_(dept, from, to); },
   SHE: function (dept, from, to) { var d = sheDashboard_(dept, from, to); d.kind = 'safety'; return d; },
   QA: function (dept, from, to) { return execExtra_(qaDashboard_(dept, from, to), function (d) {

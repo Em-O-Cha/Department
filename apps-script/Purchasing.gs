@@ -304,6 +304,16 @@ function purVendorProducts_(list) {
   }).filter(function (x) { return x.name; });
 }
 
+// ข้อมูลผู้ขายสำหรับ Dashboard ผู้บริหาร (สรุปผู้ขาย + ตารางเทียบราคาผู้ขาย · ผู้ใช้ขอ 21/11/69) — หน้าเว็บคำนวณเองด้วย PUR.vendorDashHtml
+function purVendorDash_(ss) {
+  var vendors = purRead_(ss, 'vendors').map(function (v) {
+    return { id: v.id, name: v.name, category: v.category || '', active: v.active || '', items: v.items || '', products: purVendorProducts_(purJson_(v.products)) };
+  });
+  var mats = purRead_(ss, 'materials').filter(function (m) { return m.active !== 'ปิด' && m.vendorId && m.price !== ''; })
+    .map(function (m) { return { name: m.name, unit: m.unit, vendorId: m.vendorId, price: m.price, priceDate: m.priceDate }; });
+  return { today: purToday_(), vendors: vendors, mats: mats };
+}
+
 // ---------- วัตถุดิบ ----------
 function purSaveMaterial(token, m) {
   var dept = requirePur_(token);
