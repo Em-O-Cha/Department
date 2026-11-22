@@ -38,7 +38,9 @@
     }
     var lastM = shift(t.slice(0, 8) + '01', -1);
     var quick = [['เดือนนี้', t.slice(0, 8) + '01', t], ['เดือนก่อน', lastM.slice(0, 8) + '01', lastM], ['7 วัน', shift(t, -6), t], ['30 วัน', shift(t, -29), t], ['90 วัน', shift(t, -89), t], ['ปีนี้', t.slice(0, 4) + '-01-01', t]];
-    $('main').innerHTML = '<h3>Dashboard ผู้บริหาร · ' + esc(curDept().name || '') + '</h3><p class="lead">เลือกฝ่ายที่เมนู · เลือกช่วงวันที่ด้านล่าง · ดูข้อมูลได้อย่างเดียว แก้ไขไม่ได้</p>'
+    // หัวหน้าเป็นสีของฝ่ายที่เลือก (ผู้ใช้ขอ 22/11/69)
+    $('main').style.setProperty('--xc', curDept().color || 'var(--c)');
+    $('main').innerHTML = '<h3 class="xh3">' + icon(curDept().key, 22) + ' Dashboard ผู้บริหาร · ' + esc(curDept().name || '') + '</h3><p class="lead">เลือกฝ่ายที่เมนู · เลือกช่วงวันที่ด้านล่าง · ดูข้อมูลได้อย่างเดียว แก้ไขไม่ได้</p>'
       + '<div class="panel xfilter"' + (curDept().embed ? ' style="display:none"' : '') + '>'
       + '<div class="xdates"' + (curDept().embed ? ' style="display:none"' : '') + '><label>ตั้งแต่<input type="date" id="xFrom" value="' + X.q.from + '"></label><label>ถึง<input type="date" id="xTo" value="' + X.q.to + '"></label>'
       + '<div class="pchips">' + quick.map(function (q) { return '<button class="chip' + (X.q.from === q[1] && X.q.to === q[2] ? ' on' : '') + '" data-q="' + q[1] + '|' + q[2] + '">' + q[0] + '</button>'; }).join('') + '</div></div></div>'
@@ -89,7 +91,7 @@
   // ผลที่โหลดแล้วเก็บไว้ใน r (X.data) จึงไม่โหลดซ้ำเมื่อกลับมาหน้าเดิม
   var PART_TITLE = {
     rises: 'ราคาปรับขึ้น แยกตามสินค้า',
-    vendorInfo: 'ผู้ขาย: สรุปข้อมูล + เทียบราคา <small class="muted">(ข้อมูลปัจจุบัน ไม่ขึ้นกับช่วงวันที่)</small>',
+    vendorInfo: 'ตารางเทียบราคาผู้ขาย <small class="muted">(ข้อมูลปัจจุบัน ไม่ขึ้นกับช่วงวันที่)</small>',
     cost: function (r) { return 'ค่าใช้จ่าย QA ปี ' + (+String(r.to).slice(0, 4) + 543) + ' <small class="muted">(ค่าตรวจวิเคราะห์ · ค่าใช้จ่ายอื่น · ชดเชยลูกค้า)</small>'; },
     compare: 'เปรียบเทียบยอดสั่งซื้อ แยกบริษัท / สินค้า',
     monthly: 'สรุปรายเดือน ทุกบริษัท',
@@ -98,7 +100,7 @@
   function drawPart(r, name, data, box) {
     var range = dd(r.from) + ' – ' + dd(r.to);
     if (name === 'rises') box.innerHTML = data && data.ok && window.PUR && window.PUR.risesHtml ? '<div class="panel pbox">' + window.PUR.risesHtml(data, range) + '</div>' : '<div class="panel muted">ไม่มีข้อมูล</div>';
-    else if (name === 'vendorInfo') box.innerHTML = data && window.PUR && window.PUR.vendorDashHtml ? '<div class="panel pbox">' + window.PUR.vendorDashHtml(data.vendors, data.mats, data.today) + '</div>' : '';
+    else if (name === 'vendorInfo') box.innerHTML = data && window.PUR && window.PUR.vendorDashHtml ? '<div class="panel pbox">' + window.PUR.vendorDashHtml(data.vendors, data.mats, data.today, { part: 'compare' }).replace(/^<div class="prh"><h4>[\s\S]*?<\/h4><\/div>/, '') + '</div>' : '';
     else if (name === 'cost') box.innerHTML = data && window.QAM && window.QAM.costHtml ? window.QAM.costHtml(data, +String(r.to).slice(0, 4)) : '';
     else if (name === 'compare') { box.innerHTML = '<div class="panel pbox a7cmp"><div class="xcmp"></div></div>'; if (window.ACC && window.ACC.mountCmp) window.ACC.mountCmp(box.querySelector('.xcmp'), data); }
     else if (name === 'monthly') { box.innerHTML = '<div class="xmon"></div>'; if (window.ACC && window.ACC.mountMonthly) window.ACC.mountMonthly(box.querySelector('.xmon'), data); }
@@ -289,11 +291,12 @@
 
   var css = document.createElement('style');
   css.textContent = [
+    '.page-head:has(> .xh3){background:var(--xc)!important;border:0}.page-head .xh3{color:#fff;display:flex;align-items:center;gap:10px}.page-head .xh3 .ic{width:34px!important;height:34px!important;padding:6px;border-radius:10px;background:rgba(255,255,255,.22);color:#fff}',
     '.xfilter{display:flex;flex-direction:column;gap:12px;margin-bottom:14px}.xdepts{display:flex;flex-wrap:wrap;gap:8px}',
     '.xdept{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:7px 12px;font-size:14px;color:var(--ink)}.xdept small{font-size:11px;color:var(--muted);margin-left:2px}',
     '.xdept .xi{color:var(--dc);display:inline-grid}.xdept .xi svg{width:18px;height:18px}.xdept.on{border-color:var(--dc);background:color-mix(in srgb,var(--dc) 12%,white);font-weight:600}',
     '.xdates{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}.xdates label{display:flex;flex-direction:column;font-size:12.5px;color:var(--muted);margin:0;gap:3px}.xdates input{padding:7px 10px;border:1.5px solid var(--line);border-radius:9px;font:inherit;font-size:14px}.xdates .pchips{margin:0}',
-    '.xhead{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.92);border-radius:12px;padding:10px 14px;margin-bottom:10px;box-shadow:var(--shadow)}.xhead .xi{color:var(--c);display:inline-grid}.xhead b{font-size:16px}.xhead span:last-child{margin-left:auto;color:var(--muted);font-size:13px}',
+    '.xhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--c);color:#fff;border-radius:14px;padding:12px 16px;margin-bottom:12px;box-shadow:0 6px 18px rgba(15,23,42,.16)}.xhead .xi{color:#fff;display:inline-grid;place-items:center;width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.2)}.xhead b{font-size:17px;color:#fff}.xhead span:last-child{margin-left:auto;color:rgba(255,255,255,.92);font-size:13px;font-weight:600}',
     '.kpis.xk{grid-template-columns:repeat(4,1fr)}.kpi small{display:block;font-size:11.5px;color:var(--muted);margin-top:2px}',
     '.xchart{margin-bottom:14px}.xch{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}.xleg{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}.xleg i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-left:8px}',
     '.xsvg{width:100%;height:auto;display:block}.xax{font-size:11px;fill:#64748b}.xcol:hover rect{fill:rgba(15,23,42,.05)}',

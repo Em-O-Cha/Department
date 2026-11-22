@@ -1338,7 +1338,7 @@
     var tile = function (v, label, color, sub) { return '<div class="kpi" style="--k:' + color + '"><b>' + v + '</b><span>' + label + '</span>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>'; };
     var nx = M.next, rangeName = RANGES.filter(function (x) { return x[0] === range; })[0][1];
     var html = '<div class="pbar noprint apdr"><div class="pchips" style="margin:0">' + RANGES.map(function (x) { return '<button class="chip' + (x[0] === range ? ' on' : '') + '" data-apdr="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>'
-      + '<small class="muted">ช่วงเวลาใช้กับกราฟ / หมวด / ผู้ขาย · ยอดรอจ่ายนับทุกรอบที่ยังไม่ถึง</small></div>';
+      + '</div>';
     if (!M.all.length) return html + '<div class="empty"><div class="icon">' + icon('chart', 28) + '</div><h4>ยังไม่มีบิลค่าใช้จ่าย</h4><div>นำเข้าบิลที่หน้า "นำเข้าบิล" แล้วข้อมูลจะขึ้นที่นี่</div></div>';
     html += '<div class="kpis">'
       + tile(nx ? b0(nx.pay) : '–', 'รอบจ่ายถัดไป (บาท)', '#dc2626', nx ? wday(nx.actual) + ' ' + thd(nx.actual) + ' · ' + Object.keys(nx.bills).length + ' บิล' + (Object.keys(nx.po).length ? ' (PO ' + Object.keys(nx.po).length + ')' : '') + (M.prevOfNext && DCH ? ' ' + DCH.delta(nx.pay, M.prevOfNext.pay, { good: 'down', label: 'จากรอบก่อน' }) : '') : 'ยังไม่มีบิลในรอบที่จะถึง')

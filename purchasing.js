@@ -246,7 +246,10 @@
       var lo = l[0], hi = l[l.length - 1];
       return { name: g.name, unit: g.unit, list: l, lo: lo, hi: hi, diff: lo.price ? Math.round((hi.price - lo.price) / lo.price * 1000) / 10 : '' };
     }).filter(Boolean).sort(function (a, b) { return (Number(b.diff) || 0) - (Number(a.diff) || 0) || a.name.localeCompare(b.name, 'th'); });
-    html += '<div class="prh" style="margin-top:16px"><h4>' + icon('chart', 18) + ' ตารางเทียบราคาผู้ขาย</h4></div>'
+    // opt.part: 'summary' = สรุปข้อมูลผู้ขายอย่างเดียว (หน้าผู้ขาย) · 'compare' = ตารางเทียบราคาอย่างเดียว (Dashboard · ผู้ใช้ขอ 22/11/69 เอาสรุปผู้ขายออกจาก Dashboard)
+    if (opt.part === 'summary') return html;
+    if (opt.part === 'compare') html = '';
+    html += '<div class="prh"' + (opt.part === 'compare' ? '' : ' style="margin-top:16px"') + '><h4>' + icon('chart', 18) + ' ตารางเทียบราคาผู้ขาย</h4></div>'
       + '<p class="muted" style="margin:0 0 8px;font-size:13px">สินค้าที่มีผู้ขายตั้งแต่ 2 รายขึ้นไป (ชื่อสินค้าและหน่วยเดียวกัน · กรัมแปลงเป็น กก.) · เรียงตามส่วนต่างราคามากไปน้อย'
       + (opt.click ? ' · กดชื่อสินค้าเพื่อดูทุกผู้ขาย' : '') + '</p>'
       + (cmp.length ? '<div class="ptable-wrap pvcmp"><table class="ptable"><thead><tr><th>สินค้า</th><th>หน่วย</th><th>ถูกสุด</th><th>แพงสุด</th><th class="r">ต่างกัน</th><th class="r">ผู้ขาย</th></tr></thead><tbody>'
@@ -262,7 +265,7 @@
   };
   function vendorDash() {
     var box = $('pVen'); if (!box) return;
-    box.innerHTML = P.vendorDashHtml(P.data.vendors, P.data.materials.filter(function (m) { return m.active !== 'ปิด' && m.vendorId; }), P.data.today, { click: true });
+    box.innerHTML = P.vendorDashHtml(P.data.vendors, P.data.materials.filter(function (m) { return m.active !== 'ปิด' && m.vendorId; }), P.data.today, { click: true, part: 'compare' });
     on('[data-pven]', 'click', function (el, e) { e.preventDefault(); var x = ven(el.getAttribute('data-pven')); if (x) vendorModal(x); }, box);
     on('[data-pcmp]', 'click', function (el, e) { e.preventDefault(); P.q.prod = el.getAttribute('data-pcmp'); go('p_rfq'); }, box);
   }
@@ -684,7 +687,15 @@
     $('main').innerHTML = '<h3>ผู้ขาย (Vendor)</h3><p class="lead">กดเบอร์เพื่อโทรได้ทันที · เก็บข้อมูลติดต่อ เครดิต บัญชีธนาคาร สินค้าที่ขาย</p>'
       + searchBar('ven', 'ค้นหาชื่อ / ผู้ติดต่อ / สินค้า', '<button class="btn btn-sm btn-line" id="pImpAvl">' + icon('list', 16) + 'นำเข้าไฟล์ AVL (Excel)</button><button class="btn btn-sm btn-primary" id="pAddVen">' + icon('plus', 16) + 'เพิ่มผู้ขาย</button>')
       + '<div class="pchips">' + [['', 'ทั้งหมด']].concat(AVL_CATS.map(function (c) { return [c, c]; })).map(function (c) { return '<button class="chip' + ((P.q.venCat || '') === c[0] ? ' on' : '') + '" data-vc="' + esc(c[0]) + '">' + esc(c[1]) + '</button>'; }).join('') + '</div>'
+      + '<details class="panel pbox pvsum"' + (P.q.venSum ? ' open' : '') + '><summary><b>' + icon('users', 18) + ' สรุปข้อมูลผู้ขาย</b> <small class="muted">แตะเพื่อเปิด / ปิด</small></summary><div id="pVenSum"></div></details>'
       + '<div id="pList" class="pcards"></div>';
+    // สรุปข้อมูลผู้ขาย ย้ายมาอยู่หน้านี้ (ผู้ใช้ขอ 22/11/69: เอาออกจาก Dashboard แต่ยังมีในระบบจัดซื้อ)
+    (function () {
+      var sb = $('pVenSum'); if (!sb) return;
+      sb.innerHTML = P.vendorDashHtml(P.data.vendors, P.data.materials.filter(function (m) { return m.active !== 'ปิด' && m.vendorId; }), P.data.today, { click: true, part: 'summary' }).replace(/^<div class="prh"><h4>[\s\S]*?<\/h4><\/div>/, '');
+      on('[data-pven]', 'click', function (el, e) { e.preventDefault(); var x = ven(el.getAttribute('data-pven')); if (x) vendorModal(x); }, sb);
+      sb.parentNode.addEventListener('toggle', function () { P.q.venSum = sb.parentNode.open; });
+    })();
     var draw = function () {
       var list = P.data.vendors.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'th'); }).filter(function (x) { return (!P.q.venCat || avlCats(x).indexOf(P.q.venCat) >= 0) && match(P.q.ven, [x.name, x.contact, x.items, x.phone, x.note, x.maker, x.agent].concat((x.products || []).map(function (p) { return p.name; })).join(' ')); });
       $('pList').innerHTML = list.map(function (x) {
@@ -1541,6 +1552,7 @@
   // ---------- สไตล์ของโมดูล ----------
   var css = document.createElement('style');
   css.textContent = [
+    '.pvsum{margin-bottom:12px}.pvsum>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.pvsum>summary::-webkit-details-marker{display:none}.pvsum>summary b{display:inline-flex;align-items:center;gap:6px}.pvsum[open]>summary{margin-bottom:10px}',
     '.dialog.wide{max-width:720px}.dialog.wide .dialog-body{max-height:calc(100vh - 170px);overflow:auto}',
     '#modalOverlay{align-items:start;overflow:auto}#modalOverlay .dialog{margin:4vh 0}',
     '.pform{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-bottom:12px}.pf{min-width:0}.pf.full{grid-column:1/-1}',
