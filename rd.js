@@ -90,11 +90,11 @@
     }).sort(function (a, b) { return a.status === 'dev' && b.status === 'dev' ? String(a.endDate).localeCompare(String(b.endDate)) : String(b.startDate).localeCompare(String(a.startDate)); });
     var chips = [['dev', 'กำลังพัฒนา'], ['late', 'เลยกำหนด'], ['fin', 'เสร็จ / วางจำหน่าย'], ['other', 'พักไว้ / ยกเลิก'], ['all', 'ทั้งหมด']];
     $('main').innerHTML = '<h3>ผลิตภัณฑ์ใหม่</h3><p class="lead">ช่วงพัฒนาสินค้าแต่ละตัว (วันที่เริ่ม → วันที่สิ้นสุด) · ประเภท · ตลาดในประเทศ / ต่างประเทศ · คู่ค้าที่จะส่งขาย</p>'
-      + '<div class="pchips">' + chips.map(function (c) { return '<button class="chip' + (q.nst === c[0] ? ' on' : '') + (c[0] === 'late' ? ' rlate' : '') + '" data-nst="' + c[0] + '">' + c[1] + ' (' + all.filter(function (p) { return match(p, c[0]); }).length + ')</button>'; }).join('') + '</div>'
-      + '<div class="pbar"><div class="psearch">' + icon('search', 18) + '<input id="nS" type="search" placeholder="ค้นหา ชื่อ / เลขที่ / คู่ค้า" value="' + esc(q.ns || '') + '"></div>'
+      + '<div class="rtool"><button class="btn btn-primary" id="nAdd">' + icon('plus', 18) + ' เพิ่มผลิตภัณฑ์ใหม่</button></div>'
+      + '<div class="pchips rchips">' + chips.map(function (c) { return '<button class="chip' + (q.nst === c[0] ? ' on' : '') + (c[0] === 'late' ? ' rlate' : '') + '" data-nst="' + c[0] + '">' + c[1] + ' (' + all.filter(function (p) { return match(p, c[0]); }).length + ')</button>'; }).join('') + '</div>'
+      + '<div class="pbar rbar"><div class="psearch">' + icon('search', 18) + '<input id="nS" type="search" placeholder="ค้นหา ชื่อ / เลขที่ / คู่ค้า" value="' + esc(q.ns || '') + '"></div>'
       + '<select id="nCat"><option value="">ทุกประเภท</option>' + cats.map(function (c) { return '<option' + (q.ncat === c ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select>'
-      + '<select id="nMkt"><option value="">ทุกตลาด</option>' + Object.keys(MKT).map(function (k) { return '<option value="' + k + '"' + (q.nmkt === k ? ' selected' : '') + '>' + MKT[k] + '</option>'; }).join('') + '</select>'
-      + '<button class="btn btn-sm btn-primary" id="nAdd">' + icon('plus', 16) + ' เพิ่มผลิตภัณฑ์ใหม่</button></div>'
+      + '<select id="nMkt"><option value="">ทุกตลาด</option>' + Object.keys(MKT).map(function (k) { return '<option value="' + k + '"' + (q.nmkt === k ? ' selected' : '') + '>' + MKT[k] + '</option>'; }).join('') + '</select></div>'
       + '<div class="rcards">' + (rows.map(function (p) {
         return '<button class="rcard" data-np="' + esc(p.id) + '"><div class="rch"><span class="rcode">' + esc(p.code) + '</span>' + stTag(p) + '</div>'
           + '<b class="rname">' + esc(p.name) + '</b><div class="rtags">' + (p.category ? '<span class="rcat">' + esc(p.category) + '</span>' : '') + mktTag(p.market) + (p.owner ? '<span class="rown">👤 ' + esc(p.owner) + '</span>' : '') + '</div>'
@@ -334,9 +334,9 @@
     }).sort(function (a, b) { return (a.active === 'off') - (b.active === 'off') || String(a.name).localeCompare(String(b.name), 'th'); });
     var np = function (name) { return H.data.products.filter(function (p) { return p.partners.indexOf(name) >= 0; }); };
     $('main').innerHTML = '<h3>คู่ค้า</h3><p class="lead">คู่ค้าในประเทศ / ต่างประเทศ · ช่องทางขาย · ผู้ติดต่อ · สินค้าที่ส่งขายให้แต่ละเจ้า</p>'
-      + '<div class="pchips">' + [['all', 'ทั้งหมด'], ['dom', 'ในประเทศ'], ['exp', 'ต่างประเทศ']].map(function (c) { return '<button class="chip' + (q.pt === c[0] ? ' on' : '') + '" data-pt2="' + c[0] + '">' + c[1] + ' (' + all.filter(function (x) { return c[0] === 'all' || x.type === c[0]; }).length + ')</button>'; }).join('') + '</div>'
-      + '<div class="pbar"><div class="psearch">' + icon('search', 18) + '<input id="pS" type="search" placeholder="ค้นหา ชื่อ / ประเทศ / สินค้า / ผู้ติดต่อ" value="' + esc(q.ps || '') + '"></div>'
-      + '<button class="btn btn-sm btn-primary" id="pAdd">' + icon('plus', 16) + ' เพิ่มคู่ค้า</button></div>'
+      + '<div class="rtool"><button class="btn btn-primary" id="pAdd">' + icon('plus', 18) + ' เพิ่มคู่ค้า</button></div>'
+      + '<div class="pchips rchips r3">' + [['all', 'ทั้งหมด'], ['dom', 'ในประเทศ'], ['exp', 'ต่างประเทศ']].map(function (c) { return '<button class="chip' + (q.pt === c[0] ? ' on' : '') + '" data-pt2="' + c[0] + '">' + c[1] + ' (' + all.filter(function (x) { return c[0] === 'all' || x.type === c[0]; }).length + ')</button>'; }).join('') + '</div>'
+      + '<div class="pbar rbar r1"><div class="psearch">' + icon('search', 18) + '<input id="pS" type="search" placeholder="ค้นหา ชื่อ / ประเทศ / สินค้า / ผู้ติดต่อ" value="' + esc(q.ps || '') + '"></div></div>'
       + '<div class="rcards">' + (rows.map(function (x) {
         var dev = np(x.name);
         return '<button class="rcard rpc' + (x.active === 'off' ? ' off' : '') + '" data-pe="' + esc(x.id) + '" style="--m:' + MKTC[x.type] + '"><div class="rch"><b class="rname" style="margin:0">' + esc(x.name) + '</b>' + mktTag(x.type) + '</div>'
@@ -470,6 +470,11 @@
   // ---------- CSS ของโมดูล ----------
   var css = document.createElement('style');
   css.textContent = [
+    // จัดปุ่มหน้า ผลิตภัณฑ์ใหม่ / คู่ค้า ให้เป็นระเบียบ (ผู้ใช้ขอ 22/11/69): ปุ่มเพิ่มอยู่บนขวา · ชิปสถานะ · แถบค้นหา + ตัวกรองกว้างเท่ากัน
+    '.rtool{display:flex;justify-content:flex-end;margin:0 0 12px}.rtool .btn{width:auto;flex:0 0 auto;min-height:44px;padding:0 20px;font-size:15px}',
+    '.rchips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.rchips .chip{white-space:nowrap}',
+    '.rbar{display:grid!important;grid-template-columns:minmax(0,1fr) 190px 190px;gap:10px;align-items:center}.rbar.r1{grid-template-columns:minmax(0,1fr)}.rbar select{width:100%;min-width:0;height:44px;margin:0;border:1.5px solid var(--line);border-radius:10px;padding:0 10px;background:#fff;font:inherit;font-size:14px;color:inherit}.rbar .psearch{min-width:0;margin:0}',
+    '@media (max-width:640px){.rtool .btn{width:100%;flex:1 1 auto;justify-content:center}.rchips{display:grid;grid-template-columns:1fr 1fr}.rchips.r3{grid-template-columns:1fr 1fr 1fr}.rchips .chip{width:100%;text-align:center;justify-content:center;margin:0}.rchips:not(.r3) .chip:last-child:nth-child(odd){grid-column:1/-1}.rbar{grid-template-columns:1fr 1fr}.rbar .psearch{grid-column:1/-1}}',
     '.rcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}',
     '.rcard{display:flex;flex-direction:column;gap:6px;text-align:left;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);cursor:pointer;font:inherit;color:var(--ink);min-width:0}.rcard:hover{border-color:#db2777}',
     '.rch{display:flex;align-items:center;justify-content:space-between;gap:8px}.rcode{font-size:12px;color:var(--muted);font-weight:700;letter-spacing:.3px}.rname{font-size:16px;line-height:1.35}',
