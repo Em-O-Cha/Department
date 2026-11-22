@@ -245,15 +245,22 @@
   // กล่องคำขอลาที่รออนุมัติ (หน้าการลา)
   function pendingBox() {
     var rows = pendingLeaves(); if (!rows.length) return '';
-    return '<div class="panel hpend"><h4>🔔 คำขอลารออนุมัติ (' + rows.length + ')</h4>' + rows.map(function (l) {
+    return '<div class="hpend"><h4>🔔 คำขอลารออนุมัติ (' + rows.length + ')</h4><div class="hpcs">' + rows.map(function (l) {
       var e = emp(l.empId) || { fullName: '-' }, y = String(l.dateFrom).slice(0, 4), qq = quotaOf(e, l.type, y), left = qq == null ? null : qq - usedOf(e.id, l.type, y, l.id);
-      return '<div class="hpr-row">' + photo(e, 'hph sm') + '<div class="pinfo"><b>' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</b>'
-        + '<small><span class="htype ' + l.type + '">' + LT[l.type] + '</span> ' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + ' · ' + lvLen(l)
-        + (left != null ? ' · <b class="' + (left - hrsOf(l) < 0 ? 'neg' : 'pos') + '">คงเหลือ ' + fh(left) + ' → หลังอนุมัติ ' + fh(left - hrsOf(l)) + '</b>' : '') + '</small>'
-        + (l.filledBy ? '<small>ผู้กรอกใบลา: ' + esc(l.filledBy) + '</small>' : l.supervisor ? '<small>หัวหน้างาน: ' + esc(l.supervisor) + '</small>' : '')
-        + (l.reason ? '<small>เหตุผล: ' + esc(l.reason) + '</small>' : '') + (l.files.length ? '<small>' + fileLinks(l.files) + '</small>' : '') + '<small class="muted">ส่งเมื่อ ' + esc(String(l.createdAt).slice(0, 16)) + (l.source ? ' · ' + esc(l.source) : '') + '</small></div>'
-        + '<div class="hpr-btns"><button class="btn btn-sm hok" data-ok="' + l.id + '">✅ อนุมัติ</button><button class="btn btn-sm hno" data-no="' + l.id + '">❌ ไม่อนุมัติ</button></div></div>';
-    }).join('') + '</div>';
+      // 1 คำขอ = 1 กล่อง แยกรายคนชัดเจน (ผู้ใช้ขอ 22/11/69)
+      var ca = String(l.createdAt || ''), after = left == null ? null : left - hrsOf(l);
+      return '<div class="hpc">'
+        + '<div class="hpc-head">' + photo(e, 'hph sm') + '<div class="hpc-who"><b>' + esc(e.fullName) + '</b>' + (e.nickname ? '<span class="hpc-nick">' + esc(e.nickname) + '</span>' : '') + '</div></div>'
+        + '<div class="hpc-what"><span class="htype ' + l.type + '">' + LT[l.type] + '</span><b>' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + '</b><span class="hpc-len">' + lvLen(l) + '</span></div>'
+        + (left != null ? '<div class="hpc-bal ' + (after < 0 ? 'neg' : 'pos') + '"><span>คงเหลือ<b>' + fh(left) + '</b></span><i>→</i><span>หลังอนุมัติ<b>' + fh(after) + '</b></span></div>' : '')
+        + '<div class="hpc-info">'
+        + (l.reason ? '<div><span>เหตุผล</span>' + esc(l.reason) + '</div>' : '')
+        + (l.filledBy ? '<div><span>ผู้กรอกใบลา</span>' + esc(l.filledBy) + '</div>' : l.supervisor ? '<div><span>หัวหน้างาน</span>' + esc(l.supervisor) + '</div>' : '')
+        + (l.files.length ? '<div><span>ไฟล์แนบ</span>' + fileLinks(l.files) + '</div>' : '')
+        + '<div class="muted"><span>ส่งเมื่อ</span>' + (ca ? dd(ca.slice(0, 10)) + ' ' + esc(ca.slice(11, 16)) : '-') + (l.source ? ' · ' + esc(l.source) : '') + '</div>'
+        + '</div>'
+        + '<div class="hpr-btns hpc-btns"><button class="btn hok" data-ok="' + l.id + '">✅ อนุมัติ</button><button class="btn hno" data-no="' + l.id + '">❌ ไม่อนุมัติ</button></div></div>';
+    }).join('') + '</div></div>';
   }
   function bindPending(root) {
     // กดแล้วปุ่มทั้งคู่เป็นสีเทาทันที · ถ้ามีคนจัดการไปแล้ว (เช่นกดใน LINE) ขึ้นป้ายสีเทา "อนุมัติไปแล้ว โดย …" แทนปุ่ม (ผู้ใช้ขอ 20/11/69)
@@ -1180,6 +1187,13 @@
   // ---------- CSS ของโมดูล ----------
   var css = document.createElement('style');
   css.textContent = [
+    '.hpcs{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}.hpc{background:#fff;border:1px solid var(--line);border-left:5px solid #f59e0b;border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow);min-width:0}',
+    '.hpc-head{display:flex;gap:12px;align-items:center}.hpc-head .hph{flex:0 0 auto}.hpc-who{min-width:0;display:flex;flex-direction:column;gap:2px}.hpc-who b{font-size:16px;line-height:1.3;word-break:break-word}.hpc-nick{align-self:flex-start;font-size:13px;font-weight:700;color:#1e40af;background:#eff6ff;border-radius:99px;padding:1px 10px}',
+    '.hpc-what{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:14.5px}.hpc-len{color:var(--muted)}',
+    '.hpc-bal{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;font-size:12.5px}.hpc-bal span{display:flex;flex-direction:column;flex:1;min-width:0}.hpc-bal b{font-size:14.5px}.hpc-bal i{font-style:normal;font-weight:700}.hpc-bal.pos{background:#f0fdf4;color:#166534}.hpc-bal.neg{background:#fef2f2;color:#b91c1c}',
+    '.hpc-info{display:flex;flex-direction:column;gap:4px;font-size:13.5px}.hpc-info>div{display:flex;gap:8px}.hpc-info span{flex:0 0 76px;color:var(--muted);font-size:12.5px}',
+    '.hpc-btns{display:grid!important;grid-template-columns:1fr 1fr;gap:8px;margin-top:2px}.hpc-btns .btn{width:100%;justify-content:center;min-height:42px;margin:0}.hpc-btns .hdone-tag{grid-column:1/-1}',
+    '@media (max-width:560px){.hpcs{grid-template-columns:1fr}}',
     '.hsex{display:block;font-weight:600;color:var(--ink)}.hnat{width:100%;border-collapse:collapse;font-size:14.5px}.hnat th,.hnat td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right}.hnat th:first-child,.hnat td:first-child{text-align:left}',
     '.hnat th{font-size:13px;color:var(--muted);font-weight:600}.hnat .m{color:#2563eb}.hnat .f{color:#db2777}.hnat .u{color:#64748b}.hnat tr.tot td{border-bottom:0;border-top:2px solid var(--line);font-weight:700}',
     '.hnat tr.job td:first-child{color:#c2410c}.hred{color:#dc2626 !important}.hlgnow{padding:10px 12px;border-radius:10px;font-weight:600;margin-bottom:12px}.hlgnow.ok{background:#dcfce7;color:#15803d}.hlgnow.bad{background:#fee2e2;color:#991b1b}.hlgol{margin:6px 0 12px;padding-left:22px;line-height:1.6}.hlgol li{margin-bottom:6px}',
@@ -1197,7 +1211,7 @@
     '.hpicks{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px;max-height:320px;overflow:auto;margin-top:8px}.hpick{display:flex;align-items:center;gap:8px;border:1.5px solid var(--line);border-radius:10px;padding:5px 8px;font-size:13.5px;cursor:pointer;margin:0}.hpick.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 7%,white)}.hpick small{display:block;font-size:11px;color:var(--muted)}',
     '.hpr-btns .hdone,.hpr-btns button:disabled{background:#e5e7eb!important;border-color:#d1d5db!important;color:#6b7280!important;cursor:not-allowed}.hdone-tag{display:inline-block;padding:7px 12px;border-radius:10px;background:#e5e7eb;color:#4b5563;font-weight:700;font-size:13.5px}',
     '.hpendl{margin-top:10px;padding:8px 10px;border-radius:10px;background:#f1f5f9;color:#475569;font-size:13px}.hpendl.click{cursor:pointer}.hpendl.click:hover{background:#e2e8f0}.hpendl small{color:#64748b}',
-    '.hnewph{display:flex;align-items:center;gap:10px;margin-bottom:10px}.xsep{height:1px;background:var(--line);margin:8px 0}.hpend{border:2px solid #f59e0b;margin-bottom:14px}.hpend h4{margin:0 0 6px}.hpr-row{display:flex;gap:10px;align-items:center;border-top:1px solid var(--line);padding:8px 0;flex-wrap:wrap}.hpr-row .pinfo small{display:block}.hpr-btns{display:flex;gap:6px}.hok{background:#16a34a;color:#fff}.hno{background:#fee2e2;color:#b91c1c}.hform{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}.hqr{background:#fff;padding:8px;border-radius:10px;border:1px solid var(--line);min-width:176px;min-height:176px}.hline div{padding:6px 10px;border-radius:8px;background:#fffbeb;margin-bottom:6px;font-size:14px}.hline div.ok{background:#f0fdf4}.hposter{background:#fff;text-align:center;padding:30px;border-radius:14px}.hposter h2{font-size:40px;margin:10px 0 0}.hposter h3{font-size:24px;margin:6px 0 16px;color:#334155}.hposter #qrBig{display:inline-block;padding:14px;border:3px solid #0f172a;border-radius:16px}.hposter p{font-size:17px;margin:10px 0}.hposter .slogo{height:70px}',
+    '.hnewph{display:flex;align-items:center;gap:10px;margin-bottom:10px}.xsep{height:1px;background:var(--line);margin:8px 0}.hpend{margin-bottom:16px}.hpend>h4{margin:0 0 10px;padding:10px 14px;border-radius:12px;background:#fff7ed;border:1.5px solid #fdba74;color:#9a3412;font-size:16px}.hpr-row{display:flex;gap:10px;align-items:center;border-top:1px solid var(--line);padding:8px 0;flex-wrap:wrap}.hpr-row .pinfo small{display:block}.hpr-btns{display:flex;gap:6px}.hok{background:#16a34a;color:#fff}.hno{background:#fee2e2;color:#b91c1c}.hform{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}.hqr{background:#fff;padding:8px;border-radius:10px;border:1px solid var(--line);min-width:176px;min-height:176px}.hline div{padding:6px 10px;border-radius:8px;background:#fffbeb;margin-bottom:6px;font-size:14px}.hline div.ok{background:#f0fdf4}.hposter{background:#fff;text-align:center;padding:30px;border-radius:14px}.hposter h2{font-size:40px;margin:10px 0 0}.hposter h3{font-size:24px;margin:6px 0 16px;color:#334155}.hposter #qrBig{display:inline-block;padding:14px;border:3px solid #0f172a;border-radius:16px}.hposter p{font-size:17px;margin:10px 0}.hposter .slogo{height:70px}',
     '.hrt{width:100%;border-collapse:collapse;font-size:11.5px;table-layout:auto}.hrt th{background:#f1f5f9;border:1px solid #0f172a;padding:4px;text-align:center;font-size:11px}.hrt th small{font-weight:400;color:#475569}.hrt td{border:1px solid #0f172a;padding:4px;vertical-align:top}.hrt .c{text-align:center}.hrt .r{text-align:right}.hrt .b{font-weight:700}.hrt tfoot td{background:#f1f5f9;font-weight:700}.hrt.sm{font-size:11.5px;margin-bottom:6px}',
     '.hrimg{width:52px;height:65px;object-fit:cover;border-radius:4px;display:inline-grid;place-items:center;background:#e2e8f0;font-size:16px;font-weight:700;color:#64748b}',
     '.hpr{display:flex;gap:16px;align-items:flex-start;margin:8px 0}.hprimg{width:130px;height:163px;object-fit:cover;border-radius:6px;border:1px solid #cbd5e1;display:inline-grid;place-items:center;background:#e2e8f0;font-size:40px;color:#64748b}',
