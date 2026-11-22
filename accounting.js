@@ -70,13 +70,19 @@
   };
   function reload(msg) {
     if (msg) toast(msg);
+    H.dcache = null; H.cmp = null; H.mon = null; H.cmpAt = H.monAt = 0;   // มีการบันทึก → ผลสรุปที่เก็บไว้ใช้ไม่ได้แล้ว
     return H.load().then(function () { if (String(state.page).indexOf('a_') === 0) H.render(state.page); }).catch(onServerError);
   }
-  H.reset = function () { H.cmp = null; H.cmpSel = ''; if (window.ACCCP) ACCCP.reset(); if (window.ACCEX) ACCEX.reset(); if (window.ACCAP) ACCAP.reset(); H.data = null; H.q = {}; H.imp = null; H.cur = null; H.pendingCur = null; H.setDraft = null; landscape(false); };
+  H.reset = function () { H.dcache = null; H.dashDcs = null; H.cmpAt = H.monAt = 0; H.cmp = null; H.cmpSel = ''; if (window.ACCCP) ACCCP.reset(); if (window.ACCEX) ACCEX.reset(); if (window.ACCAP) ACCAP.reset(); H.data = null; H.q = {}; H.imp = null; H.cur = null; H.pendingCur = null; H.setDraft = null; landscape(false); };
   H.menus = function () { return MENUS; };
   H.exportFile = function (page, kind) { return window.ACCAP && /^a_ap/.test(page) ? ACCAP.exportFile(page, kind) : null; };
   H.render = function (page) {
     landscape(false);
+    // Dashboard ไม่ต้องรอโหลดข้อมูลหลักก่อน: วาดหน้าทันที แล้วแต่ละส่วนค่อยขึ้นจากบนลงล่าง (ผู้ใช้ขอ 22/11/69)
+    if (!H.data && page === 'a_dash') {
+      H.load().then(function () { if (state.page === 'a_dash') fillDcs(); }).catch(function (e) { if (String(e.message).indexOf('SESSION_EXPIRED') >= 0) onServerError(e); });
+      return dash();
+    }
     if (!H.data) {
       $('main').innerHTML = '<h3>' + esc(state.dept.name) + '</h3><p class="lead">กำลังโหลดข้อมูลจาก Google Sheet…</p><div class="panel"><span class="spinner dark"></span> กำลังโหลด</div>';
       H.load().then(function () { if (state.page === page) H.render(page); }).catch(function (e) {
@@ -85,8 +91,9 @@
       });
       return;
     }
-    if (page !== 'a_dash') H.cmp = null;
-    if (page !== 'a_mon') H.mon = null;   // กลับมาหน้า Dashboard = คำนวณเปรียบเทียบใหม่ (อาจมีออเดอร์ใหม่)
+    // ผลสรุปเก็บไว้ 5 นาที: กลับมาหน้า Dashboard ภายใน 5 นาทีขึ้นทันที (เกินนั้นคำนวณใหม่ · กด "คำนวณใหม่" ได้ตลอด)
+    if (!fresh(H.cmpAt)) H.cmp = null;
+    if (!fresh(H.monAt)) H.mon = null;   // กลับมาหน้า Dashboard = คำนวณเปรียบเทียบใหม่ (อาจมีออเดอร์ใหม่)
     ({ a_imp: importPage, a_hist: histPage, a_dash: dash, a_mon: monthly, a_set: settings, a_cp: function () { window.ACCCP.importPage(); }, a_cpl: function () { window.ACCCP.listPage(); }, a_ex: function () { window.ACCEX.importPage(); }, a_exl: function () { window.ACCEX.listPage(); }, a_ap_dash: function () { go('a_dash'); }, a_apin: function () { window.ACCAP.importPage(); }, a_ap: function () { window.ACCAP.roundPage(); }, a_apv: function () { window.ACCAP.vendorPage(); }, a_appo: function () { window.ACCAP.poPage(); } }[page] || importPage)();
   };
 
@@ -489,8 +496,15 @@
   }
 
   // ==================== 3) Dashboard ====================
+  function fresh(at) { return at && Date.now() - at < 5 * 60 * 1000; }
+  function bkkToday() { var d = new Date(Date.now() + 7 * 3600 * 1000); return d.toISOString().slice(0, 10); }
+  function dcList() { return (H.data && H.data.map && H.data.map.dcs) || H.dashDcs || []; }
+  function fillDcs() {   // เติมรายชื่อศูนย์ในตัวกรอง เมื่อข้อมูลหลักโหลดเสร็จทีหลัง
+    var sel = $('dDc'); if (!sel || sel.options.length > 1) return;
+    dcList().forEach(function (d) { var o = document.createElement('option'); o.textContent = d.name; if (H.q.dc === d.name) o.selected = true; sel.appendChild(o); });
+  }
   function dash() {
-    var t = H.data.today, q = H.q;
+    var t = (H.data && H.data.today) || bkkToday(), q = H.q;
     if (!q.from) { q.from = t.slice(0, 8) + '01'; q.to = monthEnd(t); q.basis = 'po'; q.dc = ''; }
     var lm = addDays(t.slice(0, 8) + '01', -1);
     var quick = [['7 วัน', addDays(t, -6), t], ['เดือนนี้', t.slice(0, 8) + '01', monthEnd(t)], ['เดือนก่อน', lm.slice(0, 8) + '01', lm], ['3 เดือน', addDays(t.slice(0, 8) + '01', -61).slice(0, 8) + '01', monthEnd(t)], ['ปีนี้', t.slice(0, 4) + '-01-01', t.slice(0, 4) + '-12-31']];
@@ -500,21 +514,19 @@
       + '<div class="pbar noprint a7filter"><div class="pchips" style="margin:0">' + quick.map(function (x) { return '<button class="chip' + (q.from === x[1] && q.to === x[2] ? ' on' : '') + '" data-q="' + x[1] + '|' + x[2] + '">' + x[0] + '</button>'; }).join('') + '</div>'
       + '<label class="a7lb">ตั้งแต่ <input type="date" id="dFrom" value="' + q.from + '"></label><label class="a7lb">ถึง <input type="date" id="dTo" value="' + q.to + '"></label>'
       + '<select id="dBasis" aria-label="นับตามวันที่"><option value="po"' + (q.basis === 'po' ? ' selected' : '') + '>ตามวันที่สั่ง</option><option value="delivery"' + (q.basis === 'delivery' ? ' selected' : '') + '>ตามวันที่ส่ง</option></select>'
-      + '<select id="dDc" aria-label="ศูนย์กระจายสินค้า"><option value="">ทุกศูนย์</option>' + H.data.map.dcs.map(function (d) { return '<option' + (q.dc === d.name ? ' selected' : '') + '>' + esc(d.name) + '</option>'; }).join('') + '</select>'
+      + '<select id="dDc" aria-label="ศูนย์กระจายสินค้า"><option value="">ทุกศูนย์</option>' + dcList().map(function (d) { return '<option' + (q.dc === d.name ? ' selected' : '') + '>' + esc(d.name) + '</option>'; }).join('') + '</select>'
       + '<button class="btn btn-sm btn-line" id="dPrint">' + icon('print', 16) + ' พิมพ์</button></div>'
       + '<div id="dOut"><div class="panel"><span class="spinner dark"></span> กำลังสรุป…</div></div>'
       + '<div class="panel pbox a7cmp" id="cmpBox" style="margin-top:16px"><h4>' + icon('chart', 18) + ' เปรียบเทียบยอดสั่งซื้อ แยกบริษัท / สินค้า</h4><div id="cmpOut"><span class="spinner dark"></span> กำลังคำนวณ…</div></div>'
       + '<h4 class="a7h4">' + icon('table', 18) + ' สรุปรายเดือน ทุกบริษัท</h4><div id="dMon"><div class="panel"><span class="spinner dark"></span> กำลังสรุป…</div></div>'
       + '<div class="a7band out" id="apDashBoxH">⬆ จ่าย (เงินออก)</div><div id="apDashBox"><div class="panel"><span class="spinner dark"></span> กำลังโหลดค่าใช้จ่าย…</div></div>';
-    if (window.ACCAP && window.ACCAP.mountInto) window.ACCAP.mountInto($('apDashBox'));
     // สรุปรายเดือนทุกบริษัท ต่อท้ายส่วนรับ ก่อนส่วนจ่าย (ผู้ใช้ขอ 22/11/69) — ใช้ข้อมูลชุดเดียวกับหน้า "รายงานสรุปรายเดือน"
     var monLoad = function (force) {
       var box = $('dMon'); if (!box) return;
       if (H.mon && !force) return H.mountMonthly(box, H.mon, function () { H.mon = null; box.innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังสรุป…</div>'; monLoad(true); });
-      call('accMonthly', state.token).then(function (r) { if (!r.ok) throw new Error(r.error); H.mon = r; if ($('dMon') === box) monLoad(); })
+      call('accMonthly', state.token).then(function (r) { if (!r.ok) throw new Error(r.error); H.mon = r; H.monAt = Date.now(); if ($('dMon') === box) monLoad(); })
         .catch(function (e) { if (box.isConnected) box.innerHTML = '<div class="panel">สรุปรายเดือนไม่ได้: ' + esc(e.message || e) + '</div>'; });
     };
-    monLoad();
     on('[data-q]', 'click', function (el) { var p = el.getAttribute('data-q').split('|'); q.from = p[0]; q.to = p[1]; dash(); }, $('main'));
     ['dFrom', 'dTo'].forEach(function (id) { $(id).addEventListener('change', function () {
       var f = $('dFrom').value, to = $('dTo').value;
@@ -524,21 +536,29 @@
     $('dBasis').addEventListener('change', function () { q.basis = this.value; dash(); });
     $('dDc').addEventListener('change', function () { q.dc = this.value; dash(); });
     $('dPrint').addEventListener('click', function () { window.print(); });
-    cmpLoad();
-    var my = H.dseq = (H.dseq || 0) + 1;
-    call('accDashboard', state.token, { from: q.from, to: q.to, basis: q.basis, dc: q.dc }).then(function (r) {
+    // เรียกข้อมูลเรียงจากบนลงล่าง (ส่วนบนขึ้นก่อน) · ผลแต่ละช่วงวันที่เก็บไว้ 5 นาที
+    var my = H.dseq = (H.dseq || 0) + 1, key = [q.from, q.to, q.basis, q.dc].join('|');
+    var show = function (r) {
       if (my !== H.dseq || state.page !== 'a_dash') return;
       if (!r.ok) { $('dOut').innerHTML = '<div class="panel">' + esc(r.error) + '</div>'; return; }
+      if (r.map && r.map.dcs && !H.dashDcs) { H.dashDcs = r.map.dcs; fillDcs(); }
       $('dOut').innerHTML = H.dashHtml(r, true);
       on('[data-dcf]', 'click', function (el) { q.dc = el.getAttribute('data-dcf'); dash(); }, $('dOut'));
-    }).catch(onServerError);
+    };
+    H.dcache = H.dcache || {};
+    var hit = H.dcache[key];
+    if (hit && fresh(hit.at)) show(hit.r);
+    else call('accDashboard', state.token, { from: q.from, to: q.to, basis: q.basis, dc: q.dc }).then(function (r) { if (r.ok) H.dcache[key] = { r: r, at: Date.now() }; show(r); }).catch(onServerError);
+    cmpLoad();
+    monLoad();
+    if (window.ACCAP && window.ACCAP.mountInto) window.ACCAP.mountInto($('apDashBox'));
   }
   // ---------- เปรียบเทียบยอดสั่งซื้อ (ครั้งล่าสุด vs ครั้งก่อน · เดือนล่าสุด vs เดือนก่อน) แยกบริษัท — accCompare (AccCompare.gs) ----------
   function cmpLoad(force) {
     if (H.cmp && !force) return cmpRender();
     call('accCompare', state.token).then(function (r) {
       if (!r.ok) { if ($('cmpOut')) $('cmpOut').innerHTML = esc(r.error || 'คำนวณไม่ได้'); return; }
-      H.cmp = r; cmpRender();
+      H.cmp = r; H.cmpAt = Date.now(); cmpRender();
     }).catch(onServerError);
   }
   function monthTh(ym) { if (!ym) return '-'; var p = ym.split('-'); return MONTHS[+p[1] - 1] + ' ' + String(+p[0] + 543).slice(2); }
