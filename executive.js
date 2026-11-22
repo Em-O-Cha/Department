@@ -76,13 +76,14 @@
     if (r.kind === 'purchasing') drawPurchasing(r, d);
     else if (r.kind === 'hr' && window.HRM) $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + dd(r.from) + ' – ' + dd(r.to) + '</span></div>' + window.HRM.dashHtml(r);
     else if (r.kind === 'quality' && window.QAM) $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + dd(r.from) + ' – ' + dd(r.to) + ' · ข้อร้องเรียนลูกค้า</span></div>' + window.QAM.dashHtml(r, false);
-    else if (r.kind === 'accounting' && window.ACC) $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + dd(r.from) + ' – ' + dd(r.to) + ' · ออเดอร์ 7-11 (ตามวันที่สั่ง)</span></div>' + window.ACC.dashHtml(r);
+    else if (r.kind === 'accounting' && window.ACC) $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + dd(r.from) + ' – ' + dd(r.to) + ' · ออเดอร์ 7-11 (ตามวันที่สั่ง)</span></div><div class="a7band in">⬇ รับ (เงินเข้า)</div>' + window.ACC.dashHtml(r);
     else if (r.kind === 'rd' && window.RDM) $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + dd(r.from) + ' – ' + dd(r.to) + ' · ผลิตภัณฑ์ใหม่ / คู่ค้า</span></div>' + window.RDM.dashHtml(r);
     else if (r.kind === 'production' && window.PRDM) $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + dd(r.from) + ' – ' + dd(r.to) + ' · Yield / ของเสีย / เสร็จตามกำหนด</span></div>' + window.PRDM.dashHtml(r);
     else if (r.kind === 'safety' && window.SHE) $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + dd(r.from) + ' – ' + dd(r.to) + '</span></div>' + window.SHE.dashHtml(r);
     extras(r);
   }
 
+  // ฝ่ายบัญชี: รับ (7-11 · เปรียบเทียบ · สรุปรายเดือน) แล้วจึง จ่าย — เรียงเหมือนหน้าฝ่าย (ผู้ใช้ขอ 22/11/69)
   // ส่วนที่เพิ่มในหน้าฝ่ายภายหลัง (ผู้ใช้ขอ 19/11/69): จัดซื้อ = ราคาปรับขึ้น · QA = ค่าใช้จ่าย · บัญชี = เปรียบเทียบยอด + สรุปรายเดือนทุกบริษัท
   function extras(r) {
     var out = $('xOut'); if (!out) return;
@@ -96,8 +97,8 @@
     }
     if (r.kind === 'accounting' && window.ACC) {
       if (r.compare && window.ACC.mountCmp) { var c = add('เปรียบเทียบยอดสั่งซื้อ แยกบริษัท / สินค้า', '<div class="panel pbox a7cmp"><div class="xcmp"></div></div>'); window.ACC.mountCmp(c.querySelector('.xcmp'), r.compare); }
-      if (r.payables && window.ACCAP && window.ACCAP.mountDash) { var pd = add('การจ่าย (ค่าใช้จ่ายตามรอบจ่าย) <small class="muted">(ช่วงเวลาเลือกในกล่องนี้)</small>', '<div class="xap"></div>'); window.ACCAP.mountDash(pd.querySelector('.xap'), r.payables, {}); }
       if (r.monthly && window.ACC.mountMonthly) { var m = add('สรุปรายเดือน ทุกบริษัท', '<div class="xmon"></div>'); window.ACC.mountMonthly(m.querySelector('.xmon'), r.monthly); }
+      if (r.payables && window.ACCAP && window.ACCAP.mountDash) { var pb = document.createElement('div'); pb.className = 'a7band out'; pb.textContent = '⬆ จ่าย (เงินออก)'; out.appendChild(pb); var pd = add('การจ่าย (ค่าใช้จ่ายตามรอบจ่าย) <small class="muted">(ช่วงเวลาเลือกในกล่องนี้)</small>', '<div class="xap"></div>'); window.ACCAP.mountDash(pd.querySelector('.xap'), r.payables, {}); }
     }
     if (r.extraError) add('', '<div class="a7msg bad">บางส่วนโหลดไม่ได้: ' + esc(r.extraError) + '</div>');
   }
