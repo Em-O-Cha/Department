@@ -610,7 +610,7 @@
         var x = c.months[ym]; if (!x) return '<td><span class="muted">–</span></td>';
         tot[c.key][0] += x.qty; tot[c.key][1] += x.amt; tot[c.key][2] += x.docs;
         if (c.currency === 'บาท') { tq += x.qty; ta += x.amt; }
-        return '<td>' + cell(c, x.qty, x.amt, ' · ' + x.docs + (c.export ? ' ใบ' : ' PO')) + (fut && c.future ? '<em class="mfut">ตามกำหนดส่ง</em>' : '') + '</td>';
+        return '<td>' + cell(c, x.qty, x.amt, ' · ' + x.docs + (c.export ? ' ใบ' : ' PO')) + '</td>';   // ไม่ใส่ป้าย "ตามกำหนดส่ง" ในช่อง (มีคำอธิบายด้านบนตารางแล้ว · ผู้ใช้ขอ 22/11/69)
       }).join('');
       gt[0] += tq; gt[1] += ta;
       return '<tr><td class="cmn"><b>' + monthTh(ym) + '</b></td>' + tds + '<td class="mtot">' + (ta || tq ? '<b>' + n0(tq) + ' ลัง</b><small>' + baht(ta) + '</small>' : '<span class="muted">–</span>') + '</td></tr>';
