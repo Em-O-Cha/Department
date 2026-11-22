@@ -131,8 +131,6 @@
     var quick = [['เดือนนี้', t.slice(0, 8) + '01', t], ['เดือนก่อน', lm.slice(0, 8) + '01', lm], ['3 เดือน', addDays(t, -89), t], ['ปีนี้', t.slice(0, 4) + '-01-01', t]];
     var open = H.data.complaints.filter(function (c) { return !done(c); });
     $('main').innerHTML = '<h3>ภาพรวม ฝ่ายประกันคุณภาพ</h3><p class="lead">ข้อร้องเรียนลูกค้า + ค่าใช้จ่าย QA · ข้อมูล ณ ' + dd(t) + ' · <a href="' + esc(H.data.sheetUrl) + '" target="_blank" rel="noopener">เปิด Google Sheet</a></p>'
-      + '<div class="qtop"><button class="btn btn-primary qbig" id="dNew">' + icon('plus', 20) + ' รับเรื่องร้องเรียนใหม่</button>'
-      + '<button class="btn btn-line" id="dOpen">' + icon('msg', 18) + ' เรื่องที่ยังไม่ปิด <b>' + open.length + '</b></button></div>'
       + '<div class="pbar noprint"><div class="pchips" style="margin:0">' + quick.map(function (x) { return '<button class="chip' + (q.from === x[1] && q.to === x[2] ? ' on' : '') + '" data-q="' + x[1] + '|' + x[2] + '">' + x[0] + '</button>'; }).join('') + '</div>'
       + '<input type="date" id="dFrom" value="' + q.from + '" aria-label="ตั้งแต่"> – <input type="date" id="dTo" value="' + q.to + '" aria-label="ถึง">'
       + '<button class="btn btn-sm btn-line" id="dPrint">' + icon('print', 16) + ' พิมพ์</button></div>'
@@ -140,8 +138,6 @@
       + '<div id="dOut"><div class="panel"><span class="spinner dark"></span> กำลังสรุป…</div></div>'
       + '<div id="dCost"></div>';   // ค่าใช้จ่าย QA อยู่หน้าเดียวกัน (ผู้ใช้ขอ 21/11/69 รวม 2 Dashboard)
     drawCost();
-    $('dNew').addEventListener('click', function () { openCase(null); });
-    $('dOpen').addEventListener('click', function () { H.q.lst = 'open'; go('q_list'); });
     on('[data-q]', 'click', function (el) { var p = el.getAttribute('data-q').split('|'); q.from = p[0]; q.to = p[1]; dash(); }, $('main'));
     ['dFrom', 'dTo'].forEach(function (id) { $(id).addEventListener('change', function () { if (v('dFrom') && v('dTo') && v('dFrom') <= v('dTo')) { q.from = v('dFrom'); q.to = v('dTo'); dash(); } else toast('เลือกช่วงวันที่ให้ถูกต้อง'); }); });
     $('dPrint').addEventListener('click', function () { window.print(); });
