@@ -504,8 +504,17 @@
       + '<select id="dDc" aria-label="ศูนย์กระจายสินค้า"><option value="">ทุกศูนย์</option>' + H.data.map.dcs.map(function (d) { return '<option' + (q.dc === d.name ? ' selected' : '') + '>' + esc(d.name) + '</option>'; }).join('') + '</select>'
       + '<button class="btn btn-sm btn-line" id="dPrint">' + icon('print', 16) + ' พิมพ์</button></div>'
       + '<div id="dOut"><div class="panel"><span class="spinner dark"></span> กำลังสรุป…</div></div>'
+      + '<h4 class="a7h4">' + icon('table', 18) + ' สรุปรายเดือน ทุกบริษัท</h4><div id="dMon"><div class="panel"><span class="spinner dark"></span> กำลังสรุป…</div></div>'
       + '<div class="a7band out" id="apDashBoxH">⬆ จ่าย (เงินออก)</div><div id="apDashBox"><div class="panel"><span class="spinner dark"></span> กำลังโหลดค่าใช้จ่าย…</div></div>';
     if (window.ACCAP && window.ACCAP.mountInto) window.ACCAP.mountInto($('apDashBox'));
+    // สรุปรายเดือนทุกบริษัท ต่อท้ายส่วนรับ ก่อนส่วนจ่าย (ผู้ใช้ขอ 22/11/69) — ใช้ข้อมูลชุดเดียวกับหน้า "รายงานสรุปรายเดือน"
+    var monLoad = function (force) {
+      var box = $('dMon'); if (!box) return;
+      if (H.mon && !force) return H.mountMonthly(box, H.mon, function () { H.mon = null; box.innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังสรุป…</div>'; monLoad(true); });
+      call('accMonthly', state.token).then(function (r) { if (!r.ok) throw new Error(r.error); H.mon = r; if ($('dMon') === box) monLoad(); })
+        .catch(function (e) { if (box.isConnected) box.innerHTML = '<div class="panel">สรุปรายเดือนไม่ได้: ' + esc(e.message || e) + '</div>'; });
+    };
+    monLoad();
     on('[data-q]', 'click', function (el) { var p = el.getAttribute('data-q').split('|'); q.from = p[0]; q.to = p[1]; dash(); }, $('main'));
     ['dFrom', 'dTo'].forEach(function (id) { $(id).addEventListener('change', function () {
       var f = $('dFrom').value, to = $('dTo').value;
