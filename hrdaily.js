@@ -124,12 +124,13 @@
     var total = day.roles.reduce(function (s, r) { return s + net(r); }, 0), lv = day.roles.reduce(function (s, r) { return s + lvCount(r); }, 0);
     var sent = d.date === D.date && d.sentAt;
     $('main').innerHTML = '<h3>เช็คพนักงานรายวัน</h3><p class="lead">แตะชื่อคนที่ลา → เลือกประเภทและเหตุผล ชื่อจะย้ายไปช่อง "การลา" · ดูภาพตารางก่อนส่งเข้า LINE</p>'
-      + '<div class="pbar hdbar"><label class="hdlb">วันที่ <input type="date" id="hdDate" value="' + D.date + '"></label>'
-      + '<span class="hdsum">ทั้งหมด <b>' + n0(total) + '</b> คน · ลา <b class="neg">' + lv + '</b> คน</span>'
+      + '<div class="panel hdhead"><div class="hdrow"><label class="hdlb"><span>วันที่</span><input type="date" id="hdDate" value="' + D.date + '"></label>'
+      + '<div class="hdstat"><div><small>ทั้งหมด</small><b>' + n0(total) + '</b><small>คน</small></div><div class="lv"><small>ลา</small><b>' + lv + '</b><small>คน</small></div></div></div>'
+      + '<div class="hdtags">'
       + (sent ? '<span class="hdtag ok">ส่ง LINE แล้ว ' + esc(String(d.sentAt).slice(11, 16)) + '</span>' : d.day ? '<span class="hdtag">บันทึกแล้ว · ยังไม่ส่ง LINE</span>' : '<span class="hdtag">ยังไม่บันทึก</span>')
-      + (L.token && L.group ? '<span class="hdtag">' + (L.own ? 'ส่งเข้ากลุ่ม LINE ของฝ่ายบุคคล' : 'ส่งเข้ากลุ่มเดียวกับฝ่ายบัญชี / ฝ่ายผลิต') + '</span>' : '')
-      + '<button class="btn btn-sm btn-line" id="hdRoles">' + icon('gear', 15) + ' แก้ฝ่ายงาน / รายชื่อ</button>'
-      + (L.token ? '<button class="btn btn-sm btn-line" id="hdGroup">' + icon('send', 15) + ' ' + (L.group ? 'เปลี่ยนกลุ่ม LINE' : 'ผูกกลุ่ม LINE') + '</button>' : '') + '</div>'
+      + (L.token && L.group ? '<span class="hdtag">' + (L.own ? 'ส่งเข้ากลุ่ม LINE ของฝ่ายบุคคล' : 'ส่งเข้ากลุ่มเดียวกับฝ่ายบัญชี / ฝ่ายผลิต') + '</span>' : '') + '</div>'
+      + '<div class="hdbtns"><button class="btn btn-sm btn-line" id="hdRoles">' + icon('gear', 15) + ' แก้ฝ่ายงาน / รายชื่อ</button>'
+      + (L.token ? '<button class="btn btn-sm btn-line" id="hdGroup">' + icon('send', 15) + ' ' + (L.group ? 'เปลี่ยนกลุ่ม LINE' : 'ผูกกลุ่ม LINE') + '</button>' : '') + '</div></div>'
       + (L.token && L.group ? '' : lineSetup(L))
       + unmatchedHtml()
       + '<div class="hdgrid">' + day.roles.map(function (r, i) {
@@ -140,8 +141,8 @@
             : '<label class="hdcnt">จำนวน <input type="number" min="0" inputmode="numeric" data-cnt="' + i + '" value="' + (Number(r.count) || 0) + '"> คน' + (r.resigns.length ? ' <small class="muted">(หักลาออก ' + r.resigns.length + ' เหลือ ' + n0(net(r)) + ')</small>' : '') + '</label>')
           + (r.leaves.length ? '<div class="hdlv">' + r.leaves.map(function (l, j) { return '<div' + (isLate(l) ? ' class="lt"' : '') + '><span>' + esc(leaveText(l)) + (l.src ? ' <small class="hdauto">จากระบบการลา</small>' : '') + '</span><button class="link-btn danger" data-unlv="' + i + ':' + j + '" aria-label="ยกเลิกการลา">ยกเลิก</button></div>'; }).join('') + '</div>' : '')
           + (r.resigns.length ? '<div class="hdlv hdrs">' + r.resigns.map(function (x, j) { return '<div><span>' + esc(resignText(x)) + '</span><button class="link-btn danger" data-unrs="' + i + ':' + j + '" aria-label="ยกเลิกลาออก">ยกเลิก</button></div>'; }).join('') + '</div>' : '')
-          + '<div class="hdfoot">' + (r.names.length ? '' : '<button class="link-btn" data-addlv="' + i + '">+ เพิ่มคนลา / ลาออก</button>')
-          + '<input class="hdnote" data-note="' + i + '" placeholder="หมายเหตุ" value="' + esc(r.note || '') + '"></div></div>';
+          + '<div class="hdfoot"><input class="hdnote" data-note="' + i + '" placeholder="หมายเหตุ" value="' + esc(r.note || '') + '">'
+          + (r.names.length ? '' : '<button class="btn btn-sm btn-line hdadd" data-addlv="' + i + '">+ เพิ่มคนลา / ลาออก</button>') + '</div></div>';
       }).join('') + '</div>'
       + '<div class="panel pbox"><h4>' + icon('table', 18) + ' ตัวอย่างตาราง (ภาพที่จะส่ง LINE)</h4><div class="hdprev" id="hdPrev">' + tableHtml(day, D.date) + '</div></div>'
       + '<div class="a7bar"><button class="btn btn-line" id="hdSave">' + icon('check', 16) + ' บันทึก</button><button class="btn btn-primary" id="hdSend"' + (L.token && L.group ? '' : ' disabled') + '>' + icon('send', 16) + ' ดูภาพ & ส่ง LINE</button></div>';
@@ -304,8 +305,14 @@
 
   var css = document.createElement('style');
   css.textContent = [
+    // หัวหน้าเช็คพนักงานรายวัน จัดเป็นกล่องเดียว (ผู้ใช้ขอ 22/11/69): วันที่ + ตัวเลขสรุป · ป้ายสถานะ · ปุ่ม 2 ปุ่มกว้างเท่ากัน
+    '.hdhead{display:flex;flex-direction:column;gap:12px;padding:14px 16px;margin-bottom:12px}.hdrow{display:flex;gap:12px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap}',
+    '.hdhead .hdlb{display:flex;flex-direction:column;align-items:stretch;gap:4px;font-size:13px;font-weight:600;color:var(--muted);flex:1 1 170px;min-width:0;max-width:240px}.hdhead .hdlb input{width:100%;padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-size:15px;color:var(--ink);background:#fff}',
+    '.hdstat{display:flex;gap:8px}.hdstat>div{display:flex;flex-direction:column;align-items:center;min-width:78px;padding:6px 12px;border-radius:12px;background:#f1f5f9}.hdstat small{font-size:11.5px;color:var(--muted);line-height:1.2}.hdstat b{font-size:22px;line-height:1.15;color:var(--ink)}.hdstat .lv{background:#fef2f2}.hdstat .lv b{color:#dc2626}',
+    '.hdtags{display:flex;flex-wrap:wrap;gap:6px}.hdtags:empty{display:none}.hdbtns{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;max-width:520px}.hdbtns .btn{width:100%;justify-content:center;margin:0;white-space:nowrap;font-size:13.5px;padding-left:8px;padding-right:8px;gap:6px}',
+    '.hdfoot{flex-wrap:wrap}.hdadd{flex:0 0 auto}@media (max-width:560px){.hdadd{flex:1 1 100%;justify-content:center}.hdstat>div{min-width:64px;padding:6px 10px}}',
     '.hdbar{flex-wrap:wrap;gap:10px;align-items:center}.hdlb{display:flex;gap:6px;align-items:center;font-weight:600}.hdlb input{padding:7px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit}',
-    '.hdsum{color:var(--muted)}.hdsum b{color:var(--ink)}.hdsum .neg{color:#dc2626}.hdtag{font-size:12.5px;font-weight:700;padding:3px 10px;border-radius:99px;background:#e2e8f0;color:#334155}.hdtag.ok{background:#dcfce7;color:#166534}#hdRoles{margin-left:auto}',
+    '.hdsum{color:var(--muted)}.hdsum b{color:var(--ink)}.hdsum .neg{color:#dc2626}.hdtag{font-size:12.5px;font-weight:700;padding:3px 10px;border-radius:99px;background:#e2e8f0;color:#334155}.hdtag.ok{background:#dcfce7;color:#166534}',
     '.hdgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:12px}.hdcard{padding:12px 14px}.hdch{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px}.hdch span{color:var(--muted);white-space:nowrap}.hdch em{color:#dc2626;font-style:normal;font-weight:700}',
     '.hdchips{display:flex;flex-wrap:wrap;gap:6px}.hdchip{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:6px 12px;font:inherit;font-size:14px;cursor:pointer}.hdchip:hover{border-color:var(--c)}.hdchip.off{background:#fee2e2;border-color:#fca5a5;color:#991b1b;text-decoration:line-through}',
     '.hgnow{padding:10px 12px;border-radius:10px;font-weight:600;margin-bottom:12px}.hgnow.ok{background:#dcfce7;color:#15803d}.hgnow.bad{background:#fee2e2;color:#991b1b}.hgmsg{margin:0 0 10px;color:var(--muted);font-size:13px}',
