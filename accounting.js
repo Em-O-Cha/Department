@@ -496,7 +496,6 @@
     var quick = [['7 วัน', addDays(t, -6), t], ['เดือนนี้', t.slice(0, 8) + '01', monthEnd(t)], ['เดือนก่อน', lm.slice(0, 8) + '01', lm], ['3 เดือน', addDays(t.slice(0, 8) + '01', -61).slice(0, 8) + '01', monthEnd(t)], ['ปีนี้', t.slice(0, 4) + '-01-01', t.slice(0, 4) + '-12-31']];
     $('main').innerHTML = '<h3>Dashboard ฝ่ายบัญชี</h3><p class="lead">รับ (เงินเข้า): ยอดสั่งซื้อทุกบริษัท + ออเดอร์ 7-11 · จ่าย (เงินออก): ค่าใช้จ่ายตามรอบจ่าย — <a href="javascript:void 0" class="a7jump" onclick="document.getElementById(\'apDashBoxH\').scrollIntoView({behavior:\'smooth\'})">ไปส่วนการจ่าย ↓</a></p>'
       + '<div class="a7band in">⬇ รับ (เงินเข้า)</div>'
-      + '<div class="panel pbox a7cmp" id="cmpBox"><h4>' + icon('chart', 18) + ' เปรียบเทียบยอดสั่งซื้อ แยกบริษัท / สินค้า</h4><div id="cmpOut"><span class="spinner dark"></span> กำลังคำนวณ…</div></div>'
       + '<h4 class="a7h4">' + icon('chart', 18) + ' ออเดอร์ 7-11 ตามช่วงวันที่</h4>'
       + '<div class="pbar noprint a7filter"><div class="pchips" style="margin:0">' + quick.map(function (x) { return '<button class="chip' + (q.from === x[1] && q.to === x[2] ? ' on' : '') + '" data-q="' + x[1] + '|' + x[2] + '">' + x[0] + '</button>'; }).join('') + '</div>'
       + '<label class="a7lb">ตั้งแต่ <input type="date" id="dFrom" value="' + q.from + '"></label><label class="a7lb">ถึง <input type="date" id="dTo" value="' + q.to + '"></label>'
@@ -504,6 +503,7 @@
       + '<select id="dDc" aria-label="ศูนย์กระจายสินค้า"><option value="">ทุกศูนย์</option>' + H.data.map.dcs.map(function (d) { return '<option' + (q.dc === d.name ? ' selected' : '') + '>' + esc(d.name) + '</option>'; }).join('') + '</select>'
       + '<button class="btn btn-sm btn-line" id="dPrint">' + icon('print', 16) + ' พิมพ์</button></div>'
       + '<div id="dOut"><div class="panel"><span class="spinner dark"></span> กำลังสรุป…</div></div>'
+      + '<div class="panel pbox a7cmp" id="cmpBox" style="margin-top:16px"><h4>' + icon('chart', 18) + ' เปรียบเทียบยอดสั่งซื้อ แยกบริษัท / สินค้า</h4><div id="cmpOut"><span class="spinner dark"></span> กำลังคำนวณ…</div></div>'
       + '<h4 class="a7h4">' + icon('table', 18) + ' สรุปรายเดือน ทุกบริษัท</h4><div id="dMon"><div class="panel"><span class="spinner dark"></span> กำลังสรุป…</div></div>'
       + '<div class="a7band out" id="apDashBoxH">⬆ จ่าย (เงินออก)</div><div id="apDashBox"><div class="panel"><span class="spinner dark"></span> กำลังโหลดค่าใช้จ่าย…</div></div>';
     if (window.ACCAP && window.ACCAP.mountInto) window.ACCAP.mountInto($('apDashBox'));
