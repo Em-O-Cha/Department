@@ -50,7 +50,7 @@ function apiFunctions_() {
     prdDeleteBreakdown: prdDeleteBreakdown, prdSaveReport: prdSaveReport, prdUploadPhoto: prdUploadPhoto, prdRemovePhoto: prdRemovePhoto,
     prdSaveSettings: prdSaveSettings, prdLog: prdLog, prdDashboard: prdDashboard, prdSendLine: prdSendLine, prdLinePreview: prdLinePreview, prdLineTest: prdLineTest, prdSetLineToken: prdSetLineToken, prdUseAccBot: prdUseAccBot,
     // ผู้บริหาร (Executive.gs)
-    execOverview: execOverview, execDashboard: execDashboard, execVerify: execVerify
+    execOverview: execOverview, execDashboard: execDashboard, execPart: execPart, execVerify: execVerify
   };
 }
 

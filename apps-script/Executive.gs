@@ -6,17 +6,35 @@
 
 // ส่วนที่เพิ่มในหน้าฝ่ายภายหลัง ให้ขึ้นในหน้าผู้บริหารด้วย (ผู้ใช้ขอ 19/11/69): PUR ราคาปรับขึ้น · QA ค่าใช้จ่าย · ACC เปรียบเทียบ + สรุปรายเดือนทุกบริษัท
 function execExtra_(d) { for (var i = 1; i < arguments.length; i++) { try { arguments[i](d); } catch (e) { d.extraError = (d.extraError ? d.extraError + ' · ' : '') + String(e.message || e); } } return d; }
-var EXEC_DASHBOARDS_ = { PUR: function (dept, from, to) { return execExtra_(purDashboard_(dept, from, to), function (d) { var ss = purBook_(dept); d.rises = purPriceReport_(ss, from, to); d.vendorInfo = purVendorDash_(ss); }); },
+// ตัวสรุปหลักของแต่ละฝ่าย (ขึ้นก่อน) + ส่วนเสริม (โหลดแยกทีละส่วนด้วย execPart · ผู้ใช้ขอ 22/11/69 ให้ค่อย ๆ ขึ้นจากบนลงล่าง ไม่ต้องรอทั้งหน้า)
+var EXEC_BASE_ = { PUR: function (dept, from, to) { return purDashboard_(dept, from, to); },
   HR: function (dept, from, to) { return hrDashboard_(dept, from, to); },
   SHE: function (dept, from, to) { var d = sheDashboard_(dept, from, to); d.kind = 'safety'; return d; },
-  QA: function (dept, from, to) { return execExtra_(qaDashboard_(dept, from, to), function (d) {
-    var ss = qaBook_(dept);
-    d.cost = { today: purToday_(), tests: purRead_(ss, 'qa_tests').map(function (t) { return { year: t.year, kind: t.kind, status: t.status, price: t.price, sentDate: t.sentDate, testType: t.testType, sample: t.sample, lab: t.lab }; }),
-      complaints: purRead_(ss, 'qa_complaints').filter(function (c) { return Number(c.remedyCost) > 0; }).map(function (c) { return { recvDate: c.recvDate, remedyCost: c.remedyCost, product: c.product }; }) };
-  }); },
-  ACC: function (dept, from, to) { return execExtra_(accDashboard_(dept, from, to, 'po', ''), function (d) { d.compare = accCompareData_(dept); d.monthly = accMonthlyData_(dept); }, function (d) { d.payables = apDashData_(dept); }); },
+  QA: function (dept, from, to) { return qaDashboard_(dept, from, to); },
+  ACC: function (dept, from, to) { return accDashboard_(dept, from, to, 'po', ''); },
   PROD: function (dept, from, to) { return prdDashboard_(dept, from, to); },
   RD: function (dept, from, to) { return rdDashboard_(dept, from, to); } };
+// ลำดับ = ลำดับที่แสดงในหน้า (บนลงล่าง)
+var EXEC_PARTS_ = {
+  PUR: [['rises', function (dept, from, to) { return purPriceReport_(purBook_(dept), from, to); }],
+        ['vendorInfo', function (dept) { return purVendorDash_(purBook_(dept)); }]],
+  QA: [['cost', function (dept) {
+    var ss = qaBook_(dept);
+    return { today: purToday_(), tests: purRead_(ss, 'qa_tests').map(function (t) { return { year: t.year, kind: t.kind, status: t.status, price: t.price, sentDate: t.sentDate, testType: t.testType, sample: t.sample, lab: t.lab }; }),
+      complaints: purRead_(ss, 'qa_complaints').filter(function (c) { return Number(c.remedyCost) > 0; }).map(function (c) { return { recvDate: c.recvDate, remedyCost: c.remedyCost, product: c.product }; }) };
+  }]],
+  ACC: [['compare', function (dept) { return accCompareData_(dept); }],
+        ['monthly', function (dept) { return accMonthlyData_(dept); }],
+        ['payables', function (dept) { return apDashData_(dept); }]] };
+// ของเดิม (หน้าเว็บเวอร์ชันเก่าที่ยังค้างในเครื่อง): ทุกส่วนในครั้งเดียว
+var EXEC_DASHBOARDS_ = {};
+Object.keys(EXEC_BASE_).forEach(function (k) {
+  EXEC_DASHBOARDS_[k] = function (dept, from, to) {
+    var d = EXEC_BASE_[k](dept, from, to);
+    (EXEC_PARTS_[k] || []).forEach(function (p) { execExtra_(d, function (x) { x[p[0]] = p[1](dept, from, to); }); });
+    return d;
+  };
+});
 
 function requireExec_(token) {
   var d = requireDept_(token);
@@ -53,15 +71,26 @@ function execVerify(token) {
 }
 
 // Dashboard ของฝ่ายที่เลือก ในช่วงวันที่
-function execDashboard(token, deptKey, from, to) {
+function execDashboard(token, deptKey, from, to, lite) {
   requireExec_(token);
   var r = execRange_(from, to);
   var dept = findDept_(deptKey);
   if (!dept || dept.exec) return { ok: false, error: 'ไม่พบฝ่าย' };
-  var fn = EXEC_DASHBOARDS_[dept.key];
+  var fn = lite ? EXEC_BASE_[dept.key] : EXEC_DASHBOARDS_[dept.key];
   if (!fn) return { ok: true, ready: false, message: 'ฝ่ายนี้ยังไม่มีระบบเก็บข้อมูล — Dashboard จะขึ้นเมื่อทำระบบของฝ่ายนี้แล้ว' };
   if (!deptConfig_(dept.key).sheetId) return { ok: true, ready: false, message: 'ฝ่ายนี้ยังไม่ได้เชื่อม Google Sheet' };
   var data = fn(dept, r.from, r.to);
   data.ok = true; data.ready = true; data.from = r.from; data.to = r.to;
+  if (lite) data.parts = (EXEC_PARTS_[dept.key] || []).map(function (p) { return p[0]; });
   return data;
+}
+// ส่วนเสริมทีละส่วน (หน้าเว็บเรียกต่อจาก execDashboard แบบ lite)
+function execPart(token, deptKey, part, from, to) {
+  requireExec_(token);
+  var r = execRange_(from, to), dept = findDept_(deptKey);
+  if (!dept || dept.exec) return { ok: false, error: 'ไม่พบฝ่าย' };
+  var p = (EXEC_PARTS_[dept.key] || []).filter(function (x) { return x[0] === part; })[0];
+  if (!p) return { ok: false, error: 'ไม่พบส่วนข้อมูล' };
+  try { return { ok: true, part: part, data: p[1](dept, r.from, r.to) }; }
+  catch (e) { return { ok: false, error: String(e.message || e) }; }
 }

@@ -60,7 +60,7 @@
     if (X.data && X.data.key === key) return draw(X.data);
     var my = ++X.seq;
     $('xOut').innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังโหลดข้อมูล…</div>';
-    call('execDashboard', state.token, X.q.dept, X.q.from, X.q.to).then(function (r) {
+    call('execDashboard', state.token, X.q.dept, X.q.from, X.q.to, true).then(function (r) {   // true = ส่วนหลักก่อน ส่วนเสริมโหลดทีละส่วน (execPart)
       if (my !== X.seq || String(state.page).indexOf('x_dash') !== 0) return;
       if (!r.ok) { $('xOut').innerHTML = '<div class="panel err">' + esc(r.error) + '</div>'; return; }
       r.key = key; X.data = r; draw(r);
@@ -85,22 +85,48 @@
 
   // ฝ่ายบัญชี: รับ (7-11 · เปรียบเทียบ · สรุปรายเดือน) แล้วจึง จ่าย — เรียงเหมือนหน้าฝ่าย (ผู้ใช้ขอ 22/11/69)
   // ส่วนที่เพิ่มในหน้าฝ่ายภายหลัง (ผู้ใช้ขอ 19/11/69): จัดซื้อ = ราคาปรับขึ้น · QA = ค่าใช้จ่าย · บัญชี = เปรียบเทียบยอด + สรุปรายเดือนทุกบริษัท
+  // ส่วนเสริมใต้ตัวสรุปหลัก: วางกรอบทุกส่วนตามลำดับก่อน แล้วแต่ละส่วนขึ้นเมื่อโหลดเสร็จ (execPart · ผู้ใช้ขอ 22/11/69)
+  // ผลที่โหลดแล้วเก็บไว้ใน r (X.data) จึงไม่โหลดซ้ำเมื่อกลับมาหน้าเดิม
+  var PART_TITLE = {
+    rises: 'ราคาปรับขึ้น แยกตามสินค้า',
+    vendorInfo: 'ผู้ขาย: สรุปข้อมูล + เทียบราคา <small class="muted">(ข้อมูลปัจจุบัน ไม่ขึ้นกับช่วงวันที่)</small>',
+    cost: function (r) { return 'ค่าใช้จ่าย QA ปี ' + (+String(r.to).slice(0, 4) + 543) + ' <small class="muted">(ค่าตรวจวิเคราะห์ · ค่าใช้จ่ายอื่น · ชดเชยลูกค้า)</small>'; },
+    compare: 'เปรียบเทียบยอดสั่งซื้อ แยกบริษัท / สินค้า',
+    monthly: 'สรุปรายเดือน ทุกบริษัท',
+    payables: 'การจ่าย (ค่าใช้จ่ายตามรอบจ่าย) <small class="muted">(ช่วงเวลาเลือกในกล่องนี้)</small>'
+  };
+  function drawPart(r, name, data, box) {
+    var range = dd(r.from) + ' – ' + dd(r.to);
+    if (name === 'rises') box.innerHTML = data && data.ok && window.PUR && window.PUR.risesHtml ? '<div class="panel pbox">' + window.PUR.risesHtml(data, range) + '</div>' : '<div class="panel muted">ไม่มีข้อมูล</div>';
+    else if (name === 'vendorInfo') box.innerHTML = data && window.PUR && window.PUR.vendorDashHtml ? '<div class="panel pbox">' + window.PUR.vendorDashHtml(data.vendors, data.mats, data.today) + '</div>' : '';
+    else if (name === 'cost') box.innerHTML = data && window.QAM && window.QAM.costHtml ? window.QAM.costHtml(data, +String(r.to).slice(0, 4)) : '';
+    else if (name === 'compare') { box.innerHTML = '<div class="panel pbox a7cmp"><div class="xcmp"></div></div>'; if (window.ACC && window.ACC.mountCmp) window.ACC.mountCmp(box.querySelector('.xcmp'), data); }
+    else if (name === 'monthly') { box.innerHTML = '<div class="xmon"></div>'; if (window.ACC && window.ACC.mountMonthly) window.ACC.mountMonthly(box.querySelector('.xmon'), data); }
+    else if (name === 'payables') { box.innerHTML = '<div class="xap"></div>'; if (window.ACCAP && window.ACCAP.mountDash) window.ACCAP.mountDash(box.querySelector('.xap'), data, {}); }
+  }
   function extras(r) {
     var out = $('xOut'); if (!out) return;
-    var add = function (title, inner) { var el = document.createElement('div'); el.innerHTML = '<h4 class="xsec">' + title + '</h4>' + (inner || ''); out.appendChild(el); return el; };
-    var range = dd(r.from) + ' – ' + dd(r.to);
-    if (r.kind === 'purchasing' && r.rises && r.rises.ok && window.PUR && window.PUR.risesHtml) add('ราคาปรับขึ้น แยกตามสินค้า', '<div class="panel pbox">' + window.PUR.risesHtml(r.rises, range) + '</div>');
-    if (r.kind === 'purchasing' && r.vendorInfo && window.PUR && window.PUR.vendorDashHtml) add('ผู้ขาย: สรุปข้อมูล + เทียบราคา <small class="muted">(ข้อมูลปัจจุบัน ไม่ขึ้นกับช่วงวันที่)</small>', '<div class="panel pbox">' + window.PUR.vendorDashHtml(r.vendorInfo.vendors, r.vendorInfo.mats, r.vendorInfo.today) + '</div>');
-    if (r.kind === 'quality' && r.cost && window.QAM && window.QAM.costHtml) {
-      var y = +String(r.to).slice(0, 4);
-      add('ค่าใช้จ่าย QA ปี ' + (y + 543) + ' <small class="muted">(ค่าตรวจวิเคราะห์ · ค่าใช้จ่ายอื่น · ชดเชยลูกค้า)</small>', window.QAM.costHtml(r.cost, y));
-    }
-    if (r.kind === 'accounting' && window.ACC) {
-      if (r.compare && window.ACC.mountCmp) { var c = add('เปรียบเทียบยอดสั่งซื้อ แยกบริษัท / สินค้า', '<div class="panel pbox a7cmp"><div class="xcmp"></div></div>'); window.ACC.mountCmp(c.querySelector('.xcmp'), r.compare); }
-      if (r.monthly && window.ACC.mountMonthly) { var m = add('สรุปรายเดือน ทุกบริษัท', '<div class="xmon"></div>'); window.ACC.mountMonthly(m.querySelector('.xmon'), r.monthly); }
-      if (r.payables && window.ACCAP && window.ACCAP.mountDash) { var pb = document.createElement('div'); pb.className = 'a7band out'; pb.textContent = '⬆ จ่าย (เงินออก)'; out.appendChild(pb); var pd = add('การจ่าย (ค่าใช้จ่ายตามรอบจ่าย) <small class="muted">(ช่วงเวลาเลือกในกล่องนี้)</small>', '<div class="xap"></div>'); window.ACCAP.mountDash(pd.querySelector('.xap'), r.payables, {}); }
-    }
-    if (r.extraError) add('', '<div class="a7msg bad">บางส่วนโหลดไม่ได้: ' + esc(r.extraError) + '</div>');
+    var parts = r.parts || ['rises', 'vendorInfo', 'cost', 'compare', 'monthly', 'payables'].filter(function (n) { return r[n]; });
+    var mine = X.seq;
+    parts.forEach(function (name) {
+      if (name === 'payables') { var pb = document.createElement('div'); pb.className = 'a7band out'; pb.textContent = '⬆ จ่าย (เงินออก)'; out.appendChild(pb); }
+      var t = PART_TITLE[name], el = document.createElement('div');
+      el.innerHTML = '<h4 class="xsec">' + (typeof t === 'function' ? t(r) : t || name) + '</h4><div class="xpart"></div>';
+      out.appendChild(el);
+      var box = el.querySelector('.xpart');
+      var put = function (data) { try { drawPart(r, name, data, box); } catch (e) { box.innerHTML = '<div class="a7msg bad">แสดงส่วนนี้ไม่ได้: ' + esc(e.message || e) + '</div>'; } };
+      if (r[name] !== undefined) return put(r[name]);
+      box.innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังโหลด…</div>';
+      call('execPart', state.token, X.q.dept, name, r.from, r.to).then(function (x) {
+        if (!x.ok) throw new Error(x.error || 'โหลดไม่ได้');
+        r[name] = x.data;
+        if (mine === X.seq && box.isConnected) put(x.data);
+      }).catch(function (e) {
+        if (String(e.message).indexOf('SESSION_EXPIRED') >= 0) return onServerError(e);
+        if (box.isConnected) box.innerHTML = '<div class="a7msg bad">โหลดส่วนนี้ไม่ได้: ' + esc(e.message || e) + '</div>';
+      });
+    });
+    if (r.extraError) { var er = document.createElement('div'); er.innerHTML = '<div class="a7msg bad">บางส่วนโหลดไม่ได้: ' + esc(r.extraError) + '</div>'; out.appendChild(er); }
   }
 
   // ---------- ฝ่ายจัดซื้อ & สต๊อก ----------
