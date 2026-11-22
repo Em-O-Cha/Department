@@ -605,6 +605,9 @@
       : (deptModule() ? deptModule().menus() : [{ id: 'home', label: 'หน้าหลัก', ic: 'home' }].concat(state.dept.menus.map(function (m, i) {
           return { id: 'm' + i, label: m, ic: 'form' };
         }))).concat([{ id: 'pw', label: 'เปลี่ยนรหัสผ่าน', ic: 'key' }]);
+    // หน้า Dashboard ของทุกฝ่ายอยู่บนสุดของเมนูเสมอ (ผู้ใช้ขอ 22/11/69)
+    var di = -1; items.forEach(function (it, i) { if (di < 0 && it.id && /^[a-z]+_dash$/.test(it.id)) di = i; });
+    if (di > 0) items = [items[di]].concat(items.slice(0, di), items.slice(di + 1));
     var tone = '', curLabel = '';
     $('nav').innerHTML = items.map(function (it) {
       if (it.section != null) { tone = it.tone || ''; return '<div class="navs' + (tone ? ' t-' + tone : '') + '">' + (tone === 'in' ? '⬇ ' : tone === 'out' ? '⬆ ' : '') + esc(it.section) + '</div>'; }   // หัวข้อใหญ่ (เช่น รับ / จ่าย ของฝ่ายบัญชี) — สีเด่นกว่าหัวข้อกลุ่ม
