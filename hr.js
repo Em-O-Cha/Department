@@ -620,7 +620,7 @@
     var over = Object.keys(sum).filter(function (id) { return ['sick', 'personal', 'vacation'].some(function (k) { var qq = quotaOf(emp(id) || {}, k, y); return qq != null && (sum[id][k] || 0) > qq; }); });
     q.lview = q.lview || 'list';
     if (q.lview === 'bal') return leaveBalances(y);
-    $('main').innerHTML = '<h3>การลา / ขาดงาน / มาสาย</h3><p class="lead">บันทึกการลาทุกประเภท · คิดเป็นชั่วโมง: จ.–พฤ. ' + dayHrs()[1] + ' ชม. · ศ. ' + dayHrs()[5] + ' ชม.' + (dayHrs()[6] ? ' · ส. ' + dayHrs()[6] + ' ชม.' : ' · เสาร์–อาทิตย์ไม่นับ') + ' (ตั้งได้ในหน้าตั้งค่า)</p>'
+    $('main').innerHTML = '<h3>การลา / ขาดงาน / มาสาย</h3>'
       + (over.length ? '<div class="panel sins" style="margin-bottom:12px"><div class="sin bad">ลาเกินสิทธิ์ปี ' + (+y + 543) + ': ' + over.map(function (id) { return esc((emp(id) || {}).fullName || id); }).join(', ') + '</div></div>' : '')
       + pendingBox()
       + leaveTabs()
