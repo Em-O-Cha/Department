@@ -957,9 +957,10 @@
   // ==================== โครงรายงาน (ใช้ทั้งหน้าเว็บและ Excel) ====================
   // สไตล์ตามไฟล์ต้นแบบ: Angsana New · หัว 18 ตัวหนา · ข้อมูล 18 · เส้นบาง (thin) ซ้าย-ขวา / เส้นจาง (hair) บน-ล่าง · แถวรวมผู้ขายพื้น #FFF2CC ตัวแดง · ช่องชำระรวมพื้นเหลือง
   var RED = 'FF0000', NF_AMT = '#,##0.00_);(#,##0.00)', NF2 = '#,##0.00', NF_ACC = '_(* #,##0.00_);_(* \\(#,##0.00\\);_(* "-"??_);_(@_)';
-  // คอลัมน์ (ผู้ใช้ขอ 23/11/69): J % หัก ณ ที่จ่าย · K ส่วนลด/มัดจำ · L หัก ณ ที่จ่าย (ใหม่) · M มูลค่ารายการ · N VAT · O รวม · P ชำระ
-  var WIDTHS = [3.85546875, 8.5703125, 32.42578125, 15.7109375, 16.5703125, 19, 56.85546875, 13.28515625, 15.7109375, 10, 15, 15, 17.5703125, 17.5703125, 17.5703125, 17.5703125];
-  var COLS = 'ABCDEFGHIJKLMNOP';
+  // คอลัมน์ (ผู้ใช้ขอ 23/11/69): J % หัก ณ ที่จ่าย · K ส่วนลด/มัดจำ · L มูลค่ารายการ · M VAT (หลังหักส่วนลด) · N รวม · O ชำระ (= รวม − มูลค่า × %)
+  //   ไม่มีคอลัมน์ยอดหัก ณ ที่จ่ายแยก (ผู้ใช้: มี % อยู่แล้ว) — ยอดหักคิดในสูตรช่องชำระ
+  var WIDTHS = [3.85546875, 8.5703125, 32.42578125, 15.7109375, 16.5703125, 19, 56.85546875, 13.28515625, 15.7109375, 12, 15, 17.5703125, 17.5703125, 17.5703125, 17.5703125];
+  var COLS = 'ABCDEFGHIJKLMNO';
   function S(o) { return o; }
   var ST = {
     t20: S({ sz: 20, b: 1, h: 'center' }), t20r: S({ sz: 20, b: 1, h: 'right' }), title: S({ sz: 20, b: 1, h: 'center', fill: 'D9EAD3' }),
@@ -997,13 +998,13 @@
       sh.cats.forEach(function (ck, ci) {
         if (ci) R(28.5);   // เว้นแถวระหว่างหมวด
         var c = cat(ck), r1 = R(28.5);
-        'BCDEF'.split('').forEach(function (x) { put(r1, x, '', ST.t20); }); 'HLMNOP'.split('').forEach(function (x) { put(r1, x, '', ST.t20r); });
+        'BCDEF'.split('').forEach(function (x) { put(r1, x, '', ST.t20); }); 'HLMNO'.split('').forEach(function (x) { put(r1, x, '', ST.t20r); });
         put(r1, 'G', c.title + ' ' + payTxt, si ? ST.title : ST.title18); put(r1, 'I', 'อัพเดทวันที่', ST.upd); merge('I' + r1, 'J' + r1);
         if (si === 1 && ci) put(r1, 'K', upd, ST.updv, '=K1'); else put(r1, 'K', upd, ST.updv);
         var rB = R(28.5); put(rB, 'B', c.title + ' ' + payTxt, si ? ST.big : ST.big18, '=G' + r1); put(rB, 'C', '', si ? ST.big : ST.big18); merge('B' + rB, 'C' + rB);
         var r3 = R(48.95);
         [['B', 'ผู้ขาย/ผู้จ่ายเงิน', ST.hd], ['C', '', ST.hd], ['D', 'วันที่ออก', ST.hd], ['E', 'วันที่ครบกำหนด', ST.hd], ['F', 'เลขที่ใบกำกับภาษี', ST.hd], ['G', 'คำอธิบาย', ST.hd], ['H', 'จำนวน', ST.hd], ['I', 'ราคา', ST.hd],
-          ['J', '% หัก ณ ที่จ่าย', ST.hdK], ['K', 'ส่วนลด/มัดจำ', ST.hdK], ['L', 'หัก ณ ที่จ่าย', ST.hdK], ['M', 'มูลค่ารายการ', ST.hd], ['N', 'ภาษีมูลค่าเพิ่ม', ST.hd], ['O', 'รวม', ST.hd], ['P', 'ชำระ', ST.hdR]].forEach(function (x) { put(r3, x[0], x[1], x[2]); });
+          ['J', '% หัก ณ ที่จ่าย', ST.hdK], ['K', 'ส่วนลด/มัดจำ', ST.hdK], ['L', 'มูลค่ารายการ', ST.hd], ['M', 'ภาษีมูลค่าเพิ่ม', ST.hd], ['N', 'รวม', ST.hd], ['O', 'ชำระ', ST.hdR]].forEach(function (x) { put(r3, x[0], x[1], x[2]); });
         merge('B' + r3, 'C' + r3);
         var first = r3 + 1, totRows = [], secTotal = 0;
         var bills = billsOf(lines.filter(function (l) { return l.category === ck; }));
@@ -1012,7 +1013,7 @@
         vs.sort(function (a, b) { return (vOrder[norm(a.name)] || 999) - (vOrder[norm(b.name)] || 999) || a.name.localeCompare(b.name, 'th'); });
         if (!vs.length) vs.push({ name: '', bills: [{ empty: 1, lines: [{}] }] });
         vs.forEach(function (v) {
-          var vStart = 0, anyWht = false, sums = { K: 0, L: 0, M: 0, N: 0, O: 0, P: 0 };
+          var vStart = 0, anyWht = false, sums = { K: 0, L: 0, M: 0, N: 0, O: 0 };
           v.bills.sort(function (a, b) { return String(a.issueDate || '').localeCompare(String(b.issueDate || '')) || String(a.invNo || '').localeCompare(String(b.invNo || '')); });
           v.bills.forEach(function (b) {
             var bStart = 0, nSum = 0, kSum = 0;
@@ -1023,7 +1024,7 @@
               if (!b.empty) sh.rows[r - 1].bill = b.billId;
               put(r, 'A', '', ST.no, '=IF(B' + x + '="","",COUNTA($B$' + first + ':B' + x + '))');
               put(r, 'B', r === vStart ? v.name : '', ST.ven); put(r, 'C', '', ST.venC);
-              if (b.empty) { 'DEFGHIJKLMNOP'.split('').forEach(function (cc) { put(r, cc, '', /[MNO]/.test(cc) ? ST.amt : cc === 'P' ? ST.pay : cc === 'D' || cc === 'E' ? ST.d : ST.desc); }); return; }
+              if (b.empty) { 'DEFGHIJKLMNO'.split('').forEach(function (cc) { put(r, cc, '', /[LMN]/.test(cc) ? ST.amt : cc === 'O' ? ST.pay : cc === 'D' || cc === 'E' ? ST.d : ST.desc); }); return; }
               var pct = Number(b.pct) || 0, qty = Number(l.qty) || 0, price = Number(l.price) || 0;
               var c = calc({ qty: qty, price: price, disc: l.disc }, b.vatMode, pct);
               if (!li) {
@@ -1038,33 +1039,32 @@
               put(r, 'I', price, price < 0 || isPo ? (isPo ? ST.priceR : ST.priceNeg) : ST.price);
               put(r, 'J', pct || '', ST.pct);
               put(r, 'K', c.disc ? c.disc : '', ST.wht);
-              put(r, 'L', pct ? c.wht : '', ST.wht, pct ? '=+M' + x + '*J' + x + '%' : null);
-              put(r, 'M', c.amount, ST.amt, b.vatMode === 'inc' ? '=H' + x + '*I' + x + '*100/107' : '=+H' + x + '*I' + x);
-              put(r, 'N', c.vat, ST.amt, b.vatMode === 'none' ? null : '=ROUND((M' + x + '-K' + x + ')*7%,2)');   // VAT จากยอดหลังหักส่วนลด/มัดจำ
-              put(r, 'O', c.total, ST.amt, '=+M' + x + '-K' + x + '+N' + x);
-              put(r, 'P', '', ST.pay);
-              nSum += c.total; kSum += pct ? c.wht : 0; if (pct || c.disc) anyWht = true;
-              sums.K += c.disc; sums.L += pct ? c.wht : 0; sums.M += c.amount; sums.N += c.vat; sums.O += c.total;
+              put(r, 'L', c.amount, ST.amt, b.vatMode === 'inc' ? '=H' + x + '*I' + x + '*100/107' : '=+H' + x + '*I' + x);
+              put(r, 'M', c.vat, ST.amt, b.vatMode === 'none' ? null : '=ROUND((L' + x + '-K' + x + ')*7%,2)');   // VAT จากยอดหลังหักส่วนลด/มัดจำ
+              put(r, 'N', c.total, ST.amt, '=+L' + x + '-K' + x + '+M' + x);
+              put(r, 'O', '', ST.pay);
+              nSum += c.total; kSum += pct ? c.wht : 0; if (c.disc) anyWht = true;
+              sums.K += c.disc; sums.L += c.amount; sums.M += c.vat; sums.N += c.total;
             });
             if (b.empty) return;
             var bEnd = bStart + b.lines.length - 1, ns = [], ks = [];
-            for (var q = bStart; q <= bEnd; q++) { ns.push('O' + q); if (Number(b.pct)) ks.push('L' + q); }
+            for (var q = bStart; q <= bEnd; q++) { ns.push('N' + q); if (Number(b.pct)) ks.push('ROUND(L' + q + '*J' + q + '%,2)'); }   // หัก ณ ที่จ่าย = มูลค่า × %
             var payV = r2(nSum - kSum);
-            put(bStart, 'P', payV, ST.pay, '=+' + ns.join('+') + (ks.length ? '-' + ks.join('-') : ''));
-            if (bEnd > bStart) merge('P' + bStart, 'P' + bEnd);
-            sums.P += payV;
+            put(bStart, 'O', payV, ST.pay, '=+' + ns.join('+') + (ks.length ? '-' + ks.join('-') : ''));
+            if (bEnd > bStart) merge('O' + bStart, 'O' + bEnd);
+            sums.O += payV;
           });
           var tr = R(26.25), from = vStart, to = tr - 1;
           put(tr, 'A', '', ST.no, '=IF(B' + tr + '="","",COUNTA($B$' + first + ':B' + tr + '))');
           var vend = vendorOf(v.name), bankTxt = vend && vend.bank ? vend.bank : 'ธ.';
           put(tr, 'B', '', ST.bankB); put(tr, 'C', bankTxt, ST.bank);
-          if (anyWht) { 'DEFG'.split('').forEach(function (cc) { put(tr, cc, '', ST.edge); }); merge('C' + tr, 'G' + tr); 'HIJ'.split('').forEach(function (cc) { put(tr, cc, '', ST.bankF); }); ['K', 'L'].forEach(function (cc) { put(tr, cc, sums[cc] ? r2(sums[cc]) : '', ST.sumK, sums[cc] ? '=SUM(' + cc + from + ':' + cc + to + ')' : null); }); }
-          else { 'DEFGHI'.split('').forEach(function (cc) { put(tr, cc, '', ST.edge); }); put(tr, 'J', '', ST.edgeR); merge('C' + tr, 'J' + tr); put(tr, 'K', '', ST.bankF); put(tr, 'L', '', ST.bankF); }
-          ['M', 'N', 'O'].forEach(function (cc) { put(tr, cc, r2(sums[cc]), ST.sumA, '=SUM(' + cc + from + ':' + cc + to + ')'); });
-          put(tr, 'P', r2(sums.P), ST.sumO, '=SUM(P' + from + ':P' + to + ')');
-          totRows.push(tr); secTotal += sums.P;
+          if (anyWht) { 'DEFG'.split('').forEach(function (cc) { put(tr, cc, '', ST.edge); }); merge('C' + tr, 'G' + tr); 'HIJ'.split('').forEach(function (cc) { put(tr, cc, '', ST.bankF); }); put(tr, 'K', r2(sums.K), ST.sumK, '=SUM(K' + from + ':K' + to + ')'); }
+          else { 'DEFGHI'.split('').forEach(function (cc) { put(tr, cc, '', ST.edge); }); put(tr, 'J', '', ST.edgeR); merge('C' + tr, 'J' + tr); put(tr, 'K', '', ST.bankF); }
+          ['L', 'M', 'N'].forEach(function (cc) { put(tr, cc, r2(sums[cc]), ST.sumA, '=SUM(' + cc + from + ':' + cc + to + ')'); });
+          put(tr, 'O', r2(sums.O), ST.sumO, '=SUM(O' + from + ':O' + to + ')');
+          totRows.push(tr); secTotal += sums.O;
         });
-        put(rB, 'D', r2(secTotal), si ? ST.bigTot : ST.bigTot18, '=+' + totRows.map(function (t) { return 'P' + t; }).join('+')); put(rB, 'E', '', si ? ST.bigTot : ST.bigTot18); merge('D' + rB, 'E' + rB);
+        put(rB, 'D', r2(secTotal), si ? ST.bigTot : ST.bigTot18, '=+' + totRows.map(function (t) { return 'O' + t; }).join('+')); put(rB, 'E', '', si ? ST.bigTot : ST.bigTot18); merge('D' + rB, 'E' + rB);
         catTotals[ck] = { total: r2(secTotal), titleRow: r1, sumRow: rB, sheet: sh.name };
       });
       if (si !== 1) return;
@@ -1161,7 +1161,7 @@
         properties: { defaultRowHeight: 28.5, defaultColWidth: 12.5703125 },
         pageSetup: { paperSize: 9, orientation: 'landscape', scale: sh.scale, fitToPage: false, fitToHeight: 0,
           margins: si ? { left: 0.0389, right: 0.118, top: 0.157, bottom: 0.0785, header: 0.157, footer: 0.0785 } : { left: 0.118, right: 0.0785, top: 0.157, bottom: 0, header: 0, footer: 0 },
-          printArea: 'A1:P' + sh.rows.length }
+          printArea: 'A1:O' + sh.rows.length }
       });
       WIDTHS.forEach(function (w, i) { ws.getColumn(i + 1).width = w; ws.getColumn(i + 1).font = { name: 'Angsana New', size: 18 }; });
       sh.rows.forEach(function (row, ri) {
