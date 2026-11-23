@@ -211,8 +211,8 @@
     out.grand = last(/รวมทั้งสิ้น|รวมเงินทั้งสิ้น|ยอดสุทธิ|รวมสุทธิ|จำนวนเงินรวม|Grand\s*Total|Net\s*Total|Total\s*Amount/i);
     out.vat = last(/ภาษีมูลค่าเพิ่ม|VAT/i, /ไม่รวม|ก่อน|รวมภาษี|exclud|includ/i);
     out.sub = last(/รวมเงิน|รวมเป็นเงิน|ยอดรวม|มูลค่าสินค้า|Sub\s*-?\s*Total|Total\b/i, /ทั้งสิ้น|สุทธิ|ภาษี|VAT|Grand|Net/i);
-    var dsc = last(/ส่วนลด|หัก\s*มัดจำ|เงินมัดจำ|มัดจำ|Discount|Deposit/i, /ภาษี|VAT|ทั้งสิ้น|Grand/i);   // ส่วนลด / หักมัดจำ ท้ายบิล → หักก่อนคิด VAT
-    out.disc = dsc ? Math.abs(dsc) : 0;
+    var dscL = last(/ส่วนลด|Discount/i, /ภาษี|VAT|ทั้งสิ้น|Grand/i);   // ส่วนลด: บรรทัดที่มีคำว่า "ส่วนลด"
+    var dscO = last(/มัดจำ|Deposit|หัก|Less/i, /ภาษี|VAT|ทั้งสิ้น|Grand|ณ\s*ที่จ่าย|Withholding/i);   // ไม่มีคำว่าส่วนลด → ยอดหักอื่นที่เกิน 5% ของยอดสินค้า (หัก ณ ที่จ่ายไม่เกิน 5% และกดเลือกเองในข้อ 2)
     // รายการ: บรรทัดที่ลงท้ายด้วย จำนวน … ราคา … จำนวนเงิน (จำนวน × ราคา ≈ จำนวนเงิน)
     var stop = /รวม|ภาษี|VAT|Total|ส่วนลด|Discount|ชำระ|หัก ณ/i;
     T.forEach(function (l) {
@@ -229,7 +229,8 @@
       if (!desc) return;
       out.lines.push({ desc: desc.slice(0, 200), qty: found.qty, price: found.price, amt: a });
     });
-    var S = out.lines.reduce(function (s, x) { return s + x.amt; }, 0);
+    var S = out.lines.reduce(function (s, x) { return s + x.amt; }, 0), base = out.sub || S;
+    out.disc = dscL ? Math.abs(dscL) : dscO && base && Math.abs(dscO) / base > 0.05 ? Math.abs(dscO) : 0;
     if (out.lines.length) {
       if (out.vat === 0 || (out.vat == null && out.grand != null && Math.abs(S - out.grand) < 1)) out.vatMode = 'none';
       else if (out.sub != null && Math.abs(S - out.sub) < 1) out.vatMode = 'exc';
@@ -748,7 +749,7 @@
       + (!po && !b.pages.length ? '<div class="apatt"><label class="btn apsm">' + icon('upload', 16) + ' ถ่ายรูป / แนบไฟล์บิล<input type="file" id="apAttach" accept="image/*,application/pdf" multiple hidden></label><small>' + (b.fromPo ? 'เลือกได้หลายไฟล์ (ใบกำกับ / ใบส่งของ / หลายหน้า) · ระบบอ่านรายการแล้วจับคู่กับ PO ให้' : 'ระบบอ่านเลขที่ใบกำกับ วันที่ และรายการให้') + '</small></div>' : '')
       + '<div class="aphl"><b>1. หมวดของ' + (po ? ' PO' : 'บิล') + 'นี้ <span class="req">*</span></b><div class="apchips" id="apCats">' + d.cats.map(function (c, i) {
           return '<label><input type="radio" name="apCat" value="' + c.key + '"' + (b.category === c.key ? ' checked' : '') + '><span>' + (i + 1) + '. ' + esc(c.name) + '</span></label>'; }).join('') + '</div></div>'
-      + '<div class="aphl"><b>2. % หัก ณ ที่จ่าย</b> <small>หัก ณ ที่จ่าย = มูลค่ารายการ × % (หักตอนจ่าย · VAT คิดจากยอดเต็ม) · <b class="apred">ส่วนลด / มัดจำ</b> ไม่ใช่ช่องนี้ — ใส่เป็นบาทในตารางช่อง "ส่วนลด/มัดจำ"</small><div class="apchips sm" id="apPcts">' + PCTS.map(function (p) {
+      + '<div class="aphl"><b>2. % หัก ณ ที่จ่าย</b> <small>หัก ณ ที่จ่าย = มูลค่ารายการ × % · เลือกที่นี่เท่านั้น · <b class="apred">ส่วนลด / มัดจำ</b> แยกต่างหาก — ระบบอ่านจากบิล (คำว่า "ส่วนลด" หรือยอดหักที่เกิน 5%) ลงช่อง "ส่วนลด/มัดจำ" ในตาราง แก้เป็นบาทได้</small><div class="apchips sm" id="apPcts">' + PCTS.map(function (p) {
           return '<label><input type="radio" name="apPct" value="' + p + '"' + (Number(b.pct) === p ? ' checked' : '') + '><span>' + (p ? p + '%' : 'ไม่หัก') + '</span></label>'; }).join('')
         + '<label class="apother">อื่น ๆ <input id="apPctX" inputmode="decimal" value="' + (PCTS.indexOf(Number(b.pct)) < 0 ? esc(b.pct) : '') + '" placeholder="%"></label></div></div>'
       + '<div class="apgrid">'
@@ -763,7 +764,7 @@
       + '</div>'
       + '<div class="aphl"><b>ราคา' + (po ? 'ที่ตกลง' : 'ในบิล') + '</b><div class="apchips sm" id="apVat">' + Object.keys(VAT_SHORT).map(function (k) {
           return '<label><input type="radio" name="apVat" value="' + k + '"' + (b.vatMode === k ? ' checked' : '') + '><span>' + VAT_SHORT[k] + '</span></label>'; }).join('') + '</div></div>'
-      + '<div class="cpwrap"><table class="aptab' + (po ? ' po' : '') + '"><thead><tr><th>' + (po ? 'ชื่อสินค้า' : 'คำอธิบาย') + (b.fromPo ? ' / หักจาก PO' : '') + '</th><th>' + (po && b.log && b.log.length ? 'จำนวนค้าง' : 'จำนวน') + '</th><th>ราคา</th><th>มูลค่ารายการ</th><th class="apred">ส่วนลด/มัดจำ<small>บาท หรือ %</small></th><th>VAT<small>หลังหักส่วนลด</small></th><th>รวม</th><th class="apred">หัก ณ ที่จ่าย</th><th></th></tr></thead><tbody id="apLines"></tbody></table></div>'
+      + '<div class="cpwrap"><table class="aptab' + (po ? ' po' : '') + '"><thead><tr><th>' + (po ? 'ชื่อสินค้า' : 'คำอธิบาย') + (b.fromPo ? ' / หักจาก PO' : '') + '</th><th>' + (po && b.log && b.log.length ? 'จำนวนค้าง' : 'จำนวน') + '</th><th>ราคา</th><th>มูลค่ารายการ</th><th class="apred">ส่วนลด/มัดจำ<small>บาท · ตามบิล</small></th><th>VAT<small>หลังหักส่วนลด</small></th><th>รวม</th><th class="apred">หัก ณ ที่จ่าย</th><th></th></tr></thead><tbody id="apLines"></tbody></table></div>'
       + '<button type="button" class="btn apsm" id="apAdd">+ เพิ่มรายการ</button>'
       + '<div id="apSum"></div><div id="apPoSum"></div>'
       + '<div class="apgrid"><label class="apwide">บัญชีธนาคารของผู้ขาย (แสดงที่แถวรวมในรายงาน)<input id="apBank" value="' + esc(b.bank) + '" placeholder="เช่น ธ.กสิกรไทย 123-4-56789-0 บริษัท …"></label>'
@@ -881,7 +882,6 @@
     }).join('');
     on('#apLines input', 'input', function (el) {
       var i = +el.getAttribute('data-i'), k = el.getAttribute('data-k'), l = b.lines[i];
-      if (k === 'disc' && /%\s*$/.test(el.value)) l.discPct = num(el.value); else if (k === 'disc') delete l.discPct;
       l[k] = k === 'desc' ? el.value : num(el.value);
       discOf(l, b);
       var c = calc(l, b.vatMode, b.pct), tr = el.closest('tr');

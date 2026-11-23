@@ -20,7 +20,7 @@ var AP_AI_SCHEMA_ = {
     vatMode: { type: 'string', enum: ['inc', 'exc', 'none', ''], description: 'inc = ราคาสินค้ารวม VAT แล้ว, exc = VAT แยกบวกท้ายบิล, none = ไม่มี VAT, "" = ไม่แน่ใจ' },
     lines: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['desc', 'qty', 'price', 'amount'], properties: {
       desc: { type: 'string' }, qty: { type: 'number' }, price: { type: 'number', description: 'ราคาต่อหน่วยตามที่พิมพ์' }, amount: { type: 'number', description: 'จำนวนเงินของรายการตามที่พิมพ์' } } } },
-    discount: { type: 'number', description: 'ส่วนลด / หักเงินมัดจำ ท้ายบิล (ก่อนคิด VAT) เป็นจำนวนบวก หรือ 0 ถ้าไม่มี · ไม่ต้องใส่เป็นรายการใน lines' },
+    discount: { type: 'number', description: 'ส่วนลด (จำนวนบวก) ไม่ต้องใส่เป็นรายการใน lines: ใช้บรรทัดที่มีคำว่า "ส่วนลด"/Discount · ถ้าไม่มีคำนี้ ให้ใส่ยอดหักอื่นในบิล (เช่น หักมัดจำ) เฉพาะเมื่อเกิน 5% ของยอดสินค้า · ห้ามใส่ภาษีหัก ณ ที่จ่าย · ไม่มี = 0' },
     subtotal: { type: 'number', description: 'ยอดก่อน VAT หรือ 0 ถ้าไม่มี' },
     vat: { type: 'number', description: 'ภาษีมูลค่าเพิ่ม หรือ 0' },
     total: { type: 'number', description: 'ยอดรวมสุทธิ หรือ 0' },
