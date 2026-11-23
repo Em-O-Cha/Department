@@ -589,11 +589,16 @@
         + c.products.filter(function (p) { return p[k][0] || p[k][2]; }).map(function (p) { return row(p.name, p.color, p[k]); }).join('')
         + '</tbody><tfoot>' + row('รวม', '', c.total[k], 'cmt') + '</tfoot></table></div>';
     };
+    var sec = function (k, no, title, sub, body) {
+      return '<section class="cmsec ' + k + '"><div class="cmsh"><span class="cmno">' + no + '</span><div><b>' + title + '</b><small>' + sub + '</small></div></div><div class="cmsb">' + body + '</div></section>';
+    };
     box.innerHTML = '<div class="pchips cmchips">' + cs.map(function (x) { return '<button class="chip' + (x.key === c.key ? ' on' : '') + '" data-cmp="' + esc(x.key) + '">' + esc(x.name) + '</button>'; }).join('')
       + (reload ? '<button class="btn btn-sm btn-line noprint" data-cmpre="1">↻ คำนวณใหม่</button>' : '') + '</div>'
       + (c.error ? '<p class="muted">' + esc(c.error) + '</p>' : '<p class="muted cmnote">นับ' + esc(c.basis) + ' · ' + esc(c.note) + (c.currency !== 'บาท' ? ' · ยอดเงินเป็น ' + esc(c.currency) : '') + '</p>'
-        + '<h5 class="cmh">ครั้งล่าสุด เทียบครั้งก่อน</h5>' + table('r', 'ครั้งก่อน<small>' + (c.round.prev ? thDate(c.round.prev) : '-') + '</small>', 'ครั้งล่าสุด<small>' + (c.round.last ? thDate(c.round.last) : '-') + '</small>')
-        + '<h5 class="cmh">เดือนล่าสุด เทียบเดือนก่อน</h5>' + table('m', 'เดือนก่อน<small>' + monthTh(c.month.prev) + '</small>', 'เดือนล่าสุด<small>' + monthTh(c.month.last) + '</small>'));
+        + sec('r', '①', 'ครั้งล่าสุด เทียบครั้งก่อน', 'รอบ ' + (c.round.last ? thDate(c.round.last) : '-') + ' เทียบกับ ' + (c.round.prev ? thDate(c.round.prev) : '-'),
+          table('r', 'ครั้งก่อน<small>' + (c.round.prev ? thDate(c.round.prev) : '-') + '</small>', 'ครั้งล่าสุด<small>' + (c.round.last ? thDate(c.round.last) : '-') + '</small>'))
+        + sec('m', '②', 'เดือนล่าสุด เทียบเดือนก่อน', 'ยอดทั้งเดือน ' + monthTh(c.month.last) + ' เทียบกับ ' + monthTh(c.month.prev),
+          table('m', 'เดือนก่อน<small>' + monthTh(c.month.prev) + '</small>', 'เดือนล่าสุด<small>' + monthTh(c.month.last) + '</small>')));
     on('[data-cmp]', 'click', function (el) { var k = el.getAttribute('data-cmp'); box.setAttribute('data-sel', k); if (reload) H.cmpSel = k; H.mountCmp(box, data, reload); }, box);
     on('[data-cmpre]', 'click', function () { reload(); }, box);
   };
@@ -861,7 +866,7 @@
     '.a7fixrow select,.a7filter select,.a7lb input{padding:8px 10px;border:1.5px solid var(--line);border-radius:9px;font:inherit;font-size:14px;background:#fff}.a7lb{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);margin:0}',
     '.a7cmp{margin-bottom:18px}.a7h4{display:flex;gap:6px;align-items:center;margin:6px 0 8px}.cmchips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.cmchips #cmpRe{margin-left:auto}',
     '.cptab.mtab{min-width:0}.mtab td{min-width:92px}.mtab td.mtot{background:#f8fafc}.mtab .cmt td.mtot{background:#fde68a}.mfut{display:block;font-style:normal;font-size:11px;color:#c2410c;margin-top:2px}.mtab th small{color:#475569}',
-    '.cptab.cmtab{min-width:0}.cmnote{font-size:12.5px;margin:6px 0 0}.cmh{margin:14px 0 6px;font-size:14.5px}.cmtab th small{display:block;font-weight:400;font-size:12px}.cmtab td{vertical-align:top}.cmtab td b,.cmtab td small{display:block;white-space:nowrap}.cmtab td small{color:var(--muted);font-size:12.5px;margin-top:2px}',
+    '.cptab.cmtab{min-width:0}.cmnote{font-size:12.5px;margin:6px 0 0}.cmh{margin:14px 0 6px;font-size:14.5px}.cmsec{margin:16px 0 0;border:1.5px solid var(--cmc);border-radius:14px;overflow:hidden;background:#fff}.cmsec.r{--cmc:#2563EB;--cmt:#EFF6FF}.cmsec.m{--cmc:#7C3AED;--cmt:#F5F3FF}.cmsec+.cmsec{margin-top:22px}.cmsh{display:flex;align-items:center;gap:10px;background:var(--cmc);color:#fff;padding:10px 14px}.cmsh b{display:block;font-size:15px}.cmsh small{display:block;font-size:12.5px;opacity:.9}.cmno{flex:none;width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700}.cmsb{padding:8px 10px 10px}.cmsb .cpwrap{margin:0}.cmsec .cmtab thead th{background:var(--cmt)}.cmsec .cmtab tfoot td{background:var(--cmt)}.cmtab th small{display:block;font-weight:400;font-size:12px}.cmtab td{vertical-align:top}.cmtab td b,.cmtab td small{display:block;white-space:nowrap}.cmtab td small{color:var(--muted);font-size:12.5px;margin-top:2px}',
     '@media (max-width:700px){.cptab.cmtab{font-size:12.5px}.cmtab th,.cmtab td{padding:6px 4px}.cmtab th{white-space:normal}.cmtab td.cmn{min-width:0!important;max-width:96px;font-size:12px}.cmtab td small{font-size:11px}.a7cmp .cpwrap{overflow-x:auto}}',
     '.cmtab td.cmn{text-align:left;white-space:normal;min-width:130px}.cmtab .cmt td{background:#fef9c3;font-weight:700}.cmu{color:#15803d}.cmd{color:#dc2626}.cmz{color:var(--muted)}.cmtab td small .cmu,.cmtab td small .cmd{color:inherit}.cmtab td small .cmu{color:#15803d}.cmtab td small .cmd{color:#dc2626}',
     '.a7checks{margin-bottom:12px}.a7k{grid-template-columns:repeat(4,1fr);margin-top:12px}.kpi small{display:block;font-size:11.5px;color:var(--muted);margin-top:2px}',
