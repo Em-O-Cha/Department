@@ -721,7 +721,9 @@
     H.data.products.forEach(function (x) { if (x.category && cats.indexOf(x.category) < 0) cats.push(x.category); });
     wide({ icon: 'box', title: isNew ? 'เพิ่มสินค้า' : 'แก้ไขสินค้า', ok: 'บันทึก',
       body: '<div class="pform"><div class="pf full"><label for="xN">ชื่อสินค้า *</label><input id="xN" value="' + esc(p.name || '') + '" maxlength="120"></div>'
-        + '<div class="pf"><label for="xC">หมวด</label><input id="xC" list="xCL" value="' + esc(p.category || '') + '" maxlength="60"><datalist id="xCL">' + cats.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist></div>'
+        // หมวด: เลือกจากรายการ (ผู้ใช้ขอ 22/11/69) + "หมวดใหม่…" พิมพ์เองได้
+        + '<div class="pf"><label for="xCs">หมวด</label><select id="xCs"><option value="">— เลือกหมวด —</option>' + cats.sort(function (a, b) { return a.localeCompare(b, 'th'); }).map(function (c) { return '<option' + (p.category === c ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '<option value="__new">＋ หมวดใหม่…</option></select>'
+        + '<input id="xC" maxlength="60" placeholder="พิมพ์ชื่อหมวดใหม่" style="display:none;margin-top:6px"></div>'
         + '<div class="pf"><label for="xU">หน่วยนับ</label><input id="xU" list="xUL" value="' + esc(p.unit || '') + '" placeholder="เช่น ซอง" maxlength="20"><datalist id="xUL">' + list(S_().units).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist></div>'
         + '<div class="pf"><label for="xR">น้ำหนักวัตถุดิบต่อ batch (กก.)</label><input id="xR" inputmode="decimal" value="' + esc(p.rawKg == null ? '' : p.rawKg) + '"></div>'
         + '<div class="pf"><label for="xT">Yield ขั้นต่ำ (%)</label><input id="xT" inputmode="decimal" value="' + esc(p.target == null ? '' : p.target) + '" placeholder="ว่าง = ' + esc(S_().target) + '"></div>'
@@ -729,7 +731,7 @@
         + '<div class="pf"><label for="xMax">ควรได้ต่อ batch — สูงสุด</label><input id="xMax" inputmode="numeric" value="' + esc(p.qtyMax == null ? '' : p.qtyMax) + '"></div>'
         + (isNew ? '' : '<label class="xchk pf full"><input type="checkbox" id="xA"' + (p.active === 'ไม่ใช้' ? ' checked' : '') + '> เลิกผลิตสินค้านี้แล้ว (ซ่อนจากรายการให้เลือก)</label>') + '</div>',
       submit: function () {
-        var o = { id: p.id, name: $('xN').value.trim(), category: $('xC').value.trim(), unit: $('xU').value.trim(), rawKg: $('xR').value, target: $('xT').value, qtyMin: $('xMin').value, qtyMax: $('xMax').value, active: !($('xA') && $('xA').checked) };
+        var cs = $('xCs').value, o = { id: p.id, name: $('xN').value.trim(), category: cs === '__new' ? $('xC').value.trim() : cs, unit: $('xU').value.trim(), rawKg: $('xR').value, target: $('xT').value, qtyMin: $('xMin').value, qtyMax: $('xMax').value, active: !($('xA') && $('xA').checked) };
         if (!o.name) return Promise.resolve('ใส่ชื่อสินค้า');
         if (num(o.qtyMin) !== '' && num(o.qtyMax) !== '' && num(o.qtyMax) < num(o.qtyMin)) return Promise.resolve('จำนวนสูงสุดต้องไม่น้อยกว่าต่ำสุด');
         return call('prdSaveProduct', state.token, o).then(function (r) {
@@ -738,6 +740,8 @@
           closeModal(); toast(isNew ? 'เพิ่มสินค้าแล้ว' : 'บันทึกแล้ว'); after(r.product);
         });
       } });
+    var cs = $('xCs');
+    if (cs) cs.addEventListener('change', function () { var n = this.value === '__new'; $('xC').style.display = n ? '' : 'none'; if (n) $('xC').focus(); });
   }
 
   // ==================== ตั้งค่า / LINE ====================
