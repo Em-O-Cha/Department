@@ -127,7 +127,7 @@
     var lines = GRPS.filter(function (x) { return x[0] !== 'other'; }).map(function (x) {
       var o = g[x[0]]; tn += o.n; tl += o.lv;
       var hi = top > 0 && rate(o) === top;
-      return '<div' + (hi ? ' class="hdghi"' : '') + '>' + (hi ? '▲ ' : '') + esc(x[1]) + ' ' + n0(o.n) + ' คน · ลาหยุด ' + n0(o.lv) + ' คน (' + pct(o.lv, o.n) + ')' + (hi ? ' · ลาหยุดมากที่สุด' : '') + '</div>';
+      return '<div' + (hi ? ' class="hdghi"' : '') + '>' + (hi ? '▲ ' : '') + esc(x[1]) + ' ' + n0(o.n) + ' คน · ลาหยุด ' + n0(o.lv) + ' คน (' + pct(o.lv, o.n) + ')</div>';
     }).join('');
     return '<div class="hdgsum"><b>สรุปตามกลุ่ม</b>' + lines + '<div><b>รวมทุกกลุ่ม ' + n0(tn) + ' คน · ลาหยุด ' + n0(tl) + ' คน (' + pct(tl, tn) + ')</b></div></div>';
   }
