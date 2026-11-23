@@ -546,8 +546,8 @@ function prdCard_(kicker, title, sub, body, alt, headColor, by) {
     { backgroundColor: '#FFFFFF', cornerRadius: '12px', paddingTop: '6px', paddingBottom: '6px', paddingStart: '12px', paddingEnd: '12px' });
   var inner = [prdBox_([badge, prdT_(title, { size: 'xl', color: '#FFFFFF', weight: 'bold', margin: 'md' }),
     prdT_(sub, { size: 'xs', color: '#CFFAFE', margin: 'xs' })]
-    // ชื่อผู้รายงานตัวใหญ่ชัดเจน (ผู้ใช้ขอ 23/11/69)
-    .concat(by ? [prdBox_([prdT_('👤 รายงานโดย ' + by, { size: 'lg', color: '#FFFFFF', weight: 'bold' })], { margin: 'md', backgroundColor: '#00000033', cornerRadius: '10px', paddingTop: '6px', paddingBottom: '6px', paddingStart: '12px', paddingEnd: '12px' })] : []),
+    // ชื่อผู้รายงาน: แถบไฮไลท์ขนาดปกติ (ผู้ใช้ขอ 23/11/69 — ตัวใหญ่ชัดเกินไป)
+    .concat(by ? [prdBox_([prdT_('รายงานโดย ' + by, { size: 'sm', color: '#FFFFFF', weight: 'bold' })], { margin: 'sm', backgroundColor: '#00000033', cornerRadius: '8px', paddingTop: '3px', paddingBottom: '3px', paddingStart: '10px', paddingEnd: '10px' })] : []),
     { backgroundColor: headColor || PRD_COLOR_, cornerRadius: '18px', paddingAll: '18px' }),
     prdBox_(body, { paddingStart: '6px', paddingEnd: '6px', paddingTop: '4px', paddingBottom: '4px' })];
   return { type: 'flex', altText: alt.slice(0, 390), contents: { type: 'bubble', size: 'giga', body: prdBox_(inner, { paddingAll: '14px', backgroundColor: '#FFFFFF' }) } };
