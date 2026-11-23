@@ -108,7 +108,8 @@
   function tableHtml(day, date) {
     var total = 0, lv = 0;
     var rows = day.roles.map(function (r) {
-      var off = r.leaves.filter(function (l) { return !isLate(l); }).concat(r.resigns || []).map(function (l) { return l.name; });
+      // คนลายังอยู่ในช่องชื่อ (ผู้ใช้ขอ 23/11/69) · เฉพาะคนลาออกที่ไม่แสดงในช่องชื่อ
+      var off = (r.resigns || []).map(function (l) { return l.name; });
       var working = r.names.filter(function (n) { return off.indexOf(n) < 0; });
       total += net(r); lv += lvCount(r);
       return '<tr><td class="hdr">' + esc(r.role) + '</td><td class="hdn">' + esc(working.join(', ')) + '</td><td class="hdc">' + n0(net(r)) + '</td>'
