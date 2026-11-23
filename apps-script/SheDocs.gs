@@ -24,13 +24,23 @@ function shedYears_(ss) {
   purRead_(ss, 'she_docs').forEach(function (d) { var y = Number(d.year); if (y && ys.indexOf(y) < 0) ys.push(y); });
   return ys.sort();
 }
+// โฟลเดอร์ชั้นบนสุดตั้งชื่อเองได้ (ผู้ใช้ขอ 23/11/69): นอกจากปี พ.ศ. แล้ว มีโฟลเดอร์ชื่อข้อความ เช่น "ใบอนุญาต"
+// เก็บใน setting docRoots = JSON [{ name, cats: [{ name, subs: [..] }] }] · ไฟล์ในโฟลเดอร์ชื่อ: คอลัมน์ปีเก็บชื่อโฟลเดอร์, หมวด '' = ไว้ในโฟลเดอร์นั้นโดยตรง
+function shedRoots_(ss) { try { var a = JSON.parse(sheSettings_(ss).docRoots || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+function shedYearVal_(v) { var n = Number(v); return v !== '' && v != null && isFinite(n) && n >= 2500 && n <= 2700 ? n : String(v == null ? '' : v).trim(); }
+// ปี (ตัวเลข) หรือชื่อโฟลเดอร์ที่มีอยู่จริง → คืนค่าที่ใช้เก็บ · ไม่ถูกต้อง = null
+function shedRootOk_(ss, v) {
+  var y = shedYearVal_(v);
+  if (typeof y === 'number') return y;
+  return y && shedRoots_(ss).some(function (x) { return x.name === y; }) ? y : null;
+}
 function shedOut_(d) {
-  return { id: d.id, year: Number(d.year) || '', category: d.category || '', title: d.title || '', fileName: d.fileName || '', mime: d.mime || '', size: Number(d.size) || 0,
+  return { id: d.id, year: shedYearVal_(d.year), category: d.category || '', title: d.title || '', fileName: d.fileName || '', mime: d.mime || '', size: Number(d.size) || 0,
     fileId: d.fileId || '', url: d.url || '', note: d.note || '', by: d.by || '', createdAt: d.createdAt || '', updatedAt: d.updatedAt || '' };
 }
 function sheDocs(token) {
   var dept = requireShe_(token), ss = sheBook_(dept);
-  return { ok: true, years: shedYears_(ss), cats: String(sheSettings_(ss).docCats || SHED_CATS_DEFAULT_), docs: purRead_(ss, 'she_docs').map(shedOut_).sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }) };
+  return { ok: true, years: shedYears_(ss), roots: shedRoots_(ss), cats: String(sheSettings_(ss).docCats || SHED_CATS_DEFAULT_), docs: purRead_(ss, 'she_docs').map(shedOut_).sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }) };
 }
 // โฟลเดอร์ปลายทาง: ฝ่าย / แฟ้มเอกสาร SHE / ปี xxxx (central = Drive ของบัญชีระบบ)
 function shedFolder_(dept, year, central) {
@@ -38,14 +48,14 @@ function shedFolder_(dept, year, central) {
   if (folderId) try { parent = DriveApp.getFolderById(folderId); parent.getName(); } catch (e) { parent = null; }
   if (!parent) { parent = DriveApp.getRootFolder(); top = 'แฟ้มเอกสาร SHE (ฝ่ายความปลอดภัย)'; }
   var sub = function (p, name) { var it = p.getFoldersByName(name); return it.hasNext() ? it.next() : p.createFolder(name); };
-  return sub(sub(parent, top), 'ปี ' + year);
+  return sub(sub(parent, top), typeof year === 'number' ? 'ปี ' + year : String(year).replace(/[\\/:*?"<>|]/g, '_'));
 }
 // meta = { year, category, title, note, by } · อัปโหลดทีละไฟล์ (หน้าเว็บส่งต่อกันเอง)
 function sheUploadDoc(token, meta, fileName, mimeType, base64) {
   var dept = requireShe_(token);
   meta = meta || {};
-  var year = Number(meta.year);
-  if (!(year >= 2500 && year <= 2700)) return { ok: false, error: 'เลือกปี (พ.ศ.)' };
+  var year = shedRootOk_(sheBook_(dept), meta.year);
+  if (year == null) return { ok: false, error: 'เลือกโฟลเดอร์ (ปี หรือชื่อโฟลเดอร์)' };
   var name = purClean_(fileName, 150).replace(/[\\/:*?"<>|]/g, '_');
   if (!SHED_EXT_.test(name)) return { ok: false, error: 'รับเฉพาะไฟล์ Word / Excel / PowerPoint / PDF' };
   var bytes = Utilities.base64Decode(String(base64 || ''));
@@ -75,7 +85,7 @@ function sheUpdateDoc(token, id, patch) {
   return purLocked_(function () {
     var ss = sheBook_(dept), d = purRead_(ss, 'she_docs').filter(function (x) { return x.id === id; })[0];
     if (!d) return { ok: false, error: 'ไม่พบเอกสาร' };
-    if (patch.year !== undefined) { var y = Number(patch.year); if (!(y >= 2500 && y <= 2700)) return { ok: false, error: 'ปีไม่ถูกต้อง' }; d.year = y; }
+    if (patch.year !== undefined) { var y = shedRootOk_(ss, patch.year); if (y == null) return { ok: false, error: 'โฟลเดอร์ไม่ถูกต้อง' }; d.year = y; }
     if (patch.title !== undefined) d.title = sheText_(patch.title, 200) || d.title;
     if (patch.category !== undefined) d.category = sheText_(patch.category, 80);
     if (patch.note !== undefined) d.note = sheText_(patch.note, 500);
@@ -106,6 +116,26 @@ function sheDocYears(token, years) {
     var ss = sheBook_(dept), sr = purRead_(ss, 'she_settings').filter(function (x) { return x.id === 'docYears'; })[0];
     purWrite_(ss, 'she_settings', sr ? Object.assign(sr, { value: ys.join(', ') }) : { id: 'docYears', value: ys.join(', ') });
     return { ok: true, years: shedYears_(ss) };
+  });
+}
+// บันทึกโฟลเดอร์ชื่อข้อความทั้งหมด (สร้าง / ลบโฟลเดอร์ว่าง / โฟลเดอร์ย่อยข้างใน) · ลบโฟลเดอร์ที่ยังมีไฟล์ไม่ได้
+function sheDocRoots(token, roots) {
+  var dept = requireShe_(token), clean = function (x) { return String(x || '').replace(/[›\r\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60); };
+  var list = (Array.isArray(roots) ? roots : []).slice(0, 40).map(function (r) {
+    return { name: clean(r && r.name), cats: (Array.isArray(r && r.cats) ? r.cats : []).slice(0, 40).map(function (c) {
+      return { name: clean(c && c.name), subs: (Array.isArray(c && c.subs) ? c.subs : []).slice(0, 40).map(clean).filter(String) };
+    }).filter(function (c) { return c.name; }) };
+  }).filter(function (r) { return r.name && typeof shedYearVal_(r.name) !== 'number'; });
+  var names = list.map(function (r) { return r.name; });
+  if (names.some(function (n, i) { return names.indexOf(n) !== i; })) return { ok: false, error: 'มีชื่อโฟลเดอร์ซ้ำกัน' };
+  return purLocked_(function () {
+    var ss = sheBook_(dept), docs = purRead_(ss, 'she_docs');
+    var lost = shedRoots_(ss).filter(function (r) { return names.indexOf(r.name) < 0 && docs.some(function (d) { return String(d.year) === r.name; }); });
+    if (lost.length) return { ok: false, error: 'โฟลเดอร์ "' + lost[0].name + '" ยังมีไฟล์อยู่ ลบไม่ได้' };
+    var sr = purRead_(ss, 'she_settings').filter(function (x) { return x.id === 'docRoots'; })[0], val = JSON.stringify(list);
+    purWrite_(ss, 'she_settings', sr ? Object.assign(sr, { value: val }) : { id: 'docRoots', value: val });
+    purLogWrite_(ss, 'แก้โฟลเดอร์แฟ้มเอกสาร', 'she_settings', 'docRoots', names.join(' | '));
+    return { ok: true, roots: list };
   });
 }
 function sheDocCats(token, text) {
