@@ -30,7 +30,7 @@ var HR_TABLES_ = {
     ['action', 'การดำเนินการ'], ['files', 'ไฟล์แนบ'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
   hr_settings: { tab: 'ตั้งค่า', cols: [['id', 'รายการ'], ['value', 'ค่า']] }
 };
-var HR_LEAVE_TYPES_ = { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', maternity: 'ลาคลอด', paternity: 'ลาดูแลบุตร (ชาย)', ordain: 'ลาบวช', military: 'ลารับราชการทหาร',
+var HR_LEAVE_TYPES_ = { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', birthday: 'ลาวันเกิด', maternity: 'ลาคลอด', paternity: 'ลาดูแลบุตร (ชาย)', ordain: 'ลาบวช', military: 'ลารับราชการทหาร',
   training: 'ลาเพื่อฝึกอบรม', other: 'ลาอื่นๆ', absent: 'ขาดงาน', late: 'มาสาย' };
 // ลาคลอด / ลาดูแลบุตร (ชาย) นับทุกวันรวมวันหยุด (ผู้ใช้เลือก 20/11/69) — 1 วัน = ชม. มาตรฐาน (จ.–พฤ.) เพื่อให้ "(x วัน)" ตรงกับวันปฏิทิน
 var HR_CAL_TYPES_ = { maternity: 1, paternity: 1 };
@@ -39,7 +39,7 @@ var HR_DOC_TYPES_ = { idcard: 'บัตรประชาชน', passport: '�
   health: 'ตรวจสุขภาพประจำปี / ใบรับรองแพทย์', food: 'อบรมสุขาภิบาลอาหาร', driving: 'ใบขับขี่', contract: 'สัญญาจ้าง', other: 'อื่นๆ' };
 var HR_DISC_LEVELS_ = { verbal: 'ตักเตือนด้วยวาจา', written1: 'ใบเตือนครั้งที่ 1', written2: 'ใบเตือนครั้งที่ 2', suspend: 'พักงาน', terminate: 'เลิกจ้าง' };
 var HR_SETTINGS_DEFAULT_ = {
-  quotas: JSON.stringify({ sick: 30, personal: 3, vacation: 6, maternity: 120, paternity: 15, ordain: 15 }), maternityPaidDays: '90', maternityPaidHours: '',
+  quotas: JSON.stringify({ sick: 30, personal: 3, vacation: 6, birthday: 1, maternity: 120, paternity: 15, ordain: 15 }), maternityPaidDays: '90', maternityPaidHours: '',
   buildings: 'G1, G2, G3, ออฟฟิศ', groups: 'ผลิต, ออฟฟิศ', alertDays: '60', workDays: 'จ-ศ',
   // ชั่วโมงทำงานต่อวัน (ผู้ใช้กำหนด 20/11/69): จ.–พฤ. 10 ชม. · ศ. 8 ชม. · เสาร์ไม่ทำงาน — การลาคิดเป็นชั่วโมงตามวันจริง
   hoursMonThu: '10', hoursFri: '8', hoursSat: '0',
@@ -84,6 +84,7 @@ function hrSettings_(ss) {
   var qm = {};
   if (q.maternity == null || Number(q.maternity) === 98) q.maternity = 120;   // สิทธิ์ใหม่ (ผู้ใช้กำหนด 20/11/69)
   if (q.paternity == null) q.paternity = 15;
+  if (q.birthday == null) q.birthday = 1;   // ลาวันเกิด (ผู้ใช้ขอ 23/11/69) ค่าเริ่มต้น 1 วัน/ปี · ตั้งเป็นชั่วโมงได้ที่หน้าตั้งค่า
   s.quotaDays = q;
   Object.keys(HR_LEAVE_TYPES_).forEach(function (k) {
     // ลาคลอด / ดูแลบุตร: ตั้งเป็นชั่วโมงได้ (ผู้ใช้ขอ 20/11/69) · ยังไม่ตั้ง = วัน × ชม. มาตรฐาน (1 วันปฏิทิน = ชม. จ.–พฤ.)

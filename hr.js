@@ -27,7 +27,7 @@
     { id: 'h_set', label: 'ตั้งค่า', ic: 'gear' },
     { id: 'h_log', label: 'ประวัติการแก้ไข', ic: 'clock' }
   ];
-  var LT = { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', maternity: 'ลาคลอด', paternity: 'ลาดูแลบุตร (ชาย)', ordain: 'ลาบวช', military: 'ลารับราชการทหาร', training: 'ลาเพื่อฝึกอบรม', other: 'ลาอื่นๆ', absent: 'ขาดงาน', late: 'มาสาย' };
+  var LT = { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', birthday: 'ลาวันเกิด', maternity: 'ลาคลอด', paternity: 'ลาดูแลบุตร (ชาย)', ordain: 'ลาบวช', military: 'ลารับราชการทหาร', training: 'ลาเพื่อฝึกอบรม', other: 'ลาอื่นๆ', absent: 'ขาดงาน', late: 'มาสาย' };
   var DT = { idcard: 'บัตรประชาชน', passport: 'พาสปอร์ต', visa: 'วีซ่า', workpermit: 'ใบอนุญาตทำงาน (Work Permit)', pink: 'บัตรชมพู / บัตรประจำตัวคนต่างด้าว',
     health: 'ตรวจสุขภาพประจำปี / ใบรับรองแพทย์', food: 'อบรมสุขาภิบาลอาหาร', driving: 'ใบขับขี่', contract: 'สัญญาจ้าง', other: 'อื่นๆ' };
   var DL = { verbal: 'ตักเตือนด้วยวาจา', written1: 'ใบเตือนครั้งที่ 1', written2: 'ใบเตือนครั้งที่ 2', suspend: 'พักงาน', terminate: 'เลิกจ้าง' };
@@ -90,7 +90,7 @@
     return src ? '<img class="' + (cls || 'hph') + '" src="' + src + '" alt="">' : '<span class="' + (cls || 'hph') + ' none">' + esc(String((e && (e.nickname || e.fullName)) || '?').replace(/^(นาย|นางสาว|นาง|คุณ|MISS\.?|MR\.?|MRS\.?)\s*/i, '').slice(0, 1)) + '</span>';
   }
   // ---------- สิทธิ์วันลา (นับตามปีปฏิทิน ม.ค.–ธ.ค. · ขึ้นปีใหม่เริ่มนับใหม่เอง) ----------
-  var QK = ['sick', 'personal', 'vacation', 'maternity', 'paternity', 'ordain'];
+  var QK = ['sick', 'personal', 'vacation', 'birthday', 'maternity', 'paternity', 'ordain'];
   var CAL = { maternity: 1, paternity: 1 };   // ลาคลอด / ลาดูแลบุตร (ชาย): นับทุกวันรวมวันหยุด (20/11/69)
   // ลาคลอด: จ่ายค่าจ้าง n วันแรกของปี (ตั้งค่า maternityPaidDays = 90) — คืนข้อความ "จ่าย x วัน · ไม่รับค่าจ้าง y วัน"
   function matPay(usedBeforeH, thisH) {   // เป็นชั่วโมง (ผู้ใช้ขอ 20/11/69)
@@ -958,15 +958,15 @@
       + r('เลขบัตรประชาชน / พาสปอร์ต', e.idNo) + r('เบอร์โทร', e.phone) + r('วุฒิการศึกษา', e.education) + r('ที่อยู่ตามทะเบียนบ้าน', e.addrReg) + r('ที่อยู่ปัจจุบัน', e.addrNow)
       + r('ผู้ติดต่อฉุกเฉิน', [e.emergencyName, e.emergencyPhone].filter(String).join(' · ')) + '</table>'
       + '<h5 class="hh">เอกสาร</h5><table class="hrt sm"><thead><tr><th>ประเภท</th><th>เลขที่</th><th>วันที่ออก</th><th>วันหมดอายุ</th></tr></thead><tbody>' + (dc.map(function (d) { return '<tr><td>' + esc(DT[d.type] || d.type) + '</td><td>' + esc(d.number) + '</td><td>' + dd(d.issueDate) + '</td><td>' + dd(d.expiryDate) + '</td></tr>'; }).join('') || '<tr><td colspan="4" class="c muted">-</td></tr>') + '</tbody></table>'
-      + '<h5 class="hh">สรุปการลา ปี ' + (+y + 543) + ' (ชั่วโมง · มาสาย = ครั้ง)</h5><table class="hrt sm"><thead><tr>' + ['sick', 'personal', 'vacation', 'maternity', 'paternity', 'ordain', 'absent', 'late'].map(function (k) { return '<th>' + LT[k] + '</th>'; }).join('') + '</tr></thead><tbody><tr>'
-      + ['sick', 'personal', 'vacation', 'maternity', 'paternity', 'ordain', 'absent', 'late'].map(function (k) { var qq = quotaOf(e, k, y); return '<td class="c">' + r2(used[k] || 0) + (qq ? ' / ' + r2(qq) : '') + '</td>'; }).join('') + '</tr></tbody></table>'
+      + '<h5 class="hh">สรุปการลา ปี ' + (+y + 543) + ' (ชั่วโมง · มาสาย = ครั้ง)</h5><table class="hrt sm"><thead><tr>' + ['sick', 'personal', 'vacation', 'birthday', 'maternity', 'paternity', 'ordain', 'absent', 'late'].map(function (k) { return '<th>' + LT[k] + '</th>'; }).join('') + '</tr></thead><tbody><tr>'
+      + ['sick', 'personal', 'vacation', 'birthday', 'maternity', 'paternity', 'ordain', 'absent', 'late'].map(function (k) { var qq = quotaOf(e, k, y); return '<td class="c">' + r2(used[k] || 0) + (qq ? ' / ' + r2(qq) : '') + '</td>'; }).join('') + '</tr></tbody></table>'
       + '<h5 class="hh">ประวัติการอบรม</h5><table class="hrt sm"><thead><tr><th>วันที่</th><th>หลักสูตร</th><th>ชั่วโมง</th><th>วิทยากร</th></tr></thead><tbody>' + (tr.map(function (t) { return '<tr><td>' + dd(t.date) + '</td><td>' + esc(t.title) + '</td><td class="c">' + t.hours + '</td><td>' + esc(t.trainer) + '</td></tr>'; }).join('') || '<tr><td colspan="4" class="c muted">-</td></tr>') + '</tbody></table>'
       + (ds.length ? '<h5 class="hh">วินัย / ใบเตือน</h5><table class="hrt sm"><thead><tr><th>วันที่</th><th>ระดับ</th><th>เหตุผล</th></tr></thead><tbody>' + ds.map(function (x) { return '<tr><td>' + dd(x.date) + '</td><td>' + esc(DL[x.level]) + '</td><td>' + esc(x.reason) + '</td></tr>'; }).join('') + '</tbody></table>' : '');
     return wrap('ประวัติพนักงาน', printedAt(), H.data.settings.fmProfile, body);
   }
   function leaveRep(all) {
     var q = H.q, from = q.rFrom, to = q.rTo, quotas = H.data.settings.quotaMap || {};
-    var ks = ['sick', 'personal', 'vacation', 'maternity', 'paternity', 'ordain', 'other', 'absent', 'late'];
+    var ks = ['sick', 'personal', 'vacation', 'birthday', 'maternity', 'paternity', 'ordain', 'other', 'absent', 'late'];
     var sum = {};
     all.filter(function (l) { return l.status !== 'ไม่อนุมัติ' && l.dateFrom <= to && (l.dateTo || l.dateFrom) >= from; }).forEach(function (l) {
       sum[l.empId] = sum[l.empId] || {}; var k = ks.indexOf(l.type) >= 0 ? l.type : 'other';
@@ -1019,7 +1019,7 @@
       + F('sHS', 'เสาร์ (ชม. / วัน · 0 = ไม่ทำงาน)', s.hoursSat, 'number', ' min="0" max="24" step="0.5"') + '</div>'
       + '<h4>สิทธิ์ลาต่อปี (ชั่วโมง)</h4>'
       + ((s.quotaFromDays || []).length ? '<p class="hqinfo warn" style="margin:0 0 8px">' + s.quotaFromDays.map(function (k) { return LT[k]; }).join(', ') + ' ยังเป็นค่าที่แปลงจากวันเดิม × ' + stdH() + ' ชม. — ตรวจตัวเลขแล้วกด "บันทึกการตั้งค่า" เพื่อยืนยัน</p>' : '')
-      + '<div class="pform">' + ['sick', 'personal', 'ordain'].map(function (k) { return F('q_' + k, LT[k] + ' (ชม.)' + (s.quotaDays && s.quotaDays[k] != null ? ' · เดิม ' + s.quotaDays[k] + ' วัน' : ''), qm[k] == null ? '' : r2(qm[k]), 'number', ' min="0" step="0.5"'); }).join('') + '</div>'
+      + '<div class="pform">' + ['sick', 'personal', 'birthday', 'ordain'].map(function (k) { return F('q_' + k, LT[k] + ' (ชม.)' + (s.quotaDays && s.quotaDays[k] != null ? ' · เดิม ' + s.quotaDays[k] + ' วัน' : ''), qm[k] == null ? '' : r2(qm[k]), 'number', ' min="0" step="0.5"'); }).join('') + '</div>'
       + '<h4>ลาพักร้อน (แต่ละคนไม่เท่ากัน)</h4><p class="hqinfo" style="margin:0 0 8px">ใส่จำนวนวันพักร้อนของแต่ละคนในทะเบียนพนักงาน (แก้ไขข้อมูล → "วันลาพักร้อน (วัน/ปี)") ระบบคิดเป็นชั่วโมง = วัน × ' + stdH() + ' ชม. · ช่องนี้ใช้กับคนที่ยังไม่ได้ใส่ (เว้นว่าง = ไม่จำกัด)</p><div class="pform">'
       + F('qVacDef', 'ค่าเริ่มต้น (วัน/ปี)', s.quotaDays && s.quotaDays.vacation != null && s.quotaDays.vacation !== '' ? s.quotaDays.vacation : '', 'number', ' min="0" max="60" step="0.5"') + '</div>'
       + '<h4>ลาคลอด / ลาดูแลบุตร (ชั่วโมง · นับทุกวันรวมวันหยุด 1 วัน = ' + stdH() + ' ชม.)</h4><div class="pform">'
@@ -1034,7 +1034,7 @@
       + '<div class="panel" id="formBox" style="margin-top:14px"><span class="spinner dark"></span> กำลังโหลดลิงก์แบบฟอร์มขอลา…</div>';
     formSettings();
     $('sSave').addEventListener('click', function () {
-      var qq = {}; ['sick', 'personal', 'ordain', 'maternity', 'paternity'].forEach(function (k) { if (v('q_' + k) !== '') qq[k] = Number(v('q_' + k)); });
+      var qq = {}; ['sick', 'personal', 'birthday', 'ordain', 'maternity', 'paternity'].forEach(function (k) { if (v('q_' + k) !== '') qq[k] = Number(v('q_' + k)); });
       var qd = Object.assign({}, s.quotaDays || {}); if (v('qVacDef') === '') delete qd.vacation; else qd.vacation = Number(v('qVacDef'));
       var b = $('sSave'); b.disabled = true;
       call('hrSaveSettings', state.token, { quotaHours: JSON.stringify(qq), quotas: JSON.stringify(qd), maternityPaidHours: v('sMatPaidH'), hoursMonThu: v('sHMT'), hoursFri: v('sHF'), hoursSat: v('sHS'), workDays: Number(v('sHS')) > 0 ? 'จ-ส' : 'จ-ศ', groups: v('sGroups'), buildings: v('sBld'), alertDays: v('sAlert'), fmRegister: v('sFmR'), fmProfile: v('sFmP'), fmLeave: v('sFmL') })
@@ -1207,7 +1207,7 @@
     '.hquota{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:6px}.hquota div{background:#f8fafc;border-radius:10px;padding:6px;text-align:center}.hquota span{display:block;font-size:11.5px;color:var(--muted)}.hquota b{font-size:18px}.hquota small{font-size:11px;color:var(--muted);margin-left:2px}.hquota em{display:block;font-style:normal;font-size:11.5px;font-weight:600;color:#15803d}.hquota em.neg{color:#dc2626}.hqinfo{margin:4px 0 10px;padding:10px 12px;border-radius:10px;background:#f8fafc;border-left:4px solid #94a3b8;font-size:13.5px}.hqinfo:empty{display:none}.hqinfo.ok{background:#f0fdf4;border-color:#16a34a}.hqinfo.warn{background:#fffbeb;border-color:#d97706}.hqinfo.bad{background:#fef2f2;border-color:#dc2626}.hqrow{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:4px}.hqrow b{font-size:16px}.hbal td small{display:block;font-size:11px;color:var(--muted)}.hbal tr{cursor:pointer}.hbal tr:hover td{background:#f8fafc}',
     '.hfiles{display:flex;flex-direction:column;gap:4px}.hfile{display:flex;align-items:center;gap:8px;font-size:13.5px}.hfile a{display:inline-flex;gap:4px;align-items:center;color:var(--c);word-break:break-all}.hfile svg{width:14px;height:14px}',
     '.hst{display:inline-block;margin-top:4px;font-size:12px;font-weight:700;padding:2px 9px;border-radius:99px}.hst.ok{background:#dcfce7;color:#15803d}.hst.wait{background:#ffedd5;color:#c2410c}.hst.no{background:#fee2e2;color:#b91c1c}.pprice .hst{display:block;width:max-content;margin-left:auto}',
-    '.htype{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;background:#fef3c7;color:#b45309}.htype.sick{background:#dbeafe;color:#1d4ed8}.htype.absent{background:#fee2e2;color:#b91c1c}.htype.late{background:#f1f5f9;color:#475569}.htype.vacation{background:#dcfce7;color:#15803d}',
+    '.htype{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;background:#fef3c7;color:#b45309}.htype.sick{background:#dbeafe;color:#1d4ed8}.htype.birthday{background:#fce7f3;color:#be185d}.htype.absent{background:#fee2e2;color:#b91c1c}.htype.late{background:#f1f5f9;color:#475569}.htype.vacation{background:#dcfce7;color:#15803d}',
     '.hpicks{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px;max-height:320px;overflow:auto;margin-top:8px}.hpick{display:flex;align-items:center;gap:8px;border:1.5px solid var(--line);border-radius:10px;padding:5px 8px;font-size:13.5px;cursor:pointer;margin:0}.hpick.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 7%,white)}.hpick small{display:block;font-size:11px;color:var(--muted)}',
     '.hpr-btns .hdone,.hpr-btns button:disabled{background:#e5e7eb!important;border-color:#d1d5db!important;color:#6b7280!important;cursor:not-allowed}.hdone-tag{display:inline-block;padding:7px 12px;border-radius:10px;background:#e5e7eb;color:#4b5563;font-weight:700;font-size:13.5px}',
     '.hpendl{margin-top:10px;padding:8px 10px;border-radius:10px;background:#f1f5f9;color:#475569;font-size:13px}.hpendl.click{cursor:pointer}.hpendl.click:hover{background:#e2e8f0}.hpendl small{color:#64748b}',

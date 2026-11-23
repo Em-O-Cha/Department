@@ -7,7 +7,7 @@
 //   ตั้ง Webhook URL ของ OA = URL /exec ของระบบนี้ · เชิญบอทเข้ากลุ่ม แล้วพิมพ์ "ตั้งค่ากลุ่ม HR <รหัสตั้งค่า>" (รหัสดูได้ในหน้าตั้งค่า HR)
 //   Apps Script อ่าน header ลายเซ็นของ LINE ไม่ได้ → ปุ่มอนุมัติใส่ลายเซ็นของระบบเอง (HMAC) · ผูกกลุ่มต้องใช้รหัสตั้งค่า
 
-var HR_FORM_TYPES_ = ['sick', 'personal', 'vacation', 'maternity', 'paternity', 'ordain', 'other'];
+var HR_FORM_TYPES_ = ['sick', 'personal', 'vacation', 'birthday', 'maternity', 'paternity', 'ordain', 'other'];
 var HR_FORM_URL_ = 'https://em-o-cha.github.io/Department/leave.html';
 var HR_APP_URL_ = 'https://em-o-cha.github.io/Department/';
 

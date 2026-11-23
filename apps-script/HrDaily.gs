@@ -31,7 +31,7 @@ var HRD_ROLES_DEFAULT_ = [
   { role: 'ผู้บริหาร', names: 'พี่เก้' },
   { role: 'ผู้บริหาร', names: 'คุณอเล็ก' }
 ];
-var HRD_LEAVE_TYPES_ = ['ลาป่วย', 'ลากิจ', 'ลาพักร้อน', 'ลาไม่แจ้ง', 'ขาดงาน', 'ลาคลอด', 'อื่น ๆ'];
+var HRD_LEAVE_TYPES_ = ['ลาป่วย', 'ลากิจ', 'ลาพักร้อน', 'ลาวันเกิด', 'ลาไม่แจ้ง', 'ขาดงาน', 'ลาคลอด', 'อื่น ๆ'];
 
 function hrdBook_(dept) { var ss = hrBook_(dept); PUR_TABLES_.hr_daily = HRD_TABLE_; PUR_NUM_KEYS_.total = 1; PUR_NUM_KEYS_.leaveCount = 1; PUR_NUM_KEYS_.resign = 1; return ss; }
 function hrdClean_(v, max) { return purClean_(v, max || 80); }
