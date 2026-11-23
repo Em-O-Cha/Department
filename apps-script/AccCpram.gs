@@ -73,7 +73,7 @@ function cpCase_(rows) {
     return o;
   });
 }
-function cpPcsNote_(r) { return r.pcs ? '= ' + r.pcs.toLocaleString() + ' ' + r.pcsUnit + ' (' + r.perCase.toLocaleString() + ' ' + r.pcsUnit + '/ลัง)' : ''; }
+function cpPcsNote_(r) { return r.pcs ? r.pcs.toLocaleString() + ' ' + r.pcsUnit + ' (' + r.perCase.toLocaleString() + ' ' + r.pcsUnit + '/ลัง)' : ''; }
 function cpCleanShip_(s) { return { key: accClean_(s && s.key, 60), wh: accClean_(s && s.wh, 30) || '-', place: accClean_(s && s.place, 40) }; }
 function cpSheetId_(ss) { var r = cpSettingRow_(ss, 'cpramSheet'); return r ? String(r.value || '') : ''; }
 function cpBook_(main) {
@@ -353,6 +353,7 @@ function cpDraw_(sh, rows, title, withRounds) {
       var cancel = r.status === 'cancel', note = [cpPcsNote_(r), cancel ? 'ยกเลิก' : r.status === 'done' ? '*ส่งสินค้าแล้ว' : '', r.note, r.history ? cpHistLast_(r.history) : ''].filter(String).join(' · ');
       if (!cancel) sum += Number(r.qty) || 0;
       if (cancel) cancelRows.push(row + i);
+      if (/^[=+\-@]/.test(note)) note = "'" + note;   // กันชีตอ่านหมายเหตุเป็นสูตร (#ERROR!)
       vals.push([i ? '' : CP_DAYS_[new Date(gr.date + 'T00:00:00').getDay()], i ? '' : "'" + cpSlash_(gr.date), r.product, "'" + String(r.poNo).replace(/^'/, ''), String(r.wh || '-').replace(/^'/, ''), Number(r.qty) || 0,
         r.unit || 'ลัง', '', r.place, note]);
     });
@@ -463,9 +464,11 @@ function cpMakeFiles_(dept, rows, title, name, withRounds) {
   DriveApp.getFileById(ss.getId()).moveTo(folder);
   var sh = ss.getSheets()[0]; sh.setName('ตารางส่งสินค้า');
   cpDraw_(sh, rows.map(function (r) { return Object.assign({}, r); }), title, withRounds);
-  sh.setFrozenRows(0);
+  // หลายหน้า: ตรึงแถวหัว (ชื่อตาราง + หัวคอลัมน์ แถว 1–4) → PDF พิมพ์หัวคอลัมน์ซ้ำทุกหน้า (fzr) — ผู้ใช้ขอ 23/11/69
+  var onePage = rows.length <= 28;
+  sh.setFrozenRows(onePage ? 0 : 4);
   SpreadsheetApp.flush();
-  var pdf = accExportPdf_(ss, folder, name, rows.length <= 28), xlsx = accExportXlsx_(ss, folder, name);
+  var pdf = accExportPdf_(ss, folder, name, onePage), xlsx = accExportXlsx_(ss, folder, name);
   return { pdfUrl: pdf.getUrl(), xlsxUrl: xlsx.getUrl(), xlsxDownload: accXlsxDownload_(xlsx.getUrl()), sheetUrl: ss.getUrl() };
 }
 function cpTrash_(urls) { urls.forEach(function (u) { var id = String(u || '').match(/[-\w]{25,}/); if (id) try { DriveApp.getFileById(id[0]).setTrashed(true); } catch (e) {} }); }
@@ -505,6 +508,7 @@ function cpMonthFiles(token, ym) {
     var key = 'cpramFiles_' + ym, row = cpSettingRow_(main, key) || { id: key }, old = {};
     try { old = JSON.parse(row.value || '{}'); } catch (e) {}
     cpTrash_([old.pdfUrl, old.xlsxUrl, old.sheetUrl]);
+    try { cpRebuildMonths_(ss, [ym]); } catch (e) {}   // แท็บเดือนในชีตสร้างใหม่ด้วย (แก้ #ERROR! ในหมายเหตุของแท็บเดิม)
     var p = ym.split('-'), f = cpMakeFiles_(dept, rows, 'ตารางส่งสินค้า CP Ram ' + CP_MONTHS_[+p[1] - 1] + ' ' + (+p[0] + 543), 'ตารางส่งสินค้า CP Ram ' + cpTabName_(ym), true);
     row.value = JSON.stringify({ pdfUrl: f.pdfUrl, xlsxUrl: f.xlsxUrl, sheetUrl: f.sheetUrl });
     purWrite_(main, 'acc_settings', row);
