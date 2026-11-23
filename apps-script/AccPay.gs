@@ -158,6 +158,13 @@ function apSaveSettings(token, s) {
 }
 
 // ---------- บิล ----------
+// ครบเครดิต (ผู้ใช้ 23/11/69): เครดิตนับเป็นเดือน 30 วัน = 1 เดือน (45 = 1 เดือน + 15 วัน) — เหมือน creditDue ใน payables.js
+function apCreditDue_(iso, credit) {
+  var c = Math.max(0, Math.round(Number(credit) || 0)), p = String(iso).split('-'), y = +p[0], m = +p[1] - 1 + Math.floor(c / 30), d = +p[2];
+  y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+  d = Math.min(d, new Date(y, m + 1, 0).getDate());
+  return accAddDays_(y + '-' + ('0' + (m + 1)).slice(-2) + '-' + ('0' + d).slice(-2), c % 30);
+}
 function apCat_(k) { return AP_CATS_.some(function (c) { return c.key === k; }) ? k : ''; }
 function apCleanBill_(b) {
   b = b || {};
@@ -168,7 +175,7 @@ function apCleanBill_(b) {
     note: accClean_(b.note, 300), bank: accClean_(b.bank, 150), kind: b.kind === 'po' ? 'po' : '', poRef: b.kind === 'po' ? '' : accClean_(b.poRef, 40)
   };
   if (x.kind === 'po') { x.invNo = ''; x.issueDate = ''; x.creditDays = 0; }
-  x.dueDate = accDate_(b.dueDate) || (x.issueDate ? accAddDays_(x.issueDate, x.creditDays) : '');
+  x.dueDate = accDate_(b.dueDate) || (x.issueDate ? apCreditDue_(x.issueDate, x.creditDays) : '');
   x.lines = (Array.isArray(b.lines) ? b.lines : []).slice(0, 80).map(function (l) {
     var qty = Number(purNum_(l.qty)), price = Number(purNum_(l.price));
     return { desc: accClean_(l.desc, 200), qty: isFinite(qty) ? qty : 0, price: isFinite(price) ? price : 0, po: Math.max(0, Math.round(Number(l.po) || 0)) };

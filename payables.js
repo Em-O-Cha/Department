@@ -56,14 +56,24 @@
     var base = due || P.data.today;
     return rs.filter(function (d) { return d >= base; })[0] || rs[rs.length - 1] || '';
   }
-  // ตัดรอบบิล (ผู้ใช้ขอ 20/11/69 · เลือก "วันตัดรอบ + เครดิต"): บิลวันที่ ≤ วันตัดรอบ (19) → ตัดรอบวันที่ 19 เดือนนั้น · หลังวันที่ 19 → วันที่ 19 เดือนถัดไป
-  // แล้วนับเครดิตของผู้ขายจากวันตัดรอบ → รอบจ่าย = วันจ่าย (10) รอบแรกที่ไม่ก่อนวันนั้น
-  function cutOf(iso) {
-    var cd = Number(P.data.settings.cutDay) || 19, p = String(iso || P.data.today).split('-'), y = +p[0], m = +p[1];
-    if (+p[2] > cd) { m++; if (m > 12) { m = 1; y++; } }
-    return y + '-' + pad(m) + '-' + pad(cd);
+  // เครดิต (ตามตารางของผู้ใช้ 23/11/69): ครบเครดิต = วันที่ส่งของ / วันที่บิล + เครดิต นับเป็นเดือน (30 วัน = 1 เดือน, 60 = 2 เดือน, 45 = 1 เดือน + 15 วัน)
+  // ครบกำหนดวันที่ 1–19 (วันตัดรอบ) → จ่ายวันที่ 10 ของเดือนนั้น · หลังวันที่ 19 → จ่ายวันที่ 10 เดือนถัดไป
+  // เช่น ส่งของ 19/3 เครดิต 60 → ครบ 19/5 → จ่าย 10/5 · ส่งของ 21/3 → ครบ 21/5 → จ่าย 10/6 · ส่งของ 1/3 เครดิต 45 → 1/4 + 15 = 16/4 → จ่าย 10/4
+  function addMonths(iso, n) {
+    var p = String(iso).split('-'), y = +p[0], m = +p[1] - 1 + n, d = +p[2];
+    y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+    var last = new Date(y, m + 1, 0).getDate();
+    return y + '-' + pad(m + 1) + '-' + pad(Math.min(d, last));
   }
-  function roundInfo(iso, credit) { var cut = cutOf(iso), due = addDays(cut, Number(credit) || 0); return { cut: cut, due: due, round: defaultRound(due) }; }
+  function creditDue(iso, credit) { var c = Math.max(0, Math.round(Number(credit) || 0)); return addDays(addMonths(iso, Math.floor(c / 30)), c % 30); }
+  function roundInfo(iso, credit) {
+    var cd = Number(P.data.settings.cutDay) || 19, pd = Number(P.data.settings.payDay) || 10, due = creditDue(iso, credit), p = due.split('-'), y = +p[0], m = +p[1];
+    if (+p[2] > cd) { m++; if (m > 12) { m = 1; y++; } }
+    var nom = y + '-' + pad(m) + '-' + pad(pd);
+    while (nom < iso) nom = addMonths(nom, 1);   // เครดิตสั้นมาก (เช่น 0) ไม่ให้รอบจ่ายก่อนวันที่บิล
+    var rs = (P.data.rounds || []).map(function (r) { return r.nominal; });
+    return { due: due, cut: cd, round: rs.indexOf(nom) >= 0 ? nom : defaultRound(nom) };
+  }
   function roundFor(iso, credit) { return roundInfo(iso, credit).round; }
   function calc(l, mode, pct) {
     var amount = mode === 'inc' ? l.qty * l.price * 100 / 107 : l.qty * l.price;
@@ -819,12 +829,12 @@
     });
     vhint(); dupCheck();
   }
-  function due() { var b = P.cur; return b.issueDate ? addDays(b.issueDate, Number(b.creditDays) || 0) : ''; }
+  function due() { var b = P.cur; return b.issueDate ? creditDue(b.issueDate, b.creditDays) : ''; }
   function refresh(dates) {
     var b = P.cur;
     $('apDue').value = due() ? slash(due()) : '';
     var ri = roundInfo(b.issueDate || P.data.today, b.creditDays), rh = $('apRoundHint');
-    if (rh) rh.textContent = 'ตัดรอบ ' + slash(ri.cut) + ' + เครดิต ' + (Number(b.creditDays) || 0) + ' วัน = ' + slash(ri.due) + ' → จ่าย ' + dotAD(ri.round, true) + (b.payRound && b.payRound !== ri.round ? ' (เลือกรอบอื่นไว้)' : '');
+    if (rh) rh.textContent = 'ครบเครดิต ' + slash(ri.due) + ' (เครดิต ' + (Number(b.creditDays) || 0) + ' วัน · ' + (+ri.due.slice(8) <= ri.cut ? 'ครบไม่เกินวันที่ ' + ri.cut + ' → จ่ายเดือนนั้น' : 'ครบหลังวันที่ ' + ri.cut + ' → จ่ายเดือนถัดไป') + ') → จ่าย ' + dotAD(ri.round, true) + (b.payRound && b.payRound !== ri.round ? ' (เลือกรอบอื่นไว้)' : '');
     if (dates && b.autoRound) { b.payRound = ri.round; var s = $('apRound'); if (s && s.querySelector('option[value="' + b.payRound + '"]')) s.value = b.payRound; }
     var t = { amount: 0, vat: 0, total: 0, wht: 0 };
     b.lines.forEach(function (l) { if (l.dup) return; var c = calc(l, b.vatMode, b.pct); t.amount += c.amount; t.vat += c.vat; t.total += c.total; t.wht += c.wht; });
@@ -1001,7 +1011,7 @@
               var c = calc({ qty: qty, price: price }, b.vatMode, pct);
               if (!li) {
                 put(r, 'D', b.issueDate ? { date: b.issueDate } : '', ST.d);
-                put(r, 'E', b.dueDate ? { date: b.dueDate } : '', ST.d, b.issueDate ? '=+D' + x + '+' + (Number(b.creditDays) || 0) : null);
+                put(r, 'E', b.dueDate ? { date: b.dueDate } : '', ST.d, b.issueDate ? (function (c) { c = Math.max(0, Math.round(Number(c) || 0)); var mo = Math.floor(c / 30), dd = c % 30; return mo ? '=EDATE(D' + x + ',' + mo + ')' + (dd ? '+' + dd : '') : '=+D' + x + '+' + dd; })(b.creditDays) : null);
                 put(r, 'F', b.invNo || '', ST.inv);
               } else { put(r, 'D', '', ST.d); put(r, 'E', '', ST.d); put(r, 'F', '', ST.inv); }
               var isPo = b.kind === 'po';
@@ -1365,7 +1375,7 @@
         + linkPanel()
         + '<div class="panel pbox"><h4>' + icon('gear', 18) + ' ตั้งค่า</h4><div class="apgrid">'
         + '<label>วันจ่ายประจำเดือน (วันที่)<input id="apPayDay" inputmode="numeric" value="' + d.settings.payDay + '"><small>ตรงวันหยุด → จ่ายวันทำการถัดไป (ใช้วันหยุดชุดเดียวกับ 7-11)</small></label>'
-        + '<label>วันตัดรอบบิล (วันที่)<input id="apCutDay" inputmode="numeric" value="' + (d.settings.cutDay || 19) + '"><small>รอบจ่าย = วันตัดรอบของบิล + เครดิตผู้ขาย → วันจ่ายรอบแรกหลังจากนั้น</small></label>'
+        + '<label>วันตัดรอบบิล (วันที่)<input id="apCutDay" inputmode="numeric" value="' + (d.settings.cutDay || 19) + '"><small>ครบเครดิตวันที่ 1 ถึงวันนี้ → จ่ายวันจ่ายของเดือนนั้น · หลังวันนี้ → จ่ายเดือนถัดไป (เครดิต 30 วัน = 1 เดือน)</small></label>'
         + '<label>เลขผู้เสียภาษีของบริษัทเรา<input id="apOurTax" inputmode="numeric" value="' + esc(d.settings.ourTaxId) + '" placeholder="13 หลัก"><small>ไม่ให้ระบบจับเลขของเราเป็นเลขของผู้ขาย</small></label>'
         + '</div><button class="btn btn-primary" id="apSetSave">บันทึกตั้งค่า</button></div>'
         + aiPanel()
