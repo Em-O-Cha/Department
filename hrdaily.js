@@ -105,7 +105,7 @@
     var n = day.roles.reduce(function (s, r) { return s + (r.resigns || []).length; }, 0) + (day.resignNames || []).length;
     return n || (Number(day.resign) || 0);
   }
-  // จับกลุ่มฝ่ายงาน (ผู้ใช้ขอ 23/11/69): ออฟฟิศ / QC / พนักงานฝ่ายผลิต / Job — ฝ่ายงานที่ไม่เข้ากลุ่มไหนอยู่ "อื่น ๆ"
+  // จับกลุ่มฝ่ายงาน (ผู้ใช้ขอ 23/11/69): ออฟฟิศ / QC / พนักงานฝ่ายผลิต / Job — ฝ่ายงานที่ไม่เข้ากลุ่ม (แม่บ้าน / ผู้บริหาร) ไม่แสดงและไม่นับในรวมทุกกลุ่ม
   var GRPS = [['office', 'กลุ่มออฟฟิศ'], ['qc', 'กลุ่ม QC'], ['prod', 'กลุ่มพนักงานฝ่ายผลิต'], ['job', 'กลุ่ม Job'], ['other', 'อื่น ๆ (ไม่ได้จัดกลุ่ม)']];
   function grpOf(role) {
     var n = String(role || '').toLowerCase().replace(/\s+/g, '');
@@ -122,7 +122,7 @@
     var pct = function (lv, n) { return n ? (Math.round(lv / n * 1000) / 10).toLocaleString('th-TH', { maximumFractionDigits: 1 }) + '%' : '-'; };
     var tn = 0, tl = 0;
     // ข้อความธรรมดาใต้ตาราง (ผู้ใช้ขอ 23/11/69 — ไม่ต้องทำเป็นตาราง)
-    var lines = GRPS.filter(function (x) { return x[0] !== 'other' || g.other.roles.length; }).map(function (x) {
+    var lines = GRPS.filter(function (x) { return x[0] !== 'other'; }).map(function (x) {
       var o = g[x[0]]; tn += o.n; tl += o.lv;
       return '<div>' + esc(x[1]) + ' ' + n0(o.n) + ' คน · ลาหยุด ' + n0(o.lv) + ' คน (' + pct(o.lv, o.n) + ')</div>';
     }).join('');
