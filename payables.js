@@ -1106,6 +1106,31 @@
     return { nominal: nominal, actual: rd.actual, sheets: sheets, catTotals: catTotals, lines: lines };
   }
 
+  // ---------- ดูรายงานเต็มจอ (ผู้ใช้ขอ 23/11/69): ทับทั้งหน้า + เต็มจอของเบราว์เซอร์ · ขนาดพอดีความกว้างจอ หรือซูมเอง ----------
+  function tableW() { return WIDTHS.reduce(function (t, w) { return t + Math.round(w * 5.6 + 4); }, 0); }
+  function fitZoom() { var el = $('apSheets'); return Math.max(0.4, Math.min(2.5, ((el ? el.clientWidth : window.innerWidth) - 40) / tableW())); }
+  function curZoom() { return P.zoom === 'fit' || !P.zoom ? fitZoom() : P.zoom; }
+  function fsZoom() {
+    var z = P.fs ? curZoom() : 1;
+    Array.prototype.forEach.call(document.querySelectorAll('#apSheets .apx1'), function (t) { t.style.zoom = z === 1 ? '' : z; });
+    if ($('apZv')) $('apZv').textContent = Math.round(z * 100) + '%';
+  }
+  function fsOn(again) {
+    var el = $('apSheets'); if (!el) return;
+    P.fs = true; el.classList.add('fs'); document.body.classList.add('apfsopen');
+    if (!again && !document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function () {});
+    fsZoom();
+  }
+  function fsOff() {
+    if (!P.fs) return;
+    P.fs = false; var el = $('apSheets'); if (el) el.classList.remove('fs'); document.body.classList.remove('apfsopen');
+    if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function () {});
+    fsZoom();
+  }
+  document.addEventListener('fullscreenchange', function () { if (!document.fullscreenElement && P.fs) fsOff(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && P.fs) fsOff(); });
+  window.addEventListener('resize', function () { if (P.fs && P.zoom === 'fit') fsZoom(); });
+
   // ---------- แสดงในหน้าเว็บ (หน้าตาเหมือน Excel) ----------
   function cellText(c) {
     var v = c.v;
@@ -1216,20 +1241,27 @@
             return '<button class="apround' + (r.nominal === P.round ? ' on' : '') + '" data-r="' + r.nominal + '"><b>จ่าย ' + dotAD(r.nominal, true) + '</b><small>' + (x ? Object.keys(x.bills).length + ' บิล · ' + m2(x.pay) : 'ยังไม่มีบิล') + '</small></button>';
           }).join('') + '</div>'
         + (model ? '<div class="kpis xk"><div class="kpi"><b>' + m2(tot.pay) + '</b><span>ยอดชำระรอบนี้ (บาท)</span></div><div class="kpi"><b>' + (bills.length - tot.po) + (tot.po ? ' <em class="apred">+ PO ' + tot.po + '</em>' : '') + '</b><span>บิล' + (tot.po ? ' · PO ล่วงหน้า ' + m2(tot.poPay) + ' บาท (ตัวแดง)' : '') + '</span></div><div class="kpi"><b>' + m2(tot.wht) + '</b><span>หัก ณ ที่จ่าย' + (tot.disc ? ' · ส่วนลด/มัดจำ ' + m2(tot.disc) : '') + '</span></div><div class="kpi"><b>' + dotAD(model.actual) + '</b><span>วันจ่ายจริง' + (roundOf(P.round).why ? ' (' + esc(roundOf(P.round).why) + ' เลื่อนจาก ' + dotAD(P.round) + ')' : '') + '</span></div></div>'
-          + '<div class="apbtns noprint"><button class="btn btn-primary" id="apXls">' + icon('table', 18) + ' Excel ตามแบบฟอร์ม</button><button class="btn" id="apPdf">' + icon('pdf', 18) + ' PDF</button><button class="btn" id="apNew">' + icon('upload', 18) + ' นำเข้าบิล</button><button class="btn appob" id="apNewPo">' + icon('clock', 18) + ' + PO ล่วงหน้า</button></div>'
+          + '<div class="apbtns noprint"><button class="btn btn-primary" id="apXls">' + icon('table', 18) + ' Excel ตามแบบฟอร์ม</button><button class="btn" id="apPdf">' + icon('pdf', 18) + ' PDF</button><button class="btn" id="apNew">' + icon('upload', 18) + ' นำเข้าบิล</button><button class="btn appob" id="apNewPo">' + icon('clock', 18) + ' + PO ล่วงหน้า</button><button class="btn apdesk" id="apFull" title="ขยายรายงานเต็มหน้าจอ">⛶ ดูเต็มจอ</button></div>'
           + '<div class="apcats">' + d.cats.map(function (c, i) { var t = model.catTotals[c.key]; return '<span><i>' + (i + 1) + '</i>' + esc(c.name) + '<b>' + m2(t ? t.total : 0) + '</b></span>'; }).join('') + '</div>'
           + (tot.po ? '<div class="aplegend"><i></i> ตัวแดง = PO ล่วงหน้า ยังไม่ได้รับบิล (แตะแถวเพื่อแก้ / กด "ได้รับบิลแล้ว")</div>' : '')
           + '<div id="apInc" class="noprint"></div>'
-          + model.sheets.map(function (sh) { return sheetHtml(sh); }).join('') : '<div class="panel">ยังไม่มีรอบจ่าย</div>');
+          + '<div id="apSheets" class="apsheets"><div class="apfsbar noprint"><b>รายงานจ่าย ' + dotAD(model.actual) + '</b><span class="apfsz"><button type="button" class="btn apsm" id="apZo" aria-label="ย่อ">−</button><span id="apZv">100%</span><button type="button" class="btn apsm" id="apZi" aria-label="ขยาย">+</button><button type="button" class="btn apsm" id="apZf">พอดีจอ</button></span><button type="button" class="btn btn-primary apsm" id="apFsX">✕ ออกจากเต็มจอ</button></div>'
+          + model.sheets.map(function (sh) { return sheetHtml(sh); }).join('') + '</div>' : '<div class="panel">ยังไม่มีรอบจ่าย</div>');
       on('[data-r]', 'click', function (el) { P.round = el.getAttribute('data-r'); P.roundPage(); });
       bindLink();
       if (!model) return;
       $('apXls').addEventListener('click', function () { var b = this; b.disabled = true; P.excel().catch(function (e) { toast('สร้าง Excel ไม่ได้: ' + (e.message || e)); }).then(function () { b.disabled = false; }); });
       $('apPdf').addEventListener('click', function () { $('pdfBtn').click(); });
+      $('apFull').addEventListener('click', function () { P.zoom = 'fit'; fsOn(); });
+      $('apFsX').addEventListener('click', fsOff);
+      $('apZf').addEventListener('click', function () { P.zoom = 'fit'; fsZoom(); });
+      $('apZi').addEventListener('click', function () { P.zoom = Math.min(2.5, curZoom() + 0.1); fsZoom(); });
+      $('apZo').addEventListener('click', function () { P.zoom = Math.max(0.4, curZoom() - 0.1); fsZoom(); });
+      if (P.fs) fsOn(true);   // หน้าวาดใหม่ (เช่น ได้รายการเงินเข้า) ระหว่างดูเต็มจอ → คงเต็มจอไว้
       $('apNew').addEventListener('click', function () { P.cur = null; go('a_apin'); });
       $('apNewPo').addEventListener('click', function () { P.cur = Object.assign(newBill('po'), { payRound: P.round, autoRound: false }); go('a_appo'); });
       // แถวที่เป็นบิล → แตะเพื่อแก้
-      on('tr.apbill', 'click', function (el) { editBill(el.getAttribute('data-bill')); });
+      on('tr.apbill', 'click', function (el) { fsOff(); editBill(el.getAttribute('data-bill')); });
       on('tr.apbill', 'keydown', function (el, e) { if (e.key === 'Enter') editBill(el.getAttribute('data-bill')); });
       if (!P.inc[P.round]) {
         $('apInc').innerHTML = '<div class="a7msg"><span class="spinner dark"></span> กำลังคำนวณรายการเงินเข้า (CP ALL / CP Ram)…</div>';
@@ -1678,6 +1710,8 @@
     '.apbtns{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.apbtns .btn{width:auto}.apdel{color:#dc2626;border-color:#fecaca}.apr{cursor:pointer}.apr:hover{background:#f8fafc}',
     '.rounds{margin:0 0 14px}.apround{border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:8px 12px;text-align:left;cursor:pointer;font:inherit}.apround small{display:block;color:var(--muted);font-size:12px}.apround.on{border-color:var(--c);background:var(--c);color:#fff}.apround.on small{color:#fff}',
     '.apcats{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}.apcats span{flex:1 1 150px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px}.apcats i{font-style:normal;display:inline-block;width:20px;height:20px;border-radius:50%;background:#D9EAD3;text-align:center;margin-right:6px;font-weight:700}.apcats b{display:block;font-size:16px;font-variant-numeric:tabular-nums}',
+    '.apfsbar{display:none}.apsheets.fs{position:fixed;inset:0;z-index:1000;background:#fff;overflow:auto;padding:0 16px 24px}.apsheets.fs .apfsbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:sticky;top:0;left:0;z-index:3;background:#fff;padding:10px 0;margin-bottom:8px;border-bottom:1px solid var(--line)}.apfsbar b{flex:1;font-size:17px}.apfsz{display:flex;gap:6px;align-items:center}.apfsz #apZv{min-width:48px;text-align:center;font-variant-numeric:tabular-nums;font-weight:700}.apfsbar .btn{margin:0;min-height:38px}',
+    '.apsheets.fs .apsheet .cpwrap{max-height:none;overflow:visible;border:0}.apsheets.fs .apsheet{margin-bottom:28px}body.apfsopen{overflow:hidden}@media(max-width:900px){.apdesk{display:none}}',
     '.apsheet{margin:0 0 22px}.apsheet .cpwrap{max-height:calc(100vh - 90px);overflow:auto;border:1px solid var(--line);border-radius:0 8px 8px 8px;background:#fff}',
     '.apqban{display:flex;gap:8px;align-items:center;background:#eff6ff;border:1.5px solid #bfdbfe;color:#1e3a8a;border-radius:12px;padding:10px 12px;margin-bottom:12px}.apsplit{display:flex;flex-direction:column;gap:6px;margin-top:12px}.apsplit span{color:var(--muted)}.apsn{display:inline-block;background:#1f2937;color:#fff;border-radius:8px 8px 0 0;padding:4px 12px;font-size:13px;font-weight:600}',
     '.apx1{border-collapse:collapse;table-layout:fixed;background:#fff;font-variant-numeric:tabular-nums}.apx1 td{padding:1px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;line-height:1.25}.apx1 td.ov{overflow:visible;position:relative;z-index:1}.apx1 tr.apbill{cursor:pointer}.apx1 tr.apbill:hover td{box-shadow:inset 0 0 0 999px rgba(37,99,235,.06)}',
