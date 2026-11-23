@@ -412,25 +412,55 @@ function cpFlex_(lines, hasImg, files) {
   total = Math.round(total * 100) / 100;
   var dl = Object.keys(dates).sort(), pd = Object.keys(poDates).sort();
   var body = [row('วันที่ใบสั่งซื้อ', accDotRange_(pd)), row('ลูกค้า', 'CPRAM (ซีพีแรม)'), row('วันที่ส่งสินค้า', accDotRange_(dl)), row('ใบสั่งซื้อ', Object.keys(pos).length + ' ใบ'), row('หมายเหตุ', 'Update ' + accDot_(purToday_()), { color: '#C2410C' })];
-  // ตารางส่งสินค้า แยกตามวันส่ง
+  // ตารางส่งสินค้า แยกตามวันส่ง — LINE จำกัด 30 KB ต่อการ์ด (ผู้ใช้เจอ error 400 ตอนส่ง 31 PO, 23/11/69)
+  // level 0 = เต็ม (PO + สินค้า/คลังทุกแถว) · 1 = กระชับ (สินค้า/คลังบอกครั้งเดียวต่อวันถ้าเหมือนกัน, PO แถวเดียว) · 2 = สรุปต่อวันส่ง (รายละเอียดดูในภาพ / PDF)
   var by = {}; lines.forEach(function (x) { (by[x.deliveryDate] = by[x.deliveryDate] || []).push(x); });
-  Object.keys(by).sort().forEach(function (d) {
-    var g = by[d].sort(function (a, b) { return String(a.poNo).localeCompare(String(b.poNo)) || a.lineNo - b.lineNo; });
-    var sum = g.reduce(function (s2, x) { return s2 + (x.status === 'cancel' ? 0 : Number(x.qty) || 0); }, 0);
-    body.push({ type: 'box', layout: 'horizontal', margin: 'xl', backgroundColor: '#0F5132', cornerRadius: '10px', paddingTop: '7px', paddingBottom: '7px', paddingStart: '12px', paddingEnd: '12px', contents: [
-      T('ส่งวัน' + accDayName_(d) + ' ' + accDot_(d), { size: 'sm', weight: 'bold', color: '#FFFFFF', flex: 7 }), T((Math.round(sum * 100) / 100).toLocaleString() + ' ' + cpUnitOf_(g), { size: 'sm', weight: 'bold', color: '#FFFFFF', flex: 4, align: 'end' })] });
-    g.forEach(function (x, i) {
-      var cancel = x.status === 'cancel', hist = x.history ? cpHistLast_(x.history) : '';
-      var sub = [(x.product || ('รหัส ' + x.itemCode)) + (x.pcs ? ' (' + x.pcs.toLocaleString() + ' ' + x.pcsUnit + ')' : ''), [x.wh && x.wh !== '-' ? 'คลัง' + x.wh : '', x.place].filter(String).join(' · ')].filter(String);
-      var c = [{ type: 'box', layout: 'horizontal', contents: [T('PO ' + x.poNo, { size: 'sm', weight: 'bold', color: cancel ? '#94A3B8' : '#0F172A', flex: 7, decoration: cancel ? 'line-through' : 'none' }),
-        T((Number(x.qty) || 0).toLocaleString() + ' ' + (x.unit || 'ลัง'), { size: 'sm', weight: 'bold', color: cancel ? '#94A3B8' : '#0F5132', flex: 4, align: 'end', decoration: cancel ? 'line-through' : 'none' })] },
-        T(sub.join(' · '), { size: 'xs', color: '#64748B', margin: 'xs' })];
-      if (cancel) c.push(T('ยกเลิก', { size: 'xs', color: '#DC2626', weight: 'bold', margin: 'xs' }));
-      if (hist && x._changed) c.push(T('⚠ ' + hist, { size: 'xs', color: '#C2410C', weight: 'bold', margin: 'xs' }));
-      body.push({ type: 'box', layout: 'vertical', margin: i ? 'md' : 'sm', paddingStart: '4px', paddingEnd: '4px', contents: c });
-      if (i < g.length - 1) body.push({ type: 'separator', margin: 'md', color: '#E2E8F0' });
+  var subOf = function (x, extra) { return [(x.product || ('รหัส ' + x.itemCode)) + (extra || ''), [x.wh && x.wh !== '-' ? 'คลัง' + x.wh : '', x.place].filter(String).join(' · ')].filter(String).join(' · '); };
+  var dateRows = function (level) {
+    var out = [];
+    var keys = Object.keys(by).sort();
+    if (level === 3) {   // สรุปต่อวันส่งแบบบรรทัดเดียว (งานจำนวนมาก) — เกิน 60 วันตัดท้าย
+      keys.slice(0, 60).forEach(function (d, i) {
+        var g = by[d], sum = g.reduce(function (s2, x) { return s2 + (x.status === 'cancel' ? 0 : Number(x.qty) || 0); }, 0), n = g.filter(function (x) { return x.status !== 'cancel'; }).length;
+        out.push({ type: 'box', layout: 'horizontal', margin: i ? 'sm' : 'lg', contents: [T(accDayName_(d).slice(0, 2) + ' ' + accDot_(d) + ' · ' + n + ' PO', { size: 'sm', color: '#0F172A', flex: 7 }), T((Math.round(sum * 100) / 100).toLocaleString() + ' ' + cpUnitOf_(g), { size: 'sm', weight: 'bold', color: '#0F5132', flex: 4, align: 'end' })] });
+      });
+      if (keys.length > 60) out.push(T('และอีก ' + (keys.length - 60) + ' วันส่ง', { size: 'xs', color: '#64748B', margin: 'sm' }));
+      out.push(T('รายละเอียดแต่ละ PO อยู่ในภาพตาราง / ไฟล์ PDF', { size: 'xs', color: '#64748B', margin: 'md', align: 'center' }));
+      return out;
+    }
+    keys.forEach(function (d) {
+      var g = by[d].sort(function (a, b) { return String(a.poNo).localeCompare(String(b.poNo)) || a.lineNo - b.lineNo; });
+      var sum = g.reduce(function (s2, x) { return s2 + (x.status === 'cancel' ? 0 : Number(x.qty) || 0); }, 0);
+      var n = g.filter(function (x) { return x.status !== 'cancel'; }).length;
+      out.push({ type: 'box', layout: 'horizontal', margin: level === 2 ? 'md' : 'xl', backgroundColor: '#0F5132', cornerRadius: '10px', paddingTop: '7px', paddingBottom: '7px', paddingStart: '12px', paddingEnd: '12px', contents: [
+        T('ส่งวัน' + accDayName_(d) + ' ' + accDot_(d) + (level === 2 ? ' · ' + n + ' PO' : ''), { size: 'sm', weight: 'bold', color: '#FFFFFF', flex: 7 }), T((Math.round(sum * 100) / 100).toLocaleString() + ' ' + cpUnitOf_(g), { size: 'sm', weight: 'bold', color: '#FFFFFF', flex: 4, align: 'end' })] });
+      if (level === 2) return;
+      var same = level === 1 && g.every(function (x) { return subOf(x) === subOf(g[0]); });
+      if (same) out.push(T(subOf(g[0]), { size: 'xs', color: '#64748B', margin: 'sm' }));
+      g.forEach(function (x, i) {
+        var cancel = x.status === 'cancel', hist = x.history ? cpHistLast_(x.history) : '';
+        var pcs = x.pcs ? ' (' + x.pcs.toLocaleString() + ' ' + x.pcsUnit + ')' : '';
+        var qtyT = T((Number(x.qty) || 0).toLocaleString() + ' ' + (x.unit || 'ลัง'), { size: 'sm', weight: 'bold', color: cancel ? '#94A3B8' : '#0F5132', flex: 4, align: 'end', decoration: cancel ? 'line-through' : 'none' });
+        if (level === 1) {
+          out.push({ type: 'box', layout: 'horizontal', margin: 'sm', contents: [T('PO ' + x.poNo + (cancel ? ' (ยกเลิก)' : '') + (same ? pcs : ''), { size: 'sm', color: cancel ? '#94A3B8' : '#0F172A', flex: 7 }), qtyT] });
+          if (!same) out.push(T(subOf(x, pcs), { size: 'xxs', color: '#64748B' }));
+          if (hist && x._changed) out.push(T('⚠ ' + hist, { size: 'xxs', color: '#C2410C', weight: 'bold' }));
+          return;
+        }
+        var c = [{ type: 'box', layout: 'horizontal', contents: [T('PO ' + x.poNo, { size: 'sm', weight: 'bold', color: cancel ? '#94A3B8' : '#0F172A', flex: 7, decoration: cancel ? 'line-through' : 'none' }), qtyT] },
+          T(subOf(x, pcs), { size: 'xs', color: '#64748B', margin: 'xs' })];
+        if (cancel) c.push(T('ยกเลิก', { size: 'xs', color: '#DC2626', weight: 'bold', margin: 'xs' }));
+        if (hist && x._changed) c.push(T('⚠ ' + hist, { size: 'xs', color: '#C2410C', weight: 'bold', margin: 'xs' }));
+        out.push({ type: 'box', layout: 'vertical', margin: i ? 'md' : 'sm', paddingStart: '4px', paddingEnd: '4px', contents: c });
+        if (i < g.length - 1) out.push({ type: 'separator', margin: 'md', color: '#E2E8F0' });
+      });
     });
-  });
+    if (level === 2) out.push(T('รายละเอียดแต่ละ PO อยู่ในภาพตาราง / ไฟล์ PDF', { size: 'xs', color: '#64748B', margin: 'md', align: 'center' }));
+    return out;
+  };
+  var head = body.slice(), lvl = 0;
+  body = head.concat(dateRows(0));
+  var tailFrom = body.length;
   body.push({ type: 'box', layout: 'vertical', margin: 'xl', backgroundColor: '#ECFDF5', cornerRadius: '16px', paddingAll: '14px', borderColor: '#A7F3D0', borderWidth: '1px', contents: [
     T('สินค้าจำนวนรวม', { size: 'sm', color: '#047857', align: 'center' }), T(total.toLocaleString() + ' ' + cpUnitOf_(live), { size: '3xl', weight: 'bold', color: '#047857', align: 'center' })] });
   if (hasImg) body.push(T('📊 ตารางส่งสินค้า อยู่ในข้อความถัดไป (กดที่ภาพเพื่อเปิดภาพเต็ม)', { size: 'xxs', color: '#64748B', margin: 'md', align: 'center' }));
@@ -438,15 +468,19 @@ function cpFlex_(lines, hasImg, files) {
     action: { type: 'uri', label: 'เปิดไฟล์ PDF', uri: files.pdfUrl }, contents: [T('เปิดไฟล์ PDF', { size: 'md', weight: 'bold', color: '#FFFFFF', align: 'center' })] });
   if (files && files.xlsxUrl) body.push({ type: 'box', layout: 'vertical', margin: 'md', backgroundColor: '#FFFFFF', borderColor: '#0F5132', borderWidth: '2px', cornerRadius: '24px', paddingAll: '11px',
     action: { type: 'uri', label: 'ดาวน์โหลด Excel', uri: accXlsxDownload_(files.xlsxUrl, true) }, contents: [T('ดาวน์โหลดไฟล์ Excel', { size: 'md', weight: 'bold', color: '#0F5132', align: 'center' })] });
+  var tail = body.slice(tailFrom);
   var inner = [
     { type: 'box', layout: 'vertical', backgroundColor: '#0F5132', cornerRadius: '18px', paddingAll: '18px', contents: [
       T('ORDER CONFIRMATION · CP RAM', { size: 'xxs', color: '#A7F3D0', weight: 'bold' }),
       T('ใบแจ้งออเดอร์ CP Ram', { size: 'xl', color: '#FFFFFF', weight: 'bold', margin: 'sm' }),
       T('บริษัท สปังกี้ ฟู้ด จำกัด · ฝ่ายบัญชี', { size: 'xs', color: '#D1FAE5', margin: 'xs' })] },
     { type: 'box', layout: 'vertical', paddingStart: '6px', paddingEnd: '6px', paddingTop: '6px', paddingBottom: '4px', contents: body }];
+  var bubbleOf = function () { return { type: 'bubble', size: 'giga', body: { type: 'box', layout: 'vertical', paddingAll: '14px', backgroundColor: '#FFFFFF', contents: [inner[0], { type: 'box', layout: 'vertical', paddingStart: '6px', paddingEnd: '6px', paddingTop: '6px', paddingBottom: '4px', contents: body }] } }; };
+  while (lvl < 3 && cpBytes_(JSON.stringify(bubbleOf())) > 28000) { lvl++; body = head.concat(dateRows(lvl)).concat(tail); }
   return { type: 'flex', altText: 'ออเดอร์ CP Ram · ' + Object.keys(pos).length + ' ใบสั่ง · ส่ง ' + accDotRange_(dl) + ' · รวม ' + total.toLocaleString() + ' ' + cpUnitOf_(live),
-    contents: { type: 'bubble', size: 'giga', body: { type: 'box', layout: 'vertical', paddingAll: '14px', backgroundColor: '#FFFFFF', contents: inner } } };
+    contents: bubbleOf() };
 }
+function cpBytes_(s) { return encodeURIComponent(s).replace(/%[0-9A-F]{2}/g, 'x').length; }
 function cpImportLines_(ss, imp) {
   var lines = purRead_(ss, 'cp_lines').filter(function (x) { return x.importId === imp.id; });
   lines.forEach(function (x) { Object.keys(x).forEach(function (k) { if (typeof x[k] === 'string') x[k] = x[k].replace(/^'/, ''); }); x._changed = !!x.history && String(x.updatedAt || '') >= String(imp.createdAt || ''); });
