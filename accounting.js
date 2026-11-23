@@ -177,6 +177,10 @@
   };
   // หัวรายงาน + ตาราง + ช่องเซ็น (ใช้ทั้งหน้าจอและพิมพ์)
   function reportHtml(map, m, sub) {
+    // ตัดสินค้าที่ไม่มีออเดอร์ (รวม 0 ลัง) และศูนย์ที่ไม่มีออเดอร์ออก ทั้งหน้าจอ / พิมพ์ / ภาพ LINE (ผู้ใช้ขอ 23/11/69)
+    var pz = map.products.filter(function (p) { return (m.byProduct[p.key] || 0) > 0; }), dz = m.dcs.filter(function (d) { return d.cases; });
+    if (pz.length) map = Object.assign({}, map, { products: pz });
+    if (dz.length) m = Object.assign({}, m, { dcs: dz });
     return '<div class="a7rep"><div class="a7head">' + logoHtml() + '<div class="a7title"><b>แบบฟอร์มบันทึกออเดอร์ 7-Eleven</b><span>บริษัท สปังกี้ ฟู้ด จำกัด</span></div>'
       + '<div class="a7meta"><div>วันที่สั่ง <b>' + thRange(m.poDates) + '</b></div><div>วันที่ส่ง <b>' + thRange(m.deliveryDates) + '</b></div>' + (sub ? '<div>' + sub + '</div>' : '') + '</div></div>'
       + H.tplHtml(map, m, { full: true, click: true })

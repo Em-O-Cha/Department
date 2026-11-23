@@ -379,6 +379,10 @@ function accBuildReportSheet_(dept, map, m, title) {
   file.moveTo(folder);
   var sh = ss.getSheets()[0];
   sh.setName('ออเดอร์ 7-11');
+  // ตัดสินค้าที่ไม่มีออเดอร์ (รวม 0 ลัง) และศูนย์ที่ไม่มีออเดอร์ออก (ผู้ใช้ขอ 23/11/69) — เหลืออย่างน้อย 1 คอลัมน์ / 1 ศูนย์
+  var byP = m.byProduct || {}, pz = map.products.filter(function (p) { return (byP[p.key] || 0) > 0; }), dz = (m.dcs || []).filter(function (d) { return d.cases; });
+  if (pz.length) map = Object.assign({}, map, { products: pz });
+  if (dz.length) m = Object.assign({}, m, { dcs: dz });
   var P = map.products, nP = P.length, firstCol = 4, lastCol = firstCol + nP - 1, totCol = lastCol + 1;
   var hasImg = P.some(function (p) { return p.img; }), H = hasImg ? 4 : 3, rName = hasImg ? 7 : 6;   // มีรูป = แถวรูปแทรกเหนือชื่อสินค้า
   var rows = 9 + (H - 3) + m.dcs.length * 3 + 2;
