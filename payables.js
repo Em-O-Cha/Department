@@ -981,6 +981,7 @@
     d: S({ sz: 18, h: 'center', bd: 'tthh', nf: 'mm-dd-yy' }), inv: S({ sz: 18, h: 'left', bd: 'tthh' }), desc: S({ sz: 18, h: 'left', bd: 'tthh' }),
     qty: S({ sz: 18, h: 'right', bd: 'tthh', nf: '#,##0' }), qty2: S({ sz: 18, h: 'right', bd: 'tthh', nf: '#,##0.00' }), price: S({ sz: 18, h: 'right', bd: 'tthh', nf: '#,##0.00' }), priceNeg: S({ sz: 18, h: 'right', bd: 'tthh', nf: '#,##0.00', c: RED }),
     descR: S({ sz: 18, h: 'left', bd: 'tthh', c: RED }), qtyR: S({ sz: 18, h: 'right', bd: 'tthh', nf: '#,##0', c: RED }), qty2R: S({ sz: 18, h: 'right', bd: 'tthh', nf: '#,##0.00', c: RED }), priceR: S({ sz: 18, h: 'right', bd: 'tthh', nf: '#,##0.00', c: RED }),   // PO ล่วงหน้า = ตัวแดงเหมือนในไฟล์
+    dR: S({ sz: 18, h: 'center', bd: 'tthh', nf: 'mm-dd-yy', c: RED }), invR: S({ sz: 18, h: 'left', bd: 'tthh', c: RED }), amtR: S({ sz: 18, h: 'right', bd: 'tthh', nf: NF_AMT, c: RED }), payR: S({ sz: 18, b: 1, h: 'right', bd: 'tthh', nf: NF_AMT, c: RED }),   // PO ล่วงหน้า: ทั้งแถวตัวแดง ยกเว้นชื่อบริษัท (ผู้ใช้ขอ 23/11/69)
     pct: S({ sz: 18, h: 'center', bd: 'tthh', nf: NF2, c: RED }), wht: S({ sz: 18, h: 'right', bd: 'tthh', nf: NF2, c: RED }),
     amt: S({ sz: 18, h: 'right', bd: 'tthh', nf: NF_AMT }), pay: S({ sz: 18, b: 1, h: 'right', bd: 'tthh', nf: NF_AMT }),
     bankB: S({ sz: 18, b: 1, c: RED, fill: 'FFF2CC', bd: 't-tt' }), bank: S({ sz: 18, b: 1, c: RED, fill: 'FFF2CC', h: 'left', bd: '-ttt' }), bankF: S({ sz: 18, b: 1, c: RED, fill: 'FFF2CC', bd: 'tttt' }),
@@ -1036,22 +1037,22 @@
               if (b.empty) { 'DEFGHIJKLMNO'.split('').forEach(function (cc) { put(r, cc, '', /[LMN]/.test(cc) ? ST.amt : cc === 'O' ? ST.pay : cc === 'D' || cc === 'E' ? ST.d : ST.desc); }); return; }
               var pct = Number(b.pct) || 0, qty = Number(l.qty) || 0, price = Number(l.price) || 0;
               var c = calc({ qty: qty, price: price, disc: l.disc }, b.vatMode, pct);
-              if (!li) {
-                put(r, 'D', b.issueDate ? { date: b.issueDate } : '', ST.d);
-                put(r, 'E', b.dueDate ? { date: b.dueDate } : '', ST.d, b.issueDate ? (function (c) { c = Math.max(0, Math.round(Number(c) || 0)); var mo = Math.floor(c / 30), dd = c % 30; return mo ? '=EDATE(D' + x + ',' + mo + ')' + (dd ? '+' + dd : '') : '=+D' + x + '+' + dd; })(b.creditDays) : null);
-                put(r, 'F', b.invNo || '', ST.inv);
-              } else { put(r, 'D', '', ST.d); put(r, 'E', '', ST.d); put(r, 'F', '', ST.inv); }
               var isPo = b.kind === 'po';
+              if (!li) {
+                put(r, 'D', b.issueDate ? { date: b.issueDate } : '', isPo ? ST.dR : ST.d);
+                put(r, 'E', b.dueDate ? { date: b.dueDate } : '', isPo ? ST.dR : ST.d, b.issueDate ? (function (c) { c = Math.max(0, Math.round(Number(c) || 0)); var mo = Math.floor(c / 30), dd = c % 30; return mo ? '=EDATE(D' + x + ',' + mo + ')' + (dd ? '+' + dd : '') : '=+D' + x + '+' + dd; })(b.creditDays) : null);
+                put(r, 'F', b.invNo || '', isPo ? ST.invR : ST.inv);
+              } else { put(r, 'D', '', isPo ? ST.dR : ST.d); put(r, 'E', '', isPo ? ST.dR : ST.d); put(r, 'F', '', isPo ? ST.invR : ST.inv); }
               if (isPo) sh.rows[r - 1].po = 1;
               put(r, 'G', l.desc || '', isPo ? ST.descR : ST.desc);
               put(r, 'H', qty, Math.round(qty) === qty ? (isPo ? ST.qtyR : ST.qty) : (isPo ? ST.qty2R : ST.qty2));
               put(r, 'I', price, price < 0 || isPo ? (isPo ? ST.priceR : ST.priceNeg) : ST.price);
               put(r, 'J', pct || '', ST.pct);
               put(r, 'K', c.disc ? c.disc : '', ST.wht);
-              put(r, 'L', c.amount, ST.amt, b.vatMode === 'inc' ? '=H' + x + '*I' + x + '*100/107' : '=+H' + x + '*I' + x);
-              put(r, 'M', c.vat, ST.amt, b.vatMode === 'none' ? null : '=ROUND((L' + x + '-K' + x + ')*7%,2)');   // VAT จากยอดหลังหักส่วนลด/มัดจำ
-              put(r, 'N', c.total, ST.amt, '=+L' + x + '-K' + x + '+M' + x);
-              put(r, 'O', '', ST.pay);
+              put(r, 'L', c.amount, isPo ? ST.amtR : ST.amt, b.vatMode === 'inc' ? '=H' + x + '*I' + x + '*100/107' : '=+H' + x + '*I' + x);
+              put(r, 'M', c.vat, isPo ? ST.amtR : ST.amt, b.vatMode === 'none' ? null : '=ROUND((L' + x + '-K' + x + ')*7%,2)');   // VAT จากยอดหลังหักส่วนลด/มัดจำ
+              put(r, 'N', c.total, isPo ? ST.amtR : ST.amt, '=+L' + x + '-K' + x + '+M' + x);
+              put(r, 'O', '', isPo ? ST.payR : ST.pay);
               nSum += c.total; kSum += pct ? c.wht : 0; if (c.disc) anyWht = true;
               sums.K += c.disc; sums.L += c.amount; sums.M += c.vat; sums.N += c.total;
             });
@@ -1059,7 +1060,7 @@
             var bEnd = bStart + b.lines.length - 1, ns = [], ks = [];
             for (var q = bStart; q <= bEnd; q++) { ns.push('N' + q); if (Number(b.pct)) ks.push('ROUND(L' + q + '*J' + q + '%,2)'); }   // หัก ณ ที่จ่าย = มูลค่า × %
             var payV = r2(nSum - kSum);
-            put(bStart, 'O', payV, ST.pay, '=+' + ns.join('+') + (ks.length ? '-' + ks.join('-') : ''));
+            put(bStart, 'O', payV, b.kind === 'po' ? ST.payR : ST.pay, '=+' + ns.join('+') + (ks.length ? '-' + ks.join('-') : ''));
             if (bEnd > bStart) merge('O' + bStart, 'O' + bEnd);
             sums.O += payV;
           });
