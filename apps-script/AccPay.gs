@@ -12,7 +12,7 @@ var AP_TABLES_ = {
   ap_lines: { tab: 'รายการค่าใช้จ่าย', cols: [
     ['id', 'รหัส'], ['billId', 'รหัสบิล'], ['payRound', 'รอบจ่าย'], ['category', 'หมวด'], ['vendor', 'ผู้ขาย/ผู้จ่ายเงิน'], ['taxId', 'เลขผู้เสียภาษีผู้ขาย'],
     ['issueDate', 'วันที่ออก'], ['creditDays', 'เครดิต (วัน)'], ['dueDate', 'วันที่ครบกำหนด'], ['invNo', 'เลขที่ใบกำกับภาษี'], ['lineNo', 'ลำดับ'],
-    ['desc', 'คำอธิบาย'], ['qty', 'จำนวน'], ['price', 'ราคา'], ['vatMode', 'ราคา / VAT'], ['pct', '%'], ['wht', 'ส่วนลด/มัดจำ/หัก ณที่จ่าย'],
+    ['desc', 'คำอธิบาย'], ['qty', 'จำนวน'], ['price', 'ราคา'], ['vatMode', 'ราคา / VAT'], ['pct', '%'], ['wht', 'หัก ณ ที่จ่าย'], ['disc', 'ส่วนลด/มัดจำ'],
     ['amount', 'มูลค่ารายการ'], ['vat', 'ภาษีมูลค่าเพิ่ม'], ['lineTotal', 'รวม'], ['note', 'หมายเหตุ'], ['files', 'ไฟล์บิล'],
     ['createdAt', 'บันทึกเมื่อ'], ['updatedAt', 'แก้ไขเมื่อ'], ['kind', 'ประเภท'],
     ['recvQty', 'รับบิลแล้ว (จำนวน)'], ['poLog', 'ประวัติรับบิล (PO)'], ['poRef', 'หักจาก PO']] },
@@ -44,7 +44,7 @@ function apRegister_() {
   accRegister_();
   Object.keys(AP_TABLES_).forEach(function (k) { PUR_TABLES_[k] = AP_TABLES_[k]; });
   ['payRound', 'issueDate', 'dueDate'].forEach(function (k) { PUR_DATE_KEYS_[k] = 1; });
-  ['creditDays', 'lineNo', 'qty', 'price', 'pct', 'wht', 'amount', 'vat', 'lineTotal', 'sort', 'recvQty'].forEach(function (k) { PUR_NUM_KEYS_[k] = 1; });
+  ['creditDays', 'lineNo', 'qty', 'price', 'pct', 'wht', 'disc', 'amount', 'vat', 'lineTotal', 'sort', 'recvQty'].forEach(function (k) { PUR_NUM_KEYS_[k] = 1; });
 }
 function apR2_(n) { return Math.round(Number(n || 0) * 100) / 100; }
 function apTxt_(v) { return String(v == null ? '' : v).replace(/^'/, ''); }
@@ -62,7 +62,21 @@ function apBook_(main) {
   if (!id) return null;
   var ss = SpreadsheetApp.openById(id);
   try { if (ss.getSpreadsheetTimeZone() !== PUR_TZ_) ss.setSpreadsheetTimeZone(PUR_TZ_); } catch (e) {}
+  apHeadV2_(ss);
   return ss;
+}
+// 23/11/69 (ผู้ใช้ขอแยก ส่วนลด/มัดจำ กับ หัก ณ ที่จ่าย): หัวคอลัมน์เดิม "ส่วนลด/มัดจำ/หัก ณที่จ่าย" (เก็บหัก ณ ที่จ่าย) → เปลี่ยนชื่อเป็น "หัก ณ ที่จ่าย" ครั้งเดียว
+function apHeadV2_(ss) {
+  var key = 'AP_HEAD_V2_' + ss.getId(), cache = CacheService.getScriptCache();
+  if (cache.get(key)) return;
+  try {
+    var sh = ss.getSheetByName(AP_TABLES_.ap_lines.tab);
+    if (sh && sh.getLastColumn()) {
+      var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String), i = head.indexOf('ส่วนลด/มัดจำ/หัก ณที่จ่าย');
+      if (i >= 0 && head.indexOf('หัก ณ ที่จ่าย') < 0) sh.getRange(1, i + 1).setValue('หัก ณ ที่จ่าย');
+    }
+    cache.put(key, '1', 21600);
+  } catch (e) {}
 }
 function apFolder_(dept) {
   var folderId = deptConfig_(dept.key).folderId;
@@ -177,17 +191,18 @@ function apCleanBill_(b) {
   if (x.kind === 'po') { x.invNo = ''; x.issueDate = ''; x.creditDays = 0; }
   x.dueDate = accDate_(b.dueDate) || (x.issueDate ? apCreditDue_(x.issueDate, x.creditDays) : '');
   x.lines = (Array.isArray(b.lines) ? b.lines : []).slice(0, 80).map(function (l) {
-    var qty = Number(purNum_(l.qty)), price = Number(purNum_(l.price));
-    return { desc: accClean_(l.desc, 200), qty: isFinite(qty) ? qty : 0, price: isFinite(price) ? price : 0, po: Math.max(0, Math.round(Number(l.po) || 0)) };
+    var qty = Number(purNum_(l.qty)), price = Number(purNum_(l.price)), disc = Number(purNum_(l.disc));
+    return { desc: accClean_(l.desc, 200), qty: isFinite(qty) ? qty : 0, price: isFinite(price) ? price : 0, disc: isFinite(disc) ? apR2_(disc) : 0, po: Math.max(0, Math.round(Number(l.po) || 0)) };
   }).filter(function (l) { return l.desc || l.qty || l.price; });
   return x;
 }
 // คำนวณเหมือนสูตรในไฟล์: ราคารวม VAT → มูลค่า = จำนวน × ราคา × 100/107 · ไม่รวม VAT → จำนวน × ราคา · VAT = ROUND(มูลค่า × 7%, 2)
 // ส่วนลด/หัก ณ ที่จ่าย = มูลค่า × % · รวม = มูลค่า + VAT
+// ผู้ใช้ขอ 23/11/69: ส่วนลด/มัดจำ (disc บาท) หักก่อนคิด VAT · หัก ณ ที่จ่าย = มูลค่ารายการ × % เหมือนเดิม · รวม = มูลค่า − ส่วนลด + VAT
 function apCalc_(l, vatMode, pct) {
-  var amount = vatMode === 'inc' ? l.qty * l.price * 100 / 107 : l.qty * l.price;
-  var vat = vatMode === 'none' ? 0 : apR2_(amount * 0.07);
-  return { amount: apR2_(amount), vat: vat, lineTotal: apR2_(amount + vat), wht: apR2_(amount * pct / 100) };
+  var amount = apR2_(vatMode === 'inc' ? l.qty * l.price * 100 / 107 : l.qty * l.price), disc = apR2_(Number(l.disc) || 0);
+  var vat = vatMode === 'none' ? 0 : apR2_((amount - disc) * 0.07);
+  return { amount: amount, disc: disc, vat: vat, lineTotal: apR2_(amount - disc + vat), wht: apR2_(amount * (Number(pct) || 0) / 100) };
 }
 function apSaveBill(token, bill, files) {
   var dept = requireAcc_(token); apRegister_();
@@ -235,7 +250,7 @@ function apSaveBill(token, bill, files) {
       return purRowValues_(sh, 'ap_lines', {
         id: purId_('APL'), billId: billId, payRound: x.payRound, category: x.category, vendor: x.vendor, taxId: x.taxId ? "'" + x.taxId : '',
         issueDate: x.issueDate, creditDays: x.creditDays, dueDate: x.dueDate, invNo: x.invNo ? "'" + x.invNo : '', lineNo: i + 1,
-        desc: l.desc, qty: l.qty, price: l.price, vatMode: x.vatMode, pct: x.pct, wht: c.wht, amount: c.amount, vat: c.vat, lineTotal: c.lineTotal,
+        desc: l.desc, qty: l.qty, price: l.price, vatMode: x.vatMode, pct: x.pct, wht: c.wht, disc: c.disc || '', amount: c.amount, vat: c.vat, lineTotal: c.lineTotal,
         note: i ? '' : x.note, files: filesTxt, createdAt: createdAt, updatedAt: mine.length ? now : '', kind: x.kind === 'po' ? AP_PO_ : '',
         recvQty: recvOf(l, i), poLog: i ? '' : poLog, poRef: poRef
       }, head);
@@ -252,7 +267,7 @@ function apSaveBill(token, bill, files) {
     v.updatedAt = now;
     purWrite_(ss, 'ap_vendors', v);
     purLogWrite_(main, (mine.length ? 'แก้' : 'บันทึก') + (x.kind === 'po' ? 'PO ล่วงหน้า' : (mine.length && String(mine[0].kind) === AP_PO_ ? 'บิลจาก PO ล่วงหน้า' : 'บิลค่าใช้จ่าย')), 'ap_lines', billId, x.vendor + ' ' + x.invNo + ' รอบ ' + x.payRound);
-    return { ok: true, billId: billId, files: filesTxt, uploaded: saved.length, lines: x.lines.map(function (l) { var c = apCalc_(l, x.vatMode, x.pct); return { po: l.po, desc: l.desc, qty: l.qty, amount: c.amount, total: c.lineTotal, wht: c.wht }; }) };
+    return { ok: true, billId: billId, files: filesTxt, uploaded: saved.length, lines: x.lines.map(function (l) { var c = apCalc_(l, x.vatMode, x.pct); return { po: l.po, desc: l.desc, qty: l.qty, amount: apR2_(c.amount - c.disc), total: c.lineTotal, wht: c.wht }; }) };
   });
 }
 
@@ -290,15 +305,15 @@ function apDeductPo_(main, ss, poId, billId, x, lines) {
     var now = purNow_(), logLines = [];
     rows.forEach(function (row) {
       var d = by[row.lineNo]; if (!d) return;
-      var pq = Number(row.qty) || 0, pp = Number(row.price) || 0, pa = apCalc_({ qty: pq, price: pp }, row.vatMode, Number(row.pct) || 0).amount;
+      var pq = Number(row.qty) || 0, pp = Number(row.price) || 0, pd = Number(row.disc) || 0, pc = apCalc_({ qty: pq, price: pp, disc: pd }, row.vatMode, Number(row.pct) || 0), pa = apR2_(pc.amount - pc.disc);   // มูลค่าสุทธิหลังส่วนลด
       var rq = Math.max(0, Math.round((pq - d.q) * 10000) / 10000), ra = Math.max(0, apR2_(pa - d.amt));
       if (rq <= 0 || ra <= 0.005) { rq = 0; ra = 0; }
       var price = rq ? Math.round((String(row.vatMode) === 'inc' ? ra * 1.07 : ra) / rq * 1e6) / 1e6 : pp;   // ราคาต่อหน่วยใหม่ให้ จำนวนคงเหลือ × ราคา = มูลค่าคงเหลือ
       row.recvQty = Math.round(((Number(row.recvQty) || 0) + Math.min(pq, d.q)) * 10000) / 10000;
-      row.qty = rq; row.price = price;
+      row.qty = rq; row.price = price; row.disc = '';   // ส่วนลดเดิมรวมอยู่ในราคาใหม่แล้ว
       var c = apCalc_({ qty: rq, price: price }, row.vatMode, Number(row.pct) || 0);
       row.amount = c.amount; row.vat = c.vat; row.lineTotal = c.lineTotal; row.wht = c.wht; row.updatedAt = now;
-      logLines.push({ n: row.lineNo, desc: row.desc, q: d.q, amt: apR2_(d.amt), a: apR2_(d.a), pq: pq, pp: pp, rq: Math.min(pq, d.q) });
+      logLines.push({ n: row.lineNo, desc: row.desc, q: d.q, amt: apR2_(d.amt), a: apR2_(d.a), pq: pq, pp: pp, pd: pd, rq: Math.min(pq, d.q) });
     });
     var log = []; try { log = rows[0].poLog ? JSON.parse(rows[0].poLog) : []; } catch (e) { log = []; }
     log.push({ at: now, billId: billId, invNo: x.invNo, date: x.issueDate, round: x.payRound, total: apR2_(total), pay: apR2_(pay), lines: logLines });
@@ -325,10 +340,10 @@ function apRestorePo_(ss, poId, billId) {
   (ent.lines || []).forEach(function (el) {
     var row = rows.filter(function (r) { return Number(r.lineNo) === Number(el.n); })[0]; if (!row) return;
     var back = el.rq != null ? Number(el.rq) : Number(el.q) || 0;
-    if (el.pq != null) { row.qty = Number(el.pq) || 0; row.price = Number(el.pp) || 0; }   // คืนจำนวน + ราคาก่อนหักบิลนี้
+    if (el.pq != null) { row.qty = Number(el.pq) || 0; row.price = Number(el.pp) || 0; row.disc = Number(el.pd) || ''; }   // คืนจำนวน + ราคาก่อนหักบิลนี้
     else row.qty = Math.round(((Number(row.qty) || 0) + (Number(el.q) || 0)) * 10000) / 10000;
     row.recvQty = Math.max(0, Math.round(((Number(row.recvQty) || 0) - back) * 10000) / 10000) || '';
-    var c = apCalc_({ qty: row.qty, price: Number(row.price) || 0 }, row.vatMode, Number(row.pct) || 0);
+    var c = apCalc_({ qty: row.qty, price: Number(row.price) || 0, disc: row.disc }, row.vatMode, Number(row.pct) || 0);
     row.amount = c.amount; row.vat = c.vat; row.lineTotal = c.lineTotal; row.wht = c.wht;
   });
   rows[0].poLog = log.filter(function (e) { return e !== ent; });
@@ -400,7 +415,7 @@ function apImportBills(token, bills) {
         var c = apCalc_(l, x.vatMode, x.pct);
         add.push(purRowValues_(sh, 'ap_lines', { id: purId_('APL'), billId: billId, payRound: x.payRound, category: x.category, vendor: x.vendor, taxId: x.taxId ? "'" + x.taxId : '',
           issueDate: x.issueDate, creditDays: x.creditDays, dueDate: x.dueDate, invNo: x.invNo ? "'" + x.invNo : '', lineNo: i + 1, desc: l.desc, qty: l.qty, price: l.price,
-          vatMode: x.vatMode, pct: x.pct, wht: c.wht, amount: c.amount, vat: c.vat, lineTotal: c.lineTotal, note: i ? '' : x.note, files: '', createdAt: now, updatedAt: '',
+          vatMode: x.vatMode, pct: x.pct, wht: c.wht, disc: c.disc || '', amount: c.amount, vat: c.vat, lineTotal: c.lineTotal, note: i ? '' : x.note, files: '', createdAt: now, updatedAt: '',
           kind: x.kind === 'po' ? AP_PO_ : '' }, head));
       });
     });

@@ -75,10 +75,12 @@
     return { due: due, cut: cd, round: rs.indexOf(nom) >= 0 ? nom : defaultRound(nom) };
   }
   function roundFor(iso, credit) { return roundInfo(iso, credit).round; }
+  // ผู้ใช้ขอ 23/11/69: ส่วนลด/มัดจำ (disc, บาท ต่อบรรทัด) หักก่อนคิด VAT · หัก ณ ที่จ่าย = มูลค่ารายการ × % (เหมือนเดิม)
+  // รวม = มูลค่ารายการ − ส่วนลด/มัดจำ + VAT · ชำระ = รวม − หัก ณ ที่จ่าย
   function calc(l, mode, pct) {
-    var amount = mode === 'inc' ? l.qty * l.price * 100 / 107 : l.qty * l.price;
-    var vat = mode === 'none' ? 0 : r2(amount * 0.07);
-    return { amount: r2(amount), vat: vat, total: r2(r2(amount) + vat), wht: r2(amount * pct / 100) };
+    var amount = r2(mode === 'inc' ? l.qty * l.price * 100 / 107 : l.qty * l.price), disc = r2(Number(l.disc) || 0);
+    var vat = mode === 'none' ? 0 : r2((amount - disc) * 0.07);
+    return { amount: amount, disc: disc, vat: vat, total: r2(amount - disc + vat), wht: r2(amount * (Number(pct) || 0) / 100) };
   }
   P.reset = function () { P.data = null; P.cur = null; P.round = ''; P.inc = {}; };
   function ensure(title, fn) {
@@ -428,7 +430,7 @@
       var b = by[l.billId];
       if (!b) { b = by[l.billId] = { kind: l.kind || '', billId: l.billId, payRound: l.payRound, category: l.category, vendor: l.vendor, taxId: l.taxId, issueDate: l.issueDate, creditDays: l.creditDays, dueDate: l.dueDate, invNo: l.invNo, vatMode: l.vatMode, pct: Number(l.pct) || 0, note: '', files: String(l.files || '').split(/\s+/).filter(Boolean), createdAt: l.updatedAt || l.createdAt, lines: [], amount: 0, vat: 0, total: 0, wht: 0 }; out.push(b); }
       if (l.note) b.note = l.note;
-      b.lines.push(l); b.amount += Number(l.amount) || 0; b.vat += Number(l.vat) || 0; b.total += Number(l.lineTotal) || 0; b.wht += Number(l.wht) || 0;
+      b.lines.push(l); b.amount += Number(l.amount) || 0; b.disc = (b.disc || 0) + (Number(l.disc) || 0); b.vat += Number(l.vat) || 0; b.total += Number(l.lineTotal) || 0; b.wht += Number(l.wht) || 0;
     });
     out.forEach(function (b) {
       b.lines.sort(function (x, y) { return x.lineNo - y.lineNo; }); b.pay = r2(b.total - b.wht);
@@ -444,7 +446,7 @@
     var v = vendorOf(b.vendor);
     P.cur = Object.assign(newBill(b.kind), { billId: b.billId, category: b.category, vendor: b.vendor, taxId: b.taxId, invNo: b.invNo, issueDate: b.issueDate, creditDays: b.creditDays, payRound: b.payRound,
       vatMode: b.vatMode || 'exc', pct: b.pct, note: b.note, bank: v ? v.bank || '' : '', keepFiles: b.files, autoRound: false, poRef: b.poRef, log: b.log,
-      lines: b.lines.map(function (l) { return { desc: l.desc, qty: Number(l.qty) || 0, price: Number(l.price) || 0, recv: Number(l.recvQty) || 0 }; }) });
+      lines: b.lines.map(function (l) { return { desc: l.desc, qty: Number(l.qty) || 0, price: Number(l.price) || 0, disc: Number(l.disc) || 0, recv: Number(l.recvQty) || 0 }; }) });
     var pg = b.kind === 'po' ? 'a_appo' : 'a_apin';
     if (state.page !== pg && !(state.page === 'a_appo' && pg === 'a_apin')) go(pg); else form();
   }
@@ -465,7 +467,7 @@
   function poCtx(id) {
     var b = billsOf(P.data.lines.filter(function (l) { return l.billId === id && l.kind === 'po'; }))[0];
     if (!b) return null;
-    return { id: id, lines: b.lines.map(function (l) { return { n: Number(l.lineNo), desc: l.desc, qty: Number(l.qty) || 0, price: Number(l.price) || 0, recv: Number(l.recvQty) || 0 }; }),
+    return { id: id, lines: b.lines.map(function (l) { return { n: Number(l.lineNo), desc: l.desc, qty: Number(l.qty) || 0, price: Number(l.price) || 0, disc: Number(l.disc) || 0, recv: Number(l.recvQty) || 0 }; }),
       vatMode: b.vatMode || 'exc', pct: b.pct, log: b.log, pay: b.pay, total: b.total, vendor: b.vendor, round: b.payRound };
   }
   // นำเข้าบิลตามปกติ (ผู้ใช้ขอ 23/11/69): ตรวจ PO ล่วงหน้าที่รอบิลของบริษัทเดียวกัน (สแกนรวมหลายใบก็ตรวจทีละใบ)
@@ -541,10 +543,10 @@
     var g = {};
     counted(b).forEach(function (l, i) {
       if (!l.po) return;
-      var x = g[l.po] = g[l.po] || { n: l.po, qs: {}, q: 0, amount: 0, vat: 0, total: 0, wht: 0, rows: 0 };
+      var x = g[l.po] = g[l.po] || { n: l.po, qs: {}, q: 0, amount: 0, disc: 0, vat: 0, total: 0, wht: 0, rows: 0 };
       var c = calc(l, b.vatMode, b.pct), qk = q0(l.qty);
       if (!x.qs[qk]) { x.qs[qk] = 1; x.q += Number(l.qty) || 0; }
-      x.amount += c.amount; x.vat += c.vat; x.total += c.total; x.wht += c.wht; x.rows++;
+      x.amount += r2(c.amount - c.disc); x.disc += c.disc; x.vat += c.vat; x.total += c.total; x.wht += c.wht; x.rows++;
     });
     Object.keys(g).forEach(function (k) { var x = g[k]; x.unit = x.q ? x.amount / x.q : 0; });
     return g;
@@ -552,7 +554,7 @@
   // PO หลังหักบิลนี้ (เหมือน apDeductPo_ หลังบ้าน): จำนวนคงเหลือ = PO − จำนวนในบิล · มูลค่าคงเหลือ = มูลค่า PO − มูลค่าในบิล
   // มูลค่าในบิลเกิน PO หรือจำนวนครบ = บรรทัดนี้ใช้หมด (ใช้ยอดตามบิลทั้งหมด)
   function poAfter(p, x, po) {
-    var amt = calc({ qty: p.qty, price: p.price }, po.vatMode, po.pct).amount;
+    var pc = calc({ qty: p.qty, price: p.price, disc: p.disc }, po.vatMode, po.pct), amt = r2(pc.amount - pc.disc);
     if (!x) return { amt: amt, q: p.qty, ra: amt, done: p.qty <= 0, over: 0 };
     var rq = Math.max(0, Math.round((p.qty - x.q) * 10000) / 10000), ra = Math.max(0, r2(amt - x.amount));
     var done = rq <= 0 || ra <= 0.005;
@@ -753,7 +755,7 @@
       + '</div>'
       + '<div class="aphl"><b>ราคา' + (po ? 'ที่ตกลง' : 'ในบิล') + '</b><div class="apchips sm" id="apVat">' + Object.keys(VAT_SHORT).map(function (k) {
           return '<label><input type="radio" name="apVat" value="' + k + '"' + (b.vatMode === k ? ' checked' : '') + '><span>' + VAT_SHORT[k] + '</span></label>'; }).join('') + '</div></div>'
-      + '<div class="cpwrap"><table class="aptab' + (po ? ' po' : '') + '"><thead><tr><th>' + (po ? 'ชื่อสินค้า' : 'คำอธิบาย') + (b.fromPo ? ' / หักจาก PO' : '') + '</th><th>' + (po && b.log && b.log.length ? 'จำนวนค้าง' : 'จำนวน') + '</th><th>ราคา</th><th>มูลค่ารายการ</th><th>VAT</th><th>รวม</th><th class="apred">หัก ณ ที่จ่าย</th><th></th></tr></thead><tbody id="apLines"></tbody></table></div>'
+      + '<div class="cpwrap"><table class="aptab' + (po ? ' po' : '') + '"><thead><tr><th>' + (po ? 'ชื่อสินค้า' : 'คำอธิบาย') + (b.fromPo ? ' / หักจาก PO' : '') + '</th><th>' + (po && b.log && b.log.length ? 'จำนวนค้าง' : 'จำนวน') + '</th><th>ราคา</th><th>มูลค่ารายการ</th><th class="apred">ส่วนลด/มัดจำ<small>บาท หรือ %</small></th><th>VAT<small>หลังหักส่วนลด</small></th><th>รวม</th><th class="apred">หัก ณ ที่จ่าย</th><th></th></tr></thead><tbody id="apLines"></tbody></table></div>'
       + '<button type="button" class="btn apsm" id="apAdd">+ เพิ่มรายการ</button>'
       + '<div id="apSum"></div><div id="apPoSum"></div>'
       + '<div class="apgrid"><label class="apwide">บัญชีธนาคารของผู้ขาย (แสดงที่แถวรวมในรายงาน)<input id="apBank" value="' + esc(b.bank) + '" placeholder="เช่น ธ.กสิกรไทย 123-4-56789-0 บริษัท …"></label>'
@@ -839,8 +841,8 @@
     var ri = roundInfo(b.issueDate || P.data.today, b.creditDays), rh = $('apRoundHint');
     if (rh) rh.textContent = 'ครบเครดิต ' + slash(ri.due) + ' (เครดิต ' + (Number(b.creditDays) || 0) + ' วัน · ' + (+ri.due.slice(8) <= ri.cut ? 'ครบไม่เกินวันที่ ' + ri.cut + ' → จ่ายเดือนนั้น' : 'ครบหลังวันที่ ' + ri.cut + ' → จ่ายเดือนถัดไป') + ') → จ่าย ' + dotAD(ri.round, true) + (b.payRound && b.payRound !== ri.round ? ' (เลือกรอบอื่นไว้)' : '');
     if (dates && b.autoRound) { b.payRound = ri.round; var s = $('apRound'); if (s && s.querySelector('option[value="' + b.payRound + '"]')) s.value = b.payRound; }
-    var t = { amount: 0, vat: 0, total: 0, wht: 0 };
-    b.lines.forEach(function (l) { if (l.dup) return; var c = calc(l, b.vatMode, b.pct); t.amount += c.amount; t.vat += c.vat; t.total += c.total; t.wht += c.wht; });
+    var t = { amount: 0, disc: 0, vat: 0, total: 0, wht: 0 };
+    b.lines.forEach(function (l) { if (l.dup) return; var c = calc(l, b.vatMode, b.pct); t.amount += c.amount; t.disc += c.disc; t.vat += c.vat; t.total += c.total; t.wht += c.wht; });
     var pay = r2(t.total - t.wht), r = b.read, checks = '';
     poSum();
     if (r) {
@@ -851,7 +853,7 @@
       if (!b.invNo) checks += chk('warn', 'อ่านเลขที่ใบกำกับจากภาพไม่ได้ — พิมพ์เองตามภาพ (กด "ข้อความที่อ่านได้" ใต้ภาพเพื่อดูว่าระบบอ่านได้อะไร)');
       if (!vendorOf(b.vendor)) checks += chk('warn', 'ผู้ขายใหม่ — ระบบจะจำ หมวด เครดิต แบบ VAT % และบัญชีธนาคารไว้ใช้ครั้งต่อไป');
     }
-    $('apSum').innerHTML = '<div class="apsum"><span>มูลค่ารายการ<b>' + m2(t.amount) + '</b></span><span>VAT<b>' + m2(t.vat) + '</b></span><span>รวม<b>' + m2(t.total) + '</b></span><span class="apred">หัก ' + (b.pct || 0) + '%<b>' + m2(t.wht) + '</b></span><span class="appay">ชำระ<b>' + m2(pay) + '</b></span></div>' + (checks ? '<div class="a7checks">' + checks + '</div>' : '');
+    $('apSum').innerHTML = '<div class="apsum"><span>มูลค่ารายการ<b>' + m2(t.amount) + '</b></span>' + (t.disc ? '<span class="apred">ส่วนลด/มัดจำ<b>−' + m2(t.disc) + '</b></span>' : '') + '<span>VAT<b>' + m2(t.vat) + '</b></span><span>รวม<b>' + m2(t.total) + '</b></span><span class="apred">หัก ' + (b.pct || 0) + '%<b>' + m2(t.wht) + '</b></span><span class="appay">ชำระ<b>' + m2(pay) + '</b></span></div>' + (checks ? '<div class="a7checks">' + checks + '</div>' : '');
   }
   function drawLines() {
     var b = P.cur;
@@ -864,13 +866,15 @@
           return '<option value="' + p.n + '"' + (l.po === p.n ? ' selected' : '') + (p.qty <= 0 && l.po !== p.n ? ' disabled' : '') + '>หัก PO: ' + p.n + '. ' + esc(p.desc || '-') + ' (ค้าง ' + q0(p.qty) + ')</option>'; }).join('') + '</select>'
         + (l.dup || l.dupSet ? '<button type="button" class="apdupb' + (l.dup ? ' on' : '') + '" data-dup="' + i + '">' + (l.dup ? 'ซ้ำ · ไม่นับ — กดเพื่อนับด้วย' : 'นับรายการนี้ด้วย — กดถ้าซ้ำ') + '</button>' : '') + '</div>' : '';
       return '<tr data-row="' + i + '"' + (l.dup ? ' class="apdupl"' : set ? ' class="apset"' : '') + '><td><input data-i="' + i + '" data-k="desc" value="' + esc(l.desc) + '">' + map + '</td><td><input class="apn" data-i="' + i + '" data-k="qty" inputmode="decimal" value="' + esc(l.qty) + '"></td><td><input class="apn" data-i="' + i + '" data-k="price" inputmode="decimal" value="' + esc(l.price) + '"></td>'
-        + '<td class="apv" data-c="amount">' + m2(c.amount) + '</td><td class="apv" data-c="vat">' + m2(c.vat) + '</td><td class="apv" data-c="total">' + m2(c.total) + '</td><td class="apv apred" data-c="wht">' + m2(c.wht) + '</td>'
+        + '<td class="apv" data-c="amount">' + m2(c.amount) + '</td><td><input class="apn apdisc" data-i="' + i + '" data-k="disc" inputmode="decimal" value="' + (c.disc ? esc(l.disc) : '') + '" placeholder="0" aria-label="ส่วนลด/มัดจำ"></td><td class="apv" data-c="vat">' + m2(c.vat) + '</td><td class="apv" data-c="total">' + m2(c.total) + '</td><td class="apv apred" data-c="wht">' + m2(c.wht) + '</td>'
         + '<td>' + (b.lines.length > 1 ? '<button type="button" class="apx" data-del="' + i + '" aria-label="ลบรายการ">✕</button>' : '') + '</td></tr>'
         + (lastOf[l.po] === i ? '<tr class="apgrp" data-grp="' + l.po + '">' + grpCells(G[l.po], b) + '</tr>' : '');
     }).join('');
     on('#apLines input', 'input', function (el) {
       var i = +el.getAttribute('data-i'), k = el.getAttribute('data-k'), l = b.lines[i];
+      if (k === 'disc' && /%\s*$/.test(el.value)) l.discPct = num(el.value); else if (k === 'disc') delete l.discPct;
       l[k] = k === 'desc' ? el.value : num(el.value);
+      discOf(l, b);
       var c = calc(l, b.vatMode, b.pct), tr = el.closest('tr');
       ['amount', 'vat', 'total', 'wht'].forEach(function (f) { tr.querySelector('[data-c=' + f + ']').textContent = m2(c[f]); });
       updGroups(); refresh();
@@ -891,16 +895,19 @@
     var b = P.cur;
     Array.prototype.forEach.call($('apLines').querySelectorAll('tr[data-row]'), function (tr) {
       var l = b.lines[+tr.getAttribute('data-row')]; if (!l) return;
+      discOf(l, b);
       var c = calc(l, b.vatMode, b.pct);
       ['amount', 'vat', 'total', 'wht'].forEach(function (f) { var el = tr.querySelector('[data-c=' + f + ']'); if (el) el.textContent = m2(c[f]); });
     });
     updGroups();
   }
   // แถว "รวมหัก PO" ใต้กลุ่มบรรทัดที่หัก PO บรรทัดเดียวกัน (ผู้ใช้ขอ 23/11/69): จำนวน (นับครั้งเดียวถ้าเท่ากัน) · ราคา/หน่วยรวม = มูลค่ารวม ÷ จำนวน · มูลค่า / VAT / รวม / หัก
+  // ส่วนลด/มัดจำ พิมพ์เป็น % ได้ (เช่น 5%) → คิดเป็นบาทจากมูลค่ารายการ
+  function discOf(l, b) { if (l.discPct != null) l.disc = r2(calc({ qty: l.qty, price: l.price }, b.vatMode, 0).amount * l.discPct / 100); }
   function grpCells(x, b) {
     var p = b.po.lines.filter(function (y) { return y.n === x.n; })[0] || {};
     return '<td>รวมหัก PO ' + x.n + '. ' + esc(p.desc || '') + '<small>' + x.rows + ' บรรทัด · จำนวนเท่ากันนับครั้งเดียว</small></td><td class="apv">' + q0(x.q) + '</td><td class="apv">' + m2(x.unit) + '</td>'
-      + '<td class="apv">' + m2(x.amount) + '</td><td class="apv">' + m2(x.vat) + '</td><td class="apv">' + m2(x.total) + '</td><td class="apv apred">' + m2(x.wht) + '</td><td></td>';
+      + '<td class="apv">' + m2(x.amount + x.disc) + '</td><td class="apv apred">' + (x.disc ? '−' + m2(x.disc) : '') + '</td><td class="apv">' + m2(x.vat) + '</td><td class="apv">' + m2(x.total) + '</td><td class="apv apred">' + m2(x.wht) + '</td><td></td>';
   }
   function updGroups() {
     var b = P.cur; if (!b.fromPo) return;
@@ -950,8 +957,9 @@
   // ==================== โครงรายงาน (ใช้ทั้งหน้าเว็บและ Excel) ====================
   // สไตล์ตามไฟล์ต้นแบบ: Angsana New · หัว 18 ตัวหนา · ข้อมูล 18 · เส้นบาง (thin) ซ้าย-ขวา / เส้นจาง (hair) บน-ล่าง · แถวรวมผู้ขายพื้น #FFF2CC ตัวแดง · ช่องชำระรวมพื้นเหลือง
   var RED = 'FF0000', NF_AMT = '#,##0.00_);(#,##0.00)', NF2 = '#,##0.00', NF_ACC = '_(* #,##0.00_);_(* \\(#,##0.00\\);_(* "-"??_);_(@_)';
-  var WIDTHS = [3.85546875, 8.5703125, 32.42578125, 15.7109375, 16.5703125, 19, 56.85546875, 13.28515625, 15.7109375, 12, 13.28515625, 17.5703125, 17.5703125, 17.5703125, 17.5703125];
-  var COLS = 'ABCDEFGHIJKLMNO';
+  // คอลัมน์ (ผู้ใช้ขอ 23/11/69): J % หัก ณ ที่จ่าย · K ส่วนลด/มัดจำ · L หัก ณ ที่จ่าย (ใหม่) · M มูลค่ารายการ · N VAT · O รวม · P ชำระ
+  var WIDTHS = [3.85546875, 8.5703125, 32.42578125, 15.7109375, 16.5703125, 19, 56.85546875, 13.28515625, 15.7109375, 10, 15, 15, 17.5703125, 17.5703125, 17.5703125, 17.5703125];
+  var COLS = 'ABCDEFGHIJKLMNOP';
   function S(o) { return o; }
   var ST = {
     t20: S({ sz: 20, b: 1, h: 'center' }), t20r: S({ sz: 20, b: 1, h: 'right' }), title: S({ sz: 20, b: 1, h: 'center', fill: 'D9EAD3' }),
@@ -989,13 +997,13 @@
       sh.cats.forEach(function (ck, ci) {
         if (ci) R(28.5);   // เว้นแถวระหว่างหมวด
         var c = cat(ck), r1 = R(28.5);
-        'BCDEF'.split('').forEach(function (x) { put(r1, x, '', ST.t20); }); 'HLMNO'.split('').forEach(function (x) { put(r1, x, '', ST.t20r); });
+        'BCDEF'.split('').forEach(function (x) { put(r1, x, '', ST.t20); }); 'HLMNOP'.split('').forEach(function (x) { put(r1, x, '', ST.t20r); });
         put(r1, 'G', c.title + ' ' + payTxt, si ? ST.title : ST.title18); put(r1, 'I', 'อัพเดทวันที่', ST.upd); merge('I' + r1, 'J' + r1);
         if (si === 1 && ci) put(r1, 'K', upd, ST.updv, '=K1'); else put(r1, 'K', upd, ST.updv);
         var rB = R(28.5); put(rB, 'B', c.title + ' ' + payTxt, si ? ST.big : ST.big18, '=G' + r1); put(rB, 'C', '', si ? ST.big : ST.big18); merge('B' + rB, 'C' + rB);
         var r3 = R(48.95);
         [['B', 'ผู้ขาย/ผู้จ่ายเงิน', ST.hd], ['C', '', ST.hd], ['D', 'วันที่ออก', ST.hd], ['E', 'วันที่ครบกำหนด', ST.hd], ['F', 'เลขที่ใบกำกับภาษี', ST.hd], ['G', 'คำอธิบาย', ST.hd], ['H', 'จำนวน', ST.hd], ['I', 'ราคา', ST.hd],
-          ['J', '%', ST.hdR], ['K', 'ส่วนลด/มัดจำ/หัก ณที่จ่าย', ST.hdK], ['L', 'มูลค่ารายการ', ST.hd], ['M', 'ภาษีมูลค่าเพิ่ม', ST.hd], ['N', 'รวม', ST.hd], ['O', 'ชำระ', ST.hdR]].forEach(function (x) { put(r3, x[0], x[1], x[2]); });
+          ['J', '% หัก ณ ที่จ่าย', ST.hdK], ['K', 'ส่วนลด/มัดจำ', ST.hdK], ['L', 'หัก ณ ที่จ่าย', ST.hdK], ['M', 'มูลค่ารายการ', ST.hd], ['N', 'ภาษีมูลค่าเพิ่ม', ST.hd], ['O', 'รวม', ST.hd], ['P', 'ชำระ', ST.hdR]].forEach(function (x) { put(r3, x[0], x[1], x[2]); });
         merge('B' + r3, 'C' + r3);
         var first = r3 + 1, totRows = [], secTotal = 0;
         var bills = billsOf(lines.filter(function (l) { return l.category === ck; }));
@@ -1004,7 +1012,7 @@
         vs.sort(function (a, b) { return (vOrder[norm(a.name)] || 999) - (vOrder[norm(b.name)] || 999) || a.name.localeCompare(b.name, 'th'); });
         if (!vs.length) vs.push({ name: '', bills: [{ empty: 1, lines: [{}] }] });
         vs.forEach(function (v) {
-          var vStart = 0, anyWht = false, sums = { K: 0, L: 0, M: 0, N: 0, O: 0 };
+          var vStart = 0, anyWht = false, sums = { K: 0, L: 0, M: 0, N: 0, O: 0, P: 0 };
           v.bills.sort(function (a, b) { return String(a.issueDate || '').localeCompare(String(b.issueDate || '')) || String(a.invNo || '').localeCompare(String(b.invNo || '')); });
           v.bills.forEach(function (b) {
             var bStart = 0, nSum = 0, kSum = 0;
@@ -1015,9 +1023,9 @@
               if (!b.empty) sh.rows[r - 1].bill = b.billId;
               put(r, 'A', '', ST.no, '=IF(B' + x + '="","",COUNTA($B$' + first + ':B' + x + '))');
               put(r, 'B', r === vStart ? v.name : '', ST.ven); put(r, 'C', '', ST.venC);
-              if (b.empty) { 'DEFGHIJKLMNO'.split('').forEach(function (cc) { put(r, cc, '', /[LMN]/.test(cc) ? ST.amt : cc === 'O' ? ST.pay : cc === 'D' || cc === 'E' ? ST.d : ST.desc); }); return; }
+              if (b.empty) { 'DEFGHIJKLMNOP'.split('').forEach(function (cc) { put(r, cc, '', /[MNO]/.test(cc) ? ST.amt : cc === 'P' ? ST.pay : cc === 'D' || cc === 'E' ? ST.d : ST.desc); }); return; }
               var pct = Number(b.pct) || 0, qty = Number(l.qty) || 0, price = Number(l.price) || 0;
-              var c = calc({ qty: qty, price: price }, b.vatMode, pct);
+              var c = calc({ qty: qty, price: price, disc: l.disc }, b.vatMode, pct);
               if (!li) {
                 put(r, 'D', b.issueDate ? { date: b.issueDate } : '', ST.d);
                 put(r, 'E', b.dueDate ? { date: b.dueDate } : '', ST.d, b.issueDate ? (function (c) { c = Math.max(0, Math.round(Number(c) || 0)); var mo = Math.floor(c / 30), dd = c % 30; return mo ? '=EDATE(D' + x + ',' + mo + ')' + (dd ? '+' + dd : '') : '=+D' + x + '+' + dd; })(b.creditDays) : null);
@@ -1029,33 +1037,34 @@
               put(r, 'H', qty, Math.round(qty) === qty ? (isPo ? ST.qtyR : ST.qty) : (isPo ? ST.qty2R : ST.qty2));
               put(r, 'I', price, price < 0 || isPo ? (isPo ? ST.priceR : ST.priceNeg) : ST.price);
               put(r, 'J', pct || '', ST.pct);
-              put(r, 'K', pct ? c.wht : '', ST.wht, pct ? '=+L' + x + '*' + pct + '%' : null);
-              put(r, 'L', c.amount, ST.amt, b.vatMode === 'inc' ? '=H' + x + '*I' + x + '*100/107' : '=+H' + x + '*I' + x);
-              put(r, 'M', c.vat, ST.amt, b.vatMode === 'none' ? null : '=ROUND(L' + x + '*7%,2)');
-              put(r, 'N', c.total, ST.amt, '=+L' + x + '+M' + x);
-              put(r, 'O', '', ST.pay);
-              nSum += c.total; kSum += pct ? c.wht : 0; if (pct) anyWht = true;
-              sums.K += pct ? c.wht : 0; sums.L += c.amount; sums.M += c.vat; sums.N += c.total;
+              put(r, 'K', c.disc ? c.disc : '', ST.wht);
+              put(r, 'L', pct ? c.wht : '', ST.wht, pct ? '=+M' + x + '*J' + x + '%' : null);
+              put(r, 'M', c.amount, ST.amt, b.vatMode === 'inc' ? '=H' + x + '*I' + x + '*100/107' : '=+H' + x + '*I' + x);
+              put(r, 'N', c.vat, ST.amt, b.vatMode === 'none' ? null : '=ROUND((M' + x + '-K' + x + ')*7%,2)');   // VAT จากยอดหลังหักส่วนลด/มัดจำ
+              put(r, 'O', c.total, ST.amt, '=+M' + x + '-K' + x + '+N' + x);
+              put(r, 'P', '', ST.pay);
+              nSum += c.total; kSum += pct ? c.wht : 0; if (pct || c.disc) anyWht = true;
+              sums.K += c.disc; sums.L += pct ? c.wht : 0; sums.M += c.amount; sums.N += c.vat; sums.O += c.total;
             });
             if (b.empty) return;
             var bEnd = bStart + b.lines.length - 1, ns = [], ks = [];
-            for (var q = bStart; q <= bEnd; q++) { ns.push('N' + q); if (Number(b.pct)) ks.push('K' + q); }
+            for (var q = bStart; q <= bEnd; q++) { ns.push('O' + q); if (Number(b.pct)) ks.push('L' + q); }
             var payV = r2(nSum - kSum);
-            put(bStart, 'O', payV, ST.pay, '=+' + ns.join('+') + (ks.length ? '-' + ks.join('-') : ''));
-            if (bEnd > bStart) merge('O' + bStart, 'O' + bEnd);
-            sums.O += payV;
+            put(bStart, 'P', payV, ST.pay, '=+' + ns.join('+') + (ks.length ? '-' + ks.join('-') : ''));
+            if (bEnd > bStart) merge('P' + bStart, 'P' + bEnd);
+            sums.P += payV;
           });
           var tr = R(26.25), from = vStart, to = tr - 1;
           put(tr, 'A', '', ST.no, '=IF(B' + tr + '="","",COUNTA($B$' + first + ':B' + tr + '))');
           var vend = vendorOf(v.name), bankTxt = vend && vend.bank ? vend.bank : 'ธ.';
           put(tr, 'B', '', ST.bankB); put(tr, 'C', bankTxt, ST.bank);
-          if (anyWht) { 'DEFG'.split('').forEach(function (cc) { put(tr, cc, '', ST.edge); }); merge('C' + tr, 'G' + tr); 'HIJ'.split('').forEach(function (cc) { put(tr, cc, '', ST.bankF); }); put(tr, 'K', r2(sums.K), ST.sumK, '=SUM(K' + from + ':K' + to + ')'); }
-          else { 'DEFGHI'.split('').forEach(function (cc) { put(tr, cc, '', ST.edge); }); put(tr, 'J', '', ST.edgeR); merge('C' + tr, 'J' + tr); put(tr, 'K', '', ST.bankF); }
-          ['L', 'M', 'N'].forEach(function (cc) { put(tr, cc, r2(sums[cc]), ST.sumA, '=SUM(' + cc + from + ':' + cc + to + ')'); });
-          put(tr, 'O', r2(sums.O), ST.sumO, '=SUM(O' + from + ':O' + to + ')');
-          totRows.push(tr); secTotal += sums.O;
+          if (anyWht) { 'DEFG'.split('').forEach(function (cc) { put(tr, cc, '', ST.edge); }); merge('C' + tr, 'G' + tr); 'HIJ'.split('').forEach(function (cc) { put(tr, cc, '', ST.bankF); }); ['K', 'L'].forEach(function (cc) { put(tr, cc, sums[cc] ? r2(sums[cc]) : '', ST.sumK, sums[cc] ? '=SUM(' + cc + from + ':' + cc + to + ')' : null); }); }
+          else { 'DEFGHI'.split('').forEach(function (cc) { put(tr, cc, '', ST.edge); }); put(tr, 'J', '', ST.edgeR); merge('C' + tr, 'J' + tr); put(tr, 'K', '', ST.bankF); put(tr, 'L', '', ST.bankF); }
+          ['M', 'N', 'O'].forEach(function (cc) { put(tr, cc, r2(sums[cc]), ST.sumA, '=SUM(' + cc + from + ':' + cc + to + ')'); });
+          put(tr, 'P', r2(sums.P), ST.sumO, '=SUM(P' + from + ':P' + to + ')');
+          totRows.push(tr); secTotal += sums.P;
         });
-        put(rB, 'D', r2(secTotal), si ? ST.bigTot : ST.bigTot18, '=+' + totRows.map(function (t) { return 'O' + t; }).join('+')); put(rB, 'E', '', si ? ST.bigTot : ST.bigTot18); merge('D' + rB, 'E' + rB);
+        put(rB, 'D', r2(secTotal), si ? ST.bigTot : ST.bigTot18, '=+' + totRows.map(function (t) { return 'P' + t; }).join('+')); put(rB, 'E', '', si ? ST.bigTot : ST.bigTot18); merge('D' + rB, 'E' + rB);
         catTotals[ck] = { total: r2(secTotal), titleRow: r1, sumRow: rB, sheet: sh.name };
       });
       if (si !== 1) return;
@@ -1113,7 +1122,7 @@
     sh.rows.forEach(function (row, ri) {
       var r = ri + 1;
       h += '<tr style="height:' + Math.round(row.h * 1.25) + 'px"' + (row.bill ? ' data-bill="' + esc(row.bill) + '" tabindex="0" class="apbill' + (row.po ? ' appo' : '') + '"' + (row.po ? ' title="PO ล่วงหน้า — ยังไม่ได้รับบิล"' : '') : '') + '>';
-      for (var ci = 0; ci < 15; ci++) {
+      for (var ci = 0; ci < COLS.length; ci++) {
         var k = COLS[ci] + r; if (cover[k]) continue;
         var c = row.c[COLS[ci]] || { v: '', s: {} }, s = c.s || {}, sp = span[k];
         var css = 'font-size:' + Math.round((s.sz || 18) * 0.66) + 'px;' + (s.b ? 'font-weight:700;' : '') + (s.c ? 'color:#' + s.c + ';' : '') + (s.fill && s.fill !== 'FFFFFF' ? 'background:#' + s.fill + ';' : '') + 'text-align:' + (s.h || (typeof c.v === 'number' ? 'right' : 'left')) + ';'
@@ -1152,7 +1161,7 @@
         properties: { defaultRowHeight: 28.5, defaultColWidth: 12.5703125 },
         pageSetup: { paperSize: 9, orientation: 'landscape', scale: sh.scale, fitToPage: false, fitToHeight: 0,
           margins: si ? { left: 0.0389, right: 0.118, top: 0.157, bottom: 0.0785, header: 0.157, footer: 0.0785 } : { left: 0.118, right: 0.0785, top: 0.157, bottom: 0, header: 0, footer: 0 },
-          printArea: 'A1:O' + sh.rows.length }
+          printArea: 'A1:P' + sh.rows.length }
       });
       WIDTHS.forEach(function (w, i) { ws.getColumn(i + 1).width = w; ws.getColumn(i + 1).font = { name: 'Angsana New', size: 18 }; });
       sh.rows.forEach(function (row, ri) {
@@ -1189,14 +1198,14 @@
       if (!P.round || !list.some(function (r) { return r.nominal === P.round; })) P.round = (list.filter(function (r) { return r.actual >= today && cnt[r.nominal]; })[0] || list.filter(function (r) { return r.actual >= today; })[0] || list[list.length - 1] || {}).nominal || '';
       var model = P.model = P.round ? buildModel(P.round, P.inc[P.round]) : null;
       var bills = model ? billsOf(model.lines) : [];
-      var tot = bills.reduce(function (t, b) { t.pay += b.pay; t.wht += b.wht; t.vat += b.vat; if (b.kind === 'po') { t.po++; t.poPay += b.pay; } return t; }, { pay: 0, wht: 0, vat: 0, po: 0, poPay: 0 });
+      var tot = bills.reduce(function (t, b) { t.pay += b.pay; t.wht += b.wht; t.disc += b.disc || 0; t.vat += b.vat; if (b.kind === 'po') { t.po++; t.poPay += b.pay; } return t; }, { pay: 0, wht: 0, disc: 0, vat: 0, po: 0, poPay: 0 });
       $('main').innerHTML = '<h3>รายงานจ่ายตามรอบ</h3><p class="lead">หน้าตาเหมือนไฟล์ค่าใช้จ่ายเดิม · แตะแถวเพื่อแก้บิล · ปุ่ม Excel ได้ไฟล์ตามแบบฟอร์ม (ฟอนต์ สี ขนาดช่องเหมือนเดิม)</p>'
         + (d.linked ? '' : linkPanel())
         + '<div class="apchips rounds noprint">' + list.map(function (r) {
             var x = cnt[r.nominal];
             return '<button class="apround' + (r.nominal === P.round ? ' on' : '') + '" data-r="' + r.nominal + '"><b>จ่าย ' + dotAD(r.nominal, true) + '</b><small>' + (x ? Object.keys(x.bills).length + ' บิล · ' + m2(x.pay) : 'ยังไม่มีบิล') + '</small></button>';
           }).join('') + '</div>'
-        + (model ? '<div class="kpis xk"><div class="kpi"><b>' + m2(tot.pay) + '</b><span>ยอดชำระรอบนี้ (บาท)</span></div><div class="kpi"><b>' + (bills.length - tot.po) + (tot.po ? ' <em class="apred">+ PO ' + tot.po + '</em>' : '') + '</b><span>บิล' + (tot.po ? ' · PO ล่วงหน้า ' + m2(tot.poPay) + ' บาท (ตัวแดง)' : '') + '</span></div><div class="kpi"><b>' + m2(tot.wht) + '</b><span>หัก ณ ที่จ่าย / ส่วนลด</span></div><div class="kpi"><b>' + dotAD(model.actual) + '</b><span>วันจ่ายจริง' + (roundOf(P.round).why ? ' (' + esc(roundOf(P.round).why) + ' เลื่อนจาก ' + dotAD(P.round) + ')' : '') + '</span></div></div>'
+        + (model ? '<div class="kpis xk"><div class="kpi"><b>' + m2(tot.pay) + '</b><span>ยอดชำระรอบนี้ (บาท)</span></div><div class="kpi"><b>' + (bills.length - tot.po) + (tot.po ? ' <em class="apred">+ PO ' + tot.po + '</em>' : '') + '</b><span>บิล' + (tot.po ? ' · PO ล่วงหน้า ' + m2(tot.poPay) + ' บาท (ตัวแดง)' : '') + '</span></div><div class="kpi"><b>' + m2(tot.wht) + '</b><span>หัก ณ ที่จ่าย' + (tot.disc ? ' · ส่วนลด/มัดจำ ' + m2(tot.disc) : '') + '</span></div><div class="kpi"><b>' + dotAD(model.actual) + '</b><span>วันจ่ายจริง' + (roundOf(P.round).why ? ' (' + esc(roundOf(P.round).why) + ' เลื่อนจาก ' + dotAD(P.round) + ')' : '') + '</span></div></div>'
           + '<div class="apbtns noprint"><button class="btn btn-primary" id="apXls">' + icon('table', 18) + ' Excel ตามแบบฟอร์ม</button><button class="btn" id="apPdf">' + icon('pdf', 18) + ' PDF</button><button class="btn" id="apNew">' + icon('upload', 18) + ' นำเข้าบิล</button><button class="btn appob" id="apNewPo">' + icon('clock', 18) + ' + PO ล่วงหน้า</button></div>'
           + '<div class="apcats">' + d.cats.map(function (c, i) { var t = model.catTotals[c.key]; return '<span><i>' + (i + 1) + '</i>' + esc(c.name) + '<b>' + m2(t ? t.total : 0) + '</b></span>'; }).join('') + '</div>'
           + (tot.po ? '<div class="aplegend"><i></i> ตัวแดง = PO ล่วงหน้า ยังไม่ได้รับบิล (แตะแถวเพื่อแก้ / กด "ได้รับบิลแล้ว")</div>' : '')
@@ -1329,7 +1338,7 @@
     var vc = {}; bills.forEach(function (b) { if (b.creditDays !== '' && vc[b.vendor] == null) vc[b.vendor] = b.creditDays; });
     bills.forEach(function (b) {
       if (b.creditDays === '' && vc[b.vendor] != null) b.creditDays = vc[b.vendor];   // เครดิตของผู้ขายตามไฟล์ (สูตร =D+45 / +60)
-      b.dueDate = b.issueDate ? addDays(b.issueDate, Number(b.creditDays) || 0) : '';
+      b.dueDate = b.issueDate ? creditDue(b.issueDate, b.creditDays) : '';
       var t = { total: 0, wht: 0 }; b.lines.forEach(function (l) { var c = calc(l, b.vatMode, b.pct); t.total += c.total; t.wht += c.wht; }); b.pay = r2(t.total - t.wht);
     });
     return bills;
@@ -1582,7 +1591,7 @@
       + tile(M.upPo ? M.upPo + ' ใบ' : '0', 'PO ล่วงหน้า (รอบิล)', '#b91c1c', M.upPo ? b0(M.upPoPay) + ' บาท · ยังไม่ได้รับบิล' : 'ไม่มีรายการรอบิล')
       + tile(b0(M.pay), 'ยอดจ่ายตามรอบ · ' + rangeName, '#2563eb', M.list.length + ' รอบ · จ่ายไปแล้ว ' + b0(M.pastPay))
       + tile(b0(M.vat), 'ภาษีซื้อ (VAT) · ' + rangeName, '#0d9488', 'จากบิลที่มี VAT')
-      + tile(b0(M.wht), 'หัก ณ ที่จ่าย / ส่วนลด · ' + rangeName, '#7c3aed', 'หักออกจากยอดชำระแล้ว')
+      + tile(b0(M.wht), 'หัก ณ ที่จ่าย · ' + rangeName, '#7c3aed', 'หักออกจากยอดชำระแล้ว')
       + '</div>';
     var chart = M.list.length && DCH ? DCH.area({
       labels: M.list.map(function (r) { return thd(r.actual, true); }), unit: ' บาท', height: 200, fmt: function (v) { return b0(v); },
@@ -1677,7 +1686,7 @@
     '.apodone summary{cursor:pointer;padding:2px 0}.appocard.done{border-color:#bbf7d0;background:#f0fdf4}.appocard.done .appoit{color:#166534}.appocard.done .appoit div{border-color:#bbf7d0}',
     '.appoban.info{background:#eff6ff;border-color:#bfdbfe;color:#1e3a8a;font-weight:500}.appoban.info b{color:#1e3a8a}.apmap{display:flex;flex-direction:column;gap:3px;padding:0 4px 4px}.apmap select{font:inherit;font-size:14px;min-height:36px;border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:6px;padding:4px 6px;max-width:100%}',
     '.apdupb{border:1px solid #fcd34d;background:#fffbeb;color:#92400e;border-radius:6px;padding:8px 10px;min-height:36px;font:inherit;font-size:12.5px;cursor:pointer;text-align:left}.apdupb.on{background:#fef3c7;font-weight:700}.apdupl td input{text-decoration:line-through;color:var(--muted)}.apdupl td.apv{color:#cbd5e1;text-decoration:line-through}',
-    '.appos{margin-top:12px;border:1.5px solid #bfdbfe;border-radius:12px;padding:10px 12px;background:#fff}.appos h4{margin:0 0 8px;display:flex;gap:6px;align-items:center;color:#1e3a8a}.apposT{border-collapse:collapse;width:100%;font-size:14px}.apposT th,.apposT td{border-bottom:1px solid var(--line);padding:5px 6px;text-align:right;white-space:nowrap}.apposT th:first-child,.apposT td:first-child{text-align:left;white-space:normal}.apposT th{background:#f1f5f9;font-size:13px}.apposT .apthis{color:#dc2626;font-weight:700}.aptab tr.apgrp td{background:#eff6ff;color:#1e3a8a;font-weight:700;border-top:2px solid #93c5fd;padding:6px}.aptab tr.apgrp td small{display:block;font-weight:400;font-size:12px;color:#475569}.aptab tr.apset td:first-child{box-shadow:inset 3px 0 #93c5fd}.apposT small{display:block;font-size:12px;color:var(--muted);font-weight:400}.apposT .apthis small{color:#dc2626}.appoit span:last-child small{text-align:right}.apposT tr.apdone td{color:var(--muted)}',
+    '.appos{margin-top:12px;border:1.5px solid #bfdbfe;border-radius:12px;padding:10px 12px;background:#fff}.appos h4{margin:0 0 8px;display:flex;gap:6px;align-items:center;color:#1e3a8a}.apposT{border-collapse:collapse;width:100%;font-size:14px}.apposT th,.apposT td{border-bottom:1px solid var(--line);padding:5px 6px;text-align:right;white-space:nowrap}.apposT th:first-child,.apposT td:first-child{text-align:left;white-space:normal}.apposT th{background:#f1f5f9;font-size:13px}.apposT .apthis{color:#dc2626;font-weight:700}.aptab th small{display:block;font-weight:400;font-size:11.5px;color:var(--muted)}.aptab input.apdisc{color:#dc2626;min-width:80px}.aptab tr.apgrp td{background:#eff6ff;color:#1e3a8a;font-weight:700;border-top:2px solid #93c5fd;padding:6px}.aptab tr.apgrp td small{display:block;font-weight:400;font-size:12px;color:#475569}.aptab tr.apset td:first-child{box-shadow:inset 3px 0 #93c5fd}.apposT small{display:block;font-size:12px;color:var(--muted);font-weight:400}.apposT .apthis small{color:#dc2626}.appoit span:last-child small{text-align:right}.apposT tr.apdone td{color:var(--muted)}',
     '.apchoose{align-items:flex-start}.apchoose .apbtns{margin-top:6px}.apchoose .btn small{display:block;font-weight:400;color:var(--muted);font-size:12px}.appoban.info #apUnPo{margin:0 0 0 auto;flex:none}',
     '.apnote{margin:6px 0 0;font-size:13px;color:var(--muted)}.appost{margin-top:8px;border-radius:8px;padding:8px 10px;font-size:14px}.appost.part{background:#fffbeb;color:#92400e}.appost.full{background:#f0fdf4;color:#166534}.apmore{margin-top:6px}',
     '.apmap select{width:100%;text-overflow:ellipsis}@media(max-width:560px){.apomoney{grid-template-columns:1fr 1fr 1fr;font-size:11.5px}.apomoney b{font-size:13.5px}.aptab td:first-child{min-width:170px;max-width:190px}.apposT,.apposT thead,.apposT tbody{display:block}.apposT tr{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--line)}.apposT th,.apposT td{border:0;padding:4px 3px;font-size:13px}.apposT td:first-child{grid-column:1/-1;font-weight:600;padding-top:8px}.apposT th:first-child{display:none}.apposT small{font-size:11px}}',
