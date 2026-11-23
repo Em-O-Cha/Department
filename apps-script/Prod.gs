@@ -540,12 +540,15 @@ var PRD_COLOR_ = '#0E7490';
 function prdT_(text, o) { var x = { type: 'text', text: String(text == null || text === '' ? '-' : text), wrap: true }; Object.keys(o || {}).forEach(function (k) { x[k] = o[k]; }); return x; }
 function prdBox_(contents, o) { var x = { type: 'box', layout: 'vertical', contents: contents }; Object.keys(o || {}).forEach(function (k) { x[k] = o[k]; }); return x; }
 // การ์ดขาว + แถบหัวมน (แบบเดียวกับรายงานฝ่ายบัญชี — LINE บนคอมไม่รองรับพื้นโปร่งใส)
-function prdCard_(kicker, title, sub, body, alt, headColor) {
+function prdCard_(kicker, title, sub, body, alt, headColor, by) {
   // ป้ายหัวการ์ด (DAILY REPORT · G1/G2/G3, PRODUCTION PLAN) = ป้ายขาวตัวใหญ่ ตัวอักษรสีกลุ่ม (ผู้ใช้ขอให้เห็นชัด 23/11/69)
   var badge = prdBox_([prdT_(kicker, { size: 'xl', color: headColor || PRD_COLOR_, weight: 'bold', align: 'center' })],
     { backgroundColor: '#FFFFFF', cornerRadius: '12px', paddingTop: '6px', paddingBottom: '6px', paddingStart: '12px', paddingEnd: '12px' });
   var inner = [prdBox_([badge, prdT_(title, { size: 'xl', color: '#FFFFFF', weight: 'bold', margin: 'md' }),
-    prdT_(sub, { size: 'xs', color: '#CFFAFE', margin: 'xs' })], { backgroundColor: headColor || PRD_COLOR_, cornerRadius: '18px', paddingAll: '18px' }),
+    prdT_(sub, { size: 'xs', color: '#CFFAFE', margin: 'xs' })]
+    // ชื่อผู้รายงานตัวใหญ่ชัดเจน (ผู้ใช้ขอ 23/11/69)
+    .concat(by ? [prdBox_([prdT_('👤 รายงานโดย ' + by, { size: 'lg', color: '#FFFFFF', weight: 'bold' })], { margin: 'md', backgroundColor: '#00000033', cornerRadius: '10px', paddingTop: '6px', paddingBottom: '6px', paddingStart: '12px', paddingEnd: '12px' })] : []),
+    { backgroundColor: headColor || PRD_COLOR_, cornerRadius: '18px', paddingAll: '18px' }),
     prdBox_(body, { paddingStart: '6px', paddingEnd: '6px', paddingTop: '4px', paddingBottom: '4px' })];
   return { type: 'flex', altText: alt.slice(0, 390), contents: { type: 'bubble', size: 'giga', body: prdBox_(inner, { paddingAll: '14px', backgroundColor: '#FFFFFF' }) } };
 }
@@ -563,7 +566,7 @@ function prdRow_(no, name, sub, right, rightColor) {
 }
 var PRD_GCOLOR_ = { G2: '#EA580C', G1: '#2563EB', G3: '#16A34A' };
 var PRD_GTINT_ = { G2: '#FFEDD5', G1: '#DBEAFE', G3: '#DCFCE7' };
-function prdMorningFlex_(date, plans, note) {
+function prdMorningFlex_(date, plans, note, by) {
   var body = [], n = 0;
   ['G2', 'G1', 'G3'].forEach(function (g) {
     var list = plans.filter(function (x) { return x.grp === g && x.status !== 'cancel'; });
@@ -581,7 +584,7 @@ function prdMorningFlex_(date, plans, note) {
   if (!n) body.push(prdT_('ยังไม่มีรายการในแผน', { size: 'sm', color: '#64748B', margin: 'lg' }));
   if (note) body.push(prdBox_([prdT_('📌 ' + note, { size: 'sm', color: '#9A3412', weight: 'bold' })], { margin: 'xl', backgroundColor: '#FFF7ED', cornerRadius: '12px', paddingAll: '12px' }));
   return prdCard_('PRODUCTION PLAN', 'แผนผลิต ' + prdDot_(date), 'บริษัท สปังกี้ ฟู้ด จำกัด · ฝ่ายผลิต · ' + n + ' รายการ', body,
-    'แผนผลิต ' + prdDot_(date) + ' · ' + n + ' รายการ');
+    'แผนผลิต ' + prdDot_(date) + ' · ' + n + ' รายการ', null, by || '');
 }
 function prdEveningFlex_(date, grp, plans, rep, target, prods) {
   var body = [], mine = plans.filter(function (x) { return x.grp === grp && x.status !== 'cancel'; });
@@ -644,8 +647,8 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
   if (rep && rep.checks) body.push(prdBox_([prdT_('✅ ' + rep.checks + ' เรียบร้อย', { size: 'sm', color: '#166534', weight: 'bold' })], { margin: 'xl', backgroundColor: '#F0FDF4', cornerRadius: '12px', paddingAll: '12px' }));
   var nPhotos = rep ? purParseFiles_(rep.files).length : 0;
   if (nPhotos) body.push(prdT_('📷 รูปประกอบ ' + nPhotos + ' รูป อยู่ในข้อความถัดไป', { size: 'xxs', color: '#64748B', margin: 'md', align: 'center' }));
-  return prdCard_('DAILY REPORT · ' + grp, title, grp + ' · ' + PRD_GROUPS_[grp] + (rep && rep.by ? ' · รายงานโดย ' + rep.by : ''), body,
-    title, PRD_GCOLOR_[grp] === '#16A34A' ? '#15803D' : PRD_GCOLOR_[grp] === '#2563EB' ? '#1D4ED8' : '#C2410C');
+  return prdCard_('DAILY REPORT · ' + grp, title, grp + ' · ' + PRD_GROUPS_[grp], body,
+    title, PRD_GCOLOR_[grp] === '#16A34A' ? '#15803D' : PRD_GCOLOR_[grp] === '#2563EB' ? '#1D4ED8' : '#C2410C', rep && rep.by ? rep.by : '');
 }
 // ส่ง LINE: kind = morning (แผนทั้งวัน) | evening (สรุปของกลุ่ม grp + รูปแยกเป็นภาพ)
 function prdSendLine(token, kind, date, grp, by) {
@@ -660,7 +663,7 @@ function prdSendLine(token, kind, date, grp, by) {
     var rep = prdReport_(ss, date, kind, kind === 'evening' ? grp : ''), msgs;
     if (kind === 'morning') {
       if (!plans.length) return { ok: false, error: 'ยังไม่มีแผนผลิตของวันนี้' };
-      msgs = [prdMorningFlex_(date, plans, rep && rep.note ? rep.note : s.morningNote)];
+      msgs = [prdMorningFlex_(date, plans, rep && rep.note ? rep.note : s.morningNote, by || (rep && rep.by))];
     } else {
       msgs = [prdEveningFlex_(date, grp, plans.concat(prdCarried_(allPlans, date)), rep, Number(s.target) || 85, prods)];
       (rep ? purParseFiles_(rep.files) : []).forEach(function (f) {
@@ -688,7 +691,7 @@ function prdLinePreview(token, kind, date, grp) {
       photos: rep ? purParseFiles_(rep.files).length : 0 };
   }
   var mr = prdReport_(ss, date, 'morning', '');
-  return { ok: true, flex: prdMorningFlex_(date, plans, mr && mr.note ? mr.note : s.morningNote), photos: 0 };
+  return { ok: true, flex: prdMorningFlex_(date, plans, mr && mr.note ? mr.note : s.morningNote, mr && mr.by), photos: 0 };
 }
 // ใส่ Channel access token จากหน้าตั้งค่าของฝ่ายผลิต (ไม่ต้องเข้า Apps Script) — ตรวจกับ LINE ก่อนว่า token ใช้ได้ แล้วเก็บใน Script Property PROD_LINE_TOKEN
 // ไม่ส่งค่า token กลับไปหน้าเว็บ · ไม่บันทึกลงชีต/ประวัติ
