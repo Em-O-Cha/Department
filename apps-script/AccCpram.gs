@@ -44,11 +44,13 @@ function cpMap_(ss) {
   var row = cpSettingRow_(ss, 'cpramMap'), saved = {};
   try { saved = row ? JSON.parse(row.value || '{}') : {}; } catch (e) { saved = {}; }
   var products = (Array.isArray(saved.products) ? saved.products : []).map(cpCleanProduct_).filter(function (p) { return p.code && p.name; });
-  CP_PRODUCTS_DEFAULT_.forEach(function (d) { if (!products.some(function (p) { return p.code === d.code; })) products.push(d); });
+  // saved.full = บันทึกจากหน้าตั้งค่าแล้ว (ลบค่าเริ่มต้นได้) — ก่อนนั้นเติมค่าเริ่มต้นให้
+  if (!saved.full) CP_PRODUCTS_DEFAULT_.forEach(function (d) { if (!products.some(function (p) { return p.code === d.code; })) products.push(d); });
   var ships = (Array.isArray(saved.ships) ? saved.ships : []).map(cpCleanShip_).filter(function (s) { return s.key && s.place; });
-  CP_SHIPS_DEFAULT_.forEach(function (d) { if (!ships.some(function (s) { return accNorm_(s.key) === accNorm_(d.key); })) ships.push(d); });
+  if (!saved.full) CP_SHIPS_DEFAULT_.forEach(function (d) { if (!ships.some(function (s) { return accNorm_(s.key) === accNorm_(d.key); })) ships.push(d); });
   return { products: products, ships: ships };
 }
+function cpMapFull_(ss) { var r = cpSettingRow_(ss, 'cpramMap'); try { return !!(r && JSON.parse(r.value || '{}').full); } catch (e) { return false; } }
 function cpCleanProduct_(p) { return { code: accClean_(p && p.code, 20).replace(/\D/g, ''), name: accClean_(p && p.name, 80) }; }
 function cpCleanShip_(s) { return { key: accClean_(s && s.key, 60), wh: accClean_(s && s.wh, 30) || '-', place: accClean_(s && s.place, 40) }; }
 function cpSheetId_(ss) { var r = cpSettingRow_(ss, 'cpramSheet'); return r ? String(r.value || '') : ''; }
@@ -62,9 +64,12 @@ function cpBook_(main) {
 function cpKey_(l) { return String(l.poNo).replace(/^'/, '') + '|' + Number(l.lineNo); }
 function cpR2_(n) { return Math.round(Number(n || 0) * 100) / 100; }
 function cpMatchProduct_(map, code) { var p = map.products.filter(function (x) { return x.code === code; })[0]; return p ? p.name : ''; }
+// ส่งที่ในใบ PO มี 2 แบบ: "0400 / WD01 LLKC RM WHD" หรือรหัสอย่างเดียว "0412"
+// คำค้นที่เป็นตัวเลขล้วน = รหัส ต้องตรงกับรหัสหน้าสุดของช่อง "ส่งที่" ทั้งตัว · คำค้นอื่น = มีอยู่ในข้อความ
 function cpMatchShip_(map, shipTo) {
-  var t = accNorm_(shipTo);
-  return map.ships.filter(function (s) { return t.indexOf(accNorm_(s.key)) >= 0; })[0] || null;
+  var t = accNorm_(shipTo), code = (String(shipTo).match(/^\s*(\d+)/) || [])[1] || '';
+  if (!t) return null;
+  return map.ships.filter(function (s) { var k = accNorm_(s.key); return /^\d+$/.test(k) ? k === code : t.indexOf(k) >= 0; })[0] || null;
 }
 
 // รับข้อมูลจากหน้าเว็บ: [{poNo, poDate, shipTo, termDays, page, file, lines:[{lineNo, prNo, itemCode, deliveryDate, qty, unit, price, amount}], totals:{sub, discount, vat, net}}]
@@ -81,7 +86,9 @@ function cpCleanPos_(pos) {
     return o;
   }).filter(function (p) { return p.poNo && p.lines.length; });
 }
-function cpUnitTh_(u) { return { CAS: 'ลัง', CTN: 'ลัง', CT: 'ลัง', PAC: 'แพ็ค', PCS: 'ชิ้น', EA: 'ชิ้น' }[String(u).toUpperCase()] || u; }
+// หน่วยของยอดรวม: ทุกแถวหน่วยเดียวกัน → หน่วยนั้น (ลัง / ชิ้น …) · ปนกัน → "หน่วย"
+function cpUnitOf_(rows) { var u = {}; (rows || []).forEach(function (r) { u[String(r.unitTh || r.unit || 'ลัง')] = 1; }); var k = Object.keys(u); return k.length === 1 ? k[0] : k.length ? 'หน่วย' : 'ลัง'; }
+function cpUnitTh_(u) { return { CAS: 'ลัง', CTN: 'ลัง', CT: 'ลัง', PAC: 'แพ็ค', PCS: 'ชิ้น', PC: 'ชิ้น', EA: 'ชิ้น' }[String(u).toUpperCase()] || u; }
 
 // จัดรายการ + ตรวจกับของเดิม
 function cpPrepare_(map, pos, savedList) {
@@ -92,7 +99,7 @@ function cpPrepare_(map, pos, savedList) {
     if (!ship) { unShip[p.shipTo] = unShip[p.shipTo] || { shipTo: p.shipTo, pos: [] }; unShip[p.shipTo].pos.push(p.poNo); }
     p.lines.forEach(function (l) {
       var product = cpMatchProduct_(map, l.itemCode);
-      if (!product) { unProd[l.itemCode] = unProd[l.itemCode] || { itemCode: l.itemCode, qty: 0 }; unProd[l.itemCode].qty += l.qty; }
+      if (!product) { unProd[l.itemCode] = unProd[l.itemCode] || { itemCode: l.itemCode, qty: 0, unit: cpUnitTh_(l.unit) }; unProd[l.itemCode].qty += l.qty; }
       var r = Object.assign({}, l, { poDate: p.poDate, shipTo: p.shipTo, termDays: p.termDays, file: p.file, product: product,
         wh: ship ? ship.wh : '', place: ship ? ship.place : '', unitTh: cpUnitTh_(l.unit),
         vat: cpR2_(l.amount * 0.07), net: cpR2_(l.amount * 1.07), dueDate: cpDue_(l.deliveryDate) });
@@ -222,7 +229,8 @@ function cpSaveMap(token, json) {
   var cfg; try { cfg = JSON.parse(json || '{}'); } catch (e) { return { ok: false, error: 'ข้อมูลไม่ถูกต้อง' }; }
   return purLocked_(function () {
     var main = purBook_(dept), cur = cpMap_(main); cpHolInit_(main);
-    var products = cur.products.slice(), ships = cur.ships.slice();
+    // cfg.full = หน้าตั้งค่า ส่งรายการทั้งหมดมา (แทนที่ของเดิม ลบได้)
+    var products = cfg.full ? [] : cur.products.slice(), ships = cfg.full ? [] : cur.ships.slice();
     (cfg.products || []).map(cpCleanProduct_).forEach(function (p) {
       if (!p.code || !p.name) return;
       var i = products.map(function (x) { return x.code; }).indexOf(p.code);
@@ -234,7 +242,8 @@ function cpSaveMap(token, json) {
       if (i >= 0) ships[i] = s; else ships.push(s);
     });
     var row = cpSettingRow_(main, 'cpramMap') || { id: 'cpramMap' };
-    row.value = JSON.stringify({ products: products, ships: ships });
+    var o = { products: products, ships: ships }; if (cfg.full || cpMapFull_(main)) o.full = 1;
+    row.value = JSON.stringify(o);
     purWrite_(main, 'acc_settings', row);
     purLogWrite_(main, 'แก้การจับคู่ CP Ram', 'acc_settings', 'cpramMap', products.length + ' สินค้า · ' + ships.length + ' สถานที่ส่ง');
     return { ok: true, map: cpMap_(main) };
@@ -344,7 +353,7 @@ function cpDraw_(sh, rows, title, withRounds) {
     .setHorizontalAlignment('center').setVerticalAlignment('middle');
   sh.getRange(5, 10, vals.length, 1).setFontSize(11).setWrap(true);
   var tr = last + 2;
-  sh.getRange(tr, 5, 1, 3).setValues([['Total', total, 'ลัง']]).setFontWeight('bold').setBackground(CP_TOTAL_BG_).setHorizontalAlignment('center');
+  sh.getRange(tr, 5, 1, 3).setValues([['Total', total, cpUnitOf_(rows.filter(function (r) { return r.status !== 'cancel'; }))]]).setFontWeight('bold').setBackground(CP_TOTAL_BG_).setHorizontalAlignment('center');
   sh.getRange(tr + 3, 10).setValue('ผู้จัดทำ            __________________');
   sh.getRange(tr + 4, 10).setValue('ผู้ตรวจสอบ    ___________________');
   var rt = tr;
@@ -384,7 +393,7 @@ function cpFlex_(lines, hasImg, files) {
     var g = by[d].sort(function (a, b) { return String(a.poNo).localeCompare(String(b.poNo)) || a.lineNo - b.lineNo; });
     var sum = g.reduce(function (s2, x) { return s2 + (x.status === 'cancel' ? 0 : Number(x.qty) || 0); }, 0);
     body.push({ type: 'box', layout: 'horizontal', margin: 'xl', backgroundColor: '#0F5132', cornerRadius: '10px', paddingTop: '7px', paddingBottom: '7px', paddingStart: '12px', paddingEnd: '12px', contents: [
-      T('ส่งวัน' + accDayName_(d) + ' ' + accDot_(d), { size: 'sm', weight: 'bold', color: '#FFFFFF', flex: 7 }), T(sum.toLocaleString() + ' ลัง', { size: 'sm', weight: 'bold', color: '#FFFFFF', flex: 4, align: 'end' })] });
+      T('ส่งวัน' + accDayName_(d) + ' ' + accDot_(d), { size: 'sm', weight: 'bold', color: '#FFFFFF', flex: 7 }), T(sum.toLocaleString() + ' ' + cpUnitOf_(g), { size: 'sm', weight: 'bold', color: '#FFFFFF', flex: 4, align: 'end' })] });
     g.forEach(function (x, i) {
       var cancel = x.status === 'cancel', hist = x.history ? cpHistLast_(x.history) : '';
       var sub = [x.product || ('รหัส ' + x.itemCode), [x.wh && x.wh !== '-' ? 'คลัง' + x.wh : '', x.place].filter(String).join(' · ')].filter(String);
@@ -398,7 +407,7 @@ function cpFlex_(lines, hasImg, files) {
     });
   });
   body.push({ type: 'box', layout: 'vertical', margin: 'xl', backgroundColor: '#ECFDF5', cornerRadius: '16px', paddingAll: '14px', borderColor: '#A7F3D0', borderWidth: '1px', contents: [
-    T('สินค้าจำนวนรวม', { size: 'sm', color: '#047857', align: 'center' }), T(total.toLocaleString() + ' ลัง', { size: '3xl', weight: 'bold', color: '#047857', align: 'center' })] });
+    T('สินค้าจำนวนรวม', { size: 'sm', color: '#047857', align: 'center' }), T(total.toLocaleString() + ' ' + cpUnitOf_(live), { size: '3xl', weight: 'bold', color: '#047857', align: 'center' })] });
   if (hasImg) body.push(T('📊 ตารางส่งสินค้า อยู่ในข้อความถัดไป (กดที่ภาพเพื่อเปิดภาพเต็ม)', { size: 'xxs', color: '#64748B', margin: 'md', align: 'center' }));
   if (files && files.pdfUrl) body.push({ type: 'box', layout: 'vertical', margin: 'xl', backgroundColor: '#0F5132', cornerRadius: '24px', paddingAll: '12px',
     action: { type: 'uri', label: 'เปิดไฟล์ PDF', uri: files.pdfUrl }, contents: [T('เปิดไฟล์ PDF', { size: 'md', weight: 'bold', color: '#FFFFFF', align: 'center' })] });
@@ -410,7 +419,7 @@ function cpFlex_(lines, hasImg, files) {
       T('ใบแจ้งออเดอร์ CP Ram', { size: 'xl', color: '#FFFFFF', weight: 'bold', margin: 'sm' }),
       T('บริษัท สปังกี้ ฟู้ด จำกัด · ฝ่ายบัญชี', { size: 'xs', color: '#D1FAE5', margin: 'xs' })] },
     { type: 'box', layout: 'vertical', paddingStart: '6px', paddingEnd: '6px', paddingTop: '6px', paddingBottom: '4px', contents: body }];
-  return { type: 'flex', altText: 'ออเดอร์ CP Ram · ' + Object.keys(pos).length + ' ใบสั่ง · ส่ง ' + accDotRange_(dl) + ' · รวม ' + total.toLocaleString() + ' ลัง',
+  return { type: 'flex', altText: 'ออเดอร์ CP Ram · ' + Object.keys(pos).length + ' ใบสั่ง · ส่ง ' + accDotRange_(dl) + ' · รวม ' + total.toLocaleString() + ' ' + cpUnitOf_(live),
     contents: { type: 'bubble', size: 'giga', body: { type: 'box', layout: 'vertical', paddingAll: '14px', backgroundColor: '#FFFFFF', contents: inner } } };
 }
 function cpImportLines_(ss, imp) {

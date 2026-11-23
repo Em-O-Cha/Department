@@ -29,7 +29,7 @@
   // รีเฟรชอัตโนมัติ (accounting.js autoTick): โหลดใหม่ เปลี่ยนจริงค่อยวาดหน้าใหม่
   C.refresh = function () { return call('cpLoad', state.token).then(function (d) { var ch = JSON.stringify(d) !== JSON.stringify(C.data); if (ch) C.data = d; C.loadedAt = Date.now(); return ch; }); };
   C.age = function () { return C.data ? Date.now() - (C.loadedAt || 0) : 0; };
-  C.reset = function () { C.data = null; C.imp = null; C.month = ''; };
+  C.reset = function () { C.data = null; C.imp = null; C.month = ''; C.set = null; };
 
   // ==================== อ่าน PDF ====================
   function loadPdfJs() {
@@ -51,7 +51,12 @@
     var po = topRight.filter(function (t) { return RX.po.test(t.s); })[0];
     var pd = topRight.filter(function (t) { return RX.date.test(t.s); })[0];
     var term = topRight.filter(function (t) { return /^:\s*\d+$/.test(t.s); })[0];
+    // ส่งที่: แบบเดิม "0400 / WD01 LLKC RM WHD" · แบบใหม่มีแค่รหัส "0412" (อยู่แถวเดียวกับสกุลเงิน THB ด้านขวา)
     var ship = items.filter(function (t) { return RX.ship.test(t.s); })[0];
+    if (!ship) {
+      var cur = items.filter(function (t) { return /^[A-Z]{3}$/.test(t.s) && t.x > 380 && t.y > 540 && t.y < 640; })[0];
+      ship = items.filter(function (t) { return /^\d{3,5}$/.test(t.s) && t.x > 40 && t.x < 200 && (cur ? Math.abs(t.y - cur.y) <= 4 : t.y > 575 && t.y < 615); })[0];
+    }
     var pg = items.filter(function (t) { return /^\d+\s*\/\s*\d+$/.test(t.s) && t.y > 700; })[0];
     // แถวรายการ: ยึดวันที่กำหนดส่ง (คอลัมน์กลาง) แล้วเก็บของในบรรทัดเดียวกัน
     var lines = items.filter(function (t) { return RX.date.test(t.s) && t.x > 200 && t.x < 360 && t.y < 590; }).map(function (d) {
@@ -117,7 +122,10 @@
 
   // ==================== หน้า 1: เลือกไฟล์ ====================
   C.importPage = function () {
-    if (C.imp && C.imp.preview) return previewPage();
+    if (C.imp && C.imp.preview) {
+      if (!C.imp.stale) return previewPage();
+      C.imp.stale = 0; loading('นำเข้า PO CP Ram'); runPreview().catch(onServerError); return;   // เพิ่งแก้หน้าตั้งค่า → ตรวจใหม่
+    }
     if (!C.data) { loading('นำเข้า PO CP Ram'); load().then(C.importPage).catch(onServerError); return; }
     var d = C.data;
     $('main').innerHTML = '<h3>นำเข้าใบสั่งซื้อ CP Ram (PDF)</h3><p class="lead">เลือกไฟล์ PDF ใบสั่งซื้อจาก CPRAM (เลือกได้หลายไฟล์ · 1 หน้า = 1 ใบสั่ง) ระบบจะอ่านเลขที่ PO วันส่ง จำนวน และราคา ให้ตรวจก่อนบันทึก</p>'
@@ -178,7 +186,7 @@
       }).join('');
     }).join('');
     return '<div class="cpwrap"><table class="cptab"><thead><tr><th>วัน</th><th>วันที่</th><th>สินค้า</th><th>PO</th><th>คลัง</th><th>จำนวนสินค้า</th><th>หน่วย</th><th>Total</th><th>สถานที่ส่ง</th>' + (opt.noNote ? '' : '<th>' + (opt.preview ? 'สถานะ' : 'หมายเหตุ') + '</th>') + '</tr></thead>'
-      + '<tbody>' + body + '</tbody><tfoot><tr><td colspan="4"></td><td class="cpy">Total</td><td class="cpy">' + n0(total) + '</td><td class="cpy">ลัง</td><td colspan="' + (opt.noNote ? 2 : 3) + '"></td></tr></tfoot></table></div>';
+      + '<tbody>' + body + '</tbody><tfoot><tr><td colspan="4"></td><td class="cpy">Total</td><td class="cpy">' + n0(total) + '</td><td class="cpy">' + unitOf(rows.filter(function (r) { return r.status !== 'cancel'; })) + '</td><td colspan="' + (opt.noNote ? 2 : 3) + '"></td></tr></tfoot></table></div>';
   }
   function pname(r) { return r.product ? esc(r.product) : '<span class="cpq0">รหัส ' + esc(r.itemCode) + '</span>'; }
   function histText(h) { var t = String(h).split(' | ').pop().replace(/^[\d-]+: /, ''); return /^เลื่อนส่ง/.test(t) ? '📅 ' + t : 'เปลี่ยน: ' + t; }
@@ -204,7 +212,7 @@
     var a = list.filter(function (r) { return r.status !== 'cancel'; }), amt = a.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
     var pos = {}; a.forEach(function (r) { pos[r.poNo] = 1; });
     var tile = function (v, l, c) { return '<div class="kpi" style="--k:' + c + '"><b>' + v + '</b><span>' + l + '</span></div>'; };
-    return '<div class="kpis xk">' + tile(n0(Object.keys(pos).length), 'ใบสั่งซื้อ', '#2563eb') + tile(n0(a.reduce(function (s, r) { return s + (Number(r.qty) || 0); }, 0)), 'ลัง', '#16a34a')
+    return '<div class="kpis xk">' + tile(n0(Object.keys(pos).length), 'ใบสั่งซื้อ', '#2563eb') + tile(n0(a.reduce(function (s, r) { return s + (Number(r.qty) || 0); }, 0)), 'จำนวนสินค้า (' + unitOf(a) + ')', '#16a34a')
       + tile('฿' + n0(amt), 'มูลค่า (ก่อน VAT)', '#d97706') + tile('฿' + n0(amt * 1.07), 'รวม VAT 7%', '#7c3aed') + '</div>';
   }
 
@@ -223,9 +231,10 @@
     if (!linked) checks.push(chk(false, 'ยังไม่ได้เชื่อม Google Sheet — เชื่อมไฟล์ก่อนกดบันทึก'));
     var fix = '';
     if (unP.length || unS.length) {
-      fix = '<div class="panel pbox a7fix"><h4>' + icon('warn', 18) + ' ตั้งค่าครั้งแรก (ระบบจำไว้ใช้ครั้งต่อไป)</h4>'
-        + unP.map(function (u, i) { return '<div class="a7fixrow"><span>รหัสสินค้า <b>' + esc(u.itemCode) + '</b> <small>(' + n0(u.qty) + ' ลัง)</small></span><input data-cpp="' + i + '" list="cpPL" placeholder="ชื่อสินค้า เช่น น้ำพริกหนังไก่กรอบ"></div>'; }).join('')
-        + unS.map(function (u, i) { return '<div class="a7fixrow cps"><span>ส่งที่ <b>' + esc(u.shipTo) + '</b> <small>(PO ' + esc(u.pos.slice(0, 3).join(', ')) + (u.pos.length > 3 ? ' …' : '') + ')</small></span><input data-cpw="' + i + '" placeholder="คลัง เช่น ขอนแก่น / -"><input data-cps="' + i + '" list="cpSL" placeholder="สถานที่ส่ง เช่น คล้ายนคร"></div>'; }).join('')
+      fix = '<div class="panel pbox a7fix"><h4>' + icon('warn', 18) + ' จับคู่ครั้งแรก (ระบบจำไว้ใช้ครั้งต่อไป)</h4>'
+        + '<p class="cphow">พิมพ์ชื่อให้ครบทุกช่อง แล้วกด <b>บันทึกการจับคู่ แล้วตรวจใหม่</b> — ระบบจะจำรหัสนี้ไว้ ใบ PO ครั้งต่อไปขึ้นชื่อเอง · แก้ / ลบภายหลังได้ที่เมนู <a href="#" id="cpGoSet">ตั้งค่าคลัง / สถานที่ส่ง CP Ram</a></p>'
+        + unP.map(function (u, i) { return '<div class="a7fixrow"><span>รหัสสินค้า <b>' + esc(u.itemCode) + '</b> <small>(' + n0(u.qty) + ' ' + esc(u.unit || 'ลัง') + ')</small></span><input data-cpp="' + i + '" list="cpPL" placeholder="ชื่อสินค้า เช่น น้ำพริกหนังไก่กรอบ"></div>'; }).join('')
+        + unS.map(function (u, i) { return '<div class="a7fixrow cps"><span>ส่งที่ <b>' + (esc(u.shipTo) || '<i class="cpbad">อ่านรหัสไม่ได้</i>') + '</b> <small>(PO ' + esc(u.pos.slice(0, 3).join(', ')) + (u.pos.length > 3 ? ' …' : '') + ')</small></span><input data-cpw="' + i + '" placeholder="คลัง เช่น ขอนแก่น / -" aria-label="คลัง"><input data-cps="' + i + '" list="cpSL" placeholder="สถานที่ส่ง เช่น คล้ายนคร" aria-label="สถานที่ส่ง"></div>'; }).join('')
         + '<datalist id="cpPL">' + r.map.products.map(function (p) { return '<option value="' + esc(p.name) + '">'; }).join('') + '</datalist>'
         + '<datalist id="cpSL">' + uniq(r.map.ships.map(function (s) { return s.place; }).concat(['ลาดหลุมแก้ว', 'คล้ายนคร'])).map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>'
         + '<button class="btn btn-primary" id="cpMapSave">' + icon('check', 16) + ' บันทึกการจับคู่ แล้วตรวจใหม่</button></div>';
@@ -249,17 +258,22 @@
       unP.forEach(function (u, i) { var v = $('main').querySelector('[data-cpp="' + i + '"]').value.trim(); if (v) cfg.products.push({ code: u.itemCode, name: v }); else miss++; });
       unS.forEach(function (u, i) {
         var w = $('main').querySelector('[data-cpw="' + i + '"]').value.trim(), p = $('main').querySelector('[data-cps="' + i + '"]').value.trim();
-        if (p) cfg.ships.push({ key: shipKey(u.shipTo), wh: w || '-', place: p }); else miss++;
+        if (p && u.shipTo) cfg.ships.push({ key: shipKey(u.shipTo), wh: w || '-', place: p }); else miss++;
       });
-      if (miss) { toast('ใส่ให้ครบทุกช่องก่อน'); return; }
+      if (unS.some(function (u) { return !u.shipTo; })) { toast('อ่านรหัส "ส่งที่" จากไฟล์ไม่ได้ — ส่งไฟล์ให้ผู้ดูแลระบบตรวจ'); return; }
+      if (miss) { toast('ใส่สถานที่ส่ง / ชื่อสินค้าให้ครบทุกช่องก่อน'); return; }
       ms.disabled = true; ms.innerHTML = '<span class="spinner"></span> กำลังบันทึก';
-      call('cpSaveMap', state.token, JSON.stringify(cfg)).then(function (x) { if (!x.ok) throw new Error(x.error); return runPreview(); }).catch(function (e) { ms.disabled = false; toast(e.message); });
+      call('cpSaveMap', state.token, JSON.stringify(cfg)).then(function (x) { if (!x.ok) throw new Error(x.error); if (C.data) C.data.map = x.map; C.set = null; toast('จำการจับคู่แล้ว — ตรวจใหม่'); return runPreview(); }).catch(function (e) { ms.disabled = false; toast(e.message); });
     });
+    var gs = $('cpGoSet'); if (gs) gs.addEventListener('click', function (e) { e.preventDefault(); go('a_cps'); });
     bindLink();
   }
+  // หน่วยของยอดรวม (เหมือน cpUnitOf_): หน่วยเดียวกันทั้งหมด → หน่วยนั้น · ปนกัน → "หน่วย"
+  function unitOf(rows) { var u = {}; rows.forEach(function (r) { u[String(r.unitTh || r.unit || 'ลัง')] = 1; }); var k = Object.keys(u); return k.length === 1 ? k[0] : k.length ? 'หน่วย' : 'ลัง'; }
   function uniq(a) { var s = {}; return a.filter(function (x) { return x && !s[x] && (s[x] = 1); }); }
   // "0400 / WD01 LLKC RM WHD" → "WD01 LLKC" (คำที่ใช้จับคู่ — ตัดรหัสโรงงานและคำท้ายทั่วไปออก)
-  function shipKey(s) { var t = String(s).replace(/^\d+\s*\/\s*/, '').trim().split(/\s+/); return t.slice(0, 2).join(' ') || s; }
+  // "0412" (รหัสอย่างเดียว) → "0412"
+  function shipKey(s) { s = String(s).trim(); if (/^\d+$/.test(s)) return s; var t = s.replace(/^\d+\s*\/\s*/, '').trim().split(/\s+/); return t.slice(0, 2).join(' ') || s; }
   function save() {
     var b = $('cpSave'); b.disabled = true; b.innerHTML = '<span class="spinner"></span> กำลังบันทึกลง Google Sheet';
     call('cpSave', state.token, C.imp.pos, C.imp.fileName).then(function (r) {
@@ -273,6 +287,70 @@
   }
 
   // ==================== หน้าตารางส่งสินค้า (รายเดือน) ====================
+  // ---------- ตั้งค่าคลัง / สถานที่ส่ง + สินค้า (จับคู่จากใบ PO) ----------
+  C.settingsPage = function () {
+    if (!C.data) { loading('ตั้งค่าคลัง / สถานที่ส่ง CP Ram'); load().then(C.settingsPage).catch(onServerError); return; }
+    if (!C.set) C.set = JSON.parse(JSON.stringify(C.data.map || { products: [], ships: [] }));
+    var cfg = C.set, used = {};
+    (C.data.lines || []).forEach(function (l) { if (l.shipTo) used[l.shipTo] = 1; });
+    var seen = Object.keys(used).filter(function (t) { return !cfg.ships.some(function (s) { return matchShip(s.key, t); }); });
+    $('main').innerHTML = '<h3>ตั้งค่าคลัง / สถานที่ส่ง CP Ram</h3>'
+      + '<div class="panel pbox"><h4>' + icon('table', 18) + ' คลัง / สถานที่ส่ง</h4>'
+      + '<p class="cphow">ระบบอ่านช่อง <b>"ส่งที่"</b> ในใบ PO แล้วหาแถวที่ตรงกัน: ใส่<b>รหัส</b> (ตัวเลขล้วน เช่น 0412 — ต้องตรงทั้งรหัส) หรือ<b>คำค้น</b> (เช่น WD01 LLKC — มีอยู่ในข้อความ) · คลังไม่มีให้ใส่ -</p>'
+      + '<div class="ptable-wrap"><table class="ptable a7set cpset"><thead><tr><th>รหัส / คำค้น "ส่งที่"</th><th>คลัง</th><th>สถานที่ส่ง</th><th><span class="sr">ลบ</span></th></tr></thead><tbody>'
+      + cfg.ships.map(function (r, i) {
+        return '<tr><td data-l="รหัส / คำค้น &quot;ส่งที่&quot;"><input data-ss="' + i + '" data-k="key" value="' + esc(r.key) + '" placeholder="เช่น 0412" aria-label="รหัส / คำค้น"></td><td data-l="คลัง"><input data-ss="' + i + '" data-k="wh" value="' + esc(r.wh === '-' ? '-' : r.wh) + '" placeholder="-" aria-label="คลัง"></td>'
+          + '<td data-l="สถานที่ส่ง"><input data-ss="' + i + '" data-k="place" value="' + esc(r.place) + '" list="cpSL2" placeholder="เช่น ลาดหลุมแก้ว" aria-label="สถานที่ส่ง"></td><td><button class="icon-btn" data-rms="' + i + '" aria-label="ลบแถวนี้">' + icon('x', 16) + '</button></td></tr>';
+      }).join('') + (cfg.ships.length ? '' : '<tr><td colspan="4" class="muted">ยังไม่มี — กด + เพิ่มคลัง / สถานที่ส่ง</td></tr>')
+      + '</tbody></table></div><datalist id="cpSL2">' + uniq(cfg.ships.map(function (s) { return s.place; }).concat(['ลาดหลุมแก้ว', 'คล้ายนคร'])).map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>'
+      + '<button class="btn btn-line btn-sm" id="cpAddS" style="margin-top:8px">+ เพิ่มคลัง / สถานที่ส่ง</button>'
+      + (seen.length ? '<div class="a7chk warn" style="margin-top:10px"><i>!</i><span>ข้อมูลเดิมมี "ส่งที่" ที่ยังไม่ได้ตั้ง: ' + seen.map(esc).join(', ') + '</span></div>' : '')
+      + '</div>'
+      + '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('table', 18) + ' สินค้า</h4>'
+      + '<p class="cphow">จับคู่จาก<b>รหัสสินค้า</b>ในใบ PO (ตัวเลข 8 หลัก เช่น 72400524) กับชื่อที่ใช้ในตารางส่งสินค้า</p>'
+      + '<div class="ptable-wrap"><table class="ptable a7set cpset"><thead><tr><th>รหัสสินค้า</th><th>ชื่อสินค้า</th><th><span class="sr">ลบ</span></th></tr></thead><tbody>'
+      + cfg.products.map(function (r, i) {
+        return '<tr><td data-l="รหัสสินค้า"><input data-sp="' + i + '" data-k="code" value="' + esc(r.code) + '" inputmode="numeric" placeholder="เช่น 72400524" aria-label="รหัสสินค้า"></td><td data-l="ชื่อสินค้า"><input data-sp="' + i + '" data-k="name" value="' + esc(r.name) + '" placeholder="ชื่อสินค้า" aria-label="ชื่อสินค้า"></td><td><button class="icon-btn" data-rmp="' + i + '" aria-label="ลบแถวนี้">' + icon('x', 16) + '</button></td></tr>';
+      }).join('') + (cfg.products.length ? '' : '<tr><td colspan="3" class="muted">ยังไม่มี</td></tr>')
+      + '</tbody></table></div><button class="btn btn-line btn-sm" id="cpAddP" style="margin-top:8px">+ เพิ่มสินค้า</button></div>'
+      + '<p class="muted cpnote">การตั้งค่านี้ใช้กับใบ PO ที่นำเข้าครั้งต่อไป — รายการที่บันทึกไปแล้วไม่เปลี่ยน</p>'
+      + '<div class="a7bar"><button class="btn btn-line" id="cpSUndo">ยกเลิกการแก้ไข</button><button class="btn btn-primary" id="cpSSave">' + icon('check', 18) + ' บันทึกการตั้งค่า</button></div>';
+    on('input[data-ss]', 'input', function (el) { cfg.ships[+el.getAttribute('data-ss')][el.getAttribute('data-k')] = el.value; el.classList.remove('bad'); });
+    on('input[data-sp]', 'input', function (el) { cfg.products[+el.getAttribute('data-sp')][el.getAttribute('data-k')] = el.value; el.classList.remove('bad'); });
+    on('[data-rms]', 'click', function (el) { cfg.ships.splice(+el.getAttribute('data-rms'), 1); C.settingsPage(); });
+    on('[data-rmp]', 'click', function (el) { cfg.products.splice(+el.getAttribute('data-rmp'), 1); C.settingsPage(); });
+    $('cpAddS').addEventListener('click', function () { cfg.ships.push({ key: seen[0] || '', wh: '-', place: '' }); C.settingsPage(); focusLast('data-ss', 'place'); });
+    $('cpAddP').addEventListener('click', function () { cfg.products.push({ code: '', name: '' }); C.settingsPage(); focusLast('data-sp', 'code'); });
+    $('cpSUndo').addEventListener('click', function () { C.set = null; C.settingsPage(); toast('กลับเป็นค่าที่บันทึกไว้'); });
+    $('cpSSave').addEventListener('click', function () {
+      var bad = [], keys = {}, codes = {};
+      var ships = cfg.ships.map(function (r, i) { return { i: i, key: String(r.key || '').trim(), wh: String(r.wh || '').trim() || '-', place: String(r.place || '').trim() }; })
+        .filter(function (r) { return r.key || r.place || (r.wh && r.wh !== '-'); });
+      ships.forEach(function (r) {
+        var k = r.key.replace(/\s+/g, '').toLowerCase();
+        if (!r.key) bad.push(['ss', r.i, 'key']); if (!r.place) bad.push(['ss', r.i, 'place']);
+        if (k && keys[k]) bad.push(['ss', r.i, 'key']); keys[k] = 1;
+      });
+      var prods = cfg.products.map(function (r, i) { return { i: i, code: String(r.code || '').replace(/\D/g, ''), name: String(r.name || '').trim() }; }).filter(function (r) { return r.code || r.name; });
+      prods.forEach(function (r) { if (!r.code) bad.push(['sp', r.i, 'code']); if (!r.name) bad.push(['sp', r.i, 'name']); if (r.code && codes[r.code]) bad.push(['sp', r.i, 'code']); codes[r.code] = 1; });
+      if (bad.length) {
+        bad.forEach(function (b) { var el = $('main').querySelector('input[data-' + b[0] + '="' + b[1] + '"][data-k="' + b[2] + '"]'); if (el) el.classList.add('bad'); });
+        var f = $('main').querySelector('input.bad'); if (f) f.focus();
+        toast('ช่องสีแดง: ยังไม่ได้ใส่ หรือรหัสซ้ำกัน'); return;
+      }
+      var btn = this; btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> กำลังบันทึก';
+      call('cpSaveMap', state.token, JSON.stringify({ full: 1, ships: ships.map(function (r) { return { key: r.key, wh: r.wh, place: r.place }; }), products: prods.map(function (r) { return { code: r.code, name: r.name }; }) })).then(function (x) {
+        if (!x.ok) throw new Error(x.error);
+        C.data.map = x.map; C.set = null; if (C.imp && C.imp.preview) C.imp.stale = 1; C.settingsPage(); toast('บันทึกการตั้งค่าแล้ว');
+      }).catch(function (e) { btn.disabled = false; btn.innerHTML = icon('check', 18) + ' บันทึกการตั้งค่า'; toast(e.message || 'บันทึกไม่สำเร็จ'); });
+    });
+  };
+  function focusLast(attr, k) { var a = $('main').querySelectorAll('input[' + attr + '][data-k="' + k + '"]'); if (a.length) a[a.length - 1].focus(); }
+  // เหมือน cpMatchShip_ ใน AccCpram.gs
+  function matchShip(key, shipTo) {
+    var k = String(key).replace(/\s+/g, '').toLowerCase(), t = String(shipTo).replace(/\s+/g, '').toLowerCase(), code = (String(shipTo).match(/^\s*(\d+)/) || [])[1] || '';
+    return !!k && !!t && (/^\d+$/.test(k) ? k === code : t.indexOf(k) >= 0);
+  }
   C.listPage = function () {
     if (!C.data) { loading('ตารางส่งสินค้า CP Ram'); load().then(C.listPage).catch(onServerError); return; }
     var d = C.data, lines = d.lines.slice().sort(function (a, b) { return String(a.deliveryDate).localeCompare(String(b.deliveryDate)) || String(a.poNo).localeCompare(String(b.poNo)) || a.lineNo - b.lineNo; });
@@ -450,6 +528,9 @@
     '.cpmove{border:1.5px solid #fdba74;background:#fff7ed;border-radius:12px;padding:12px;margin-bottom:12px}.cpmh{color:#9a3412;margin-bottom:8px}.cpchk{display:flex;gap:8px;align-items:center;font-weight:600;color:#9a3412}.cpchk input{width:18px;height:18px}',
     '.cpmh2{font-weight:700;margin:6px 0 4px}.cpmrow{padding:6px 0;border-top:1px solid var(--line);font-size:14px}.cpmrow small{display:block;color:var(--muted)}',
     '#cpMapSave{margin-top:10px}.cpchips{margin:4px 0 12px}',
+    '.cphow{margin:0 0 10px;font-size:13.5px;color:var(--muted);line-height:1.55}.cphow b{color:var(--ink,#0f172a)}.cphow a{color:var(--c);font-weight:600}.cpbad{color:#dc2626;font-style:normal}.cpnote{font-size:13px;margin:12px 2px 0}',
+    '@media (max-width:640px){.cpset{min-width:0!important}.cpset thead{display:none}.cpset tr{display:grid;grid-template-columns:1fr 1fr 44px;gap:6px 8px;padding:10px 0;border-bottom:1px solid var(--line)}.cpset td{display:block;padding:0!important;border:0!important}.cpset td[data-l]::before{content:attr(data-l);display:block;font-size:12.5px;color:var(--muted);margin-bottom:3px}.cpset td:first-child{grid-column:1/3}.cpset td:last-child{grid-column:3;grid-row:1;align-self:end;width:auto}.cpset tr>td:nth-child(3):not(:last-child){grid-column:2/4}.cpset td[colspan]{grid-column:1/-1}.cpset td[data-l="ชื่อสินค้า"]{grid-column:1/3}.cpset .icon-btn{width:44px;height:44px}}',
+    '.cpset td:last-child,.cpset th:last-child{width:44px;text-align:center}.cpset input.bad{border-color:#dc2626;background:#fef2f2}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}',
     '.cpst3{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.cpst3 label{flex:1 1 30%}.cpst3 input{position:absolute;opacity:0}.cpst3 span{display:block;text-align:center;padding:11px 8px;border:1.5px solid var(--line);border-radius:12px;font-weight:600;cursor:pointer}',
     '.cpst3 input:checked+span{border-color:var(--c);background:color-mix(in srgb,var(--c) 12%,white);color:var(--c)}.cpst3 input:focus-visible+span{outline:2px solid var(--c)}'
   ].join('\n');

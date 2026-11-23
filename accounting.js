@@ -34,7 +34,8 @@
     { id: 'a_ap', label: 'รายงานจ่ายตามรอบ', ic: 'table' },
     { id: 'a_apv', label: 'ผู้ขาย / ตั้งค่า (จ่าย)', ic: 'gear' },
     { section: 'ตั้งค่า', tone: '' },
-    { id: 'a_set', label: 'ตั้งค่าศูนย์ / สินค้า 7-11 / LINE', ic: 'gear' }
+    { id: 'a_set', label: 'ตั้งค่าศูนย์ / สินค้า 7-11 / LINE', ic: 'gear' },
+    { id: 'a_cps', label: 'ตั้งค่าคลัง / สถานที่ส่ง CP Ram', ic: 'gear' }
   ];
   var MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
   var TOTAL_BG = '#FEF2CB', HEAD_BG = '#FFF2CC', GRAND_BG = '#FEF2CD';   // สีตามไฟล์ต้นแบบ (เหมือน Acc.gs)
@@ -95,7 +96,7 @@
     setTimeout(function () { H.autoTick(true); }, 800);   // เปิดหน้า: ข้อมูลเก่าเกิน 15 วินาที → เช็กของใหม่
     if (!fresh(H.cmpAt)) H.cmp = null;
     if (!fresh(H.monAt)) H.mon = null;   // กลับมาหน้า Dashboard = คำนวณเปรียบเทียบใหม่ (อาจมีออเดอร์ใหม่)
-    ({ a_imp: importPage, a_hist: histPage, a_dash: dash, a_mon: monthly, a_set: settings, a_cp: function () { window.ACCCP.importPage(); }, a_cpl: function () { window.ACCCP.listPage(); }, a_ex: function () { window.ACCEX.importPage(); }, a_exl: function () { window.ACCEX.listPage(); }, a_ap_dash: function () { go('a_dash'); }, a_apin: function () { window.ACCAP.importPage(); }, a_ap: function () { window.ACCAP.roundPage(); }, a_apv: function () { window.ACCAP.vendorPage(); }, a_appo: function () { window.ACCAP.poPage(); } }[page] || importPage)();
+    ({ a_imp: importPage, a_hist: histPage, a_dash: dash, a_mon: monthly, a_set: settings, a_cp: function () { window.ACCCP.importPage(); }, a_cpl: function () { window.ACCCP.listPage(); }, a_cps: function () { window.ACCCP.settingsPage(); }, a_ex: function () { window.ACCEX.importPage(); }, a_exl: function () { window.ACCEX.listPage(); }, a_ap_dash: function () { go('a_dash'); }, a_apin: function () { window.ACCAP.importPage(); }, a_ap: function () { window.ACCAP.roundPage(); }, a_apv: function () { window.ACCAP.vendorPage(); }, a_appo: function () { window.ACCAP.poPage(); } }[page] || importPage)();
   };
 
   // ==================== รีเฟรชข้อมูลอัตโนมัติ (ผู้ใช้ขอ 23/11/69) ====================
@@ -159,8 +160,9 @@
       + '<tr><th rowspan="' + RS + '" class="a7no">ที่</th><th rowspan="' + RS + '" class="a7dc">ศูนย์กระจายสินค้า<br>DC</th><th colspan="' + P.length + '" style="background:' + HEAD_BG + '">รายการสินค้า (จำนวนลัง)</th><th rowspan="' + RS + '" class="a7sum">รวม<br>(ลัง)</th></tr>'
       // แถวรูปสินค้า (ตั้งรูปได้ในหน้าตั้งค่า) · crossorigin เพื่อให้ html2canvas ใส่รูปลงภาพ LINE ได้
       + (hasImg ? '<tr>' + P.map(function (p) { return '<th class="a7pi"' + hc(p) + '>' + (p.img ? '<img src="' + esc(p.img) + '=w160" crossorigin="anonymous" alt="" loading="eager">' : '') + '</th>'; }).join('') + '</tr>' : '')
-      + '<tr>' + P.map(function (p) { return '<th class="a7p"' + (p.l2 ? '' : ' rowspan="2"') + hc(p) + '>' + esc(p.l1) + '</th>'; }).join('') + '</tr>'
-      + '<tr>' + P.filter(function (p) { return p.l2; }).map(function (p) { return '<th class="a7p"' + hc(p) + '>' + esc(p.l2) + '</th>'; }).join('') + '</tr></thead><tbody>';
+      // ชื่อสินค้า 2 บรรทัดอยู่ในช่องเดียว (เหมือน Merge Cells — ผู้ใช้ขอ 23/11/69 ไม่ให้มีเส้นคั่นระหว่างบรรทัด)
+      + '<tr>' + P.map(function (p) { return '<th class="a7p" rowspan="2"' + hc(p) + '>' + esc(p.l1) + (p.l2 ? '<br>' + esc(p.l2) : '') + '</th>'; }).join('') + '</tr>'
+      + '<tr class="a7pz"></tr></thead><tbody>';
     m.dcs.forEach(function (d, i) {
       var rows = full ? 3 : 1;
       h += '<tr class="a7r' + (d.cases ? ' has' : ' none') + '"' + (opt.click && d.cases ? ' data-dc="' + esc(d.name) + '" tabindex="0" title="ดูใบสั่งซื้อของศูนย์นี้"' : '') + '>'

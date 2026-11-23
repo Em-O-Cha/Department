@@ -399,8 +399,9 @@ function accBuildReportSheet_(dept, map, m, title) {
   sh.getRange(5, firstCol, 1, nP).merge().setValue('รายการสินค้า').setBackground(ACC_HEAD_COLOR_);
   sh.getRange(5, totCol, H, 1).merge().setValue('รวม (ลัง)');
   if (hasImg) sh.getRange(6, firstCol, 1, nP).setBackgrounds([P.map(function (p) { return p.color; })]);
-  sh.getRange(rName, firstCol, 1, nP).setValues([P.map(function (p) { return p.l1; })]).setBackgrounds([P.map(function (p) { return p.color; })]);
-  sh.getRange(rName + 1, firstCol, 1, nP).setValues([P.map(function (p) { return p.l2; })]).setBackgrounds([P.map(function (p) { return p.color; })]);
+  // ชื่อสินค้า 2 บรรทัดรวมเป็นช่องเดียว (merge แนวตั้ง — ผู้ใช้ขอ 23/11/69)
+  sh.getRange(rName, firstCol, 2, nP).setBackgrounds([P.map(function (p) { return p.color; }), P.map(function (p) { return p.color; })]).mergeVertically();
+  sh.getRange(rName, firstCol, 1, nP).setValues([P.map(function (p) { return p.l1 + (p.l2 ? '\n' + p.l2 : ''); })]).setVerticalAlignment('middle');
   sh.getRange(5, 1, H, totCol).setFontWeight('bold').setWrap(true);
   // ศูนย์ละ 3 แถว: แถวแรก = จำนวนลัง (ระบายสีเฉพาะช่องที่มีตัวเลข) · อีก 2 แถวเว้นไว้
   var r = 5 + H;
