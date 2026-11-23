@@ -492,52 +492,86 @@
   }
   function poAuto(b) {
     var pl = b.po.lines.filter(function (p) { return p.qty > 0; });
-    b.lines.forEach(function (l) {
-      if (l.po !== undefined) return;
-      var k = loose(l.desc), best = 0, bs = 0;
-      pl.forEach(function (p) { var sc = sim(k, loose(p.desc)); if (sc > bs) { bs = sc; best = p.n; } });
+    var fresh = b.lines.filter(function (l) { return l.po === undefined; });
+    fresh.forEach(function (l) {
+      var k = loose(l.desc), toks = String(l.desc || '').split(/[\s\d\-_()\/.,:;#*+]+/).map(loose).filter(function (t) { return t.length >= 2; }), best = 0, bs = 0;
+      pl.forEach(function (p) {
+        var pk = loose(p.desc), sc = sim(k, pk);
+        if (toks.some(function (t) { return pk.indexOf(t) >= 0; })) sc = Math.max(sc, 0.6);   // มีคำเดียวกัน เช่น "กระป๋อง" / "ฝา"
+        if (sc > bs) { bs = sc; best = p.n; }
+      });
       l.po = bs >= 0.5 ? best : pl.length === 1 ? pl[0].n : 0;
+    });
+    // ชุดเดียวกัน: บรรทัดที่ยังไม่ได้จับคู่ แต่จำนวนเท่ากับบรรทัดที่จับคู่แล้ว → หัก PO บรรทัดเดียวกัน
+    fresh.forEach(function (l) {
+      if (l.po) return;
+      var m = b.lines.filter(function (o) { return o !== l && o.po && q0(o.qty) === q0(l.qty); })[0];
+      if (m) l.po = m.po;
     });
     dupAuto(b);
   }
   // รายการซ้ำ (ผู้ใช้ขอ 23/11/69): สินค้าเดียวกัน (บรรทัด PO เดียวกัน หรือชื่อเดียวกัน) + จำนวนเท่ากัน = ยอดเดียวกัน → นับครั้งเดียว
   // เช่น แนบทั้งใบกำกับภาษีและใบส่งของ · ผู้ใช้กด "นับด้วย" / "ไม่นับ" เองได้ (dupSet)
+  // ซ้ำจริง = ชื่อ + จำนวน + ราคาเท่ากัน (เช่น ใบกำกับ + ใบส่งของ) → ไม่นับเลย · ผู้ใช้กดเปลี่ยนเองได้ (dupSet)
+  // ชุดเดียวกัน (ผู้ใช้ขอ 23/11/69) = หัก PO บรรทัดเดียวกัน + จำนวนเท่ากัน แต่คนละสินค้า (เช่น กระป๋อง + ฝา) → ยอดเงินนับทุกบรรทัด จำนวนหักครั้งเดียว
   function dupAuto(b) {
     var seen = {};
     b.lines.forEach(function (l) {
-      var k = (l.po ? 'p' + l.po : 'd' + loose(l.desc)) + '|' + q0(l.qty);
       if (!String(l.desc).trim() && !l.qty) return;
+      var k = loose(l.desc) + '|' + q0(l.qty) + '|' + q0(l.price);
       if (!l.dupSet) l.dup = !!seen[k];
       if (!l.dup) seen[k] = 1;
     });
+  }
+  // รวมรายการในบิลตามบรรทัด PO: จำนวน = ผลรวมของจำนวนที่ไม่ซ้ำกัน (จำนวนเท่ากัน = ชุดเดียวกัน นับครั้งเดียว) · มูลค่า / VAT / รวม = ผลรวมทุกบรรทัด
+  function poGroups(b) {
+    var g = {};
+    counted(b).forEach(function (l, i) {
+      if (!l.po) return;
+      var x = g[l.po] = g[l.po] || { n: l.po, qs: {}, q: 0, amount: 0, vat: 0, total: 0, wht: 0, rows: 0 };
+      var c = calc(l, b.vatMode, b.pct), qk = q0(l.qty);
+      if (!x.qs[qk]) { x.qs[qk] = 1; x.q += Number(l.qty) || 0; }
+      x.amount += c.amount; x.vat += c.vat; x.total += c.total; x.wht += c.wht; x.rows++;
+    });
+    Object.keys(g).forEach(function (k) { var x = g[k]; x.unit = x.q ? x.amount / x.q : 0; });
+    return g;
+  }
+  // PO หลังหักบิลนี้ (เหมือน apDeductPo_ หลังบ้าน): จำนวนคงเหลือ = PO − จำนวนในบิล · มูลค่าคงเหลือ = มูลค่า PO − มูลค่าในบิล
+  // มูลค่าในบิลเกิน PO หรือจำนวนครบ = บรรทัดนี้ใช้หมด (ใช้ยอดตามบิลทั้งหมด)
+  function poAfter(p, x, po) {
+    var amt = calc({ qty: p.qty, price: p.price }, po.vatMode, po.pct).amount;
+    if (!x) return { amt: amt, q: p.qty, ra: amt, done: p.qty <= 0, over: 0 };
+    var rq = Math.max(0, Math.round((p.qty - x.q) * 10000) / 10000), ra = Math.max(0, r2(amt - x.amount));
+    var done = rq <= 0 || ra <= 0.005;
+    return { amt: amt, q: done ? 0 : rq, ra: done ? 0 : ra, done: done, over: x.amount - amt > 0.005 ? r2(x.amount - amt) : 0, short: rq <= 0 && ra > 0.005 ? ra : 0 };
   }
   function counted(b) { return b.lines.filter(function (l) { return !l.dup && (String(l.desc).trim() || l.qty || l.price); }); }
   // สรุปการหัก PO ใต้ตาราง: แต่ละบรรทัด PO สั่ง / รับแล้ว / บิลนี้ / คงเหลือ + ยอดเงิน + ประวัติบิลก่อนหน้า
   function poSum() {
     var b = P.cur, el = $('apPoSum'); if (!el || !b.fromPo) return;
-    var po = b.po, use = counted(b), before = 0, after = 0, billPo = 0, other = 0, over = [], left = 0;
+    var po = b.po, use = counted(b), G = poGroups(b), before = 0, after = 0, billPo = 0, other = 0, over = [], left = 0, short = [];
     var rows = po.lines.map(function (p) {
-      var mine = use.filter(function (l) { return l.po === p.n; });
-      var q = mine.reduce(function (t, l) { return t + (Number(l.qty) || 0); }, 0), qa = mine.reduce(function (t, l) { return t + calc(l, b.vatMode, b.pct).total; }, 0);
-      var rest = Math.max(0, r2((p.qty - q) * 10000) / 10000);
-      before += calc({ qty: p.qty, price: p.price }, po.vatMode, po.pct).total; after += calc({ qty: rest, price: p.price }, po.vatMode, po.pct).total;
-      if (q > p.qty + 1e-9) over.push(p.desc);
-      if (rest > 0) left++;
-      var full = calc({ qty: p.qty + p.recv, price: p.price }, po.vatMode, po.pct).total, recvA = calc({ qty: p.recv, price: p.price }, po.vatMode, po.pct).total, restA = calc({ qty: rest, price: p.price }, po.vatMode, po.pct).total;
-      return '<tr' + (p.qty <= 0 ? ' class="apdone"' : '') + '><td>' + p.n + '. ' + esc(p.desc || '-') + '</td><td>' + m2(p.price) + '</td>'
-        + '<td>' + q0(p.qty + p.recv) + '<small>' + m2(full) + '</small></td><td>' + (p.recv ? q0(p.recv) + '<small>' + m2(recvA) + '</small>' : '-') + '</td>'
-        + '<td class="apthis">' + (q ? '−' + q0(q) + '<small>−' + m2(qa) + '</small>' : '-') + '</td><td><b>' + (rest > 0 ? q0(rest) : '✓ ครบ') + '</b>' + (rest > 0 ? '<small>' + m2(restA) + '</small>' : '') + '</td></tr>';
+      var x = G[p.n], a = poAfter(p, x, po);
+      before += a.amt; after += a.ra;
+      if (a.over) over.push(p.desc + ' เกิน ' + m2(a.over));
+      if (a.short) short.push(p.desc);
+      if (!a.done) left++;
+      var unit = function (q, v) { return q ? '<small>@ ' + m2(v / q) + '/หน่วย</small>' : ''; };
+      return '<tr' + (p.qty <= 0 ? ' class="apdone"' : '') + '><td>' + p.n + '. ' + esc(p.desc || '-') + (p.recv ? '<small>รับบิลไปแล้ว ' + q0(p.recv) + '</small>' : '') + '</td>'
+        + '<td>' + q0(p.qty) + '<small>' + m2(a.amt) + '</small>' + unit(p.qty, a.amt) + '</td>'
+        + '<td class="apthis">' + (x ? '−' + q0(x.q) + '<small>−' + m2(x.amount) + '</small>' + unit(x.q, x.amount) + (x.rows > 1 ? '<small>' + x.rows + ' บรรทัดรวมกัน</small>' : '') : '-') + '</td>'
+        + '<td><b>' + (a.done ? '✓ หมด' : q0(a.q)) + '</b>' + (a.done ? '' : '<small>' + m2(a.ra) + '</small>' + unit(a.q, a.ra)) + '</td></tr>';
     }).join('');
-    use.forEach(function (l) { var t = calc(l, b.vatMode, b.pct).total; if (l.po) billPo += t; else other += t; });
+    use.forEach(function (l) { var t = calc(l, b.vatMode, b.pct).amount; if (l.po) billPo += t; else other += t; });
     var dups = b.lines.filter(function (l) { return l.dup; }).length;
     el.innerHTML = '<div class="appos"><h4>' + icon('clock', 18) + ' หักจาก PO ล่วงหน้า</h4>'
-      + '<div class="cpwrap"><table class="apposT"><thead><tr><th>สินค้าใน PO</th><th>ราคา/หน่วย</th><th>สั่ง</th><th>รับแล้ว</th><th>บิลนี้</th><th>คงเหลือ</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
-      + '<p class="apnote">แต่ละช่อง: จำนวน / ยอดเงิน' + (po.vatMode === 'none' ? '' : ' (รวม VAT)') + ' บาท · ราคา/หน่วยตาม PO</p>'
-      + '<div class="apsum"><span>PO คงค้างก่อนบิลนี้<b>' + m2(before) + '</b></span><span class="apred">หักตามบิลนี้<b>−' + m2(billPo) + '</b></span><span class="appay">PO คงเหลือหลังบันทึก<b>' + m2(after) + '</b></span></div>'
-      + (Math.abs(before - billPo - after) > 0.05 && billPo ? '<p class="apnote">ราคาในบิลต่างจากราคาใน PO — PO คงเหลือคิดจากจำนวนที่เหลือ × ราคาใน PO</p>' : '')
+      + '<div class="cpwrap"><table class="apposT"><thead><tr><th>สินค้าใน PO</th><th>PO คงค้าง</th><th>บิลนี้</th><th>PO คงเหลือ</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+      + '<p class="apnote">แต่ละช่อง: จำนวน · มูลค่ารายการ (ก่อน VAT) บาท · ราคา/หน่วย — หักยอดเงินของบิลออกจากยอด PO · ถ้ายอดบิลเกินยอด PO ใช้ยอดตามบิลทั้งหมด PO รายการนั้นหมด</p>'
+      + '<div class="apsum"><span>PO คงค้าง (ก่อน VAT)<b>' + m2(before) + '</b></span><span class="apred">หักตามบิลนี้<b>−' + m2(billPo) + '</b></span><span class="appay">PO คงเหลือหลังบันทึก (ก่อน VAT)<b>' + m2(after) + '</b></span></div>'
+      + (short.length ? '<p class="apnote">' + esc(short.join(', ')) + ' — จำนวนครบแล้วแต่ยอดเงินยังเหลือ (บิลถูกกว่า PO) → PO รายการนี้ปิดตามจำนวน</p>' : '')
       + (other ? '<p class="apnote">รายการที่ไม่ได้หักจาก PO รวม ' + m2(other) + ' — ยังอยู่ในบิลนี้ตามปกติ</p>' : '')
-      + (dups ? '<p class="apnote">' + dups + ' รายการซ้ำ (สินค้าและจำนวนเท่ากัน) — นับครั้งเดียว ไม่บันทึกซ้ำในบิล</p>' : '')
-      + (over.length ? '<p class="apwarn">⚠ จำนวนในบิลมากกว่าที่ค้างใน PO: ' + esc(over.join(', ')) + ' — หักได้ถึง 0 เท่านั้น</p>' : '')
+      + (dups ? '<p class="apnote">' + dups + ' บรรทัดซ้ำ (ชื่อ จำนวน ราคาเท่ากัน) — ไม่นับ ไม่บันทึกซ้ำในบิล</p>' : '')
+      + (over.length ? '<p class="apwarn">⚠ ยอดบิลเกินยอด PO: ' + esc(over.join(', ')) + ' บาท — ใช้ยอดตามบิลทั้งหมด PO รายการนั้นหมด</p>' : '')
       + '<div class="appost ' + (left ? 'part' : 'full') + '">' + (left ? '⏳ หลังบันทึก PO ยังค้าง <b>' + left + ' รายการ</b> — เก็บไว้รอบิลถัดไป' : '✓ หลังบันทึก PO นี้<b>รับครบ</b> — ย้ายไป "รับครบแล้ว"') + '</div>'
       + (po.log && po.log.length ? '<details class="apolog"><summary>ประวัติรับบิลของ PO นี้ ' + po.log.length + ' ใบ · หักแล้ว ' + m2(po.log.reduce(function (t, e) { return t + (Number(e.total) || 0); }, 0)) + '</summary>' + logRows(po.log) + '</details>' : '')
       + '</div>';
@@ -808,35 +842,51 @@
   }
   function drawLines() {
     var b = P.cur;
+    var G = b.fromPo ? poGroups(b) : {}, lastOf = {};
+    b.lines.forEach(function (l, i) { if (b.fromPo && !l.dup && l.po && G[l.po] && G[l.po].rows > 1) lastOf[l.po] = i; });
     $('apLines').innerHTML = b.lines.map(function (l, i) {
       var c = calc(l, b.vatMode, b.pct);
+      var set = b.fromPo && !l.dup && l.po && G[l.po] && G[l.po].rows > 1;
       var map = b.fromPo ? '<div class="apmap"><select data-po="' + i + '" aria-label="หักจาก PO บรรทัด"><option value="0">— ไม่หักจาก PO —</option>' + b.po.lines.map(function (p) {
           return '<option value="' + p.n + '"' + (l.po === p.n ? ' selected' : '') + (p.qty <= 0 && l.po !== p.n ? ' disabled' : '') + '>หัก PO: ' + p.n + '. ' + esc(p.desc || '-') + ' (ค้าง ' + q0(p.qty) + ')</option>'; }).join('') + '</select>'
         + (l.dup || l.dupSet ? '<button type="button" class="apdupb' + (l.dup ? ' on' : '') + '" data-dup="' + i + '">' + (l.dup ? 'ซ้ำ · ไม่นับ — กดเพื่อนับด้วย' : 'นับรายการนี้ด้วย — กดถ้าซ้ำ') + '</button>' : '') + '</div>' : '';
-      return '<tr' + (l.dup ? ' class="apdupl"' : '') + '><td><input data-i="' + i + '" data-k="desc" value="' + esc(l.desc) + '">' + map + '</td><td><input class="apn" data-i="' + i + '" data-k="qty" inputmode="decimal" value="' + esc(l.qty) + '"></td><td><input class="apn" data-i="' + i + '" data-k="price" inputmode="decimal" value="' + esc(l.price) + '"></td>'
+      return '<tr data-row="' + i + '"' + (l.dup ? ' class="apdupl"' : set ? ' class="apset"' : '') + '><td><input data-i="' + i + '" data-k="desc" value="' + esc(l.desc) + '">' + map + '</td><td><input class="apn" data-i="' + i + '" data-k="qty" inputmode="decimal" value="' + esc(l.qty) + '"></td><td><input class="apn" data-i="' + i + '" data-k="price" inputmode="decimal" value="' + esc(l.price) + '"></td>'
         + '<td class="apv" data-c="amount">' + m2(c.amount) + '</td><td class="apv" data-c="vat">' + m2(c.vat) + '</td><td class="apv" data-c="total">' + m2(c.total) + '</td><td class="apv apred" data-c="wht">' + m2(c.wht) + '</td>'
-        + '<td>' + (b.lines.length > 1 ? '<button type="button" class="apx" data-del="' + i + '" aria-label="ลบรายการ">✕</button>' : '') + '</td></tr>';
+        + '<td>' + (b.lines.length > 1 ? '<button type="button" class="apx" data-del="' + i + '" aria-label="ลบรายการ">✕</button>' : '') + '</td></tr>'
+        + (lastOf[l.po] === i ? '<tr class="apgrp" data-grp="' + l.po + '">' + grpCells(G[l.po], b) + '</tr>' : '');
     }).join('');
     on('#apLines input', 'input', function (el) {
       var i = +el.getAttribute('data-i'), k = el.getAttribute('data-k'), l = b.lines[i];
       l[k] = k === 'desc' ? el.value : num(el.value);
       var c = calc(l, b.vatMode, b.pct), tr = el.closest('tr');
       ['amount', 'vat', 'total', 'wht'].forEach(function (f) { tr.querySelector('[data-c=' + f + ']').textContent = m2(c[f]); });
-      refresh();
+      updGroups(); refresh();
     });
     on('[data-del]', 'click', function (el) { b.lines.splice(+el.getAttribute('data-del'), 1); drawLines(); refresh(); });
     if (!b.fromPo) return;
     on('[data-po]', 'change', function (el) { b.lines[+el.getAttribute('data-po')].po = +el.value; dupAuto(b); drawLines(); refresh(); });
     on('[data-dup]', 'click', function (el) { var l = b.lines[+el.getAttribute('data-dup')]; l.dup = !l.dup; l.dupSet = true; drawLines(); refresh(); });
-    on('#apLines input[data-k=qty], #apLines input[data-k=desc]', 'change', function () { var was = b.lines.map(function (l) { return l.dup; }).join(); dupAuto(b); if (b.lines.map(function (l) { return l.dup; }).join() !== was) { drawLines(); refresh(); } });
+    on('#apLines input[data-k=qty], #apLines input[data-k=desc], #apLines input[data-k=price]', 'change', function () { var sig = function () { return b.lines.map(function (l) { return l.dup; }).join() + JSON.stringify(Object.keys(poGroups(b)).map(function (k) { return poGroups(b)[k].rows; })); }, was = sig(); dupAuto(b); if (sig() !== was) { drawLines(); refresh(); } });
   }
   function recalcLines() {
     var b = P.cur;
-    Array.prototype.forEach.call($('apLines').querySelectorAll('tr'), function (tr, i) {
-      var l = b.lines[i]; if (!l) return;
+    Array.prototype.forEach.call($('apLines').querySelectorAll('tr[data-row]'), function (tr) {
+      var l = b.lines[+tr.getAttribute('data-row')]; if (!l) return;
       var c = calc(l, b.vatMode, b.pct);
       ['amount', 'vat', 'total', 'wht'].forEach(function (f) { var el = tr.querySelector('[data-c=' + f + ']'); if (el) el.textContent = m2(c[f]); });
     });
+    updGroups();
+  }
+  // แถว "รวมหัก PO" ใต้กลุ่มบรรทัดที่หัก PO บรรทัดเดียวกัน (ผู้ใช้ขอ 23/11/69): จำนวน (นับครั้งเดียวถ้าเท่ากัน) · ราคา/หน่วยรวม = มูลค่ารวม ÷ จำนวน · มูลค่า / VAT / รวม / หัก
+  function grpCells(x, b) {
+    var p = b.po.lines.filter(function (y) { return y.n === x.n; })[0] || {};
+    return '<td>รวมหัก PO ' + x.n + '. ' + esc(p.desc || '') + '<small>' + x.rows + ' บรรทัด · จำนวนเท่ากันนับครั้งเดียว</small></td><td class="apv">' + q0(x.q) + '</td><td class="apv">' + m2(x.unit) + '</td>'
+      + '<td class="apv">' + m2(x.amount) + '</td><td class="apv">' + m2(x.vat) + '</td><td class="apv">' + m2(x.total) + '</td><td class="apv apred">' + m2(x.wht) + '</td><td></td>';
+  }
+  function updGroups() {
+    var b = P.cur; if (!b.fromPo) return;
+    var G = poGroups(b);
+    Array.prototype.forEach.call($('apLines').querySelectorAll('tr.apgrp'), function (tr) { var x = G[tr.getAttribute('data-grp')]; if (x) tr.innerHTML = grpCells(x, b); });
   }
   function vhint() { var el = $('apVhint'); if (!el) return; var v = vendorOf(P.cur.vendor); el.innerHTML = v ? '✓ ผู้ขายในระบบ · ' + esc(cat(v.category).name) + (vCredit(v) != null ? ' · เครดิต ' + vCredit(v) + ' วัน' : ' · <span class="apwarn">ยังไม่ได้ตั้งเครดิต (ตั้งได้ที่หน้า ผู้ขาย / ตั้งค่า)</span>') : (P.cur.vendor ? 'ผู้ขายใหม่' : ''); el.className = v ? 'apok' : 'apwarn'; }
   function dupCheck() {
@@ -1608,10 +1658,10 @@
     '.apodone summary{cursor:pointer;padding:2px 0}.appocard.done{border-color:#bbf7d0;background:#f0fdf4}.appocard.done .appoit{color:#166534}.appocard.done .appoit div{border-color:#bbf7d0}',
     '.appoban.info{background:#eff6ff;border-color:#bfdbfe;color:#1e3a8a;font-weight:500}.appoban.info b{color:#1e3a8a}.apmap{display:flex;flex-direction:column;gap:3px;padding:0 4px 4px}.apmap select{font:inherit;font-size:14px;min-height:36px;border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:6px;padding:4px 6px;max-width:100%}',
     '.apdupb{border:1px solid #fcd34d;background:#fffbeb;color:#92400e;border-radius:6px;padding:8px 10px;min-height:36px;font:inherit;font-size:12.5px;cursor:pointer;text-align:left}.apdupb.on{background:#fef3c7;font-weight:700}.apdupl td input{text-decoration:line-through;color:var(--muted)}.apdupl td.apv{color:#cbd5e1;text-decoration:line-through}',
-    '.appos{margin-top:12px;border:1.5px solid #bfdbfe;border-radius:12px;padding:10px 12px;background:#fff}.appos h4{margin:0 0 8px;display:flex;gap:6px;align-items:center;color:#1e3a8a}.apposT{border-collapse:collapse;width:100%;font-size:14px}.apposT th,.apposT td{border-bottom:1px solid var(--line);padding:5px 6px;text-align:right;white-space:nowrap}.apposT th:first-child,.apposT td:first-child{text-align:left;white-space:normal}.apposT th{background:#f1f5f9;font-size:13px}.apposT .apthis{color:#dc2626;font-weight:700}.apposT small{display:block;font-size:12px;color:var(--muted);font-weight:400}.apposT .apthis small{color:#dc2626}.appoit span:last-child small{text-align:right}.apposT tr.apdone td{color:var(--muted)}',
+    '.appos{margin-top:12px;border:1.5px solid #bfdbfe;border-radius:12px;padding:10px 12px;background:#fff}.appos h4{margin:0 0 8px;display:flex;gap:6px;align-items:center;color:#1e3a8a}.apposT{border-collapse:collapse;width:100%;font-size:14px}.apposT th,.apposT td{border-bottom:1px solid var(--line);padding:5px 6px;text-align:right;white-space:nowrap}.apposT th:first-child,.apposT td:first-child{text-align:left;white-space:normal}.apposT th{background:#f1f5f9;font-size:13px}.apposT .apthis{color:#dc2626;font-weight:700}.aptab tr.apgrp td{background:#eff6ff;color:#1e3a8a;font-weight:700;border-top:2px solid #93c5fd;padding:6px}.aptab tr.apgrp td small{display:block;font-weight:400;font-size:12px;color:#475569}.aptab tr.apset td:first-child{box-shadow:inset 3px 0 #93c5fd}.apposT small{display:block;font-size:12px;color:var(--muted);font-weight:400}.apposT .apthis small{color:#dc2626}.appoit span:last-child small{text-align:right}.apposT tr.apdone td{color:var(--muted)}',
     '.apchoose{align-items:flex-start}.apchoose .apbtns{margin-top:6px}.apchoose .btn small{display:block;font-weight:400;color:var(--muted);font-size:12px}.appoban.info #apUnPo{margin:0 0 0 auto;flex:none}',
     '.apnote{margin:6px 0 0;font-size:13px;color:var(--muted)}.appost{margin-top:8px;border-radius:8px;padding:8px 10px;font-size:14px}.appost.part{background:#fffbeb;color:#92400e}.appost.full{background:#f0fdf4;color:#166534}.apmore{margin-top:6px}',
-    '.apmap select{width:100%;text-overflow:ellipsis}@media(max-width:560px){.apomoney{grid-template-columns:1fr 1fr 1fr;font-size:11.5px}.apomoney b{font-size:13.5px}.aptab td:first-child{min-width:170px;max-width:190px}.apposT,.apposT thead,.apposT tbody{display:block}.apposT tr{display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid var(--line)}.apposT th,.apposT td{border:0;padding:4px 3px;font-size:13px}.apposT td:first-child{grid-column:1/-1;font-weight:600;padding-top:8px}.apposT th:first-child{display:none}.apposT small{font-size:11px}}',
+    '.apmap select{width:100%;text-overflow:ellipsis}@media(max-width:560px){.apomoney{grid-template-columns:1fr 1fr 1fr;font-size:11.5px}.apomoney b{font-size:13.5px}.aptab td:first-child{min-width:170px;max-width:190px}.apposT,.apposT thead,.apposT tbody{display:block}.apposT tr{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--line)}.apposT th,.apposT td{border:0;padding:4px 3px;font-size:13px}.apposT td:first-child{grid-column:1/-1;font-weight:600;padding-top:8px}.apposT th:first-child{display:none}.apposT small{font-size:11px}}',
     '@media (max-width:860px){.apform{grid-template-columns:1fr}.apimgs{position:static;max-height:none}.apgrid{grid-template-columns:1fr}}'
   ].join('\n');
   document.head.appendChild(css);

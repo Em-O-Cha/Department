@@ -35,7 +35,8 @@ var AP_FOLDER_ = 'บิลค่าใช้จ่าย (จ่าย)';
 // PO ล่วงหน้า (ผู้ใช้ขอ 20/11/69): สั่งซื้อแล้วแต่ยังไม่ได้รับบิล — มีแค่ ชื่อสินค้า / จำนวน / ราคา · แสดงตัวแดงในรายงานเหมือนในไฟล์ · รับบิลแล้ว = บันทึกทับ billId เดิมเป็นบิลจริง
 var AP_PO_ = 'PO ล่วงหน้า';
 // รับบิลบางส่วน (ผู้ใช้ขอ 23/11/69): บิลที่มาไม่ครบหักจำนวน / ยอดเงินออกจาก PO · PO เก็บไว้จนรับครบ แล้วเปลี่ยนเป็น "ครบแล้ว" (ไม่นับในรายงาน)
-//   แถว PO: qty = จำนวนคงเหลือ · recvQty = รับบิลแล้ว · poLog (แถวแรก) = JSON [{at, billId, invNo, date, total, pay, lines: [{n, desc, q, a}]}]
+//   แถว PO: qty = จำนวนคงเหลือ · price ปรับให้ qty × price = มูลค่าคงเหลือ · recvQty = รับบิลแล้ว
+//   poLog (แถวแรก) = JSON [{at, billId, invNo, date, total, pay, lines: [{n, desc, q, amt (ก่อน VAT), a (รวม VAT), pq / pp (จำนวน / ราคาก่อนหัก), rq}]}]
 //   แถวบิลที่หักจาก PO: poRef = billId ของ PO (ลบบิล → คืนจำนวนให้ PO)
 var AP_PO_DONE_ = 'PO ล่วงหน้า (รับครบแล้ว)';
 
@@ -244,7 +245,7 @@ function apSaveBill(token, bill, files) {
     v.updatedAt = now;
     purWrite_(ss, 'ap_vendors', v);
     purLogWrite_(main, (mine.length ? 'แก้' : 'บันทึก') + (x.kind === 'po' ? 'PO ล่วงหน้า' : (mine.length && String(mine[0].kind) === AP_PO_ ? 'บิลจาก PO ล่วงหน้า' : 'บิลค่าใช้จ่าย')), 'ap_lines', billId, x.vendor + ' ' + x.invNo + ' รอบ ' + x.payRound);
-    return { ok: true, billId: billId, files: filesTxt, uploaded: saved.length, lines: x.lines.map(function (l) { var c = apCalc_(l, x.vatMode, x.pct); return { po: l.po, desc: l.desc, qty: l.qty, total: c.lineTotal, wht: c.wht }; }) };
+    return { ok: true, billId: billId, files: filesTxt, uploaded: saved.length, lines: x.lines.map(function (l) { var c = apCalc_(l, x.vatMode, x.pct); return { po: l.po, desc: l.desc, qty: l.qty, amount: c.amount, total: c.lineTotal, wht: c.wht }; }) };
   });
 }
 
@@ -268,22 +269,29 @@ function apDeductPo_(main, ss, poId, billId, x, lines) {
   return purLocked_(function () {
     var rows = purRead_(ss, 'ap_lines').filter(function (l) { return l.billId === poId && String(l.kind) === AP_PO_; }).sort(function (a, b) { return a.lineNo - b.lineNo; });
     if (!rows.length) return { done: false, missing: true };
+    // รวมตามบรรทัด PO (ผู้ใช้ขอ 23/11/69): จำนวน = ผลรวมจำนวนที่ไม่ซ้ำกัน (จำนวนเท่ากัน เช่น กระป๋อง + ฝา = ชุดเดียว นับครั้งเดียว)
+    // มูลค่า (ก่อน VAT) = ผลรวมทุกบรรทัด → หักออกจากมูลค่า PO · เกิน PO หรือจำนวนครบ = บรรทัดนั้นหมด
     var by = {}, total = 0, pay = 0;
     (lines || []).forEach(function (l) {
       if (!l.po) return;
-      var d = by[l.po] = by[l.po] || { q: 0, a: 0 };
-      d.q += Number(l.qty) || 0; d.a += Number(l.total) || 0;
+      var d = by[l.po] = by[l.po] || { q: 0, qs: {}, amt: 0, a: 0 };
+      var qk = String(Math.round((Number(l.qty) || 0) * 10000));
+      if (!d.qs[qk]) { d.qs[qk] = 1; d.q += Number(l.qty) || 0; }
+      d.amt += Number(l.amount) || 0; d.a += Number(l.total) || 0;
       total += Number(l.total) || 0; pay += (Number(l.total) || 0) - (Number(l.wht) || 0);
     });
     var now = purNow_(), logLines = [];
     rows.forEach(function (row) {
       var d = by[row.lineNo]; if (!d) return;
-      var left = Math.max(0, Math.round(((Number(row.qty) || 0) - d.q) * 10000) / 10000);
-      row.recvQty = Math.round(((Number(row.recvQty) || 0) + d.q) * 10000) / 10000;
-      row.qty = left;
-      var c = apCalc_({ qty: left, price: Number(row.price) || 0 }, row.vatMode, Number(row.pct) || 0);
+      var pq = Number(row.qty) || 0, pp = Number(row.price) || 0, pa = apCalc_({ qty: pq, price: pp }, row.vatMode, Number(row.pct) || 0).amount;
+      var rq = Math.max(0, Math.round((pq - d.q) * 10000) / 10000), ra = Math.max(0, apR2_(pa - d.amt));
+      if (rq <= 0 || ra <= 0.005) { rq = 0; ra = 0; }
+      var price = rq ? Math.round((String(row.vatMode) === 'inc' ? ra * 1.07 : ra) / rq * 1e6) / 1e6 : pp;   // ราคาต่อหน่วยใหม่ให้ จำนวนคงเหลือ × ราคา = มูลค่าคงเหลือ
+      row.recvQty = Math.round(((Number(row.recvQty) || 0) + Math.min(pq, d.q)) * 10000) / 10000;
+      row.qty = rq; row.price = price;
+      var c = apCalc_({ qty: rq, price: price }, row.vatMode, Number(row.pct) || 0);
       row.amount = c.amount; row.vat = c.vat; row.lineTotal = c.lineTotal; row.wht = c.wht; row.updatedAt = now;
-      logLines.push({ n: row.lineNo, desc: row.desc, q: d.q, a: apR2_(d.a) });
+      logLines.push({ n: row.lineNo, desc: row.desc, q: d.q, amt: apR2_(d.amt), a: apR2_(d.a), pq: pq, pp: pp, rq: Math.min(pq, d.q) });
     });
     var log = []; try { log = rows[0].poLog ? JSON.parse(rows[0].poLog) : []; } catch (e) { log = []; }
     log.push({ at: now, billId: billId, invNo: x.invNo, date: x.issueDate, round: x.payRound, total: apR2_(total), pay: apR2_(pay), lines: logLines });
@@ -309,8 +317,10 @@ function apRestorePo_(ss, poId, billId) {
   var now = purNow_();
   (ent.lines || []).forEach(function (el) {
     var row = rows.filter(function (r) { return Number(r.lineNo) === Number(el.n); })[0]; if (!row) return;
-    row.qty = Math.round(((Number(row.qty) || 0) + (Number(el.q) || 0)) * 10000) / 10000;
-    row.recvQty = Math.max(0, Math.round(((Number(row.recvQty) || 0) - (Number(el.q) || 0)) * 10000) / 10000) || '';
+    var back = el.rq != null ? Number(el.rq) : Number(el.q) || 0;
+    if (el.pq != null) { row.qty = Number(el.pq) || 0; row.price = Number(el.pp) || 0; }   // คืนจำนวน + ราคาก่อนหักบิลนี้
+    else row.qty = Math.round(((Number(row.qty) || 0) + (Number(el.q) || 0)) * 10000) / 10000;
+    row.recvQty = Math.max(0, Math.round(((Number(row.recvQty) || 0) - back) * 10000) / 10000) || '';
     var c = apCalc_({ qty: row.qty, price: Number(row.price) || 0 }, row.vatMode, Number(row.pct) || 0);
     row.amount = c.amount; row.vat = c.vat; row.lineTotal = c.lineTotal; row.wht = c.wht;
   });
