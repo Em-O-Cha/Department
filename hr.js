@@ -258,6 +258,10 @@
       var t = function (l) { return newFiles(l).map(function (f) { return String(f.at || ''); }).sort().pop() || ''; }; return t(b).localeCompare(t(a)); }) : [];
   }
   // เปิดใบลาที่มีเอกสารแนบใหม่ = รับทราบ → ป้ายแดงกระพริบ "แนบเอกสารใหม่" เปลี่ยนเป็นป้ายน้ำเงิน "เอกสารแนบ" (ผู้ใช้ขอ 23/11/69)
+  function attTag(l) {
+    var n = newFiles(l).length, all = (l.files || []).length;
+    return n ? '<span class="hnew">📎 แนบเอกสารใหม่ ' + n + ' ไฟล์</span>' : all ? '<span class="hnew seen">📎 เอกสารแนบ ' + all + ' ไฟล์</span>' : '';
+  }
   function ackAttach(l, rowEl) {
     if (!l || !newFiles(l).length) return;
     var tag = rowEl && rowEl.querySelector('.hnew'); if (tag) { tag.classList.add('seen'); tag.textContent = '📎 เอกสารแนบ ' + l.files.length + ' ไฟล์'; }
@@ -651,13 +655,13 @@
       + '<b style="flex:1">' + rows.length + ' รายการ</b><button class="btn btn-sm btn-primary" id="lNew">' + icon('plus', 16) + ' บันทึกการลา</button></div>'
       + '<div class="plist">' + (rows.map(function (l) {
         var e = emp(l.empId) || { fullName: '(ไม่พบพนักงาน)' };
-        return '<button class="prow click" data-lv="' + l.id + '">' + photo(e, 'hph sm') + '<div class="pinfo"><b>' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</b><small>' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + (l.reason ? ' · ' + esc(l.reason) : '') + (l.filledBy ? ' · ผู้กรอก ' + esc(l.filledBy) : l.supervisor ? ' · หัวหน้างาน ' + esc(l.supervisor) : '') + '</small></div>'
-          + '<div class="pprice"><span class="htype ' + l.type + '">' + LT[l.type] + '</span><small>' + lvLen(l) + '</small>' + stTag(l) + (newFiles(l).length ? '<span class="hnew">📎 แนบเอกสารใหม่ ' + newFiles(l).length + ' ไฟล์</span>' : (l.files || []).length ? '<span class="hnew seen">📎 เอกสารแนบ ' + l.files.length + ' ไฟล์</span>' : '') + '</div></button>';
+        return '<button class="prow click" data-lv="' + l.id + '">' + photo(e, 'hph sm') + '<div class="pinfo"><b>' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</b><small>' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + (l.reason ? ' · ' + esc(l.reason) : '') + (l.filledBy ? ' · ผู้กรอก ' + esc(l.filledBy) : l.supervisor ? ' · หัวหน้างาน ' + esc(l.supervisor) : '') + '</small>' + attTag(l) + '</div>'
+          + '<div class="pprice"><span class="htype ' + l.type + '">' + LT[l.type] + '</span><small>' + lvLen(l) + '</small>' + stTag(l) + '</div></button>';
       }).join('') || '<div class="panel muted">ไม่มีรายการ</div>') + '</div>';
     $('lM').addEventListener('change', function () { q.lm = v('lM'); if (q.lm && q.lm.slice(0, 4) < String(+H.data.today.slice(0, 4) - 1)) loadOld(q.lm); else leaves(); });
     $('lT').addEventListener('change', function () { q.lt = v('lT'); leaves(); });
     $('lNew').addEventListener('click', function () { leaveModal(null); });
-    on('[data-lv]', 'click', function (el) { var l = H.data.leaves.filter(function (x) { return x.id === el.getAttribute('data-lv'); })[0]; ackAttach(l, el); leaveModal(l); }, $('main'));
+    on('[data-lv]', 'click', function (el) { var l = H.data.leaves.filter(function (x) { return x.id === el.getAttribute('data-lv'); })[0], nf = l ? newFiles(l) : []; ackAttach(l, el); H.newAtt = nf; leaveModal(l); H.newAtt = null; }, $('main'));
     bindLeaveTabs(); bindPending($('main'));
   }
   function leaveTabs() { return '<div class="pchips">' + [['list', 'รายการลา'], ['bal', 'สิทธิ์คงเหลือรายคน']].map(function (c) { return '<button class="chip' + (H.q.lview === c[0] ? ' on' : '') + '" data-lview="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>'; }
@@ -732,7 +736,7 @@
     };
     wide({
       icon: 'cal', title: isNew ? 'บันทึกการลา' : 'แก้ไขการลา', sub: (emp(l.empId) || {}).fullName || 'การลา / ขาดงาน / มาสาย',
-      body: '<div class="pform">' + empField('lEmp', 'พนักงาน * (รวมพนักงาน Job)', l.empId, true) + S('lType', 'ประเภท *', Object.keys(LT).map(function (k) { return [k, LT[k]]; }), l.type)
+      body: (H.newAtt && H.newAtt.length ? '<div class="hnewbox"><b>📎 เอกสารที่พนักงานแนบมาใหม่ (' + H.newAtt.length + ' ไฟล์)</b><div class="hfiles">' + fileLinks(H.newAtt) + '</div></div>' : '') + '<div class="pform">' + empField('lEmp', 'พนักงาน * (รวมพนักงาน Job)', l.empId, true) + S('lType', 'ประเภท *', Object.keys(LT).map(function (k) { return [k, LT[k]]; }), l.type)
         + F('lFrom', 'ตั้งแต่วันที่ *', l.dateFrom, 'date') + F('lTo', 'ถึงวันที่', l.dateTo || l.dateFrom, 'date')
         + F('lDays', 'จำนวนวันทำงาน (ครึ่งวัน = 0.5 · ระบบคิดเป็นชั่วโมงให้)', l.days === '' || l.days == null ? '' : l.days, 'number', ' step="0.5" min="0"') + F('lMin', 'มาสาย (นาที)', l.minutes, 'number', ' min="0"')
         + S('lSt', 'สถานะ', [['อนุมัติ', 'อนุมัติ'], ['รออนุมัติ', 'รออนุมัติ'], ['ไม่อนุมัติ', 'ไม่อนุมัติ']], l.status) + F('lAppr', 'ผู้อนุมัติ', l.approver) + S('lSup', 'หัวหน้างาน', supOpts, l.supervisor || '')
@@ -1211,6 +1215,7 @@
   var css = document.createElement('style');
   css.textContent = [
     '.hnew{display:inline-flex;align-items:center;gap:4px;background:#dc2626;color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;margin-top:4px;white-space:nowrap;animation:hnewp 1.2s ease-in-out infinite}.hnew.seen{background:#2563eb;animation:none}',
+    '.pinfo .hnew{align-self:flex-start;margin-top:6px}.hnewbox{background:#fef2f2;border:1.5px solid #fca5a5;border-radius:14px;padding:10px 12px;margin:0 0 14px}.hnewbox>b{display:block;color:#b91c1c;margin-bottom:6px}',
     '@keyframes hnewp{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.55);opacity:1}50%{box-shadow:0 0 0 6px rgba(220,38,38,0);opacity:.75}}',
     '.hpcs{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}.hpc{background:#fff;border:1px solid var(--line);border-left:5px solid #f59e0b;border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow);min-width:0}',
     '.hpc-head{display:flex;gap:12px;align-items:center}.hpc-head .hph{flex:0 0 auto}.hpc-who{min-width:0;display:flex;flex-direction:column;gap:2px}.hpc-who b{font-size:16px;line-height:1.3;word-break:break-word}.hpc-nick{align-self:flex-start;font-size:13px;font-weight:700;color:#1e40af;background:#eff6ff;border-radius:99px;padding:1px 10px}',
