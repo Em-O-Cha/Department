@@ -122,9 +122,12 @@
     var pct = function (lv, n) { return n ? (Math.round(lv / n * 1000) / 10).toLocaleString('th-TH', { maximumFractionDigits: 1 }) + '%' : '-'; };
     var tn = 0, tl = 0;
     // ข้อความธรรมดาใต้ตาราง (ผู้ใช้ขอ 23/11/69 — ไม่ต้องทำเป็นตาราง)
+    // ไฮไลท์กลุ่มที่ % ลาหยุดสูงสุด (ผู้ใช้ขอ 23/11/69) — เท่ากันไฮไลท์ทุกกลุ่ม · ไม่มีใครลา = ไม่ไฮไลท์
+    var rate = function (o) { return o.n ? o.lv / o.n : 0; }, top = Math.max.apply(null, GRPS.filter(function (x) { return x[0] !== 'other'; }).map(function (x) { return rate(g[x[0]]); }));
     var lines = GRPS.filter(function (x) { return x[0] !== 'other'; }).map(function (x) {
       var o = g[x[0]]; tn += o.n; tl += o.lv;
-      return '<div>' + esc(x[1]) + ' ' + n0(o.n) + ' คน · ลาหยุด ' + n0(o.lv) + ' คน (' + pct(o.lv, o.n) + ')</div>';
+      var hi = top > 0 && rate(o) === top;
+      return '<div' + (hi ? ' class="hdghi"' : '') + '>' + (hi ? '▲ ' : '') + esc(x[1]) + ' ' + n0(o.n) + ' คน · ลาหยุด ' + n0(o.lv) + ' คน (' + pct(o.lv, o.n) + ')' + (hi ? ' · ลาหยุดมากที่สุด' : '') + '</div>';
     }).join('');
     return '<div class="hdgsum"><b>สรุปตามกลุ่ม</b>' + lines + '<div><b>รวมทุกกลุ่ม ' + n0(tn) + ' คน · ลาหยุด ' + n0(tl) + ' คน (' + pct(tl, tn) + ')</b></div></div>';
   }
@@ -352,7 +355,7 @@
     '.hdprev{overflow-x:auto}.hdimgbox{position:fixed;left:-4000px;top:0}',
     '.hdimg{display:inline-block;min-width:720px;padding:18px;background:#fff;color:#000}.hdt{text-align:center;font-size:24px;font-weight:700;margin-bottom:12px}',
     '.hdbrand{display:flex;align-items:center;gap:12px;padding-bottom:10px;margin-bottom:12px;border-bottom:2px solid #e2e8f0}.hdlogo{height:56px;width:auto}.hdbrand b{display:block;font-size:20px}.hdbrand span{display:block;font-size:14px;color:#475569}',
-    '.hdgsum{margin-top:10px;font-size:15px;line-height:1.7}.hdgsum>b{display:block}',
+    '.hdgsum{margin-top:10px;font-size:15px;line-height:1.7}.hdgsum>b{display:block}.hdgsum .hdghi{display:inline-block;background:#fee2e2;color:#b91c1c;font-weight:700;border-radius:6px;padding:0 8px;margin:2px 0}',
     '.hdtab{border-collapse:collapse;width:100%;font-size:15px}.hdtab th{background:' + C_HEAD + ';border:1px solid #000;padding:8px;font-size:16px;white-space:nowrap}.hdtab td{border:1px solid #000;padding:6px 8px;vertical-align:top}',
     '.hdtab .hdr{background:' + C_ROLE + ';font-weight:700;white-space:nowrap}.hdtab .hdc{text-align:center;font-weight:700}.hdtab .hdn{max-width:260px}.hdtab .hdl{color:#b91c1c;min-width:200px}.hdtab .hdl div{white-space:nowrap}.hdtab .hdrn{color:#b91c1c;white-space:nowrap}',
     '.hdtab tfoot td{background:' + C_FOOT + ';font-size:15px}.hdtab tfoot .hdf1{background:' + C_ROLE + ';font-size:17px}'
