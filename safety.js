@@ -925,7 +925,8 @@
     String(text || '').split(/\n/).map(function (l) { return l.trim(); }).filter(String).forEach(function (l) {
       if (/^หมวด/.test(l) || !mains.length) mains.push({ name: l, subs: [] }); else mains[mains.length - 1].subs.push(l);
     });
-    mains.forEach(function (m) { m.leaves = m.subs.length ? m.subs.map(function (x) { return { key: m.name + ' › ' + x, label: x }; }) : [{ key: m.name, label: m.name }]; });
+    // โฟลเดอร์หลักเก็บไฟล์ได้เองด้วย แม้มีโฟลเดอร์ย่อยแล้ว (สร้างโฟลเดอร์ย่อยทีหลัง ไฟล์เดิมไม่หาย — 23/11/69)
+    mains.forEach(function (m) { m.leaves = [{ key: m.name, label: m.subs.length ? '(ไว้ใน ' + m.name + ' โดยตรง)' : m.name }].concat(m.subs.map(function (x) { return { key: m.name + ' › ' + x, label: x }; })); });
     return mains;
   }
   // หน้าแฟ้มเอกสารแบบ File Explorer ของ Windows (ผู้ใช้ขอ 20/11/69): โฟลเดอร์ ปี → หมวด → หมวดย่อย → ไฟล์
@@ -948,7 +949,7 @@
     var path = q.dPath || [], y = path[0], m = path.length > 1 ? tree[path[1]] : null, sub = m && path.length > 2 ? m.subs[path[2]] : null;
     if (path.length && years.indexOf(y) < 0) { path = q.dPath = []; y = null; m = null; }
     if (path.length > 1 && path[1] !== -1 && !m) { path = q.dPath = [y]; }
-    var leafKey = m ? (sub != null ? m.name + ' › ' + sub : (m.subs.length ? null : m.name)) : null;   // โฟลเดอร์ที่อัปโหลดได้
+    var leafKey = m ? (sub != null ? m.name + ' › ' + sub : m.name) : null;   // โฟลเดอร์ที่อัปโหลดได้ (หมวดหลักก็อัปโหลดได้)
     var term = String(q.dTerm || '').toLowerCase().trim();
     var known = {}; tree.forEach(function (mm) { mm.leaves.forEach(function (l) { known[l.key] = 1; }); });
     var cnt = function (filter) { return D.docs.filter(filter).length; };
@@ -966,6 +967,7 @@
       D.docs.filter(function (d) { return d.year === y && !known[d.category]; }).forEach(function (d) { items.push({ kind: 'file', doc: d }); });
     } else if (m.subs.length && sub == null) {
       m.subs.forEach(function (s, i) { var k = m.name + ' › ' + s; items.push({ kind: 'folder', name: s, n: cnt(function (d) { return d.year === y && d.category === k; }), go: [y, path[1], i] }); });
+      D.docs.filter(function (d) { return d.year === y && d.category === m.name; }).sort(function (a, b) { return String(a.title).localeCompare(String(b.title), 'th'); }).forEach(function (d) { items.push({ kind: 'file', doc: d }); });
     } else {
       D.docs.filter(function (d) { return d.year === y && d.category === leafKey; }).sort(function (a, b) { return String(a.title).localeCompare(String(b.title), 'th'); }).forEach(function (d) { items.push({ kind: 'file', doc: d }); });
     }
@@ -996,6 +998,7 @@
       + '<nav class="sxcrumb" aria-label="ตำแหน่งโฟลเดอร์">' + crumbs.map(function (c, i) { return (i ? '<span class="sxsep">›</span>' : '') + '<button data-xcr="' + i + '"' + (i === crumbs.length - 1 ? ' aria-current="page"' : '') + '>' + (i ? '' : '<span class="sxsm">' + FOLDER_SVG + '</span>') + esc(c[0]) + '</button>'; }).join('') + '</nav>'
       + '<input id="dTerm" type="search" placeholder="ค้นหาใน ' + esc(crumbs[crumbs.length - 1][0]) + '" value="' + esc(q.dTerm || '') + '" aria-label="ค้นหาเอกสาร"></div>'
       + '<div class="sxtools">' + (leafKey ? '<button class="btn btn-sm btn-primary" id="xUpl">' + icon('up', 15) + ' อัปโหลดไฟล์</button>' : '')
+      + (!term && (path.length === 1 || (path.length === 2 && m)) ? '<button class="btn btn-sm btn-line" id="dNewDir">' + icon('folder', 15) + ' สร้างโฟลเดอร์</button>' : '')
       + (!path.length ? '<button class="btn btn-sm btn-line" id="dAddYear">+ เพิ่มปี</button>' : '') + (path.length === 1 ? '<button class="btn btn-sm btn-line" id="dCats">' + icon('pen', 15) + ' แก้หมวด</button>' : '')
       + '<span class="sxcount">' + items.length + ' รายการ</span>'
       + '<div class="sxview" role="group" aria-label="มุมมอง"><button data-xv="icon" aria-pressed="' + (view === 'icon') + '" title="ไอคอน">▦</button><button data-xv="list" aria-pressed="' + (view === 'list') + '" title="รายละเอียด">☰</button></div></div>'
@@ -1027,6 +1030,7 @@
           return call('sheDocYears', state.token, years.concat([yy])).then(function (r) { if (!r.ok) return r.error; D.years = r.years; closeModal(); docsPage(); });
         } });
     });
+    if ($('dNewDir')) $('dNewDir').addEventListener('click', function () { newFolder(tree, y, path.length === 2 ? path[1] : null); });
     if ($('dCats')) $('dCats').addEventListener('click', function () {
       openModal({ title: 'แก้หมวดเอกสาร', icon: 'folder', color: state.dept.color, ok: 'บันทึก',
         body: '<p class="muted">1 บรรทัด = 1 โฟลเดอร์ · บรรทัดที่ขึ้นต้นด้วย "หมวด" เป็นโฟลเดอร์หลัก บรรทัดถัดไปเป็นโฟลเดอร์ย่อยของหมวดนั้น (เช่น 1.1 …) · ทุกปีใช้หมวดชุดเดียวกัน</p><textarea id="dCatText" rows="10" style="width:100%;font:inherit;padding:10px;border:1.5px solid var(--line);border-radius:10px">' + esc(D.cats) + '</textarea><p class="muted">ถ้าเปลี่ยนชื่อหมวดที่มีไฟล์อยู่ ไฟล์เดิมจะไปอยู่ในโฟลเดอร์ "อื่น ๆ" ให้ย้ายเข้าหมวดใหม่ด้วยปุ่ม ⋮ → แก้ไข</p>',
@@ -1039,6 +1043,51 @@
       var d = D.docs.filter(function (x) { return x.id === el.getAttribute('data-xmore'); })[0]; if (!d) return;
       docMenu(d, tree, years, known);
     }, $('main'));
+  }
+  // สร้างโฟลเดอร์เอง (ผู้ใช้ขอ 23/11/69): ในปี = โฟลเดอร์หลัก (หมวด) · ในโฟลเดอร์หลัก = โฟลเดอร์ย่อย · มีให้ทุกปีเหมือนกัน (เก็บใน docCats)
+  function newFolder(tree, y, mi) {
+    var D = H.docs, parent = mi != null ? tree[mi] : null;
+    var mainNo = function (name) { var mm = /^หมวด\s*(\d+)/.exec(name); return mm ? +mm[1] : null; };
+    var auto = function (name) {
+      if (!parent) {
+        if (/^หมวด/.test(name)) return name;
+        var n = tree.reduce(function (a, x) { return Math.max(a, mainNo(x.name) || 0); }, 0) + 1;
+        return 'หมวด ' + n + ' ' + name;
+      }
+      var no = mainNo(parent.name); if (no == null || /^\d+(\.\d+)*\s/.test(name)) return name;
+      var k = parent.subs.reduce(function (a, x) { var mm = new RegExp('^' + no + '\\.(\\d+)').exec(x); return Math.max(a, mm ? +mm[1] : 0); }, 0) + 1;
+      return no + '.' + k + ' ' + name;
+    };
+    var finalName = function () { var nm = String(v('dDirName') || '').replace(/\s+/g, ' ').trim(); return nm && $('dDirAuto').checked ? auto(nm) : nm; };
+    openModal({ title: parent ? 'สร้างโฟลเดอร์ย่อย' : 'สร้างโฟลเดอร์ใหม่', sub: parent ? 'ใน ' + parent.name : 'โฟลเดอร์หลัก (หมวด)', icon: 'folder', color: state.dept.color, ok: 'สร้างโฟลเดอร์',
+      body: F('dDirName', 'ชื่อโฟลเดอร์ *', '', 'text', ' maxlength="80" placeholder="' + (parent ? 'เช่น การตรวจวัดเสียง' : 'เช่น การตรวจระบบไฟฟ้า') + '" autocomplete="off"')
+        + '<label class="pchk" style="margin-top:8px"><input type="checkbox" id="dDirAuto" checked> ใส่เลขลำดับให้อัตโนมัติ</label>'
+        + '<div class="sxprev" id="dDirPrev" aria-live="polite"></div>'
+        + '<p class="muted" style="margin:8px 0 0">โฟลเดอร์นี้จะมีในทุกปี (ปี ' + esc(H.docs.years.join(', ')) + ') เหมือนโฟลเดอร์อื่น · แก้ชื่อหรือลบภายหลังได้ที่ "แก้หมวด" ในหน้าปี</p>',
+      onOpen: function () {
+        var upd = function () { var nm = finalName(); $('dDirPrev').innerHTML = nm ? '<span class="sxsm">' + FOLDER_SVG + '</span> ' + esc(nm) : ''; };
+        $('dDirName').addEventListener('input', upd); $('dDirAuto').addEventListener('change', upd); $('dDirName').focus();
+      },
+      submit: function () {
+        var nm = finalName();
+        if (!nm) return 'ใส่ชื่อโฟลเดอร์';
+        if (nm.indexOf('›') >= 0) return 'ชื่อโฟลเดอร์ห้ามมีเครื่องหมาย ›';
+        var bare = function (x) { return String(x).replace(/^(หมวด\s*)?\d+(\.\d+)*\s*/, '').replace(/\s+/g, ''); };   // เทียบชื่อโดยไม่สนเลขลำดับ
+        var same = (parent ? parent.subs : tree.map(function (x) { return x.name; })).some(function (x) { return bare(x) === bare(nm); });
+        if (same) return 'มีโฟลเดอร์ชื่อนี้อยู่แล้ว';
+        if (parent && /^หมวด/.test(nm)) return 'ชื่อโฟลเดอร์ย่อยห้ามขึ้นต้นด้วยคำว่า "หมวด" (ระบบจะนับเป็นโฟลเดอร์หลัก)';
+        var lines = [];
+        tree.forEach(function (x, i) { lines.push(x.name); x.subs.forEach(function (s2) { lines.push(s2); }); if (parent && i === mi) lines.push(nm); });
+        if (!parent) lines.push(nm);
+        return call('sheDocCats', state.token, lines.join('\n')).then(function (r) {
+          if (!r.ok) return r.error;
+          D.cats = r.cats; closeModal(); toast('สร้างโฟลเดอร์ "' + nm + '" แล้ว');
+          var t2 = docTree(D.cats), q = H.q;
+          q.dHist = (q.dHist || []).concat([q.dPath || []]);
+          q.dPath = parent ? [y, mi, t2[mi].subs.indexOf(nm)] : [y, t2.length - 1];   // เข้าไปในโฟลเดอร์ใหม่เลย
+          docsPage();
+        });
+      } });
   }
   // เมนู ⋮ ของไฟล์: เปิดดู / ดาวน์โหลด / แก้ไข (ชื่อ ปี หมวด หมายเหตุ) / ลบ
   function docMenu(d, tree, years, known) {
@@ -1247,6 +1296,7 @@
     '.sdprog{margin-top:10px;font-weight:600}.sdoc{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}.sdoc:first-of-type{border-top:0}.sdic{flex:0 0 44px;height:44px;border-radius:10px;color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:15px}',
     '#dTerm{flex:1 1 200px;min-width:0;padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;font:inherit}.sdmh{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;padding:4px 2px;font:inherit;text-align:left;cursor:pointer;color:var(--ink)}.sdmh b{font-size:17px;flex:1}.sdcnt{color:var(--muted);font-size:13.5px;white-space:nowrap}.sdchev{font-style:normal;font-size:18px;color:var(--muted);width:20px;text-align:center}.sdmain:not(.open):hover{background:#fff7ed}.sdbody{margin-top:6px}.sdmain h4{margin-bottom:6px}.sdleaf{border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin-top:8px}.sdlh{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}.sdlh .btn{width:auto;margin-left:auto}.sdnone{margin:6px 0 2px}.sdtx{flex:1;min-width:0}.sdtx b{display:block;overflow-wrap:anywhere}.sdtx small{display:block;color:var(--muted);overflow-wrap:anywhere}.sdbt{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.sdbt .btn{width:auto}.sddel{color:#dc2626}.sdempty{color:var(--muted)}',
     '@media (max-width:640px){.sdoc{flex-wrap:wrap}.sdbt{flex-basis:100%;justify-content:flex-start;padding-left:56px}}',
+    '.sxprev{margin-top:10px;padding:10px 12px;border-radius:12px;background:#fffbeb;border:1px dashed #f59e0b;font-weight:700;display:flex;align-items:center;gap:8px;min-height:22px}.sxprev:empty{display:none}.sxprev .sxsm{width:22px;display:inline-flex}',
     '.sxwin{background:#fff;border:1px solid #d6dbe3;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(15,23,42,.06)}.sxbar{display:flex;align-items:center;gap:6px;padding:8px;background:#f3f6fa;border-bottom:1px solid #e2e8f0;flex-wrap:wrap}',
     '.sxnav{flex:0 0 36px;width:36px!important;min-width:0;padding:0;height:36px;border:1px solid transparent;border-radius:8px;background:none;font-size:18px;cursor:pointer;color:#334155}.sxnav:hover:not(:disabled){background:#e2e8f0}.sxnav:disabled{color:#cbd5e1;cursor:default}',
     '.sxcrumb{flex:1 1 280px;min-width:0;display:flex;align-items:center;flex-wrap:wrap;gap:2px;min-height:36px;background:#fff;border:1px solid #d6dbe3;border-radius:8px;padding:2px 6px}.sxcrumb button{border:0;background:none;font:inherit;font-size:14px;padding:4px 6px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;color:#1e293b}.sxcrumb button:hover{background:#e0ecff}.sxcrumb [aria-current]{font-weight:700}.sxsep{color:#94a3b8}',
