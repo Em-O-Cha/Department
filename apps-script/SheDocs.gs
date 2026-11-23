@@ -128,10 +128,12 @@ function sheDocYears(token, years) {
   var dept = requireShe_(token);
   var ys = (Array.isArray(years) ? years : []).map(Number).filter(function (y) { return y >= 2500 && y <= 2700; })
     .filter(function (y, i, a) { return a.indexOf(y) === i; }).sort();
-  if (!ys.length) return { ok: false, error: 'ต้องมีอย่างน้อย 1 ปี' };
   return purLocked_(function () {
     var ss = sheBook_(dept), sr = purRead_(ss, 'she_settings').filter(function (x) { return x.id === 'docYears'; })[0];
-    purWrite_(ss, 'she_settings', sr ? Object.assign(sr, { value: ys.join(', ') }) : { id: 'docYears', value: ys.join(', ') });
+    // ลบปีสุดท้ายได้ ถ้ายังมีโฟลเดอร์ตั้งชื่อเองอยู่ (ผู้ใช้ขอ 23/11/69) · ไม่มีปีเลย = เก็บ "-"
+    if (!ys.length && !shedRoots_(ss).length) return { ok: false, error: 'ต้องมีอย่างน้อย 1 โฟลเดอร์' };
+    var v = ys.length ? ys.join(', ') : '-';
+    purWrite_(ss, 'she_settings', sr ? Object.assign(sr, { value: v }) : { id: 'docYears', value: v });
     return { ok: true, years: shedYears_(ss) };
   });
 }
@@ -164,5 +166,51 @@ function sheDocCats(token, text) {
     purWrite_(ss, 'she_settings', sr ? Object.assign(sr, { value: text }) : { id: 'docCats', value: text });
     purLogWrite_(ss, 'แก้หมวดแฟ้มเอกสาร', 'she_settings', 'docCats', text.replace(/\n/g, ' | '));
     return { ok: true, cats: text };
+  });
+}
+
+// เปลี่ยนชื่อโฟลเดอร์ชั้นบน (ผู้ใช้ขอ 23/11/69): ปี → ปีอื่น / ชื่ออื่น (หมวดของปีติดไปเป็นโฟลเดอร์ย่อย) · ชื่อ → ชื่ออื่น
+// ไฟล์ข้างในย้ายตาม (คอลัมน์ปีของไฟล์) · เปลี่ยนชื่อโฟลเดอร์ใน Drive ด้วยถ้าเจอ
+function shedCatsFromText_(text) {
+  var out = [];
+  String(text || '').split(/\r?\n/).map(function (l) { return l.trim(); }).filter(String).forEach(function (l) {
+    if (/^หมวด/.test(l) || !out.length) out.push({ name: l, subs: [] }); else out[out.length - 1].subs.push(l);
+  });
+  return out;
+}
+function shedDriveRename_(dept, from, to) {
+  var oldN = typeof from === 'number' ? 'ปี ' + from : String(from).replace(/[\\/:*?"<>|]/g, '_');
+  var newN = typeof to === 'number' ? 'ปี ' + to : String(to).replace(/[\\/:*?"<>|]/g, '_');
+  var tops = [];
+  try { var fid = deptConfig_(dept.key).folderId; if (fid) { var it = DriveApp.getFolderById(fid).getFoldersByName('แฟ้มเอกสาร SHE'); if (it.hasNext()) tops.push(it.next()); } } catch (e) {}
+  try { var it2 = DriveApp.getRootFolder().getFoldersByName('แฟ้มเอกสาร SHE (ฝ่ายความปลอดภัย)'); if (it2.hasNext()) tops.push(it2.next()); } catch (e) {}
+  tops.forEach(function (t) { try { var f = t.getFoldersByName(oldN); while (f.hasNext()) f.next().setName(newN); } catch (e) {} });
+}
+function sheRenameDocRoot(token, from, to) {
+  var dept = requireShe_(token);
+  var f = shedYearVal_(from), t = shedYearVal_(String(to == null ? '' : to).replace(/^ปี\s*/, '').replace(/[›\r\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60));
+  if (t === '') return { ok: false, error: 'ใส่ชื่อโฟลเดอร์ใหม่' };
+  return purLocked_(function () {
+    var ss = sheBook_(dept), years = shedYears_(ss), roots = shedRoots_(ss);
+    var isY = typeof f === 'number', ro = isY ? null : roots.filter(function (r) { return r.name === f; })[0];
+    if (isY ? years.indexOf(f) < 0 : !ro) return { ok: false, error: 'ไม่พบโฟลเดอร์เดิม' };
+    if (String(t) === String(f)) return { ok: true, years: years, roots: roots, docs: purRead_(ss, 'she_docs').map(shedOut_), to: t };
+    if (years.indexOf(t) >= 0 || roots.some(function (r) { return r.name === String(t); })) return { ok: false, error: 'มีโฟลเดอร์ชื่อนี้อยู่แล้ว' };
+    if (!isY && typeof t === 'number') return { ok: false, error: 'โฟลเดอร์ที่ตั้งชื่อเองเปลี่ยนเป็นปีไม่ได้ — ใช้ชื่อที่ไม่ใช่ตัวเลขปี' };
+    // ย้ายไฟล์
+    var n = 0, now = purNow_();
+    purRead_(ss, 'she_docs').forEach(function (d) { if (String(shedYearVal_(d.year)) === String(f)) { d.year = t; d.updatedAt = now; purWrite_(ss, 'she_docs', d); n++; } });
+    // ตั้งค่าโฟลเดอร์
+    var st = sheSettings_(ss), w = function (id, v) { var sr = purRead_(ss, 'she_settings').filter(function (x) { return x.id === id; })[0]; purWrite_(ss, 'she_settings', sr ? Object.assign(sr, { value: v }) : { id: id, value: v }); };
+    if (isY) {
+      var ys = String(st.docYears || '').split(/[,\s]+/).map(Number).filter(function (y) { return y >= 2500 && y <= 2700 && y !== f; });
+      if (typeof t === 'number') ys.push(t);
+      else roots.push({ name: t, cats: shedCatsFromText_(st.docCats || SHED_CATS_DEFAULT_) });
+      w('docYears', ys.length ? ys.sort().join(', ') : '-');
+    } else ro.name = t;
+    w('docRoots', JSON.stringify(roots));
+    try { shedDriveRename_(dept, f, t); } catch (e) {}
+    purLogWrite_(ss, 'เปลี่ยนชื่อโฟลเดอร์แฟ้มเอกสาร', 'she_settings', String(f), String(f) + ' → ' + String(t) + ' (' + n + ' ไฟล์)');
+    return { ok: true, years: shedYears_(ss), roots: shedRoots_(ss), docs: purRead_(ss, 'she_docs').map(shedOut_), to: t, moved: n };
   });
 }

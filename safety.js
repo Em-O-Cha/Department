@@ -994,7 +994,7 @@
     // ยกเว้นปีสุดท้ายที่เหลือ และโฟลเดอร์หลักอันสุดท้ายของปี
     var delKind = null, delDocs = [];
     if (!term && path.length && path[1] !== -1) {
-      if (path.length === 1) { if (isNamed || years.length > 1) { delKind = isNamed ? 'root' : 'year'; delDocs = D.docs.filter(function (d) { return d.year === y; }); } }
+      if (path.length === 1) { if (isNamed || years.length > 1 || roots.length) { delKind = isNamed ? 'root' : 'year'; delDocs = D.docs.filter(function (d) { return d.year === y; }); } }
       else if (m) {
         var dkeys = sub != null ? [m.name + ' › ' + sub] : m.leaves.map(function (l) { return l.key; });
         if (isNamed || sub != null || tree.length > 1) { delKind = 'dir'; delDocs = D.docs.filter(function (d) { return (isNamed ? d.year === y : typeof d.year === 'number') && dkeys.indexOf(d.category) >= 0; }); }
@@ -1025,6 +1025,7 @@
       + '<div class="sxtools">' + (canUp ? '<button class="btn btn-sm btn-primary" id="xUpl">' + icon('up', 15) + ' อัปโหลดไฟล์</button>' : '')
       + (!term && (path.length === 1 || (path.length === 2 && m)) ? '<button class="btn btn-sm btn-line" id="dNewDir">' + icon('folder', 15) + ' สร้างโฟลเดอร์</button>' : '')
       + (!path.length && !term ? '<button class="btn btn-sm btn-primary" id="dNewRoot">' + icon('folder', 15) + ' สร้างโฟลเดอร์</button>' : '') + (path.length === 1 && !isNamed ? '<button class="btn btn-sm btn-line" id="dCats">' + icon('pen', 15) + ' แก้หมวด</button>' : '')
+      + (!term && path.length === 1 ? '<button class="btn btn-sm btn-line" id="dRename">' + icon('pen', 15) + ' เปลี่ยนชื่อโฟลเดอร์</button>' : '')
       + (delKind ? '<button class="btn btn-sm btn-line sddel" id="dDelDir">' + icon('trash', 15) + ' ลบโฟลเดอร์นี้</button>' : '')
       + '<span class="sxcount">' + items.length + ' รายการ</span>'
       + '<div class="sxview" role="group" aria-label="มุมมอง"><button data-xv="icon" aria-pressed="' + (view === 'icon') + '" title="ไอคอน">▦</button><button data-xv="list" aria-pressed="' + (view === 'list') + '" title="รายละเอียด">☰</button></div></div>'
@@ -1050,6 +1051,7 @@
       xb.addEventListener('drop', function (e) { var fs = Array.prototype.slice.call(e.dataTransfer.files || []); if (fs.length) uploadDocs(fs, y, leafKey); });
     }
     if ($('dNewRoot')) $('dNewRoot').addEventListener('click', function () { newRoot(); });
+    if ($('dRename')) $('dRename').addEventListener('click', function () { renameRoot(y); });
     if ($('dDelDir')) $('dDelDir').addEventListener('click', function () {
       var label = crumbs[crumbs.length - 1][0], everyYear = delKind === 'dir' && !isNamed, nYears = {};
       delDocs.forEach(function (d) { nYears[d.year] = 1; });
@@ -1103,6 +1105,34 @@
   }
   // สร้างโฟลเดอร์เอง (ผู้ใช้ขอ 23/11/69): ในปี = โฟลเดอร์หลัก (หมวด) · ในโฟลเดอร์หลัก = โฟลเดอร์ย่อย · มีให้ทุกปีเหมือนกัน (เก็บใน docCats)
   // สร้างโฟลเดอร์ชั้นบนสุด: พิมพ์ปี พ.ศ. = โฟลเดอร์ปี (มีหมวดเหมือนปีอื่น) · พิมพ์ข้อความ = โฟลเดอร์ตั้งชื่อเอง
+  // เปลี่ยนชื่อโฟลเดอร์ชั้นบน (ผู้ใช้ขอ 23/11/69): ปี → ปีอื่น หรือชื่ออื่น (หมวดของปีติดไปด้วย) · ชื่อ → ชื่ออื่น
+  function renameRoot(y) {
+    var D = H.docs, isY = typeof y === 'number', n = D.docs.filter(function (d) { return d.year === y; }).length;
+    openModal({ color: state.dept.color, icon: 'pen', title: 'เปลี่ยนชื่อโฟลเดอร์ "' + (isY ? 'ปี ' + y : y) + '"',
+      sub: n ? 'ไฟล์ข้างใน ' + n + ' ไฟล์ย้ายตามไปด้วย' : 'โฟลเดอร์นี้ยังไม่มีไฟล์',
+      body: F('dRnName', 'ชื่อใหม่ *', isY ? String(y) : y, 'text', ' maxlength="60" placeholder="เช่น 2571 หรือ เอกสารตรวจประจำปี" autocomplete="off"')
+        + '<p class="muted" style="font-size:13px;margin:8px 0 0">' + (isY ? 'พิมพ์ปี พ.ศ. 4 หลัก = ยังเป็นโฟลเดอร์ปี · พิมพ์ข้อความอื่น = เป็นโฟลเดอร์ตั้งชื่อเอง (หมวด / หมวดย่อยของปีนี้ติดไปด้วย)' : 'โฟลเดอร์ที่ตั้งชื่อเองเปลี่ยนเป็นชื่ออื่นได้ (ไม่ใช่ตัวเลขปี)') + '</p>',
+      ok: 'บันทึกชื่อใหม่',
+      check: function () {
+        var v = $('dRnName').value.replace(/^ปี\s*/, '').trim();
+        if (!v) return 'ใส่ชื่อโฟลเดอร์ใหม่';
+        if (/›/.test(v)) return 'ห้ามใช้เครื่องหมาย ›';
+        var yv = /^\d{4}$/.test(v) ? +v : null;
+        if (yv != null && (yv < 2500 || yv > 2700)) return 'ปี พ.ศ. ต้องอยู่ระหว่าง 2500–2700';
+        if (yv != null && !isY) return 'โฟลเดอร์ที่ตั้งชื่อเองเปลี่ยนเป็นปีไม่ได้';
+        if (String(yv != null ? yv : v) === String(y)) return 'ชื่อเหมือนเดิม';
+        if ((yv != null && D.years.indexOf(yv) >= 0) || (D.roots || []).some(function (r) { return r.name === v; })) return 'มีโฟลเดอร์ชื่อนี้อยู่แล้ว';
+        return '';
+      },
+      submit: function () {
+        return call('sheRenameDocRoot', state.token, y, $('dRnName').value.trim()).then(function (r) {
+          if (!r.ok) return r.error;
+          D.years = r.years; D.roots = r.roots; D.docs = r.docs.sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); });
+          closeModal(); toast('เปลี่ยนชื่อโฟลเดอร์แล้ว' + (r.moved ? ' (ย้ายไฟล์ ' + r.moved + ' ไฟล์)' : ''));
+          H.q.dHist = []; H.q.dPath = [r.to]; docsPage();
+        });
+      } });
+  }
   function newRoot() {
     var D = H.docs, roots = D.roots || [];
     var parse = function () { var t = String(v('dRootName') || '').replace(/\s+/g, ' ').trim(), m = /^(?:ปี\s*)?(\d{4})$/.exec(t); return m ? { year: +m[1] } : { name: t }; };

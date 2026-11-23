@@ -105,6 +105,29 @@
     var n = day.roles.reduce(function (s, r) { return s + (r.resigns || []).length; }, 0) + (day.resignNames || []).length;
     return n || (Number(day.resign) || 0);
   }
+  // จับกลุ่มฝ่ายงาน (ผู้ใช้ขอ 23/11/69): ออฟฟิศ / QC / พนักงานฝ่ายผลิต / Job — ฝ่ายงานที่ไม่เข้ากลุ่มไหนอยู่ "อื่น ๆ"
+  var GRPS = [['office', 'กลุ่มออฟฟิศ'], ['qc', 'กลุ่ม QC'], ['prod', 'กลุ่มพนักงานฝ่ายผลิต'], ['job', 'กลุ่ม Job'], ['other', 'อื่น ๆ (ไม่ได้จัดกลุ่ม)']];
+  function grpOf(role) {
+    var n = String(role || '').toLowerCase().replace(/\s+/g, '');
+    if (/^job$/.test(n)) return 'job';
+    if (n === 'qc') return 'qc';
+    if (/หัวหน้า/.test(n)) return 'office';
+    if (/ทดลองงาน|ผลิตประจำ/.test(n)) return 'prod';
+    if (/ออฟฟิศ|อ๊อฟฟิศ|อ็อฟฟิศ|office|เช็คเกอร์|คลังสินค้า|ผู้ช่วย|^qa$|ช่าง/.test(n)) return 'office';
+    return 'other';
+  }
+  function groupHtml(day) {
+    var g = {}; GRPS.forEach(function (x) { g[x[0]] = { roles: [], n: 0, lv: 0 }; });
+    day.roles.forEach(function (r) { var o = g[grpOf(r.role)]; if (o.roles.indexOf(r.role) < 0) o.roles.push(r.role); o.n += net(r); o.lv += lvCount(r); });
+    var pct = function (lv, n) { return n ? (Math.round(lv / n * 1000) / 10).toLocaleString('th-TH', { maximumFractionDigits: 1 }) + '%' : '-'; };
+    var tn = 0, tl = 0;
+    // ข้อความธรรมดาใต้ตาราง (ผู้ใช้ขอ 23/11/69 — ไม่ต้องทำเป็นตาราง)
+    var lines = GRPS.filter(function (x) { return x[0] !== 'other' || g.other.roles.length; }).map(function (x) {
+      var o = g[x[0]]; tn += o.n; tl += o.lv;
+      return '<div>' + esc(x[1]) + ' ' + n0(o.n) + ' คน · ลาหยุด ' + n0(o.lv) + ' คน (' + pct(o.lv, o.n) + ')</div>';
+    }).join('');
+    return '<div class="hdgsum"><b>สรุปตามกลุ่ม</b>' + lines + '<div><b>รวมทุกกลุ่ม ' + n0(tn) + ' คน · ลาหยุด ' + n0(tl) + ' คน (' + pct(tl, tn) + ')</b></div></div>';
+  }
   function tableHtml(day, date) {
     var total = 0, lv = 0;
     var rows = day.roles.map(function (r) {
@@ -116,7 +139,7 @@
         + '<td class="hdn">' + (r.note ? '<div>' + esc(r.note) + '</div>' : '') + (r.resigns || []).map(function (x, k) { return '<div class="hdrn">' + (k + 1) + '.' + esc(resignText(x)) + '</div>'; }).join('') + '</td><td class="hdl">' + r.leaves.map(function (l, i) { return '<div>' + (i + 1) + '.' + esc(leaveText(l)) + '</div>'; }).join('') + '</td></tr>';
     }).join('');
     return '<div class="hdimg">' + brandHtml() + '<div class="hdt">จำนวนพนักงาน วันที่ ' + th(date) + '</div><table class="hdtab"><thead><tr><th>ฝ่ายงาน</th><th>ชื่อ</th><th>จำนวนพนักงาน</th><th>หมายเหตุ</th><th>การลา</th></tr></thead><tbody>' + rows + '</tbody>'
-      + '<tfoot><tr><td class="hdr hdf1" colspan="2">รวมพนักงานทั้งหมด</td><td class="hdf hdc"><b>' + n0(total) + '</b></td><td class="hdf">ลาออกทั้งหมด <b>' + n0(resignCount(day)) + '</b> คน' + (day.resignNames || []).map(function (n, i) { return '<div class="hdrn">' + (i + 1) + '.' + esc(n) + '</div>'; }).join('') + '</td><td class="hdf">ลางานทั้งหมด <b>' + n0(lv) + '</b> คน</td></tr></tfoot></table></div>';
+      + '<tfoot><tr><td class="hdr hdf1" colspan="2">รวมพนักงานทั้งหมด</td><td class="hdf hdc"><b>' + n0(total) + '</b></td><td class="hdf">ลาออกทั้งหมด <b>' + n0(resignCount(day)) + '</b> คน' + (day.resignNames || []).map(function (n, i) { return '<div class="hdrn">' + (i + 1) + '.' + esc(n) + '</div>'; }).join('') + '</td><td class="hdf">ลางานทั้งหมด <b>' + n0(lv) + '</b> คน</td></tr></tfoot></table>' + groupHtml(day) + '</div>';
   }
 
   // ---------- หน้า ----------
@@ -329,6 +352,7 @@
     '.hdprev{overflow-x:auto}.hdimgbox{position:fixed;left:-4000px;top:0}',
     '.hdimg{display:inline-block;min-width:720px;padding:18px;background:#fff;color:#000}.hdt{text-align:center;font-size:24px;font-weight:700;margin-bottom:12px}',
     '.hdbrand{display:flex;align-items:center;gap:12px;padding-bottom:10px;margin-bottom:12px;border-bottom:2px solid #e2e8f0}.hdlogo{height:56px;width:auto}.hdbrand b{display:block;font-size:20px}.hdbrand span{display:block;font-size:14px;color:#475569}',
+    '.hdgsum{margin-top:10px;font-size:15px;line-height:1.7}.hdgsum>b{display:block}',
     '.hdtab{border-collapse:collapse;width:100%;font-size:15px}.hdtab th{background:' + C_HEAD + ';border:1px solid #000;padding:8px;font-size:16px;white-space:nowrap}.hdtab td{border:1px solid #000;padding:6px 8px;vertical-align:top}',
     '.hdtab .hdr{background:' + C_ROLE + ';font-weight:700;white-space:nowrap}.hdtab .hdc{text-align:center;font-weight:700}.hdtab .hdn{max-width:260px}.hdtab .hdl{color:#b91c1c;min-width:200px}.hdtab .hdl div{white-space:nowrap}.hdtab .hdrn{color:#b91c1c;white-space:nowrap}',
     '.hdtab tfoot td{background:' + C_FOOT + ';font-size:15px}.hdtab tfoot .hdf1{background:' + C_ROLE + ';font-size:17px}'
