@@ -257,29 +257,12 @@
     return H.data ? H.data.leaves.filter(function (l) { return newFiles(l).length; }).sort(function (a, b) {
       var t = function (l) { return newFiles(l).map(function (f) { return String(f.at || ''); }).sort().pop() || ''; }; return t(b).localeCompare(t(a)); }) : [];
   }
-  function noticeBox() {
-    var rows = attachNotices(); if (!rows.length) return '';
-    return '<div class="hnot"><h4>📎 เอกสารแนบใหม่จากพนักงาน (' + rows.length + ')</h4><div class="hnots">' + rows.map(function (l) {
-      var e = emp(l.empId) || { fullName: '-' }, nf = newFiles(l), at = String(nf[nf.length - 1].at || '');
-      return '<div class="hnc"><div class="hpc-head">' + photo(e, 'hph sm') + '<div class="hpc-who"><b>' + esc(e.fullName) + '</b>' + (e.nickname ? '<span class="hpc-nick">' + esc(e.nickname) + '</span>' : '') + '</div></div>'
-        + '<div class="hpc-what"><span class="htype ' + l.type + '">' + LT[l.type] + '</span><b>' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + '</b>' + stTag(l) + '</div>'
-        + '<div class="hnc-files"><span>แนบใหม่ ' + nf.length + ' ไฟล์ · ' + (at ? dd(at.slice(0, 10)) + ' ' + esc(at.slice(11, 16)) : '') + '</span>' + fileLinks(nf) + '</div>'
-        + '<div class="hnc-btns"><button class="btn btn-sm btn-line" data-nlv="' + l.id + '">ดูใบลา</button><button class="btn btn-sm hok" data-ack="' + l.id + '">✓ รับทราบ</button></div></div>';
-    }).join('') + '</div></div>';
-  }
-  function bindNotice(root) {
-    on('[data-nlv]', 'click', function (el) { leaveModal(H.data.leaves.filter(function (x) { return x.id === el.getAttribute('data-nlv'); })[0]); }, root);
-    on('[data-ack]', 'click', function (el) {
-      el.disabled = true;
-      call('hrAckAttach', state.token, el.getAttribute('data-ack')).then(function (r) {
-        if (!r.ok) { el.disabled = false; return toast(r.error); }
-        H.data.leaves = H.data.leaves.map(function (x) { return x.id === r.leave.id ? r.leave : x; });
-        var card = el.closest('.hnc'), box = el.closest('.hnot');
-        if (card) card.remove();
-        if (box) { var n = box.querySelectorAll('.hnc').length; if (!n) box.remove(); else box.querySelector('h4').textContent = '📎 เอกสารแนบใหม่จากพนักงาน (' + n + ')'; }
-        renderNav(); toast('รับทราบแล้ว');
-      }).catch(function (e) { el.disabled = false; onServerError(e); });
-    }, root);
+  // เปิดใบลาที่มีเอกสารแนบใหม่ = รับทราบ → ป้าย "📎 แนบเอกสารใหม่" หายไป (ผู้ใช้ขอ 23/11/69: แจ้งแค่ที่แถวรายการลาก็พอ)
+  function ackAttach(l, rowEl) {
+    if (!l || !newFiles(l).length) return;
+    var tag = rowEl && rowEl.querySelector('.hnew'); if (tag) tag.remove();
+    l.files = l.files.map(function (f) { var c = Object.assign({}, f); delete c.notice; return c; }); renderNav();
+    call('hrAckAttach', state.token, l.id).then(function (r) { if (r.ok) H.data.leaves = H.data.leaves.map(function (x) { return x.id === r.leave.id ? r.leave : x; }); }).catch(function () {});
   }
   function pendingBox() {
     var rows = pendingLeaves(); if (!rows.length) return '';
@@ -343,9 +326,7 @@
     $('main').innerHTML = '<h3>ภาพรวม ฝ่ายบุคคล</h3><p class="lead">ข้อมูล ณ ' + dd(t) + ' · <a href="' + esc(H.data.sheetUrl) + '" target="_blank" rel="noopener">เปิด Google Sheet</a></p>'   // คำขอลารออนุมัติอยู่หน้าการลาเท่านั้น (ผู้ใช้ขอ 21/11/69: ซ้ำซ้อน)
       + '<div class="pbar noprint"><div class="pchips" style="margin:0">' + quick.map(function (x) { return '<button class="chip' + (q.from === x[1] && q.to === x[2] ? ' on' : '') + '" data-q="' + x[1] + '|' + x[2] + '">' + x[0] + '</button>'; }).join('') + '</div>'
       + '<input type="date" id="dFrom" value="' + q.from + '"> – <input type="date" id="dTo" value="' + q.to + '"><button class="btn btn-sm btn-line" id="dPrint">' + icon('print', 16) + ' พิมพ์</button></div>'
-      + '<div id="dNotice">' + noticeBox() + '</div>'
       + '<div id="dOut"><div class="panel"><span class="spinner dark"></span> กำลังสรุป…</div></div>';
-    bindNotice($('dNotice'));
     on('[data-q]', 'click', function (el) { var p = el.getAttribute('data-q').split('|'); q.from = p[0]; q.to = p[1]; dash(); }, $('main'));
     ['dFrom', 'dTo'].forEach(function (id) { $(id).addEventListener('change', function () { if (v('dFrom') && v('dTo') && v('dFrom') <= v('dTo')) { q.from = v('dFrom'); q.to = v('dTo'); dash(); } }); });
     $('dPrint').addEventListener('click', function () { window.print(); });
@@ -664,7 +645,6 @@
     if (q.lview === 'bal') return leaveBalances(y);
     $('main').innerHTML = '<h3>การลา / ขาดงาน / มาสาย</h3>'
       + (over.length ? '<div class="panel sins" style="margin-bottom:12px"><div class="sin bad">ลาเกินสิทธิ์ปี ' + (+y + 543) + ': ' + over.map(function (id) { return esc((emp(id) || {}).fullName || id); }).join(', ') + '</div></div>' : '')
-      + noticeBox()
       + pendingBox()
       + leaveTabs()
       + '<div class="pbar"><label class="pchk">เดือน <input type="month" id="lM" value="' + esc(q.lm) + '"></label><select id="lT"><option value="">ทุกประเภท</option>' + Object.keys(LT).map(function (k) { return '<option value="' + k + '"' + (q.lt === k ? ' selected' : '') + '>' + LT[k] + '</option>'; }).join('') + '</select>'
@@ -672,13 +652,13 @@
       + '<div class="plist">' + (rows.map(function (l) {
         var e = emp(l.empId) || { fullName: '(ไม่พบพนักงาน)' };
         return '<button class="prow click" data-lv="' + l.id + '">' + photo(e, 'hph sm') + '<div class="pinfo"><b>' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</b><small>' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + (l.reason ? ' · ' + esc(l.reason) : '') + (l.filledBy ? ' · ผู้กรอก ' + esc(l.filledBy) : l.supervisor ? ' · หัวหน้างาน ' + esc(l.supervisor) : '') + '</small></div>'
-          + '<div class="pprice"><span class="htype ' + l.type + '">' + LT[l.type] + '</span><small>' + lvLen(l) + '</small>' + stTag(l) + (newFiles(l).length ? '<span class="hnew">📎 เอกสารใหม่</span>' : '') + '</div></button>';
+          + '<div class="pprice"><span class="htype ' + l.type + '">' + LT[l.type] + '</span><small>' + lvLen(l) + '</small>' + stTag(l) + (newFiles(l).length ? '<span class="hnew">📎 แนบเอกสารใหม่ ' + newFiles(l).length + ' ไฟล์</span>' : '') + '</div></button>';
       }).join('') || '<div class="panel muted">ไม่มีรายการ</div>') + '</div>';
     $('lM').addEventListener('change', function () { q.lm = v('lM'); if (q.lm && q.lm.slice(0, 4) < String(+H.data.today.slice(0, 4) - 1)) loadOld(q.lm); else leaves(); });
     $('lT').addEventListener('change', function () { q.lt = v('lT'); leaves(); });
     $('lNew').addEventListener('click', function () { leaveModal(null); });
-    on('[data-lv]', 'click', function (el) { leaveModal(H.data.leaves.filter(function (x) { return x.id === el.getAttribute('data-lv'); })[0]); }, $('main'));
-    bindLeaveTabs(); bindPending($('main')); bindNotice($('main'));
+    on('[data-lv]', 'click', function (el) { var l = H.data.leaves.filter(function (x) { return x.id === el.getAttribute('data-lv'); })[0]; ackAttach(l, el); leaveModal(l); }, $('main'));
+    bindLeaveTabs(); bindPending($('main'));
   }
   function leaveTabs() { return '<div class="pchips">' + [['list', 'รายการลา'], ['bal', 'สิทธิ์คงเหลือรายคน']].map(function (c) { return '<button class="chip' + (H.q.lview === c[0] ? ' on' : '') + '" data-lview="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>'; }
   function bindLeaveTabs() { on('[data-lview]', 'click', function (el) { H.q.lview = el.getAttribute('data-lview'); leaves(); }, $('main')); }
@@ -1230,9 +1210,7 @@
   // ---------- CSS ของโมดูล ----------
   var css = document.createElement('style');
   css.textContent = [
-    '.hnot{background:#eff6ff;border:1.5px solid #93c5fd;border-radius:18px;padding:12px 14px;margin:0 0 14px}.hnot h4{margin:0 0 10px;color:#1d4ed8}.hnots{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}',
-    '.hnc{background:#fff;border:1px solid var(--line);border-left:5px solid #2563eb;border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}.hnc-files{display:flex;flex-direction:column;gap:4px}.hnc-files>span{font-size:12.5px;color:#1d4ed8;font-weight:600}',
-    '.hnc-btns{display:flex;gap:8px;justify-content:flex-end}.hnc-btns .btn{flex:1}.hnew{display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:700;margin-top:3px}@media (max-width:560px){.hnots{grid-template-columns:1fr}}',
+    '.hnew{display:inline-flex;align-items:center;gap:4px;background:#2563eb;color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;margin-top:4px;white-space:nowrap;animation:hnewp 1.6s ease-in-out infinite}@keyframes hnewp{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.45)}50%{box-shadow:0 0 0 5px rgba(37,99,235,0)}}',
     '.hpcs{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}.hpc{background:#fff;border:1px solid var(--line);border-left:5px solid #f59e0b;border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow);min-width:0}',
     '.hpc-head{display:flex;gap:12px;align-items:center}.hpc-head .hph{flex:0 0 auto}.hpc-who{min-width:0;display:flex;flex-direction:column;gap:2px}.hpc-who b{font-size:16px;line-height:1.3;word-break:break-word}.hpc-nick{align-self:flex-start;font-size:13px;font-weight:700;color:#1e40af;background:#eff6ff;border-radius:99px;padding:1px 10px}',
     '.hpc-what{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:14.5px}.hpc-len{color:var(--muted)}',
