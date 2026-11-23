@@ -169,6 +169,7 @@
     if (!H.day || H.day.date !== q.date || (H.day.src !== H.data && !H.day.dirty)) H.day = { date: q.date, items: dayItems(q.date), dirty: false, src: H.data };
     var D = H.day, items = D.items;
     var cnt = function (g) { return items.filter(function (x) { return x.grp === g && !x._carry; }).length; };
+    var hcnt = function () { return items.filter(function (x) { return x.grp === 'G2' && x.status !== 'cancel' && x.productId; }).length; };
     var ccnt = function (g) { return items.filter(function (x) { return x.grp === g && x._carry; }).length; };
     var rep = function (kind, g) { return H.data.reports.filter(function (r) { return r.date === D.date && r.kind === kind && String(r.grp || '') === String(g || ''); })[0]; };
     var mr = rep('morning', '');
@@ -182,7 +183,7 @@
       }).join('') + '</div>'
       + (q.mode === 'e' ? '<div class="xtabs xtabs3" role="tablist">' + GROUPS.map(function (g) {
         var r = rep('evening', g[0]);
-        return '<button role="tab" class="xtab' + (q.tab === g[0] ? ' on' : '') + '" data-tab="' + g[0] + '" style="--g:' + g[2] + '" aria-selected="' + (q.tab === g[0]) + '"><b>' + g[0] + ' ' + esc(g[1]) + '</b><small>' + cnt(g[0]) + ' รายการ' + (ccnt(g[0]) ? ' · ค้าง ' + ccnt(g[0]) : '') + (r && r.sentAt ? ' · ส่งแล้ว ✓' : '') + '</small></button>';
+        return '<button role="tab" class="xtab' + (q.tab === g[0] ? ' on' : '') + '" data-tab="' + g[0] + '" style="--g:' + g[2] + '" aria-selected="' + (q.tab === g[0]) + '"><b>' + g[0] + ' ' + esc(g[1]) + '</b><small>' + cnt(g[0]) + ' รายการ' + (g[0] === 'G1' && hcnt() ? ' · ต่อจาก G2 ' + hcnt() : '') + (ccnt(g[0]) ? ' · ค้าง ' + ccnt(g[0]) : '') + (r && r.sentAt ? ' · ส่งแล้ว ✓' : '') + '</small></button>';
       }).join('') + '</div>' : '') + '<div id="dBody"></div>'
       + '<div class="xsave" id="dSaveBar"' + (D.dirty ? '' : ' hidden') + '><span>มีการแก้ไขที่ยังไม่บันทึก</span><button class="btn btn-line" id="dUndo">ยกเลิก</button><button class="btn btn-primary" id="dSave">' + icon('check', 18) + ' บันทึก</button></div>';
     if (q.mode === 'm') planTab(mr); else groupTab(q.tab, rep('evening', q.tab));
@@ -270,11 +271,13 @@
     var D = H.day, s = S_(), its = [];
     var cits = [];
     D.items.forEach(function (x, i) { if (x.grp === g) (x._carry ? cits : its).push(i); });
+    var hand = []; if (g === 'G1') D.items.forEach(function (x, i) { if (x.grp === 'G2' && x.status !== 'cancel' && x.productId) hand.push(i); });
     var causes = list(s.lossCauses);
     var html = '<datalist id="xUnits">' + list(s.units).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist><datalist id="xCauses">' + causes.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>'
       + (its.length ? '<p class="muted" style="margin:0 0 10px;font-size:13px">รายการดึงมาจากแผนเช้า — กรอกผลลัพธ์ของแต่ละรายการ (ต้องการเพิ่ม / แก้แผน ให้ไปที่ "🌅 แผนเช้า")</p>'
         : '<div class="panel" style="font-size:14px">ยังไม่มีแผนของ ' + g + ' วันนี้ <button class="btn btn-line btn-sm" id="gToPlan" style="margin-left:8px">ไปใส่แผนที่ 🌅 แผนเช้า</button></div>')
       + its.map(function (i, n) { return itemCard(D.items[i], i, n, 'e'); }).join('')
+      + (hand.length ? '<h4 class="xhandh">🧊 ต่อจาก G2 งานผัด <small>' + hand.length + ' รายการ · G1 กรอกน้ำหนักหลังทำเย็น / จำนวนที่ผลิตได้จริง / ของเสีย</small></h4>' + hand.map(function (i, n) { return g2HandCard(D.items[i], i, n); }).join('') : '')
       + (cits.length ? '<h4 class="xcarryh">⏳ งานค้างจากวันก่อน <small>' + cits.length + ' รายการ · เสร็จแล้วให้เลือกวันที่เสร็จ</small></h4>' + cits.map(function (i, n) { return itemCard(D.items[i], i, n, 'e'); }).join('') : '');
     // สรุปเย็นของกลุ่ม
     var checks = list(s.checks), done = rep && rep.checks ? list(rep.checks) : [];
@@ -381,15 +384,13 @@
     var res = g === 'G2'
       ? fiU(i, 'actBatch', 'ทำจริง', x.actBatch, ' inputmode="decimal" placeholder="' + esc(isBatch(planUnit(x)) ? x.planBatch || '' : '') + '"', 'actBatchUnit', x.actBatchUnit || 'batch', ['batch', 'กก.', 'กรัม'])
         + fiU(i, 'rawKg', 'น้ำหนักวัตถุดิบ', x.rawKg, ' inputmode="decimal"' + (c.rawStd !== '' ? ' placeholder="มาตรฐาน ' + c.rawStd + '"' : ''), 'rawUnit', wUnit(x.rawUnit), ['กก.', 'กรัม'])
-        + fiU(i, 'fryKg', 'น้ำหนักหลังผัด', x.fryKg, null, 'fryUnit', wUnit(x.fryUnit), ['กก.', 'กรัม']) + fiU(i, 'coolKg', 'น้ำหนักหลังทำเย็น', x.coolKg, null, 'coolUnit', wUnit(x.coolUnit), ['กก.', 'กรัม'])
+        + fiU(i, 'fryKg', 'น้ำหนักหลังผัด', x.fryKg, null, 'fryUnit', wUnit(x.fryUnit), ['กก.', 'กรัม'])
+        + g1Done(x)
         + '<div class="xcalc" data-calc="' + i + '">' + calcHtml(x, c) + '</div>'
-        + fi(i, 'actQty', 'จำนวนที่ผลิตได้จริง', x.actQty, ' inputmode="numeric"').replace('class="xin"', 'class="xin' + (c.qtyState ? ' q-' + c.qtyState : '') + '"')
-        + fi(i, 'unit', 'หน่วย', x.unit, ' list="xUnits" maxlength="20" placeholder="' + esc(c.punit) + '"')
       : fi(i, 'actQty', g === 'G1' ? 'จำนวนที่บรรจุได้' : 'จำนวนที่บรรจุลงลัง', x.actQty, ' inputmode="numeric"')
         + fi(i, 'unit', 'หน่วย', x.unit, ' list="xUnits" maxlength="20" placeholder="' + esc(c.punit) + '"') + (g === 'G3' ? fi(i, 'actCases', 'จำนวนลัง', x.actCases, ' inputmode="numeric"', 'ลัง') : '');
-    var qUnits = ['ชิ้น']; list(S_().units).forEach(function (u) { if (qUnits.indexOf(u) < 0) qUnits.push(u); });
-    res += fiU(i, 'lossKg', 'ของเสีย (น้ำหนัก)', x.lossKg, null, 'lossKgUnit', wUnit(x.lossKgUnit), ['กก.', 'กรัม']) + fiU(i, 'lossQty', 'ของเสีย (จำนวน)', x.lossQty, ' inputmode="numeric"', 'lossQtyUnit', x.lossQtyUnit || 'ชิ้น', qUnits)
-      + fi(i, 'lossNote', 'สาเหตุของเสีย', x.lossNote, ' list="xCauses" maxlength="150"') + fi(i, 'finishDate', 'วันที่เสร็จ', x.finishDate, ' type="date" min="' + esc(x.date || '') + '"')
+    // G2: น้ำหนักหลังทำเย็น / จำนวนที่ผลิตได้จริง / ของเสีย ย้ายไปให้ G1 กรอก (ผู้ใช้ขอ 23/11/69) — การ์ด G2 เหลือแค่วันที่เสร็จ
+    res += (g === 'G2' ? '' : lossFields(i, x)) + fi(i, 'finishDate', 'วันที่เสร็จ', x.finishDate, ' type="date" min="' + esc(x.date || '') + '"')
       + '<div class="xfinw" data-fin="' + i + '">' + finHtml(i, x) + '</div>';
     // หัวการ์ดเย็น: สินค้าจากแผนเช้า (แก้ไม่ได้ที่นี่) + ข้อมูลแผน
     return '<article class="xcard" data-g="' + g + '" style="--g:' + GCOLOR[g] + '"><div class="xch"><span class="xno">' + (n + 1) + '</span><div class="xpname"><b>' + esc(x.product || '(ยังไม่เลือกสินค้า)') + '</b>'
@@ -397,6 +398,30 @@
       + (tags ? '<div class="xtags">' + tags + '</div>' : '')
       + '<div class="xgrid" style="margin-top:10px">' + res + '</div>'
       + '<label class="xchk"><input type="checkbox" data-cancel="' + i + '"' + (x.status === 'cancel' ? ' checked' : '') + '> ยกเลิกรายการนี้ (ไม่ได้ผลิต)</label></article>';
+  }
+  function lossFields(i, x) {
+    var qUnits = ['ชิ้น']; list(S_().units).forEach(function (u) { if (qUnits.indexOf(u) < 0) qUnits.push(u); });
+    return fiU(i, 'lossKg', 'ของเสีย (น้ำหนัก)', x.lossKg, null, 'lossKgUnit', wUnit(x.lossKgUnit), ['กก.', 'กรัม']) + fiU(i, 'lossQty', 'ของเสีย (จำนวน)', x.lossQty, ' inputmode="numeric"', 'lossQtyUnit', x.lossQtyUnit || 'ชิ้น', qUnits)
+      + fi(i, 'lossNote', 'สาเหตุของเสีย', x.lossNote, ' list="xCauses" maxlength="150"');
+  }
+  // การ์ด G2 (แท็บ G2): ค่าที่ G1 กรอกให้ แสดงอย่างเดียว
+  function g1Done(x) {
+    var u = function (v, k) { return v === '' || v == null ? '' : fmt(+v) + ' ' + k; };
+    var a = [x.coolKg !== '' && x.coolKg != null ? 'หลังทำเย็น ' + u(x.coolKg, wUnit(x.coolUnit)) : '', x.actQty !== '' && x.actQty != null ? 'ได้จริง ' + u(x.actQty, x.unit || calc(x).punit || '') : '',
+      x.lossKg || x.lossQty ? 'ของเสีย ' + [u(x.lossKg, wUnit(x.lossKgUnit)), u(x.lossQty, x.lossQtyUnit || 'ชิ้น')].filter(String).join(' / ') : ''].filter(String);
+    return '<div class="xg1v full"><b>G1 กรอก:</b> ' + (a.length ? esc(a.join(' · ')) : '<span class="muted">ยังไม่ได้กรอก (น้ำหนักหลังทำเย็น / จำนวนที่ผลิตได้จริง / ของเสีย)</span>') + '</div>';
+  }
+  // แท็บ G1: รายการ G2 ที่ G1 ต้องกรอกต่อ — น้ำหนักหลังทำเย็น + จำนวนที่ผลิตได้จริง + ของเสีย (เก็บในรายการ G2 เดิม)
+  function g2HandCard(x, i, n) {
+    var c = calc(x), chips = ['G2 ' + GNAME.G2, x._carry ? 'ค้างจาก ' + dd(x.date) : '', x.lot ? 'LOT ' + lotText(x.lot) : '', x.fryKg ? 'หลังผัด ' + fmt(+x.fryKg) + ' ' + wUnit(x.fryUnit) : ''].filter(String);
+    return '<article class="xcard xhand" data-g="G2" style="--g:' + GCOLOR.G2 + '"><div class="xch"><span class="xno">' + (n + 1) + '</span><div class="xpname"><b>' + esc(x.product || '(ยังไม่เลือกสินค้า)') + '</b>'
+      + '<div class="xchips">' + chips.map(function (t) { return '<span>' + esc(t) + '</span>'; }).join('') + '</div></div></div>'
+      + '<div class="xgrid" style="margin-top:10px">'
+      + fiU(i, 'coolKg', 'น้ำหนักหลังทำเย็น', x.coolKg, null, 'coolUnit', wUnit(x.coolUnit), ['กก.', 'กรัม'])
+      + '<div class="xcalc" data-calc="' + i + '">' + calcHtml(x, c) + '</div>'
+      + fi(i, 'actQty', 'จำนวนที่ผลิตได้จริง', x.actQty, ' inputmode="numeric"').replace('class="xin"', 'class="xin' + (c.qtyState ? ' q-' + c.qtyState : '') + '"')
+      + fi(i, 'unit', 'หน่วย', x.unit, ' list="xUnits" maxlength="20" placeholder="' + esc(c.punit) + '"')
+      + lossFields(i, x) + '</div></article>';
   }
   function calcHtml(x, c) {
     if (x.grp !== 'G2') return '';
@@ -988,6 +1013,7 @@
     '.xfinw{grid-column:1/-1}.xfin{border-radius:10px;padding:8px 10px;background:#f8fafc;border:1.5px solid var(--line);font-size:13px}.xfin b{display:block;font-size:14px}.xfin small{display:block;color:var(--muted);font-size:12px}.xfin.ok{background:#f0fdf4;border-color:#86efac}.xfin b.ok{color:#15803d}.xfin.bad{background:#fef2f2;border-color:#fca5a5}.xfin b.bad{color:#b91c1c}.xlc{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-top:8px}.xin select{width:100%;border:0;background:transparent;font:inherit;padding:8px;min-width:0}',
     '.xtitle em{white-space:nowrap;font-style:normal;font-weight:700;color:var(--ink)}',
     '.xsplan{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:4px 8px;align-items:center;padding:6px 0;border-bottom:1px dashed var(--line)}.xspn b{display:block;font-size:14px}.xspn small{color:var(--muted);font-size:12px}.xspq{font-size:14px;text-align:right}.xspq.muted{font-weight:400}.xspmv{grid-column:2/-1;display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)}.xspmv select{border:1.5px solid var(--line);border-radius:8px;padding:4px 6px;font:inherit;font-size:13px;background:#fff;max-width:100%}',
+    '.xhandh{margin:16px 0 8px;font-size:15px;color:#c2410c}.xhandh small{color:var(--muted);font-weight:400;font-size:12.5px}.xg1v{grid-column:1/-1;font-size:13.5px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:8px 10px;color:#1e3a8a}',
     '.xcarryh{margin:16px 0 8px;font-size:15px;color:#6d28d9}.xcarryh small{color:var(--muted);font-weight:400;font-size:12.5px}.xcarryn{background:#f5f3ff;border:1.5px solid #ddd6fe;color:#5b21b6;font-size:14px;margin-bottom:12px}',
     '.xin select.xu{flex:none;width:auto;max-width:42%;border:0;border-left:1.5px solid var(--line);background:#f8fafc;color:#334155;font:inherit;font-size:13px;padding:0 6px;align-self:stretch;cursor:pointer}',
     '.xhint{font-size:12.5px;color:#9a3412;margin:-4px 2px 8px}',
