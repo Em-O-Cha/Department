@@ -39,7 +39,16 @@
   function target(p) { var t = p && p.target !== '' && p.target != null ? Number(p.target) : NaN; return isFinite(t) && t > 0 ? t : (Number(S_().target) || 85); }
   function prodOf(id) { return H.data.products.filter(function (p) { return p.id === id; })[0]; }
   function me() { try { return localStorage.getItem('prd_by') || ''; } catch (e) { return ''; } }
-  function setMe(v) { try { localStorage.setItem('prd_by', v); } catch (e) {} }
+  function setMe(v) { try { localStorage.setItem('prd_by', v); } catch (e) {} var l = document.querySelector('.xme'); if (l) l.classList.toggle('need', !v); }
+  // ต้องเลือกผู้บันทึกก่อนส่ง LINE (ชื่อขึ้นในการ์ดเป็น "รายงานโดย …" — ผู้ใช้ขอให้บังคับ 23/11/69)
+  function needMe() {
+    if (me()) return false;
+    var l = document.querySelector('.xme'), sel = $('dMe');
+    if (l) { l.classList.add('need', 'shake'); setTimeout(function () { l.classList.remove('shake'); }, 600); l.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    if (sel) sel.focus();
+    toast('เลือกชื่อ "ผู้บันทึก" ก่อนส่ง — ชื่อจะขึ้นในการ์ด LINE ว่า รายงานโดย …');
+    return true;
+  }
   // ช่องผู้บันทึก: เลือกจากรายชื่อ (ตั้งค่า → รายชื่อผู้บันทึก) หรือ "＋ เพิ่มชื่อใหม่" แล้วชื่อนั้นเข้ารายชื่อให้ทุกเครื่อง (ผู้ใช้ขอ 21/11/69)
   function meOpts() {
     var names = list(S_().people), cur = me();
@@ -176,7 +185,7 @@
     $('main').innerHTML = '<div class="xdhead"><h3>แผนผลิต / บันทึกผล</h3>'
       + '<div class="xdate"><button class="icon-btn" id="dPrev" aria-label="วันก่อนหน้า">‹</button><label><span>' + dayName(D.date) + '</span><input type="date" id="dDate" value="' + D.date + '"></label><button class="icon-btn" id="dNext" aria-label="วันถัดไป">›</button>'
       + (D.date !== t ? '<button class="btn btn-line btn-sm" id="dToday">วันนี้</button>' : '') + '</div>'
-      + '<label class="xme">ผู้บันทึก <select id="dMe" aria-label="ผู้บันทึก">' + meOpts() + '</select></label></div>'
+      + '<label class="xme' + (me() ? '' : ' need') + '">ผู้บันทึก <b class="xreq">*</b> <select id="dMe" aria-label="ผู้บันทึก (ต้องเลือก)" required>' + meOpts() + '</select></label></div>'
       // เช้า = ใส่แผน + ส่งแผน · เย็น = ใส่ผลจริงทีละกลุ่ม + ส่งสรุปของกลุ่ม (ไม่ปนกัน)
       + '<div class="xmode" role="tablist">' + [['m', '🌅 แผนเช้า', 'ใส่แผนผลิตของวันนี้ แล้วส่งแผนเข้า LINE', mr && mr.sentAt], ['e', '🌙 สรุปเย็น', 'ใส่ผลผลิตจริงของแต่ละกลุ่ม แล้วส่งสรุป', null]].map(function (x) {
         return '<button role="tab" class="xmb' + (q.mode === x[0] ? ' on' : '') + '" data-mode="' + x[0] + '" aria-selected="' + (q.mode === x[0]) + '"><b>' + x[1] + (x[3] ? ' <small class="xok">✓ ส่งแล้ว</small>' : '') + '</b><span>' + x[2] + '</span></button>';
@@ -250,6 +259,7 @@
     bindCards();
     on('[data-add]', 'click', function (el) { addItem(el.getAttribute('data-add')); }, $('dBody'));
     $('mSend').addEventListener('click', function () {
+      if (needMe()) return;
       if (H.day.dirty) return toast('กด "บันทึก" ก่อน แล้วค่อยส่ง');
       if (!D.items.filter(function (x) { return !x._carry; }).length) return toast('ยังไม่มีแผนของวันนี้');
       var b = this; b.disabled = true;
@@ -360,6 +370,7 @@
     $('gProb').addEventListener('change', function () { saveEvening(g, true); });
     bindPhotos(g);
     $('gSend').addEventListener('click', function () {
+      if (needMe()) return;
       if (H.day.dirty) return toast('กด "บันทึก" ก่อน แล้วค่อยส่ง');
       var b = this; b.disabled = true;
       saveEvening(g).then(function (ok) { b.disabled = false; if (ok) sendLine('evening', D.date, g); });
@@ -539,6 +550,7 @@
   }
   // ---- ดูตัวอย่างการ์ด LINE แล้วส่ง
   function sendLine(kind, date, g) {
+    if (needMe()) return;
     var L = H.data.line;
     if (!L.token || !L.group) {
       return ask({ title: 'ยังเชื่อม LINE ไม่ครบ', text: 'ตั้งค่า LINE ของฝ่ายผลิตก่อน (ใส่ token และผูกกลุ่ม) ที่เมนู "ตั้งค่า / LINE"', ok: 'ไปที่ตั้งค่า', cancel: 'ปิด', tone: 'info' }).then(function (ok) { if (ok) go('p_set'); });
@@ -988,6 +1000,7 @@
   css.textContent = [
     '.xdhead{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-bottom:12px}.xdhead h3{margin:0;flex:1 1 auto}',
     '.xdate{display:flex;gap:6px;align-items:center;background:#fff;border-radius:12px;padding:6px 8px;box-shadow:var(--shadow)}.xdate label{display:flex;flex-direction:column;font-size:11px;color:var(--muted);margin:0}.xdate input{border:0;font:inherit;font-size:15px;font-weight:600;padding:0;background:none}.xdate .icon-btn{font-size:20px;line-height:1;width:36px;height:36px;justify-content:center}',
+    '.xme.need{outline:2px solid #dc2626;background:#fef2f2;color:#b91c1c}.xme .xreq{color:#dc2626}.xme.shake{animation:xshake .5s}@keyframes xshake{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}',
     '.xme{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:#334155;margin:0;background:#fff;border-radius:12px;padding:6px 8px 6px 12px;box-shadow:var(--shadow)}.xme input,.xme select{border:1.5px solid var(--line);border-radius:9px;padding:7px 10px;font:inherit;width:190px;background:#fff;color:var(--ink);min-height:40px}',
     '@media (max-width:760px){.xdhead h3{flex:1 1 100%}.xdhead .xdate{flex:1 1 100%;justify-content:space-between}.xdhead .xdate label{flex:1;align-items:center}.xdhead .xme{flex:1 1 100%}.xdhead .xme input,.xdhead .xme select{flex:1;width:auto;min-width:0}}',
     '.xtabs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}.xtab{border:2px solid transparent;background:#fff;border-radius:12px;padding:10px 12px;text-align:left;box-shadow:var(--shadow);cursor:pointer;font:inherit;color:var(--ink);border-top:4px solid var(--g);min-height:56px}',
