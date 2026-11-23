@@ -541,7 +541,10 @@ function prdT_(text, o) { var x = { type: 'text', text: String(text == null || t
 function prdBox_(contents, o) { var x = { type: 'box', layout: 'vertical', contents: contents }; Object.keys(o || {}).forEach(function (k) { x[k] = o[k]; }); return x; }
 // การ์ดขาว + แถบหัวมน (แบบเดียวกับรายงานฝ่ายบัญชี — LINE บนคอมไม่รองรับพื้นโปร่งใส)
 function prdCard_(kicker, title, sub, body, alt, headColor) {
-  var inner = [prdBox_([prdT_(kicker, { size: 'xxs', color: '#A5F3FC', weight: 'bold' }), prdT_(title, { size: 'xl', color: '#FFFFFF', weight: 'bold', margin: 'sm' }),
+  // ป้ายหัวการ์ด (DAILY REPORT · G1/G2/G3, PRODUCTION PLAN) = ป้ายขาวตัวใหญ่ ตัวอักษรสีกลุ่ม (ผู้ใช้ขอให้เห็นชัด 23/11/69)
+  var badge = prdBox_([prdT_(kicker, { size: 'xl', color: headColor || PRD_COLOR_, weight: 'bold', align: 'center' })],
+    { backgroundColor: '#FFFFFF', cornerRadius: '12px', paddingTop: '6px', paddingBottom: '6px', paddingStart: '12px', paddingEnd: '12px' });
+  var inner = [prdBox_([badge, prdT_(title, { size: 'xl', color: '#FFFFFF', weight: 'bold', margin: 'md' }),
     prdT_(sub, { size: 'xs', color: '#CFFAFE', margin: 'xs' })], { backgroundColor: headColor || PRD_COLOR_, cornerRadius: '18px', paddingAll: '18px' }),
     prdBox_(body, { paddingStart: '6px', paddingEnd: '6px', paddingTop: '4px', paddingBottom: '4px' })];
   return { type: 'flex', altText: alt.slice(0, 390), contents: { type: 'bubble', size: 'giga', body: prdBox_(inner, { paddingAll: '14px', backgroundColor: '#FFFFFF' }) } };
