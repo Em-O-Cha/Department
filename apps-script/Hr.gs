@@ -452,7 +452,22 @@ function hrLeaves(token, from, to) {
   var dept = requireHr_(token);
   if (!purDate_(from) || !purDate_(to) || from > to) return { ok: false, error: 'เลือกช่วงวันที่ให้ถูกต้อง' };
   var ss = hrBook_(dept), st = hrSettings_(ss);
-  return { ok: true, leaves: purRead_(ss, 'hr_leaves').filter(function (l) { return l.dateFrom <= to && (l.dateTo || l.dateFrom) >= from; }).map(function (l) { return hrLeaveOut_(l, st); }) };
+  var all = purRead_(ss, 'hr_leaves');
+  return { ok: true, leaves: all.filter(function (l) { return l.dateFrom <= to && (l.dateTo || l.dateFrom) >= from; }).map(function (l) { return hrLeaveOut_(l, st); }),
+    notices: all.filter(hrHasNotice_).map(function (l) { return hrLeaveOut_(l, st); }) };   // เอกสารแนบใหม่ (ทุกช่วงวันที่)
+}
+// เอกสารที่พนักงานแนบภายหลังจากแบบฟอร์ม QR (เช่น ใบรับรองแพทย์) — แจ้งเตือนในหน้า HR จนกว่าจะกด "รับทราบ" (ผู้ใช้ขอ 23/11/69)
+function hrHasNotice_(l) { return purParseFiles_(l.files).some(function (f) { return f && f.notice; }); }
+function hrAckAttach(token, leaveId) {
+  var dept = requireHr_(token);
+  return purLocked_(function () {
+    var ss = hrBook_(dept), row = hrById_(purRead_(ss, 'hr_leaves'), leaveId);
+    if (!row) return { ok: false, error: 'ไม่พบรายการลา' };
+    var files = purParseFiles_(row.files), n = 0, now = purNow_();
+    files.forEach(function (f) { if (f && f.notice) { delete f.notice; f.ackAt = now; n++; } });
+    if (n) { row.files = JSON.stringify(files); purWrite_(ss, 'hr_leaves', row); purLogWrite_(ss, 'รับทราบเอกสารแนบ', 'hr_leaves', row.id, n + ' ไฟล์'); }
+    return { ok: true, leave: hrLeaveOut_(row, hrSettings_(ss)) };
+  });
 }
 function hrLog(token, limit) {
   var dept = requireHr_(token), ss = hrBook_(dept);

@@ -261,7 +261,11 @@ function hrFormUpload(key, leaveId, sig, fileName, mimeType, base64) {
     var emp = hrById_(hrPeople_(ss), row.empId);
     var safe = purClean_(fileName, 80).replace(/[\\/:*?"<>|]/g, '_') || 'file.jpg';
     var f = DriveApp.getFolderById(folderId).createFile(Utilities.newBlob(bytes, mimeType, (emp ? emp.fullName : '') + '_ใบลา_' + row.dateFrom + '_' + safe));
-    files.push({ id: f.getId(), name: safe, mime: mimeType, url: 'https://drive.google.com/file/d/' + f.getId() + '/view', at: purNow_() });
+    // แนบภายหลัง (ใบลาส่งไปแล้ว > 15 นาที หรือ HR ตัดสินแล้ว) → แจ้งเตือนในหน้า HR จนกว่าจะกด "รับทราบ" (ผู้ใช้ขอ 23/11/69)
+    var later = row.status !== 'รออนุมัติ' || !row.createdAt || (new Date() - new Date(String(row.createdAt).replace(' ', 'T') + '+07:00')) > 15 * 60000;
+    var fo = { id: f.getId(), name: safe, mime: mimeType, url: 'https://drive.google.com/file/d/' + f.getId() + '/view', at: purNow_(), qr: 1 };
+    if (later) fo.notice = 1;
+    files.push(fo);
     row.files = JSON.stringify(files); row.updatedAt = purNow_();
     purWrite_(ss, 'hr_leaves', row);
     return { ok: true, count: files.length };
