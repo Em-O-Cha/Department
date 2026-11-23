@@ -172,7 +172,9 @@
   };
   P.parseBill = function (lines) {
     // ตัวเลขไทย → อารบิก · "ํา" (OCR แยกสระอำ) → "ำ" · เว้นวรรคหลายช่อง = คนละคอลัมน์ (เก็บไว้ 2 ช่อง)
-    var T = lines.map(function (l) { return String(l).replace(/[๐-๙]/g, function (c) { return String(c.charCodeAt(0) - 0x0E50); }).replace(/\u0E4D\u0E32/g, '\u0E33').replace(/\t/g, '  ').replace(/[ \u00a0]{3,}/g, '  ').trim(); }).filter(Boolean);
+    var T = lines.map(function (l) { return String(l).replace(/[๐-๙]/g, function (c) { return String(c.charCodeAt(0) - 0x0E50); }).replace(/\u0E4D\u0E32/g, '\u0E33').replace(/\t/g, '  ').replace(/[ \u00a0]{3,}/g, '  ')
+      .replace(/(\d{1,3})((?:\.\d{3})+)\.(\d{2})(?!\d)/g, function (m, a, b, c) { return a + b.replace(/\./g, ',') + '.' + c; })   // OCR อ่านจุลภาคเป็นจุด: 42.420.00 → 42,420.00
+      .trim(); }).filter(Boolean);
     var all = T.join('\n'), out = { vendor: '', taxId: '', invNo: '', issueDate: '', creditDays: '', lines: [], sub: null, vat: null, grand: null, vatMode: '' };
     var our = String(P.data && P.data.settings.ourTaxId || '');
     // เลขผู้เสียภาษี 13 หลัก (ตัดของบริษัทเราออก)
@@ -502,7 +504,7 @@
   }
   function poAuto(b) {
     var pl = b.po.lines.filter(function (p) { return p.qty > 0; });
-    var fresh = b.lines.filter(function (l) { return l.po === undefined; });
+    var fresh = b.lines.filter(function (l) { return l.po === undefined && (String(l.desc).trim() || l.qty > 1 || l.price); });   // บรรทัดเพิ่มเองที่ยังว่าง รอพิมพ์ก่อน
     fresh.forEach(function (l) {
       var k = loose(l.desc), toks = String(l.desc || '').split(/[\s\d\-_()\/.,:;#*+]+/).map(loose).filter(function (t) { return t.length >= 2; }), best = 0, bs = 0;
       pl.forEach(function (p) {
@@ -510,11 +512,12 @@
         if (toks.some(function (t) { return pk.indexOf(t) >= 0; })) sc = Math.max(sc, 0.6);   // มีคำเดียวกัน เช่น "กระป๋อง" / "ฝา"
         if (sc > bs) { bs = sc; best = p.n; }
       });
-      l.po = bs >= 0.5 ? best : pl.length === 1 ? pl[0].n : 0;
+      var v = bs >= 0.5 ? best : pl.length === 1 ? pl[0].n : 0;
+      if (v || l.qty > 1) l.po = v;   // ยังไม่มีจำนวน → รอจับคู่ตามจำนวนทีหลัง
     });
     // ชุดเดียวกัน: บรรทัดที่ยังไม่ได้จับคู่ แต่จำนวนเท่ากับบรรทัดที่จับคู่แล้ว → หัก PO บรรทัดเดียวกัน
     fresh.forEach(function (l) {
-      if (l.po) return;
+      if (l.po || !(l.qty > 1)) return;
       var m = b.lines.filter(function (o) { return o !== l && o.po && q0(o.qty) === q0(l.qty); })[0];
       if (m) l.po = m.po;
     });
@@ -798,7 +801,7 @@
     $('apRound').addEventListener('change', function () { b.payRound = this.value; b.autoRound = false; });
     $('apBank').addEventListener('input', function () { b.bank = this.value; });
     $('apNote').addEventListener('input', function () { b.note = this.value; });
-    $('apAdd').addEventListener('click', function () { b.lines.push(b.fromPo ? { desc: '', qty: 1, price: 0, po: 0 } : { desc: '', qty: 1, price: 0 }); drawLines(); refresh(); var x = $('apLines').querySelectorAll('input[data-k=desc]'); x[x.length - 1].focus(); });
+    $('apAdd').addEventListener('click', function () { b.lines.push({ desc: '', qty: 1, price: 0 }); drawLines(); refresh(); var x = $('apLines').querySelectorAll('input[data-k=desc]'); x[x.length - 1].focus(); });
     $('apBack').addEventListener('click', function () { P.cur = null; P.queue = null; P.render(); });
     if ($('apSkip')) $('apSkip').addEventListener('click', function () { queueNext('ข้ามแล้ว'); });
     $('apSave').addEventListener('click', save);
@@ -876,7 +879,13 @@
     if (!b.fromPo) return;
     on('[data-po]', 'change', function (el) { b.lines[+el.getAttribute('data-po')].po = +el.value; dupAuto(b); drawLines(); refresh(); });
     on('[data-dup]', 'click', function (el) { var l = b.lines[+el.getAttribute('data-dup')]; l.dup = !l.dup; l.dupSet = true; drawLines(); refresh(); });
-    on('#apLines input[data-k=qty], #apLines input[data-k=desc], #apLines input[data-k=price]', 'change', function () { var sig = function () { return b.lines.map(function (l) { return l.dup; }).join() + JSON.stringify(Object.keys(poGroups(b)).map(function (k) { return poGroups(b)[k].rows; })); }, was = sig(); dupAuto(b); if (sig() !== was) { drawLines(); refresh(); } });
+    on('#apLines input[data-k=qty], #apLines input[data-k=desc], #apLines input[data-k=price]', 'change', function () { var sig = function () { return b.lines.map(function (l) { return l.dup; }).join() + JSON.stringify(Object.keys(poGroups(b)).map(function (k) { return poGroups(b)[k].rows; })); }, pos = function () { return b.lines.map(function (l) { return l.po || 0; }).join(); }, was = sig() + pos(); poAuto(b); if (sig() + pos() !== was) setTimeout(function () { redrawKeep(); }, 0); });
+  }
+  // วาดตารางใหม่แต่คงช่องที่ผู้ใช้กำลังพิมพ์ไว้ (เปลี่ยนช่องแล้วตารางจัดกลุ่มใหม่ ไม่ให้เคอร์เซอร์หาย)
+  function redrawKeep() {
+    var a = document.activeElement, i = a && a.getAttribute && a.getAttribute('data-i'), k = a && a.getAttribute && a.getAttribute('data-k');
+    drawLines(); refresh();
+    if (i != null && k) { var el = $('apLines').querySelector('input[data-i="' + i + '"][data-k="' + k + '"]'); if (el) { el.focus(); try { el.select(); } catch (e) {} } }
   }
   function recalcLines() {
     var b = P.cur;
