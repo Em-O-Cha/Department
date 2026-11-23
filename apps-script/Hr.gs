@@ -498,9 +498,10 @@ function hrDashboard_(dept, from, to) {
     if (l.type === 'sick' || l.type === 'personal' || l.type === 'absent' || l.type === 'late') {
       if (!pidx) { pidx = {}; hrPeople_(ss).forEach(function (e) { pidx[e.id] = e; }); }   // รวมพนักงาน Job (เดิมขึ้น "-")
       var pe = pidx[l.empId] || {};
-      var o = perEmp[l.empId] = perEmp[l.empId] || { id: l.empId, name: (pe.fullName || '-') + (pe.isJob ? ' (Job)' : ''), sick: 0, personal: 0, absent: 0, late: 0, days: 0 };
+      var o = perEmp[l.empId] = perEmp[l.empId] || { id: l.empId, name: (pe.fullName || '-') + (pe.isJob ? ' (Job)' : ''), sick: 0, personal: 0, absent: 0, late: 0, days: 0, n: { sick: 0, personal: 0, absent: 0 }, times: 0 };
       o[l.type] = r2(o[l.type] + (l.type === 'late' ? 1 : pt.h));   // ป่วย / กิจ / ขาด เป็นชั่วโมง · มาสาย = ครั้ง
       if (l.type !== 'late') o.days = r2(o.days + pt.d);
+      if (l.type !== 'late') { o.n[l.type]++; } o.times++;   // จำนวนครั้ง (ลา / ขาด / สาย) — ใช้เรียงอันดับ (ผู้ใช้ขอ 23/11/69)
     }
   });
   var upto = to < today ? to : today, workHoursInRange = from <= upto ? hrRangeHours_(from, upto, st) : 0;
@@ -545,7 +546,8 @@ function hrDashboard_(dept, from, to) {
   if (exp.length - expired.length) insights.push({ level: 'warn', text: 'เอกสารจะหมดอายุใน ' + alertDays + ' วัน ' + (exp.length - expired.length) + ' รายการ' });
   if (noWP.length) insights.push({ level: 'warn', text: 'พนักงานต่างด้าวที่ยังไม่บันทึกใบอนุญาตทำงาน ' + noWP.length + ' คน' });
   if (absenteeism != null) insights.push({ level: absenteeism > 3 ? 'bad' : absenteeism > 1.5 ? 'warn' : 'ok', text: 'อัตราการขาด/ลา (ป่วย กิจ ขาดงาน) ' + absenteeism + '% ของวันทำงาน' });
-  var topLeave = Object.keys(perEmp).map(function (k) { return perEmp[k]; }).sort(function (a, b) { return (b.sick + b.personal + b.absent * 2) - (a.sick + a.personal + a.absent * 2); });
+  // เรียงตามจำนวนครั้งก่อน (ลาบ่อย) แล้วจึงชั่วโมงรวม (ผู้ใช้ขอ 23/11/69)
+  var topLeave = Object.keys(perEmp).map(function (k) { return perEmp[k]; }).sort(function (a, b) { return (b.times - a.times) || ((b.sick + b.personal + b.absent) - (a.sick + a.personal + a.absent)); });
   if (topLeave[0] && topLeave[0].days >= 3) insights.push({ level: 'warn', text: 'ลา/ขาดมากสุด: ' + topLeave[0].name + ' (ป่วย ' + topLeave[0].sick + ' · กิจ ' + topLeave[0].personal + ' · ขาด ' + topLeave[0].absent + ' ชม. · รวม ' + topLeave[0].days + ' วัน)' });
   if (disc.length) insights.push({ level: 'warn', text: 'มีการลงโทษทางวินัย ' + disc.length + ' ครั้ง' });
   if (trains.length) insights.push({ level: 'ok', text: 'อบรม ' + trains.length + ' หลักสูตร · ' + Object.keys(trained).length + ' คน · รวม ' + trainHours + ' ชั่วโมง-คน' });
