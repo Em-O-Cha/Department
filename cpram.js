@@ -426,19 +426,34 @@
       el.outerHTML = fileLinks(r.pdfUrl, r.xlsxUrl);
     }).catch(onServerError);
   }
+  // ส่ง LINE: สร้างภาพตารางก่อน แล้วให้ดูตัวอย่างในหน้าต่าง ค่อยกดส่ง (ผู้ใช้ขอ 23/11/69)
   function sendLine(id, afterSave) {
     var x = C.data.imports.filter(function (i) { return i.id === id; })[0]; if (!x) return;
-    ask({ title: afterSave ? 'บันทึกแล้ว · ส่งออเดอร์เข้ากลุ่ม LINE เลยไหม?' : 'ส่งออเดอร์ CP Ram เข้ากลุ่ม LINE?', text: 'ใบแจ้งออเดอร์ ' + n0(+x.added + +x.changed) + ' รายการ · ' + n0(x.qty) + ' ลัง (ไม่มียอดเงิน)' + (x.sentAt ? ' · เคยส่งแล้วเมื่อ ' + x.sentAt : ''), ok: 'ส่ง LINE', cancel: afterSave ? 'ไว้ทีหลัง' : 'ยกเลิก', tone: 'info' }).then(function (yes) {
-      if (!yes) return;
-      toast('กำลังสร้างภาพตารางและส่ง LINE…');
-      var lines = C.data.lines.filter(function (l) { return l.importId === id; });
-      lineImage(lines).catch(function () { return null; }).then(function (img) {
-        return call('cpSendLine', state.token, id, img ? img.png : '', img ? img.ratio : '');
-      }).then(function (r) {
-        if (!r.ok) { toast(r.error); return; }
-        x.sentAt = r.sentAt; if (r.pdfUrl) { x.pdfUrl = r.pdfUrl; x.xlsxUrl = r.xlsxUrl; } toast('ส่ง LINE แล้ว'); C.listPage();
-      }).catch(onServerError);
-    });
+    var lines = C.data.lines.filter(function (l) { return l.importId === id; });
+    var live = caseRows(lines).filter(function (l) { return l.status !== 'cancel'; });
+    var tot = live.reduce(function (s2, l) { return s2 + (Number(l.qty) || 0); }, 0), pos = uniq(live.map(function (l) { return l.poNo; }));
+    var dts = uniq(live.map(function (l) { return l.deliveryDate; })).sort();
+    var img = null;
+    openModal({ color: state.dept.color, icon: 'send', wide: true, title: afterSave ? 'บันทึกแล้ว · ส่งออเดอร์เข้ากลุ่ม LINE เลยไหม?' : 'ส่งออเดอร์ CP Ram เข้ากลุ่ม LINE?',
+      sub: pos.length + ' ใบสั่งซื้อ · ' + nq(tot) + ' ' + unitOf(live) + (dts.length ? ' · ส่ง ' + slash(dts[0]) + (dts.length > 1 ? ' – ' + slash(dts[dts.length - 1]) : '') : '') + ' (ไม่มียอดเงิน)',
+      body: (x.sentAt ? '<div class="a7chk warn"><i>!</i><span>เคยส่งแล้วเมื่อ ' + esc(x.sentAt) + ' — กดส่งอีกครั้งจะส่งซ้ำเข้ากลุ่ม</span></div>' : '')
+        + '<p class="cpsendh">จะส่ง 2 ข้อความ: <b>การ์ดสรุปจำนวน</b> (ไม่แยก PO) และ <b>ภาพตารางด้านล่าง</b></p>'
+        + '<div id="cpPrev" class="cpprev"><span class="spinner dark"></span> กำลังสร้างภาพตัวอย่าง…</div>',
+      ok: 'ส่ง LINE', cancel: afterSave ? 'ไว้ทีหลัง' : 'ยกเลิก',
+      onOpen: function () {
+        var okb = $('mOk'); okb.disabled = true;
+        lineImage(lines).catch(function () { return null; }).then(function (r) {
+          img = r; var box = $('cpPrev'); if (!box) return;
+          box.innerHTML = r ? '<img src="data:image/png;base64,' + r.png + '" alt="ภาพตารางส่งสินค้าที่จะส่งเข้า LINE">' : '<div class="a7chk warn"><i>!</i><span>สร้างภาพตารางไม่ได้ — จะส่งเฉพาะการ์ดสรุป</span></div>';
+          okb.disabled = false; okb.focus();
+        });
+      },
+      submit: function () {
+        return call('cpSendLine', state.token, id, img ? img.png : '', img ? img.ratio : '').then(function (r) {
+          if (!r.ok) return r.error || 'ส่งไม่สำเร็จ';
+          closeModal(); x.sentAt = r.sentAt; if (r.pdfUrl) { x.pdfUrl = r.pdfUrl; x.xlsxUrl = r.xlsxUrl; } toast('ส่ง LINE แล้ว'); C.listPage();
+        });
+      } });
   }
   // ภาพตารางส่งสินค้า (หน้าตาเดียวกับในหน้าเว็บ ไม่มียอดเงิน) สำหรับส่ง LINE — html2canvas
   var H2C_URL = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
@@ -551,6 +566,7 @@
     '#cpMapSave{margin-top:10px}.cpchips{margin:4px 0 12px}',
     '.cppcs{display:block;font-size:12px;color:var(--muted);font-weight:400;white-space:nowrap}.cptab .cpwh{white-space:nowrap}.a7fixrow .cppc{flex:0 1 190px}',
     '.cpimh span .cpupd{font-size:inherit;color:#C2410C}.cpimg .cppcs{font-size:14px;color:#475569}',
+    '.cpsendh{margin:4px 0 10px;font-size:14px}.cpprev{max-height:60vh;overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff;padding:6px;text-align:center;min-height:80px}.cpprev img{width:100%;height:auto;display:block}',
     '.cphow{margin:0 0 10px;font-size:13.5px;color:var(--muted);line-height:1.55}.cphow b{color:var(--ink,#0f172a)}.cphow a{color:var(--c);font-weight:600}.cpbad{color:#dc2626;font-style:normal}.cpnote{font-size:13px;margin:12px 2px 0}',
     '@media (max-width:640px){.cpset{min-width:0!important}.cpset thead{display:none}.cpset tr{display:grid;grid-template-columns:1fr 1fr 44px;gap:6px 8px;padding:10px 0;border-bottom:1px solid var(--line)}.cpset td{display:block;padding:0!important;border:0!important}.cpset td[data-l]::before{content:attr(data-l);display:block;font-size:12.5px;color:var(--muted);margin-bottom:3px}.cpset td:first-child{grid-column:1/3}.cpset td:last-child{grid-column:3;grid-row:1;align-self:end;width:auto}.cpset tr>td:nth-child(3):not(:last-child){grid-column:2/4}.cpset td[colspan]{grid-column:1/-1}.cpset td[data-l="ชื่อสินค้า"],.cpset td[data-l="ชิ้นต่อ 1 ลัง"]{grid-column:1/3}.cpset .icon-btn{width:44px;height:44px}}',
     '.cpset td:last-child,.cpset th:last-child{width:44px;text-align:center}.cpset input.bad{border-color:#dc2626;background:#fef2f2}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}',
