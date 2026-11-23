@@ -517,17 +517,22 @@
     var b = P.cur, el = $('apPoSum'); if (!el || !b.fromPo) return;
     var po = b.po, use = counted(b), before = 0, after = 0, billPo = 0, other = 0, over = [], left = 0;
     var rows = po.lines.map(function (p) {
-      var q = use.filter(function (l) { return l.po === p.n; }).reduce(function (t, l) { return t + (Number(l.qty) || 0); }, 0);
+      var mine = use.filter(function (l) { return l.po === p.n; });
+      var q = mine.reduce(function (t, l) { return t + (Number(l.qty) || 0); }, 0), qa = mine.reduce(function (t, l) { return t + calc(l, b.vatMode, b.pct).total; }, 0);
       var rest = Math.max(0, r2((p.qty - q) * 10000) / 10000);
       before += calc({ qty: p.qty, price: p.price }, po.vatMode, po.pct).total; after += calc({ qty: rest, price: p.price }, po.vatMode, po.pct).total;
       if (q > p.qty + 1e-9) over.push(p.desc);
       if (rest > 0) left++;
-      return '<tr' + (p.qty <= 0 ? ' class="apdone"' : '') + '><td>' + p.n + '. ' + esc(p.desc || '-') + '</td><td>' + q0(p.qty + p.recv) + '</td><td>' + (p.recv ? q0(p.recv) : '-') + '</td><td class="apthis">' + (q ? '−' + q0(q) : '-') + '</td><td><b>' + (rest > 0 ? q0(rest) : '✓ ครบ') + '</b></td></tr>';
+      var full = calc({ qty: p.qty + p.recv, price: p.price }, po.vatMode, po.pct).total, recvA = calc({ qty: p.recv, price: p.price }, po.vatMode, po.pct).total, restA = calc({ qty: rest, price: p.price }, po.vatMode, po.pct).total;
+      return '<tr' + (p.qty <= 0 ? ' class="apdone"' : '') + '><td>' + p.n + '. ' + esc(p.desc || '-') + '</td><td>' + m2(p.price) + '</td>'
+        + '<td>' + q0(p.qty + p.recv) + '<small>' + m2(full) + '</small></td><td>' + (p.recv ? q0(p.recv) + '<small>' + m2(recvA) + '</small>' : '-') + '</td>'
+        + '<td class="apthis">' + (q ? '−' + q0(q) + '<small>−' + m2(qa) + '</small>' : '-') + '</td><td><b>' + (rest > 0 ? q0(rest) : '✓ ครบ') + '</b>' + (rest > 0 ? '<small>' + m2(restA) + '</small>' : '') + '</td></tr>';
     }).join('');
     use.forEach(function (l) { var t = calc(l, b.vatMode, b.pct).total; if (l.po) billPo += t; else other += t; });
     var dups = b.lines.filter(function (l) { return l.dup; }).length;
     el.innerHTML = '<div class="appos"><h4>' + icon('clock', 18) + ' หักจาก PO ล่วงหน้า</h4>'
-      + '<div class="cpwrap"><table class="apposT"><thead><tr><th>สินค้าใน PO</th><th>สั่ง</th><th>รับแล้ว</th><th>บิลนี้</th><th>คงเหลือ</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+      + '<div class="cpwrap"><table class="apposT"><thead><tr><th>สินค้าใน PO</th><th>ราคา/หน่วย</th><th>สั่ง</th><th>รับแล้ว</th><th>บิลนี้</th><th>คงเหลือ</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+      + '<p class="apnote">แต่ละช่อง: จำนวน / ยอดเงิน' + (po.vatMode === 'none' ? '' : ' (รวม VAT)') + ' บาท · ราคา/หน่วยตาม PO</p>'
       + '<div class="apsum"><span>PO คงค้างก่อนบิลนี้<b>' + m2(before) + '</b></span><span class="apred">หักตามบิลนี้<b>−' + m2(billPo) + '</b></span><span class="appay">PO คงเหลือหลังบันทึก<b>' + m2(after) + '</b></span></div>'
       + (Math.abs(before - billPo - after) > 0.05 && billPo ? '<p class="apnote">ราคาในบิลต่างจากราคาใน PO — PO คงเหลือคิดจากจำนวนที่เหลือ × ราคาใน PO</p>' : '')
       + (other ? '<p class="apnote">รายการที่ไม่ได้หักจาก PO รวม ' + m2(other) + ' — ยังอยู่ในบิลนี้ตามปกติ</p>' : '')
@@ -539,7 +544,7 @@
   }
   function logRows(log) {
     return log.map(function (e) {
-      return '<div class="apolr"><span>' + slash(e.date || String(e.at || '').slice(0, 10)) + (e.invNo ? ' · เลขที่ ' + esc(e.invNo) : '') + '<small>' + (e.lines || []).map(function (x) { return esc(x.desc || '') + ' ' + q0(x.q); }).join(' · ') + '</small></span><b>' + m2(e.total) + '</b></div>';
+      return '<div class="apolr"><span>' + slash(e.date || String(e.at || '').slice(0, 10)) + (e.invNo ? ' · เลขที่ ' + esc(e.invNo) : '') + '<small>' + (e.lines || []).map(function (x) { return esc(x.desc || '') + ' ' + q0(x.q) + (x.a ? ' = ' + m2(x.a) : ''); }).join(' · ') + '</small></span><b>' + m2(e.total) + '</b></div>';
     }).join('');
   }
   // แนบภาพ / สแกนบิลในฟอร์ม (กรอกเอง หรือรับบิลจาก PO): อ่านแล้วเติมช่องที่ยังว่าง · ถ้าอ่านรายการได้ ใช้รายการจากบิลจริงแทน
@@ -1165,7 +1170,7 @@
             return '<div class="appocard"><div class="appoh"><b>' + esc(b.vendor) + '</b><span>' + catNo(b.category) + '. ' + esc(cat(b.category).name) + (b.pct ? ' · หัก ' + b.pct + '%' : '') + '</span>' + (b.log.length ? '<span class="appart">รับบิลแล้ว ' + b.log.length + ' ใบ · ยังค้าง</span>' : '') + '</div>'
               + '<div class="appoit">' + b.lines.map(function (l) {
                 var rq = Number(l.recvQty) || 0, q = Number(l.qty) || 0;
-                return '<div' + (q > 0 ? '' : ' class="apdone"') + '><span>' + esc(l.desc || '-') + (rq ? '<small>สั่ง ' + q0(q + rq) + ' · รับแล้ว ' + q0(rq) + '</small>' : '') + '</span><span>' + (q > 0 ? (rq ? 'ค้าง ' : '') + q0(q) + ' × ' + m2(l.price) : '✓ ครบ') + '</span></div>'; }).join('') + '</div>'
+                return '<div' + (q > 0 ? '' : ' class="apdone"') + '><span>' + esc(l.desc || '-') + (rq ? '<small>สั่ง ' + q0(q + rq) + ' · รับแล้ว ' + q0(rq) + '</small>' : '') + '</span><span>' + (q > 0 ? (rq ? 'ค้าง ' : '') + q0(q) + ' × ' + m2(l.price) + '<small>= ' + m2(l.lineTotal) + (b.vatMode === 'none' ? '' : ' (รวม VAT)') + '</small>' : '✓ ครบ') + '</span></div>'; }).join('') + '</div>'
               + (b.log.length ? poMoney(b) : '')
               + '<div class="appof"><span>' + (b.log.length ? 'คงเหลือ ชำระ' : 'ชำระ') + ' <b>' + m2(b.pay) + '</b></span><button class="btn apsm" data-pe="' + esc(b.billId) + '">แก้ไข</button>'
               + (b.log.length ? '<button class="btn apsm" data-pc="' + esc(b.billId) + '">ปิด PO</button>' : '')
@@ -1174,7 +1179,7 @@
         }).join('') : '<div class="panel">ยังไม่มี PO ล่วงหน้า</div>')
         + (done.length ? '<details class="panel pbox apodone"><summary><b>รับครบแล้ว / ปิดแล้ว</b> <span class="muted">' + done.length + ' PO</span></summary>' + done.map(function (b) {
           return '<div class="appocard done"><div class="appoh"><b>' + esc(b.vendor) + '</b><span>รอบจ่าย ' + dotAD(b.payRound, true) + (b.lines.some(function (l) { return Number(l.qty) > 0; }) ? ' · ปิดก่อนรับครบ' : ' · รับครบ') + '</span></div>'
-            + '<div class="appoit">' + b.lines.map(function (l) { var rq = Number(l.recvQty) || 0, q = Number(l.qty) || 0; return '<div><span>' + esc(l.desc || '-') + '</span><span>รับ ' + q0(rq) + ' / สั่ง ' + q0(q + rq) + '</span></div>'; }).join('') + '</div>'
+            + '<div class="appoit">' + b.lines.map(function (l) { var rq = Number(l.recvQty) || 0, q = Number(l.qty) || 0; return '<div><span>' + esc(l.desc || '-') + '</span><span>รับ ' + q0(rq) + ' / สั่ง ' + q0(q + rq) + ' × ' + m2(l.price) + '<small>= ' + m2(calc({ qty: rq, price: Number(l.price) || 0 }, b.vatMode, b.pct).total) + '</small></span></div>'; }).join('') + '</div>'
             + (b.log.length ? poMoney(b) : '') + '</div>';
         }).join('') + '</details>' : '');
       bindLink();
@@ -1196,7 +1201,7 @@
     var ded = b.log.reduce(function (t, e) { return t + (Number(e.total) || 0); }, 0);
     return '<div class="apomoney"><span>ยอด PO เดิม<b>' + m2(orig) + '</b></span><span class="apred">หักตามบิลแล้ว<b>−' + m2(ded) + '</b></span><span>คงเหลือ (รวม VAT)<b>' + m2(b.total) + '</b></span></div>'
       + '<details class="apolog"><summary>ประวัติรับบิล ' + b.log.length + ' ใบ</summary>' + b.log.map(function (e) {
-        return '<button type="button" class="apolr" data-pb="' + esc(e.billId) + '"><span>' + slash(e.date || String(e.at || '').slice(0, 10)) + (e.invNo ? ' · เลขที่ ' + esc(e.invNo) : '') + '<small>' + (e.lines || []).map(function (x) { return esc(x.desc || '') + ' ' + q0(x.q); }).join(' · ') + '</small></span><b>' + m2(e.total) + '</b></button>';
+        return '<button type="button" class="apolr" data-pb="' + esc(e.billId) + '"><span>' + slash(e.date || String(e.at || '').slice(0, 10)) + (e.invNo ? ' · เลขที่ ' + esc(e.invNo) : '') + '<small>' + (e.lines || []).map(function (x) { return esc(x.desc || '') + ' ' + q0(x.q) + (x.a ? ' = ' + m2(x.a) : ''); }).join(' · ') + '</small></span><b>' + m2(e.total) + '</b></button>';
       }).join('') + '</details>';
   }
 
@@ -1603,10 +1608,10 @@
     '.apodone summary{cursor:pointer;padding:2px 0}.appocard.done{border-color:#bbf7d0;background:#f0fdf4}.appocard.done .appoit{color:#166534}.appocard.done .appoit div{border-color:#bbf7d0}',
     '.appoban.info{background:#eff6ff;border-color:#bfdbfe;color:#1e3a8a;font-weight:500}.appoban.info b{color:#1e3a8a}.apmap{display:flex;flex-direction:column;gap:3px;padding:0 4px 4px}.apmap select{font:inherit;font-size:14px;min-height:36px;border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:6px;padding:4px 6px;max-width:100%}',
     '.apdupb{border:1px solid #fcd34d;background:#fffbeb;color:#92400e;border-radius:6px;padding:8px 10px;min-height:36px;font:inherit;font-size:12.5px;cursor:pointer;text-align:left}.apdupb.on{background:#fef3c7;font-weight:700}.apdupl td input{text-decoration:line-through;color:var(--muted)}.apdupl td.apv{color:#cbd5e1;text-decoration:line-through}',
-    '.appos{margin-top:12px;border:1.5px solid #bfdbfe;border-radius:12px;padding:10px 12px;background:#fff}.appos h4{margin:0 0 8px;display:flex;gap:6px;align-items:center;color:#1e3a8a}.apposT{border-collapse:collapse;width:100%;font-size:14px}.apposT th,.apposT td{border-bottom:1px solid var(--line);padding:5px 6px;text-align:right;white-space:nowrap}.apposT th:first-child,.apposT td:first-child{text-align:left;white-space:normal}.apposT th{background:#f1f5f9;font-size:13px}.apposT .apthis{color:#dc2626;font-weight:700}.apposT tr.apdone td{color:var(--muted)}',
+    '.appos{margin-top:12px;border:1.5px solid #bfdbfe;border-radius:12px;padding:10px 12px;background:#fff}.appos h4{margin:0 0 8px;display:flex;gap:6px;align-items:center;color:#1e3a8a}.apposT{border-collapse:collapse;width:100%;font-size:14px}.apposT th,.apposT td{border-bottom:1px solid var(--line);padding:5px 6px;text-align:right;white-space:nowrap}.apposT th:first-child,.apposT td:first-child{text-align:left;white-space:normal}.apposT th{background:#f1f5f9;font-size:13px}.apposT .apthis{color:#dc2626;font-weight:700}.apposT small{display:block;font-size:12px;color:var(--muted);font-weight:400}.apposT .apthis small{color:#dc2626}.appoit span:last-child small{text-align:right}.apposT tr.apdone td{color:var(--muted)}',
     '.apchoose{align-items:flex-start}.apchoose .apbtns{margin-top:6px}.apchoose .btn small{display:block;font-weight:400;color:var(--muted);font-size:12px}.appoban.info #apUnPo{margin:0 0 0 auto;flex:none}',
     '.apnote{margin:6px 0 0;font-size:13px;color:var(--muted)}.appost{margin-top:8px;border-radius:8px;padding:8px 10px;font-size:14px}.appost.part{background:#fffbeb;color:#92400e}.appost.full{background:#f0fdf4;color:#166534}.apmore{margin-top:6px}',
-    '.apmap select{width:100%;text-overflow:ellipsis}@media(max-width:560px){.apomoney{grid-template-columns:1fr 1fr 1fr;font-size:11.5px}.apomoney b{font-size:13.5px}.aptab td:first-child{min-width:170px;max-width:190px}}',
+    '.apmap select{width:100%;text-overflow:ellipsis}@media(max-width:560px){.apomoney{grid-template-columns:1fr 1fr 1fr;font-size:11.5px}.apomoney b{font-size:13.5px}.aptab td:first-child{min-width:170px;max-width:190px}.apposT,.apposT thead,.apposT tbody{display:block}.apposT tr{display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid var(--line)}.apposT th,.apposT td{border:0;padding:4px 3px;font-size:13px}.apposT td:first-child{grid-column:1/-1;font-weight:600;padding-top:8px}.apposT th:first-child{display:none}.apposT small{font-size:11px}}',
     '@media (max-width:860px){.apform{grid-template-columns:1fr}.apimgs{position:static;max-height:none}.apgrid{grid-template-columns:1fr}}'
   ].join('\n');
   document.head.appendChild(css);
