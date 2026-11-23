@@ -58,6 +58,8 @@
   .send:disabled { opacity: .6; }
   .err { color: var(--bad); font-size: 14.5px; margin-top: 10px; min-height: 1em; }
   .done { text-align: center; padding: 30px 16px; } .done .big { font-size: 64px; } .done b { font-size: 20px; display: block; margin: 8px 0; }
+  .attw { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; } .attb { border: 1.5px solid #2563eb; background: #eff6ff; color: #1d4ed8; border-radius: 99px; padding: 5px 12px; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; } .attb:disabled { opacity: .6; } .attn { color: #15803d; font-weight: 600; }
+  .toastm { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #166534; color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 14.5px; z-index: 99; max-width: 90vw; box-shadow: 0 8px 24px rgba(0,0,0,.2); } .toastm.bad { background: #b91c1c; }
   .recent div { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid var(--line); padding: 8px 0; font-size: 14.5px; }
   .st { font-weight: 600; white-space: nowrap; } .st.ok { color: var(--ok); } .st.no { color: var(--bad); } .st.wait { color: var(--warn); }
   .msg { text-align: center; padding: 40px 16px; color: var(--muted); }
@@ -79,14 +81,14 @@
       bal: 'สิทธิ์ลาคงเหลือปีนี้', left: 'เหลือ', days: 'วัน', pending: 'รออนุมัติ', type: 'ประเภทการลา', from: 'ตั้งแต่วันที่', to: 'ถึงวันที่', half: 'ลาครึ่งวัน', mFull: 'เต็มวัน', mHalf: 'ครึ่งวัน', mHours: 'เป็นชั่วโมง', tFrom: 'เวลาเริ่ม', tTo: 'ถึงเวลา', hrs: 'ชม.', mins: 'นาที', needTime: 'ระบุเวลาเริ่ม–สิ้นสุดให้ถูกต้อง',
       reason: 'เหตุผล', reasonPh: 'เช่น ไม่สบาย มีไข้ / ธุระที่บ้าน', file: 'รูปใบรับรองแพทย์ / เอกสาร (ถ้ามี)', cam: 'ถ่ายรูป', lib: 'เลือกรูป', send: 'ส่งคำขอลา',
       total: 'รวม', overQ: 'เกินสิทธิ์', willLeft: 'หลังอนุมัติจะเหลือ', sent: 'ส่งคำขอลาแล้ว', sentSub: 'รอฝ่ายบุคคลอนุมัติ — ดูสถานะได้ที่หน้านี้', again: 'ขอลาอีกครั้ง',
-      recent: 'คำขอล่าสุดของฉัน', none: 'ยังไม่มี', hint: 'พิมพ์ชื่อหรือชื่อเล่นของคุณ แล้วแตะชื่อตัวเอง', notFound: 'ไม่พบชื่อ — ลองพิมพ์ใหม่ หรือเลือก "ทั้งหมด"', myReq: 'คำขอที่เพิ่งส่ง', badLink: 'ลิงก์ไม่ถูกต้อง — สแกน QR ที่ฝ่ายบุคคลติดไว้อีกครั้ง', needType: 'เลือกประเภทการลา', needDate: 'เลือกวันที่', sup: 'หัวหน้างาน', supPh: '— เลือกหัวหน้าที่กรอกให้ —', needSup: 'เลือกหัวหน้าที่กรอกใบลาให้', by: 'ใครกรอกใบลานี้', bySelf: 'กรอกเอง', bySup: 'หัวหน้ากรอกให้', needBy: 'เลือกว่าใครกรอกใบลานี้', byName: 'ผู้กรอก',
+      recent: 'คำขอล่าสุดของฉัน', att: 'แนบเอกสาร', attN: 'แนบแล้ว', attUp: 'กำลังอัปโหลด…', attOk: 'แนบเอกสารแล้ว HR จะเห็นในใบลานี้', attFail: 'แนบไม่สำเร็จ ลองใหม่อีกครั้ง', none: 'ยังไม่มี', hint: 'พิมพ์ชื่อหรือชื่อเล่นของคุณ แล้วแตะชื่อตัวเอง', notFound: 'ไม่พบชื่อ — ลองพิมพ์ใหม่ หรือเลือก "ทั้งหมด"', myReq: 'คำขอที่เพิ่งส่ง', badLink: 'ลิงก์ไม่ถูกต้อง — สแกน QR ที่ฝ่ายบุคคลติดไว้อีกครั้ง', needType: 'เลือกประเภทการลา', needDate: 'เลือกวันที่', sup: 'หัวหน้างาน', supPh: '— เลือกหัวหน้าที่กรอกให้ —', needSup: 'เลือกหัวหน้าที่กรอกใบลาให้', by: 'ใครกรอกใบลานี้', bySelf: 'กรอกเอง', bySup: 'หัวหน้ากรอกให้', needBy: 'เลือกว่าใครกรอกใบลานี้', byName: 'ผู้กรอก',
       st: { 'รออนุมัติ': 'รออนุมัติ', 'อนุมัติ': 'อนุมัติแล้ว', 'ไม่อนุมัติ': 'ไม่อนุมัติ' },
       types: { sick: 'ลาป่วย', personal: 'ลากิจ', vacation: 'ลาพักร้อน', maternity: 'ลาคลอด', paternity: 'ลาดูแลบุตร (ชาย)', ordain: 'ลาบวช', other: 'ลาอื่นๆ' }, calNote: 'นับทุกวันรวมวันหยุด', paid: 'จ่ายค่าจ้าง', unpaid: 'ไม่รับค่าจ้าง' },
     my: { title: 'ခွင့်လွှာ', sub: 'Spunky Food Co., Ltd. · HR', pick: 'သင့်နာမည်ကို ရွေးပါ', search: 'နာမည် ရှာရန်', all: 'အားလုံး', notMe: 'ကျွန်ုပ် မဟုတ်ပါ / နာမည်ပြောင်းရန်',
       bal: 'ယခုနှစ် ကျန်ရှိသော ခွင့်ရက်', left: 'ကျန်', days: 'ရက်', pending: 'အတည်ပြုရန် စောင့်ဆဲ', type: 'ခွင့်အမျိုးအစား', from: 'စတင်သည့်ရက်', to: 'ပြီးဆုံးသည့်ရက်', half: 'နေ့တစ်ဝက် ခွင့်', mFull: 'တစ်နေ့လုံး', mHalf: 'နေ့တစ်ဝက်', mHours: 'နာရီဖြင့်', tFrom: 'စတင်ချိန်', tTo: 'ပြီးဆုံးချိန်', hrs: 'နာရီ', mins: 'မိနစ်', needTime: 'အချိန်ကို မှန်ကန်စွာ ရွေးပါ',
       reason: 'အကြောင်းပြချက်', reasonPh: 'ဥပမာ - နေမကောင်း၊ ဖျား', file: 'ဆရာဝန်လက်မှတ် / စာရွက်စာတမ်း ဓာတ်ပုံ (ရှိလျှင်)', cam: 'ဓာတ်ပုံရိုက်', lib: 'ဓာတ်ပုံရွေး', send: 'ခွင့်တောင်းခံချက် ပို့ရန်',
       total: 'စုစုပေါင်း', overQ: 'ခွင့်ရက်ထက် ကျော်နေသည်', willLeft: 'အတည်ပြုပြီးနောက် ကျန်မည်', sent: 'ခွင့်တောင်းခံချက် ပို့ပြီးပါပြီ', sentSub: 'HR အတည်ပြုရန် စောင့်ပါ — ဤစာမျက်နှာတွင် အခြေအနေ ကြည့်နိုင်သည်', again: 'ထပ်မံ ခွင့်တောင်းရန်',
-      recent: 'ကျွန်ုပ်၏ နောက်ဆုံး ခွင့်တောင်းခံချက်များ', none: 'မရှိသေးပါ', hint: 'သင့်နာမည် (သို့) အမည်ပြောင်ကို ရိုက်ပြီး သင့်နာမည်ကို နှိပ်ပါ', notFound: 'ဤနာမည် မတွေ့ပါ — ထပ်ရိုက်ကြည့်ပါ', myReq: 'ယခုပို့လိုက်သော ခွင့်တောင်းခံချက်', badLink: 'လင့်ခ် မမှန်ပါ — HR ကပ်ထားသော QR ကို ပြန်စကင်ဖတ်ပါ', needType: 'ခွင့်အမျိုးအစား ရွေးပါ', needDate: 'ရက်စွဲ ရွေးပါ', sup: 'အလုပ်ကြီးကြပ်သူ (ခေါင်းဆောင်)', supPh: '— ဖြည့်ပေးသော ခေါင်းဆောင် ရွေးပါ —', needSup: 'ဖြည့်ပေးသော ခေါင်းဆောင်ကို ရွေးပါ', by: 'ဤခွင့်လွှာကို ဘယ်သူ ဖြည့်သလဲ', bySelf: 'ကိုယ်တိုင် ဖြည့်သည်', bySup: 'ခေါင်းဆောင်က ဖြည့်ပေးသည်', needBy: 'ဘယ်သူ ဖြည့်သလဲ ရွေးပါ', byName: 'ဖြည့်သူ',
+      recent: 'ကျွန်ုပ်၏ နောက်ဆုံး ခွင့်တောင်းခံချက်များ', att: 'စာရွက်စာတမ်း ပူးတွဲရန်', attN: 'ပူးတွဲပြီး', attUp: 'တင်နေသည်…', attOk: 'ပူးတွဲပြီးပါပြီ။ HR မှ ကြည့်နိုင်ပါသည်', attFail: 'မအောင်မြင်ပါ။ ထပ်ကြိုးစားပါ', none: 'မရှိသေးပါ', hint: 'သင့်နာမည် (သို့) အမည်ပြောင်ကို ရိုက်ပြီး သင့်နာမည်ကို နှိပ်ပါ', notFound: 'ဤနာမည် မတွေ့ပါ — ထပ်ရိုက်ကြည့်ပါ', myReq: 'ယခုပို့လိုက်သော ခွင့်တောင်းခံချက်', badLink: 'လင့်ခ် မမှန်ပါ — HR ကပ်ထားသော QR ကို ပြန်စကင်ဖတ်ပါ', needType: 'ခွင့်အမျိုးအစား ရွေးပါ', needDate: 'ရက်စွဲ ရွေးပါ', sup: 'အလုပ်ကြီးကြပ်သူ (ခေါင်းဆောင်)', supPh: '— ဖြည့်ပေးသော ခေါင်းဆောင် ရွေးပါ —', needSup: 'ဖြည့်ပေးသော ခေါင်းဆောင်ကို ရွေးပါ', by: 'ဤခွင့်လွှာကို ဘယ်သူ ဖြည့်သလဲ', bySelf: 'ကိုယ်တိုင် ဖြည့်သည်', bySup: 'ခေါင်းဆောင်က ဖြည့်ပေးသည်', needBy: 'ဘယ်သူ ဖြည့်သလဲ ရွေးပါ', byName: 'ဖြည့်သူ',
       st: { 'รออนุมัติ': 'စောင့်ဆဲ', 'อนุมัติ': 'ခွင့်ပြုပြီး', 'ไม่อนุมัติ': 'ခွင့်မပြုပါ' },
       types: { sick: 'ဖျားနာခွင့်', personal: 'ကိစ္စခွင့်', vacation: 'နှစ်စဉ်ခွင့်', maternity: 'မီးဖွားခွင့်', paternity: 'ကလေးပြုစုခွင့် (အမျိုးသား)', ordain: 'ရဟန်းခံခွင့်', other: 'အခြားခွင့်' }, calNote: 'အားလပ်ရက်များ အပါအဝင် ရက်တိုင်း ရေတွက်သည်', paid: 'လစာပေးသည်', unpaid: 'လစာမပေးပါ' }
   };
@@ -215,8 +217,33 @@
     var r = S.bal && S.bal.recent; if (!r) return '';
     return '<div class="card recent"><h2>' + t('recent') + '</h2>' + (r.map(function (l) {
       var c = l.status === 'อนุมัติ' ? 'ok' : l.status === 'ไม่อนุมัติ' ? 'no' : 'wait';
-      return '<div><span>' + esc(t('types')[l.type] || l.type) + ' · ' + dmy(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? '–' + dmy(l.dateTo) : '') + ' (' + (l.hours != null ? fh(l.hours) : Number(l.minutes) ? hrsTxt(Number(l.minutes)) : l.days) + ')</span><span class="st ' + c + '">' + esc(t('st')[l.status] || l.status) + '</span></div>';
+      // แนบใบรับรองแพทย์ / เอกสารภายหลังได้ (ผู้ใช้ขอ 23/11/69)
+      var att = (l.files ? '<small class="attn">📎 ' + t('attN') + ' ' + l.files + '</small>' : '') + (l.sig ? '<button type="button" class="attb" data-att="' + esc(l.id) + '" data-sig="' + esc(l.sig) + '">📎 ' + t('att') + '</button>' : '');
+      return '<div><span>' + esc(t('types')[l.type] || l.type) + ' · ' + dmy(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? '–' + dmy(l.dateTo) : '') + ' (' + (l.hours != null ? fh(l.hours) : Number(l.minutes) ? hrsTxt(Number(l.minutes)) : l.days) + ')' + (att ? '<span class="attw">' + att + '</span>' : '') + '</span><span class="st ' + c + '">' + esc(t('st')[l.status] || l.status) + '</span></div>';
     }).join('') || '<div>' + t('none') + '</div>') + '</div>';
+  }
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest && ev.target.closest('[data-att]'); if (!b || b.disabled) return;
+    var id = b.getAttribute('data-att'), sig = b.getAttribute('data-sig');
+    var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*,application/pdf'; inp.multiple = true; inp.style.display = 'none'; document.body.appendChild(inp);
+    inp.addEventListener('change', function () {
+      var files = Array.prototype.slice.call(inp.files || []).slice(0, 5); document.body.removeChild(inp);
+      if (!files.length) return;
+      b.disabled = true; b.textContent = t('attUp');
+      Promise.all(files.map(prep)).then(function (arr) {
+        var ok = 0, i = 0; arr = arr.filter(Boolean);
+        function next() { if (i >= arr.length) return Promise.resolve(); var x = arr[i++]; return call('hrFormUpload', KEY, id, sig, x.name, x.mime, x.b64).then(function (r) { if (r && r.ok) ok++; }).catch(function () {}).then(next); }
+        return next().then(function () {
+          alertBox(ok ? t('attOk') : t('attFail'), !ok);
+          return call('hrFormBalance', KEY, S.me).then(function (r) { if (r.ok) S.bal = r; render(); });
+        });
+      }).catch(function () { b.disabled = false; b.textContent = '📎 ' + t('att'); alertBox(t('attFail'), true); });
+    });
+    inp.click();
+  });
+  function alertBox(msg, bad) {   // แถบข้อความลอยด้านล่าง (ไม่ใช้ alert ของเบราว์เซอร์)
+    var d = document.createElement('div'); d.className = 'toastm' + (bad ? ' bad' : ''); d.textContent = msg; document.body.appendChild(d);
+    setTimeout(function () { d.remove(); }, 3500);
   }
   function pick(cam) {
     var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*,application/pdf';

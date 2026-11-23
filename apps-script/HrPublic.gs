@@ -184,7 +184,7 @@ function hrFormBalance(key, empId) {
   if (!e || !hrActive_(e)) return { ok: false, error: 'ไม่พบชื่อพนักงาน' };
   var year = purToday_().slice(0, 4);
   var mine = purRead_(ss, 'hr_leaves').filter(function (l) { return l.empId === e.id; }).sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).slice(0, 8)
-    .map(function (l) { return { type: l.type, dateFrom: l.dateFrom, dateTo: l.dateTo, days: l.days, hours: hrLeaveHours_(l, st), minutes: l.type === 'late' ? '' : l.minutes, status: l.status, reason: l.reason, supervisor: l.supervisor || '', filledBy: l.filledBy || '' }; });
+    .map(function (l) { var nf = purParseFiles_(l.files).length; return { id: l.id, sig: l.type !== 'late' && l.status !== 'ไม่อนุมัติ' && nf < HR_FORM_MAX_FILES_ ? hrSign_('up|' + l.id) : '', files: nf, type: l.type, dateFrom: l.dateFrom, dateTo: l.dateTo, days: l.days, hours: hrLeaveHours_(l, st), minutes: l.type === 'late' ? '' : l.minutes, status: l.status, reason: l.reason, supervisor: l.supervisor || '', filledBy: l.filledBy || '' }; });
   return { ok: true, year: year, balance: hrBalance_(ss, e, year), recent: mine, emp: hrFormEmp_(e) };
 }
 // r = { empId, type, dateFrom, dateTo, half (true = ครึ่งวัน), reason }
@@ -243,6 +243,8 @@ function hrFormSubmit(key, r) {
   return { ok: true, id: res.id, sig: hrSign_('up|' + res.id), days: res.rec.days, hours: res.rec.hours, notified: notified };
 }
 // แนบรูปใบรับรองแพทย์ ฯลฯ ให้คำขอที่เพิ่งส่ง (ไม่เกิน 3 ไฟล์ · ภายใน 3 ชม. · ยังรออนุมัติ)
+// แนบใบรับรองแพทย์ / เอกสารได้ทั้งตอนส่งคำขอ และภายหลังจาก "คำขอล่าสุดของฉัน" (ผู้ใช้ขอ 23/11/69) · ไม่เกิน 5 ไฟล์ต่อใบลา
+var HR_FORM_MAX_FILES_ = 5;
 function hrFormUpload(key, leaveId, sig, fileName, mimeType, base64) {
   var dept = hrFormCheck_(key);
   if (!sig || sig !== hrSign_('up|' + leaveId)) return { ok: false, error: 'แนบไฟล์ไม่ได้' };
@@ -253,9 +255,9 @@ function hrFormUpload(key, leaveId, sig, fileName, mimeType, base64) {
   if (!folderId) return { ok: false, error: 'ยังไม่ได้ตั้งโฟลเดอร์ของฝ่ายบุคคล' };
   return purLocked_(function () {
     var ss = hrBook_(dept), row = hrById_(purRead_(ss, 'hr_leaves'), leaveId);
-    if (!row || row.source !== 'แบบฟอร์มพนักงาน' || row.status !== 'รออนุมัติ') return { ok: false, error: 'แนบไฟล์ไม่ได้' };
+    if (!row || row.type === 'late' || row.status === 'ไม่อนุมัติ') return { ok: false, error: 'แนบไฟล์ไม่ได้' };
     var files = purParseFiles_(row.files);
-    if (files.length >= 3) return { ok: false, error: 'แนบได้ไม่เกิน 3 ไฟล์' };
+    if (files.length >= HR_FORM_MAX_FILES_) return { ok: false, error: 'แนบได้ไม่เกิน ' + HR_FORM_MAX_FILES_ + ' ไฟล์' };
     var emp = hrById_(hrPeople_(ss), row.empId);
     var safe = purClean_(fileName, 80).replace(/[\\/:*?"<>|]/g, '_') || 'file.jpg';
     var f = DriveApp.getFolderById(folderId).createFile(Utilities.newBlob(bytes, mimeType, (emp ? emp.fullName : '') + '_ใบลา_' + row.dateFrom + '_' + safe));
