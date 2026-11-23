@@ -404,14 +404,14 @@ function cpTabYm_(name) { var m = name.match(/(\d{2})\.(\d{2})$/); return m ? (2
 // ส่งรายการของการนำเข้าครั้งนั้น (ใหม่ + PO เดิมที่เปลี่ยน) เข้ากลุ่ม LINE เดียวกับรายงาน 7-11 (ACC_LINE_TOKEN / ACC_LINE_GROUP)
 function cpFlex_(lines, hasImg, files) {
   var T = function (text, o) { var x = { type: 'text', text: String(text), wrap: true }; Object.keys(o || {}).forEach(function (k) { x[k] = o[k]; }); return x; };
-  var row = function (label, value) { return { type: 'box', layout: 'horizontal', margin: 'md', contents: [T(label, { size: 'sm', color: '#64748B', flex: 5 }), T(value, { size: 'sm', weight: 'bold', color: '#0F172A', flex: 6, align: 'end' })] }; };
+  var row = function (label, value, o) { return { type: 'box', layout: 'horizontal', margin: 'md', contents: [T(label, { size: 'sm', color: '#64748B', flex: 5 }), T(value, Object.assign({ size: 'sm', weight: 'bold', color: '#0F172A', flex: 6, align: 'end' }, o || {}))] }; };
   lines = cpCase_(lines);
   var live = lines.filter(function (x) { return x.status !== 'cancel'; });
   var pos = {}, dates = {}, poDates = {}, total = 0;
   live.forEach(function (x) { pos[x.poNo] = 1; dates[x.deliveryDate] = 1; if (x.poDate) poDates[x.poDate] = 1; total += Number(x.qty) || 0; });
   total = Math.round(total * 100) / 100;
   var dl = Object.keys(dates).sort(), pd = Object.keys(poDates).sort();
-  var body = [row('วันที่ใบสั่งซื้อ', accDotRange_(pd)), row('ลูกค้า', 'CPRAM (ซีพีแรม)'), row('วันที่ส่งสินค้า', accDotRange_(dl)), row('ใบสั่งซื้อ', Object.keys(pos).length + ' ใบ')];
+  var body = [row('วันที่ใบสั่งซื้อ', accDotRange_(pd)), row('ลูกค้า', 'CPRAM (ซีพีแรม)'), row('วันที่ส่งสินค้า', accDotRange_(dl)), row('ใบสั่งซื้อ', Object.keys(pos).length + ' ใบ'), row('หมายเหตุ', 'Update ' + accDot_(purToday_()), { color: '#C2410C' })];
   // ตารางส่งสินค้า แยกตามวันส่ง
   var by = {}; lines.forEach(function (x) { (by[x.deliveryDate] = by[x.deliveryDate] || []).push(x); });
   Object.keys(by).sort().forEach(function (d) {
@@ -556,6 +556,7 @@ function cpMoveFlex_(mv) {
   var cv = cpCase_([mv])[0];
   var body = [row('ลูกค้า', 'CPRAM (ซีพีแรม)'), row('ใบสั่งซื้อ (PO)', mv.poNo), row('สินค้า', mv.product || '-'), row('จำนวน', (Number(cv.qty) || 0).toLocaleString() + ' ' + (cv.unit || 'ลัง') + (cv.pcs ? ' (' + cv.pcs.toLocaleString() + ' ' + cv.pcsUnit + ')' : ''))];
   if (mv.place) body.push(row('สถานที่ส่ง', mv.place));
+  body.push(row('หมายเหตุ', 'Update ' + accDot_(purToday_()), { color: '#C2410C' }));
   body.push({ type: 'box', layout: 'vertical', margin: 'xl', backgroundColor: '#FFF7ED', cornerRadius: '16px', paddingAll: '14px', borderColor: '#FDBA74', borderWidth: '1px', contents: [
     { type: 'box', layout: 'horizontal', contents: [T('วันส่งเดิม', { size: 'sm', color: '#9A3412', flex: 4 }), T(day(mv.fromDate), { size: 'sm', color: '#94A3B8', decoration: 'line-through', flex: 7, align: 'end' })] },
     { type: 'box', layout: 'horizontal', margin: 'md', contents: [T('เลื่อนเป็น', { size: 'md', color: '#9A3412', weight: 'bold', flex: 4 }), T(day(mv.toDate), { size: 'lg', color: '#C2410C', weight: 'bold', flex: 7, align: 'end' })] }] });
