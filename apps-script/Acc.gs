@@ -439,7 +439,7 @@ function accBuildReportSheet_(dept, map, m, title) {
   var onePage = Math.min(1065 / wPx, 736 / hPx) >= 0.6;
   if (!onePage) sh.setFrozenRows(4 + H);
   SpreadsheetApp.flush();
-  return { ss: ss, file: file, folder: folder, onePage: onePage };
+  return { ss: ss, file: file, folder: folder, onePage: onePage, headRows: 4 + H };
 }
 function accPlaceImage_(sh, url, row, col, cellW, cellH) {
   try {
@@ -463,21 +463,30 @@ function accAngsanaXml_(xml, isStyles) {
   if (isStyles) xml = xml.replace(/<font>((?:(?!<\/font>)[\s\S])*?)<\/font>/g, function (m, inner) { return /<sz /.test(inner) ? m : '<font><sz val="16"/>' + inner + '</font>'; });
   return xml;
 }
-function accXlsxAngsana_(blob) {
+// titles = { sheet, rows } → ตั้ง "พิมพ์แถวหัวซ้ำทุกหน้า" (Print_Titles) ให้ไฟล์ Excel (ผู้ใช้ขอ 23/11/69: ขึ้นหน้าใหม่ต้องมีหัวคอลัมน์)
+function accXlsxPrintTitles_(xml, titles) {
+  if (!titles || !titles.rows || /_xlnm\.Print_Titles/.test(xml)) return xml;
+  var dn = '<definedName name="_xlnm.Print_Titles" localSheetId="0">\'' + String(titles.sheet).replace(/'/g, "''").replace(/&/g, '&amp;').replace(/</g, '&lt;') + '\'!$1:$' + titles.rows + '</definedName>';
+  if (/<definedNames>/.test(xml)) return xml.replace('<definedNames>', '<definedNames>' + dn);
+  return xml.replace('</sheets>', '</sheets><definedNames>' + dn + '</definedNames>');
+}
+function accXlsxAngsana_(blob, titles) {
   try {
     var parts = Utilities.unzip(blob.setContentType('application/zip'));
     var out = parts.map(function (f) {
       var n = f.getName();
+      if (n === 'xl/workbook.xml' && titles && titles.rows) return Utilities.newBlob(accXlsxPrintTitles_(f.getDataAsString('UTF-8'), titles), 'application/xml', n);
       if (n !== 'xl/styles.xml' && n !== 'xl/sharedStrings.xml') return f;
       return Utilities.newBlob(accAngsanaXml_(f.getDataAsString('UTF-8'), n === 'xl/styles.xml'), 'application/xml', n);
     });
     return Utilities.zip(out, 'report.xlsx').setContentType('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   } catch (e) { return blob; }   // แก้ไม่ได้ → ใช้ไฟล์เดิม
 }
-function accExportXlsx_(ss, folder, name) {
+function accExportXlsx_(ss, folder, name, titleRows) {
   var res = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=xlsx', { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) throw new Error('สร้างไฟล์ Excel ไม่สำเร็จ (HTTP ' + res.getResponseCode() + ')');
-  var f = folder.createFile(accXlsxAngsana_(res.getBlob()).setName(name + '.xlsx'));
+  var sh0 = ss.getSheets()[0], fr = titleRows || 0; if (!fr) try { fr = sh0.getFrozenRows(); } catch (e) {}
+  var f = folder.createFile(accXlsxAngsana_(res.getBlob(), fr ? { sheet: sh0.getName(), rows: fr } : null).setName(name + '.xlsx'));
   try { f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
   return f;
 }
@@ -516,7 +525,7 @@ function accMakePdf_(dept, importId) {
     if (id) try { DriveApp.getFileById(id[0]).setTrashed(true); } catch (e) {}
   });
   var built = accBuildReportSheet_(dept, map, m, name);
-  var pdf = accExportPdf_(built.ss, built.folder, name, built.onePage), xlsx = accExportXlsx_(built.ss, built.folder, name);
+  var pdf = accExportPdf_(built.ss, built.folder, name, built.onePage), xlsx = accExportXlsx_(built.ss, built.folder, name, built.headRows);
   imp.pdfUrl = pdf.getUrl(); imp.sheetUrl = built.ss.getUrl(); imp.xlsxUrl = xlsx.getUrl();
   purWrite_(ss, 'acc_imports', imp);
   return { ok: true, pdfUrl: imp.pdfUrl, sheetUrl: imp.sheetUrl, xlsxUrl: imp.xlsxUrl };

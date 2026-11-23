@@ -919,14 +919,33 @@
         cuts.push(Math.round(r.bottom - top0) + 1);
         if (/^H[34]$/.test(el.tagName)) cuts.push(Math.round(r.top - top0) - 4);
       });
+      // ไม่ตัดหน้ากลางช่องที่รวมหลายแถว (rowspan) — ถ้าช่องนั้นไม่สูงเกินครึ่งหน้า
+      var spans = [];
+      Array.prototype.forEach.call(inner.querySelectorAll('td[rowspan], th[rowspan]'), function (el) {
+        if ((+el.getAttribute('rowspan') || 1) < 2) return;
+        var r = el.getBoundingClientRect(); if (r.height < pageCss * 0.5) spans.push([Math.round(r.top - top0), Math.round(r.bottom - top0)]);
+      });
+      cuts = cuts.filter(function (c) { return !spans.some(function (sp) { return c > sp[0] + 2 && c < sp[1] - 2; }); });
       cuts.sort(function (a, b) { return a - b; });
+      // หัวตาราง (thead หรือแถวแรกที่เป็น th) พิมพ์ซ้ำบนหน้าที่เริ่มกลางตาราง — ผู้ใช้ขอ 23/11/69: ขึ้นหน้าใหม่ต้องมีหัวคอลัมน์
+      var heads = [];
+      Array.prototype.forEach.call(inner.querySelectorAll('table'), function (tb) {
+        var rows = tb.tHead ? Array.prototype.slice.call(tb.tHead.rows) : [];
+        if (!rows.length && tb.rows[0] && tb.rows[0].querySelector('th') && !tb.rows[0].querySelector('td')) rows = [tb.rows[0]];
+        if (!rows.length) return;
+        var a = rows[0].getBoundingClientRect(), z = rows[rows.length - 1].getBoundingClientRect(), t = tb.getBoundingClientRect();
+        var hTop = Math.round(a.top - top0), hBot = Math.round(z.bottom - top0) + 1;
+        if (hBot - hTop < 8 || hBot - hTop > pageCss * 0.35) return;
+        heads.push({ top: hTop, bot: hBot, end: Math.round(t.bottom - top0) });
+      });
+      var headAt = function (y) { var h = null; heads.forEach(function (x) { if (y >= x.bot && y < x.end - 4) h = x; }); return h; };
       var pages = [], y = 0;
       while (y < total - 2) {
-        var lim = y + pageCss;
-        if (lim >= total) { pages.push([y, total - y]); break; }
-        var cut = 0; cuts.forEach(function (c) { if (c > y + pageCss * 0.45 && c <= lim) cut = c; });
+        var hd = y > 0 ? headAt(y) : null, avail = pageCss - (hd ? hd.bot - hd.top : 0), lim = y + avail;
+        if (lim >= total) { pages.push([y, total - y, hd]); break; }
+        var cut = 0; cuts.forEach(function (c) { if (c > y + avail * 0.45 && c <= lim) cut = c; });
         if (!cut) cut = lim;
-        pages.push([y, cut - y]); y = cut;
+        pages.push([y, cut - y, hd]); y = cut;
       }
       if (pages.length > 60) throw new Error('หน้านี้ยาวเกิน 60 หน้า — กรองข้อมูลให้น้อยลงก่อน');
       var view = document.createElement('div'); view.style.cssText = 'position:relative;overflow:hidden;background:#fff';
@@ -934,14 +953,18 @@
       var pdf = new window.jspdf.jsPDF({ orientation: land ? 'l' : 'p', unit: 'mm', format: 'a4' });
       var scale = Math.min(2, 5200 / W);
       var chain = Promise.resolve();
+      var shot = function (top, h) { view.style.height = h + 'px'; inner.style.top = (-top) + 'px'; return window.html2canvas(view, { scale: scale, backgroundColor: '#ffffff', useCORS: true, logging: false }); };
       pages.forEach(function (pg, i) {
+        var hd = pg[2], hcv = null;
         chain = chain.then(function () {
-          view.style.height = pg[1] + 'px'; inner.style.top = (-pg[0]) + 'px';
-          return window.html2canvas(view, { scale: scale, backgroundColor: '#ffffff', useCORS: true, logging: false });
-        }).then(function (cv) {
+          if (!hd) return null;
+          if (hd.cv) return hd.cv;
+          return shot(hd.top, hd.bot - hd.top).then(function (c) { hd.cv = c; return c; });
+        }).then(function (c) { hcv = c; return shot(pg[0], pg[1]); }).then(function (cv) {
           if (i) pdf.addPage();
-          var wmm = pw - m * 2, hmm = cv.height * wmm / cv.width;
-          pdf.addImage(cv.toDataURL('image/jpeg', 0.9), 'JPEG', m, m, wmm, hmm);
+          var wmm = pw - m * 2, hmm = cv.height * wmm / cv.width, y0 = m;
+          if (hcv) { var hh = hcv.height * wmm / hcv.width; pdf.addImage(hcv.toDataURL('image/jpeg', 0.9), 'JPEG', m, m, wmm, hh); y0 += hh; }
+          pdf.addImage(cv.toDataURL('image/jpeg', 0.9), 'JPEG', m, y0, wmm, hmm);
           pdf.setFontSize(8); pdf.setTextColor(120); pdf.text((i + 1) + ' / ' + pages.length, pw - m, ph - 4, { align: 'right' });
         });
       });
@@ -1239,7 +1262,7 @@
 <script src="accounting.js?v=38"></script>
 <script src="cpram.js?v=13"></script>
 <script src="exportorder.js?v=3"></script>
-<script src="payables.js?v=27"></script>
+<script src="payables.js?v=28"></script>
 <script src="quality.js?v=10"></script>
 <script src="production.js?v=31"></script>
 <script src="rd.js?v=3"></script>

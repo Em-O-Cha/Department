@@ -1201,7 +1201,7 @@
         properties: { defaultRowHeight: 28.5, defaultColWidth: 12.5703125 },
         pageSetup: { paperSize: 9, orientation: 'landscape', scale: sh.scale, fitToPage: false, fitToHeight: 0,
           margins: si ? { left: 0.0389, right: 0.118, top: 0.157, bottom: 0.0785, header: 0.157, footer: 0.0785 } : { left: 0.118, right: 0.0785, top: 0.157, bottom: 0, header: 0, footer: 0 },
-          printArea: 'A1:P' + sh.rows.length }
+          printArea: 'A1:P' + sh.rows.length, printTitlesRow: '3:3' }   // หัวคอลัมน์ (แถว 3) พิมพ์ซ้ำทุกหน้า — ผู้ใช้ขอ 23/11/69
       });
       WIDTHS.forEach(function (w, i) { ws.getColumn(i + 1).width = w; ws.getColumn(i + 1).font = { name: 'Angsana New', size: 18 }; });
       sh.rows.forEach(function (row, ri) {

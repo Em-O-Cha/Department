@@ -468,7 +468,7 @@ function cpMakeFiles_(dept, rows, title, name, withRounds) {
   var onePage = rows.length <= 28;
   sh.setFrozenRows(onePage ? 0 : 4);
   SpreadsheetApp.flush();
-  var pdf = accExportPdf_(ss, folder, name, onePage), xlsx = accExportXlsx_(ss, folder, name);
+  var pdf = accExportPdf_(ss, folder, name, onePage), xlsx = accExportXlsx_(ss, folder, name, 4);
   return { pdfUrl: pdf.getUrl(), xlsxUrl: xlsx.getUrl(), xlsxDownload: accXlsxDownload_(xlsx.getUrl()), sheetUrl: ss.getUrl() };
 }
 function cpTrash_(urls) { urls.forEach(function (u) { var id = String(u || '').match(/[-\w]{25,}/); if (id) try { DriveApp.getFileById(id[0]).setTrashed(true); } catch (e) {} }); }
