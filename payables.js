@@ -211,6 +211,8 @@
     out.grand = last(/รวมทั้งสิ้น|รวมเงินทั้งสิ้น|ยอดสุทธิ|รวมสุทธิ|จำนวนเงินรวม|Grand\s*Total|Net\s*Total|Total\s*Amount/i);
     out.vat = last(/ภาษีมูลค่าเพิ่ม|VAT/i, /ไม่รวม|ก่อน|รวมภาษี|exclud|includ/i);
     out.sub = last(/รวมเงิน|รวมเป็นเงิน|ยอดรวม|มูลค่าสินค้า|Sub\s*-?\s*Total|Total\b/i, /ทั้งสิ้น|สุทธิ|ภาษี|VAT|Grand|Net/i);
+    var dsc = last(/ส่วนลด|หัก\s*มัดจำ|เงินมัดจำ|มัดจำ|Discount|Deposit/i, /ภาษี|VAT|ทั้งสิ้น|Grand/i);   // ส่วนลด / หักมัดจำ ท้ายบิล → หักก่อนคิด VAT
+    out.disc = dsc ? Math.abs(dsc) : 0;
     // รายการ: บรรทัดที่ลงท้ายด้วย จำนวน … ราคา … จำนวนเงิน (จำนวน × ราคา ≈ จำนวนเงิน)
     var stop = /รวม|ภาษี|VAT|Total|ส่วนลด|Discount|ชำระ|หัก ณ/i;
     T.forEach(function (l) {
@@ -395,8 +397,11 @@
     b.creditDays = vCredit(v) != null ? vCredit(v) : r.creditDays !== '' ? r.creditDays : v && v.creditDays !== '' && v.creditDays != null ? v.creditDays : '';
     if (r.vatMode) b.vatMode = r.vatMode;
     if (r.lines.length) b.lines = r.lines.map(function (x) { return { desc: x.desc, qty: x.qty, price: x.price }; });
+    putDisc(b, r.disc);
     return b;
   }
+  // ส่วนลด / มัดจำท้ายบิล → ใส่ที่บรรทัดแรก (VAT คิดจากยอดหลังหัก ให้ตรงกับบิล)
+  function putDisc(b, d) { d = Number(d) || 0; if (d > 0 && b.lines.length && !b.lines.some(function (l) { return Number(l.disc) > 0; })) { b.lines[0].disc = r2(d); delete b.lines[0].discPct; } }
   function start(files) {
     msg('<span class="spinner dark"></span> กำลังเปิดไฟล์…');
     P.queue = null;
@@ -610,6 +615,7 @@
       if (r.vatMode) b.vatMode = r.vatMode;
       if (!b.vendor && r.vendor) b.vendor = r.vendor;
       if (r.lines.length) b.lines = r.lines.map(function (x) { return { desc: x.desc, qty: x.qty, price: x.price }; });
+      putDisc(b, r.disc);
       form();
       if (r.lines.length && b.fromPo) toast('ใช้รายการจากบิลจริงแทนรายการใน PO แล้ว — ตรวจอีกครั้ง');
     }).catch(function (e) { msg(esc(e.message || e), 'bad'); });
@@ -631,7 +637,8 @@
     if (a.off == null) return a.check || '';
     if (a.off) return a.off + ' รายการ จำนวน × ราคา ไม่เท่าจำนวนเงินในบิล — ตรวจอีกครั้ง';
     var sum = b.lines.filter(function (l) { return !l.dup; }).reduce(function (t, l) { return t + (Number(l.qty) || 0) * (Number(l.price) || 0); }, 0);
-    return a.sub && Math.abs(sum - a.sub) > 1 && (!a.total || Math.abs(sum - a.total) > 1) ? 'ยอดรวมรายการ ' + m2(sum) + ' ไม่ตรงกับยอดในบิล ' + m2(a.sub) + ' — อาจขาดบางรายการ' : '';
+    var dsc = b.lines.reduce(function (t, l) { return t + (Number(l.disc) || 0); }, 0);
+    return a.sub && Math.abs(sum - a.sub) > 1 && Math.abs(sum - dsc - a.sub) > 1 && (!a.total || Math.abs(sum - a.total) > 1) ? 'ยอดรวมรายการ ' + m2(sum) + ' ไม่ตรงกับยอดในบิล ' + m2(a.sub) + ' — อาจขาดบางรายการ' : '';
   }
   function smallJpeg(src) {
     return new Promise(function (ok) {
@@ -668,6 +675,7 @@
       if (v) { if (!b.category) b.category = v.category || ''; if (!b.pct) b.pct = Number(v.pct) || 0; b.bank = v.bank || b.bank; }
       if (x.vatMode) b.vatMode = x.vatMode; else if (v && v.vatMode) b.vatMode = v.vatMode;
       if ((x.lines || []).length) b.lines = x.lines.map(function (l) { return { desc: l.desc, qty: Number(l.qty) || 0, price: Number(l.price) || 0 }; });
+      putDisc(b, x.discount);
       // ตรวจผลรวม: จำนวน × ราคา และยอดรวมรายการ เทียบกับยอดในบิล
       var check = '', sum = (x.lines || []).reduce(function (s2, l) { return s2 + (Number(l.amount) || 0); }, 0);
       var off = (x.lines || []).filter(function (l) { return Math.abs((Number(l.qty) || 0) * (Number(l.price) || 0) - (Number(l.amount) || 0)) > 1; }).length;
@@ -829,6 +837,7 @@
         if (r.vendor && !vendorOf(b.vendor)) b.vendor = r.vendor;
         if (r.issueDate) b.issueDate = r.issueDate;
         if (r.lines.length) b.lines = r.lines.map(function (x) { return { desc: x.desc, qty: x.qty, price: x.price }; });
+        putDisc(b, r.disc);
         Object.assign(b, keep); form();
       }).catch(function (e) { toast(e.message || e); form(); });
     });

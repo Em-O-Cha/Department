@@ -10,7 +10,7 @@ var AP_AI_MODEL_ = 'claude-opus-5-5';
 var AP_AI_PRICE_ = { in: 4 / 1e6, out: 20 / 1e6 };
 var AP_AI_SCHEMA_ = {
   type: 'object', additionalProperties: false,
-  required: ['vendor', 'taxId', 'invNo', 'issueDate', 'creditDays', 'vatMode', 'lines', 'subtotal', 'vat', 'total', 'note'],
+  required: ['vendor', 'taxId', 'invNo', 'issueDate', 'creditDays', 'vatMode', 'lines', 'discount', 'subtotal', 'vat', 'total', 'note'],
   properties: {
     vendor: { type: 'string', description: 'ชื่อผู้ขาย / ผู้ออกบิล (ไม่ใช่ชื่อบริษัทผู้ซื้อ)' },
     taxId: { type: 'string', description: 'เลขประจำตัวผู้เสียภาษีของผู้ขาย 13 หลัก ตัวเลขล้วน หรือ "" ถ้าไม่มี' },
@@ -20,6 +20,7 @@ var AP_AI_SCHEMA_ = {
     vatMode: { type: 'string', enum: ['inc', 'exc', 'none', ''], description: 'inc = ราคาสินค้ารวม VAT แล้ว, exc = VAT แยกบวกท้ายบิล, none = ไม่มี VAT, "" = ไม่แน่ใจ' },
     lines: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['desc', 'qty', 'price', 'amount'], properties: {
       desc: { type: 'string' }, qty: { type: 'number' }, price: { type: 'number', description: 'ราคาต่อหน่วยตามที่พิมพ์' }, amount: { type: 'number', description: 'จำนวนเงินของรายการตามที่พิมพ์' } } } },
+    discount: { type: 'number', description: 'ส่วนลด / หักเงินมัดจำ ท้ายบิล (ก่อนคิด VAT) เป็นจำนวนบวก หรือ 0 ถ้าไม่มี · ไม่ต้องใส่เป็นรายการใน lines' },
     subtotal: { type: 'number', description: 'ยอดก่อน VAT หรือ 0 ถ้าไม่มี' },
     vat: { type: 'number', description: 'ภาษีมูลค่าเพิ่ม หรือ 0' },
     total: { type: 'number', description: 'ยอดรวมสุทธิ หรือ 0' },
