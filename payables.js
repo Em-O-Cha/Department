@@ -748,7 +748,7 @@
       + (!po && !b.pages.length ? '<div class="apatt"><label class="btn apsm">' + icon('upload', 16) + ' ถ่ายรูป / แนบไฟล์บิล<input type="file" id="apAttach" accept="image/*,application/pdf" multiple hidden></label><small>' + (b.fromPo ? 'เลือกได้หลายไฟล์ (ใบกำกับ / ใบส่งของ / หลายหน้า) · ระบบอ่านรายการแล้วจับคู่กับ PO ให้' : 'ระบบอ่านเลขที่ใบกำกับ วันที่ และรายการให้') + '</small></div>' : '')
       + '<div class="aphl"><b>1. หมวดของ' + (po ? ' PO' : 'บิล') + 'นี้ <span class="req">*</span></b><div class="apchips" id="apCats">' + d.cats.map(function (c, i) {
           return '<label><input type="radio" name="apCat" value="' + c.key + '"' + (b.category === c.key ? ' checked' : '') + '><span>' + (i + 1) + '. ' + esc(c.name) + '</span></label>'; }).join('') + '</div></div>'
-      + '<div class="aphl"><b>2. % หัก ณ ที่จ่าย</b> <small>ลงคอลัมน์ % · ส่วนลด/มัดจำ/หัก ณ ที่จ่าย = มูลค่ารายการ × %</small><div class="apchips sm" id="apPcts">' + PCTS.map(function (p) {
+      + '<div class="aphl"><b>2. % หัก ณ ที่จ่าย</b> <small>หัก ณ ที่จ่าย = มูลค่ารายการ × % (หักตอนจ่าย · VAT คิดจากยอดเต็ม) · <b class="apred">ส่วนลด / มัดจำ</b> ไม่ใช่ช่องนี้ — ใส่เป็นบาทในตารางช่อง "ส่วนลด/มัดจำ"</small><div class="apchips sm" id="apPcts">' + PCTS.map(function (p) {
           return '<label><input type="radio" name="apPct" value="' + p + '"' + (Number(b.pct) === p ? ' checked' : '') + '><span>' + (p ? p + '%' : 'ไม่หัก') + '</span></label>'; }).join('')
         + '<label class="apother">อื่น ๆ <input id="apPctX" inputmode="decimal" value="' + (PCTS.indexOf(Number(b.pct)) < 0 ? esc(b.pct) : '') + '" placeholder="%"></label></div></div>'
       + '<div class="apgrid">'
