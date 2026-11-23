@@ -990,13 +990,14 @@
     if (y) crumbs.push([rootLabel(y), [y]]);
     if (path[1] === -1) crumbs.push(['อื่น ๆ', [y, -1]]); else if (m) crumbs.push([m.name, [y, path[1]]]);
     if (sub != null) crumbs.push([sub, path.slice()]);
-    // ลบโฟลเดอร์ได้เมื่อว่าง (ไม่มีไฟล์) — กันสร้างผิดแล้วแก้ไม่ได้
-    var delKind = null;
+    // ลบโฟลเดอร์ได้ทุกโฟลเดอร์ (ผู้ใช้ขอ 23/11/69 — เดิมลบได้เฉพาะโฟลเดอร์ว่าง) · มีไฟล์ข้างใน → ไฟล์ถูกลบไปถังขยะด้วย (ยืนยันก่อน)
+    // ยกเว้นปีสุดท้ายที่เหลือ และโฟลเดอร์หลักอันสุดท้ายของปี
+    var delKind = null, delDocs = [];
     if (!term && path.length && path[1] !== -1) {
-      if (path.length === 1) { if (!cnt(function (d) { return d.year === y; }) && (isNamed || years.length > 1)) delKind = isNamed ? 'root' : 'year'; }
+      if (path.length === 1) { if (isNamed || years.length > 1) { delKind = isNamed ? 'root' : 'year'; delDocs = D.docs.filter(function (d) { return d.year === y; }); } }
       else if (m) {
         var dkeys = sub != null ? [m.name + ' › ' + sub] : m.leaves.map(function (l) { return l.key; });
-        if (!cnt(function (d) { return (isNamed ? d.year === y : typeof d.year === 'number') && dkeys.indexOf(d.category) >= 0; }) && (isNamed || sub != null || tree.length > 1)) delKind = 'dir';
+        if (isNamed || sub != null || tree.length > 1) { delKind = 'dir'; delDocs = D.docs.filter(function (d) { return (isNamed ? d.year === y : typeof d.year === 'number') && dkeys.indexOf(d.category) >= 0; }); }
       }
     }
     var fdate = function (s) { var p = String(s || '').slice(0, 10).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + String(+p[0] + 543).slice(2) + ' ' + String(s).slice(11, 16) : ''; };
@@ -1004,12 +1005,12 @@
       if (it.kind === 'folder') return '<button class="sxitem" data-xgo="' + i + '" title="' + esc(it.name) + '">' + '<span class="sxic">' + FOLDER_SVG + '</span><span class="sxnm">' + esc(it.name) + '</span><small>' + it.n + ' ไฟล์</small></button>';
       var d = it.doc;
       return '<div class="sxitem sxfile"><a class="sxopen" href="' + esc(d.url) + '" target="_blank" rel="noopener" title="' + esc(d.title + ' (' + d.fileName + ')') + '"><span class="sxic">' + fileSvg(d.fileName) + '</span><span class="sxnm">' + esc(d.title) + '</span><small>' + docSize(d.size) + (it.where ? ' · ' + esc(it.where) : '') + '</small></a>'
-        + '<button class="sxmore" data-xmore="' + esc(d.id) + '" aria-label="ตัวเลือกของ ' + esc(d.title) + '">⋮</button></div>';
+        + '<button class="sxmore" data-xmore="' + esc(d.id) + '" aria-label="ตัวเลือกของ ' + esc(d.title) + '">⋮</button><button class="sxdelf" data-xdel="' + esc(d.id) + '" aria-label="ลบไฟล์ ' + esc(d.title) + '" title="ลบไฟล์">' + icon('trash', 14) + '</button></div>';
     };
     var row = function (it, i) {
       if (it.kind === 'folder') return '<tr class="sxrow" data-xgo="' + i + '" tabindex="0"><td class="sxn"><span class="sxsm">' + FOLDER_SVG + '</span>' + esc(it.name) + '</td><td>' + it.n + ' ไฟล์</td><td>โฟลเดอร์</td><td></td><td></td></tr>';
       var d = it.doc, k = docKind(d.fileName) || ['', '', 'ไฟล์'];
-      return '<tr class="sxrow"><td class="sxn"><a href="' + esc(d.url) + '" target="_blank" rel="noopener"><span class="sxsm">' + fileSvg(d.fileName) + '</span>' + esc(d.title) + '</a>' + (it.where ? '<small>' + esc(it.where) + '</small>' : '') + '</td><td>' + fdate(d.updatedAt || d.createdAt) + '</td><td>' + k[2] + '</td><td class="r">' + docSize(d.size) + '</td><td class="r"><button class="sxmore" data-xmore="' + esc(d.id) + '" aria-label="ตัวเลือกของ ' + esc(d.title) + '">⋮</button></td></tr>';
+      return '<tr class="sxrow"><td class="sxn"><a href="' + esc(d.url) + '" target="_blank" rel="noopener"><span class="sxsm">' + fileSvg(d.fileName) + '</span>' + esc(d.title) + '</a>' + (it.where ? '<small>' + esc(it.where) + '</small>' : '') + '</td><td>' + fdate(d.updatedAt || d.createdAt) + '</td><td>' + k[2] + '</td><td class="r">' + docSize(d.size) + '</td><td class="r sxact"><button class="sxdelf" data-xdel="' + esc(d.id) + '" aria-label="ลบไฟล์ ' + esc(d.title) + '" title="ลบไฟล์">' + icon('trash', 14) + '</button><button class="sxmore" data-xmore="' + esc(d.id) + '" aria-label="ตัวเลือกของ ' + esc(d.title) + '">⋮</button></td></tr>';
     };
     var body = items.length ? (view === 'list'
       ? '<table class="sxtab"><thead><tr><th>ชื่อ</th><th>วันที่แก้ไข</th><th>ชนิด</th><th class="r">ขนาด</th><th></th></tr></thead><tbody>' + items.map(row).join('') + '</tbody></table>'
@@ -1050,10 +1051,21 @@
     }
     if ($('dNewRoot')) $('dNewRoot').addEventListener('click', function () { newRoot(); });
     if ($('dDelDir')) $('dDelDir').addEventListener('click', function () {
-      var label = crumbs[crumbs.length - 1][0], everyYear = delKind === 'dir' && !isNamed;
-      ask({ title: 'ลบโฟลเดอร์ "' + label + '"?', text: (everyYear ? 'โฟลเดอร์นี้จะหายจากทุกปี · ' : '') + 'โฟลเดอร์ว่าง ไม่มีไฟล์ข้างใน', ok: 'ลบโฟลเดอร์', cancel: 'ไม่ลบ', tone: 'danger' }).then(function (yes) {
+      var label = crumbs[crumbs.length - 1][0], everyYear = delKind === 'dir' && !isNamed, nYears = {};
+      delDocs.forEach(function (d) { nYears[d.year] = 1; });
+      ask({ title: 'ลบโฟลเดอร์ "' + label + '"?', text: (everyYear ? 'โฟลเดอร์นี้มีในทุกปี จะหายจากทุกปี · ' : '') + (delDocs.length ? 'ไฟล์ข้างใน ' + delDocs.length + ' ไฟล์' + (everyYear && Object.keys(nYears).length > 1 ? ' (รวมทุกปี)' : '') + ' จะถูกลบไปถังขยะของ Google Drive ด้วย' : 'โฟลเดอร์ว่าง ไม่มีไฟล์ข้างใน'), ok: delDocs.length ? 'ลบโฟลเดอร์และไฟล์ ' + delDocs.length + ' ไฟล์' : 'ลบโฟลเดอร์', cancel: 'ไม่ลบ', tone: 'danger' }).then(function (yes) {
         if (!yes) return;
-        var done = function (r) { if (!r.ok) return toast(r.error); toast('ลบโฟลเดอร์ "' + label + '" แล้ว'); q.dHist = []; q.dPath = path.length > 1 ? (path.length === 3 ? path.slice(0, 2) : [y]) : []; docsPage(); };
+        var done = function (r) { if (!r.ok) return toast(r.error); toast('ลบโฟลเดอร์ "' + label + '" แล้ว' + (delDocs.length ? ' (ลบไฟล์ ' + delDocs.length + ' ไฟล์)' : '')); q.dHist = []; q.dPath = path.length > 1 ? (path.length === 3 ? path.slice(0, 2) : [y]) : []; docsPage(); };
+        var btn = $('dDelDir'); btn.disabled = true; btn.innerHTML = '<span class="spinner dark"></span> กำลังลบ…';
+        // ลบไฟล์ข้างในก่อน แล้วค่อยลบโฟลเดอร์
+        var pre = delDocs.length ? call('sheDeleteDocs', state.token, delDocs.map(function (d) { return d.id; })).then(function (r) {
+          if (!r.ok) throw new Error(r.error || 'ลบไฟล์ไม่ได้');
+          var gone = {}; delDocs.forEach(function (d) { gone[d.id] = 1; }); D.docs = D.docs.filter(function (d) { return !gone[d.id]; });
+        }) : Promise.resolve();
+        pre.then(function () { delFolder(done); }).catch(function (e) { btn.disabled = false; btn.innerHTML = icon('trash', 15) + ' ลบโฟลเดอร์นี้'; toast(e.message || e); });
+      });
+    });
+    function delFolder(done) {
         if (delKind === 'year') return call('sheDocYears', state.token, years.filter(function (x) { return x !== y; })).then(function (r) { if (r.ok) D.years = r.years; done(r); }).catch(onServerError);
         if (isNamed) {
           var rs = JSON.parse(JSON.stringify(roots)), ro = rs.filter(function (x) { return x.name === y; })[0];
@@ -1064,8 +1076,7 @@
         var lines = [];
         tree.forEach(function (x, i) { if (sub == null && i === path[1]) return; lines.push(x.name); x.subs.forEach(function (s2, j) { if (!(i === path[1] && j === path[2])) lines.push(s2); }); });
         call('sheDocCats', state.token, lines.join('\n')).then(function (r) { if (r.ok) D.cats = r.cats; done(r); }).catch(onServerError);
-      });
-    });
+    }
     if ($('dNewDir')) $('dNewDir').addEventListener('click', function () { newFolder(tree, y, path.length === 2 ? path[1] : null); });
     if ($('dCats')) $('dCats').addEventListener('click', function () {
       openModal({ title: 'แก้หมวดเอกสาร', icon: 'folder', color: state.dept.color, ok: 'บันทึก',
@@ -1078,6 +1089,16 @@
       e.preventDefault(); e.stopPropagation();
       var d = D.docs.filter(function (x) { return x.id === el.getAttribute('data-xmore'); })[0]; if (!d) return;
       docMenu(d, tree, years, known);
+    }, $('main'));
+    // ลบไฟล์ (ผู้ใช้ขอ 23/11/69): ปุ่มถังขยะบนไฟล์ — ยืนยันก่อน
+    on('[data-xdel]', 'click', function (el, e) {
+      e.preventDefault(); e.stopPropagation();
+      var d = D.docs.filter(function (x) { return x.id === el.getAttribute('data-xdel'); })[0]; if (!d) return;
+      ask({ title: 'ลบไฟล์ "' + d.title + '"?', text: 'ไฟล์ ' + d.fileName + ' จะถูกย้ายไปถังขยะของ Google Drive และหายจากโฟลเดอร์', ok: 'ลบไฟล์', cancel: 'ไม่ลบ', tone: 'danger' }).then(function (yes) {
+        if (!yes) return;
+        el.disabled = true;
+        call('sheDeleteDoc', state.token, d.id).then(function (r) { if (!r.ok) { el.disabled = false; return toast(r.error); } D.docs = D.docs.filter(function (x) { return x.id !== d.id; }); toast('ลบไฟล์แล้ว'); docsPage(); }).catch(onServerError);
+      });
     }, $('main'));
   }
   // สร้างโฟลเดอร์เอง (ผู้ใช้ขอ 23/11/69): ในปี = โฟลเดอร์หลัก (หมวด) · ในโฟลเดอร์หลัก = โฟลเดอร์ย่อย · มีให้ทุกปีเหมือนกัน (เก็บใน docCats)
@@ -1391,7 +1412,7 @@
     '.sxopen{display:flex;flex-direction:column;align-items:center;gap:4px;color:inherit;text-decoration:none;width:100%}.sxic{width:64px;height:54px;display:flex;align-items:center;justify-content:center}.sxic svg{max-width:64px;max-height:54px}.sxfile .sxic svg{height:54px;width:auto}',
     '.sxnm{font-size:13.5px;line-height:1.3;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.sxitem small{font-size:11.5px;color:var(--muted)}.sxmore{position:absolute;top:4px;right:4px;width:28px;height:28px;border:0;border-radius:6px;background:none;font-size:18px;cursor:pointer;color:#475569}.sxmore:hover{background:#cbd5e1}',
     '.sxtab{width:100%;border-collapse:collapse;font-size:14px}.sxtab th{text-align:left;font-weight:600;color:#475569;padding:6px 8px;border-bottom:1px solid #e2e8f0}.sxtab td{padding:6px 8px;border-bottom:1px solid #f1f5f9;vertical-align:middle}.sxtab .r{text-align:right}.sxrow:hover{background:#e5f1fb}.sxrow[data-xgo]{cursor:pointer}',
-    '.sxn a{color:inherit;text-decoration:none;display:inline-flex;align-items:center;gap:8px}.sxn{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sxn .sxsm{width:22px;height:22px}.sxn small{flex-basis:100%;color:var(--muted);font-size:12px;padding-left:30px}.sxtab .sxmore{position:static}',
+    '.sxn a{color:inherit;text-decoration:none;display:inline-flex;align-items:center;gap:8px}.sxn{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sxn .sxsm{width:22px;height:22px}.sxn small{flex-basis:100%;color:var(--muted);font-size:12px;padding-left:30px}.sxtab .sxmore{position:static}.sxdelf{position:absolute;top:4px;left:4px;width:28px;height:28px;border:0;border-radius:6px;background:rgba(255,255,255,.85);cursor:pointer;color:#dc2626;display:inline-flex;align-items:center;justify-content:center;opacity:.75}.sxdelf:hover,.sxdelf:focus-visible{opacity:1;background:#fee2e2}.sxtab .sxdelf{position:static;margin-right:4px}.sxact{white-space:nowrap}@media(hover:hover){.sxitem .sxdelf{opacity:0}.sxitem:hover .sxdelf,.sxitem .sxdelf:focus-visible{opacity:1}}',
     '.sxempty{text-align:center;color:var(--muted);padding:50px 10px}.sxstatus{padding:8px 12px;border-top:1px solid #eef2f6;background:#f8fafc;font-size:13px;color:#475569}.sxstatus input{padding:4px 8px;border:1px solid #d6dbe3;border-radius:6px;font:inherit;font-size:13px;width:180px}.sxmenu{display:flex;flex-wrap:wrap;gap:8px}.sxmenu .btn{width:auto}',
     '@media (max-width:640px){.sxgrid{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}.sxbar #dTerm{flex:1 1 100%;max-width:none}.sxcrumb{flex-basis:calc(100% - 90px)}.sxtab th:nth-child(2),.sxtab td:nth-child(2),.sxtab th:nth-child(3),.sxtab td:nth-child(3){display:none}}',
     '.smprob{border:1.5px solid #fecaca;background:#fff7f7;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}.smpt{font-weight:700;color:#b91c1c;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline}',

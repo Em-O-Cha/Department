@@ -95,6 +95,23 @@ function sheUpdateDoc(token, id, patch) {
     return { ok: true, doc: shedOut_(d) };
   });
 }
+// ลบหลายไฟล์พร้อมกัน (ลบโฟลเดอร์ที่มีไฟล์ — ผู้ใช้ขอ 23/11/69): ไฟล์ไปถังขยะ Drive + ลบแถว · ลบจากแถวล่างขึ้นบน
+function sheDeleteDocs(token, ids) {
+  var dept = requireShe_(token);
+  ids = (Array.isArray(ids) ? ids : []).map(String).slice(0, 500);
+  if (!ids.length) return { ok: true, n: 0 };
+  return purLocked_(function () {
+    var ss = sheBook_(dept), want = {}, n = 0;
+    ids.forEach(function (i) { want[i] = 1; });
+    var rows = purRead_(ss, 'she_docs').filter(function (x) { return want[x.id]; }).sort(function (a, b) { return b._row - a._row; });
+    rows.forEach(function (d) {
+      try { DriveApp.getFileById(d.fileId).setTrashed(true); } catch (e) {}
+      sheDeleteRow_(ss, 'she_docs', d); n++;
+    });
+    purLogWrite_(ss, 'ลบเอกสารหลายไฟล์ (ลบโฟลเดอร์)', 'she_docs', '', n + ' ไฟล์: ' + rows.map(function (d) { return d.title; }).slice(0, 30).join(', '));
+    return { ok: true, n: n };
+  });
+}
 function sheDeleteDoc(token, id) {
   var dept = requireShe_(token);
   return purLocked_(function () {

@@ -65,7 +65,7 @@
   // ---------- โหลดข้อมูล ----------
   H.load = function () {
     if (H.loading) return H.loading;
-    H.loading = call('accLoad', state.token).then(function (d) { H.data = d; H.loading = null; return d; }, function (e) { H.loading = null; throw e; });
+    H.loading = call('accLoad', state.token).then(function (d) { H.data = d; H.loadedAt = Date.now(); H.loading = null; return d; }, function (e) { H.loading = null; throw e; });
     return H.loading;
   };
   function reload(msg) {
@@ -92,10 +92,61 @@
       return;
     }
     // ผลสรุปเก็บไว้ 5 นาที: กลับมาหน้า Dashboard ภายใน 5 นาทีขึ้นทันที (เกินนั้นคำนวณใหม่ · กด "คำนวณใหม่" ได้ตลอด)
+    setTimeout(function () { H.autoTick(true); }, 800);   // เปิดหน้า: ข้อมูลเก่าเกิน 15 วินาที → เช็กของใหม่
     if (!fresh(H.cmpAt)) H.cmp = null;
     if (!fresh(H.monAt)) H.mon = null;   // กลับมาหน้า Dashboard = คำนวณเปรียบเทียบใหม่ (อาจมีออเดอร์ใหม่)
     ({ a_imp: importPage, a_hist: histPage, a_dash: dash, a_mon: monthly, a_set: settings, a_cp: function () { window.ACCCP.importPage(); }, a_cpl: function () { window.ACCCP.listPage(); }, a_ex: function () { window.ACCEX.importPage(); }, a_exl: function () { window.ACCEX.listPage(); }, a_ap_dash: function () { go('a_dash'); }, a_apin: function () { window.ACCAP.importPage(); }, a_ap: function () { window.ACCAP.roundPage(); }, a_apv: function () { window.ACCAP.vendorPage(); }, a_appo: function () { window.ACCAP.poPage(); } }[page] || importPage)();
   };
+
+  // ==================== รีเฟรชข้อมูลอัตโนมัติ (ผู้ใช้ขอ 23/11/69) ====================
+  // หน้ารายงาน / รายการของบัญชี: ทุก 1 นาที (และทันทีเมื่อเปิดหน้าที่ข้อมูลเก่าเกิน 15 วินาที) โหลดข้อมูลใหม่ — เปลี่ยนจริงค่อยวาดหน้าใหม่ คงตำแหน่งเลื่อนไว้
+  // ไม่รีเฟรชตอนกำลังพิมพ์ / เปิดหน้าต่าง / กรอกฟอร์มบิล / หน้านำเข้า · หน้าซ่อนอยู่ไม่โหลด
+  var AUTO_PAGES = { a_dash: 1, a_mon: 1, a_hist: 1, a_cpl: 1, a_exl: 1, a_ap: 1, a_appo: 1 };
+  function fp(x) { try { return JSON.stringify(x); } catch (e) { return String(Math.random()); } }
+  function autoBusy() {
+    var a = document.activeElement;
+    if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && $('main').contains(a)) return true;
+    var mo = document.getElementById('modalOverlay');
+    if (mo && !mo.classList.contains('hidden')) return true;
+    if (document.querySelector('.askov')) return true;
+    if (window.ACCAP && ACCAP.cur) return true;   // กำลังกรอกบิล / PO
+    return false;
+  }
+  function keepScroll() {
+    var boxes = Array.prototype.map.call(document.querySelectorAll('#main .cpwrap, #apSheets'), function (e) { return [e.scrollTop, e.scrollLeft]; });
+    var y = window.scrollY;
+    return function () { window.scrollTo(0, y); Array.prototype.forEach.call(document.querySelectorAll('#main .cpwrap, #apSheets'), function (e, i) { if (boxes[i]) { e.scrollTop = boxes[i][0]; e.scrollLeft = boxes[i][1]; } }); };
+  }
+  H.syncAt = {};
+  H.autoTick = function (onOpen) {
+    var pg = state.page;
+    if (!state.dept || state.admin || document.hidden || !AUTO_PAGES[pg] || autoBusy() || H.autoRun) return;
+    var age = pg === 'a_cpl' ? (window.ACCCP && ACCCP.age()) : pg === 'a_exl' ? (window.ACCEX && ACCEX.age()) : /^a_ap/.test(pg) ? (window.ACCAP && ACCAP.age()) : Date.now() - (H.loadedAt || 0);
+    if (onOpen && (Date.now() - (H.syncAt[pg] || 0) < 15000 || (age || 0) < 15000)) return;   // เพิ่งโหลดมา ไม่ต้องโหลดซ้ำ
+    var job;
+    if (pg === 'a_cpl' && window.ACCCP) job = ACCCP.refresh();
+    else if (pg === 'a_exl' && window.ACCEX) job = ACCEX.refresh();
+    else if ((pg === 'a_ap' || pg === 'a_appo') && window.ACCAP) job = ACCAP.refresh();
+    else if (pg === 'a_hist') job = call('accLoad', state.token).then(function (d) { var ch = fp(d) !== fp(H.data); if (ch) H.data = d; H.loadedAt = Date.now(); return ch; });
+    else job = Promise.all([call('accMonthly', state.token), call('accLoad', state.token), window.ACCAP ? ACCAP.refresh() : false]).then(function (r) {   // Dashboard / สรุปรายเดือน: ทุกบริษัท + ค่าใช้จ่าย
+      var m = r[0] && r[0].ok ? r[0] : null, ch = !!r[2];
+      if (m && fp(m.companies) !== fp(H.mon && H.mon.companies)) { H.mon = m; H.monAt = Date.now(); ch = true; }
+      if (fp(r[1]) !== fp(H.data)) { H.data = r[1]; H.loadedAt = Date.now(); ch = true; }
+      if (ch) { H.dcache = null; H.cmp = null; H.cmpAt = 0; if (m) { H.mon = m; H.monAt = Date.now(); } }
+      return ch;
+    });
+    if (!job) return;
+    H.autoRun = true; H.syncAt[pg] = Date.now();
+    job.then(function (ch) {
+      H.autoRun = false;
+      if (!ch || state.page !== pg || autoBusy()) return;
+      var back = keepScroll();
+      H.render(pg); back(); setTimeout(back, 1500);   // Dashboard ค่อย ๆ ขึ้น → คืนตำแหน่งอีกรอบ
+      toast('มีข้อมูลใหม่ — อัปเดตหน้าแล้ว');
+    }).catch(function () { H.autoRun = false; });   // เน็ตหลุด / หมดเวลา: ข้ามรอบนี้เงียบ ๆ
+  };
+  if (!H.autoTimer) H.autoTimer = setInterval(function () { if (state.dept && state.dept.module === 'accounting') H.autoTick(false); }, 60000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && state.dept && state.dept.module === 'accounting') H.autoTick(true); });
 
   // ==================== ตาราง "ต้นแบบรับออเดอร์ 7-11" ====================
   // m = matrix จาก Acc.gs (dcs[{name,cells,cases}], byProduct, cases) · full = ศูนย์ละ 3 แถวเหมือนต้นแบบ (แถวแรก = จำนวนลัง)

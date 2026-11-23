@@ -24,8 +24,11 @@
     }).join('') + '</ol>';
   }
   function msg(html, kind) { var el = $('cpMsg'); if (el) el.innerHTML = html ? '<div class="a7msg ' + (kind || '') + '">' + html + '</div>' : ''; }
-  function load() { return call('cpLoad', state.token).then(function (d) { C.data = d; return d; }); }
+  function load() { return call('cpLoad', state.token).then(function (d) { C.data = d; C.loadedAt = Date.now(); return d; }); }
   function loading(title) { $('main').innerHTML = '<h3>' + title + '</h3><div class="panel"><span class="spinner dark"></span> กำลังโหลดข้อมูล…</div>'; }
+  // รีเฟรชอัตโนมัติ (accounting.js autoTick): โหลดใหม่ เปลี่ยนจริงค่อยวาดหน้าใหม่
+  C.refresh = function () { return call('cpLoad', state.token).then(function (d) { var ch = JSON.stringify(d) !== JSON.stringify(C.data); if (ch) C.data = d; C.loadedAt = Date.now(); return ch; }); };
+  C.age = function () { return C.data ? Date.now() - (C.loadedAt || 0) : 0; };
   C.reset = function () { C.data = null; C.imp = null; C.month = ''; };
 
   // ==================== อ่าน PDF ====================

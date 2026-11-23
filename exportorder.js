@@ -26,12 +26,15 @@
     }).join('') + '</ol>';
   }
   function msg(html, kind) { var el = $('exMsg'); if (el) el.innerHTML = html ? '<div class="a7msg ' + (kind || '') + '">' + html + '</div>' : ''; }
-  function load() { return call('exLoad', state.token).then(function (d) { C.data = d; return d; }); }
+  function load() { return call('exLoad', state.token).then(function (d) { C.data = d; C.loadedAt = Date.now(); return d; }); }
   function loading(title) { $('main').innerHTML = '<h3>' + title + '</h3><div class="panel"><span class="spinner dark"></span> กำลังโหลดข้อมูล…</div>'; }
   function script(url, ready) {
     if (ready()) return Promise.resolve();
     return new Promise(function (ok, fail) { var s = document.createElement('script'); s.src = url; s.onload = ok; s.onerror = function () { fail(new Error('โหลดตัวอ่านไฟล์ไม่ได้ — ตรวจอินเทอร์เน็ตแล้วลองใหม่')); }; document.head.appendChild(s); });
   }
+  // รีเฟรชอัตโนมัติ (accounting.js autoTick): โหลดใหม่ เปลี่ยนจริงค่อยวาดหน้าใหม่
+  C.refresh = function () { return call('exLoad', state.token).then(function (d) { var ch = JSON.stringify(d) !== JSON.stringify(C.data); if (ch) C.data = d; C.loadedAt = Date.now(); return ch; }); };
+  C.age = function () { return C.data ? Date.now() - (C.loadedAt || 0) : 0; };
   C.reset = function () { C.data = null; C.imp = null; C.filter = ''; };
 
   // ==================== อ่านข้อความจาก Invoice ====================
