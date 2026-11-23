@@ -550,7 +550,7 @@
     '.cpmh2{font-weight:700;margin:6px 0 4px}.cpmrow{padding:6px 0;border-top:1px solid var(--line);font-size:14px}.cpmrow small{display:block;color:var(--muted)}',
     '#cpMapSave{margin-top:10px}.cpchips{margin:4px 0 12px}',
     '.cppcs{display:block;font-size:12px;color:var(--muted);font-weight:400;white-space:nowrap}.cptab .cpwh{white-space:nowrap}.a7fixrow .cppc{flex:0 1 190px}',
-    '.cpimh span .cpupd{font-size:inherit;color:#C2410C}',
+    '.cpimh span .cpupd{font-size:inherit;color:#C2410C}.cpimg .cppcs{font-size:14px;color:#475569}',
     '.cphow{margin:0 0 10px;font-size:13.5px;color:var(--muted);line-height:1.55}.cphow b{color:var(--ink,#0f172a)}.cphow a{color:var(--c);font-weight:600}.cpbad{color:#dc2626;font-style:normal}.cpnote{font-size:13px;margin:12px 2px 0}',
     '@media (max-width:640px){.cpset{min-width:0!important}.cpset thead{display:none}.cpset tr{display:grid;grid-template-columns:1fr 1fr 44px;gap:6px 8px;padding:10px 0;border-bottom:1px solid var(--line)}.cpset td{display:block;padding:0!important;border:0!important}.cpset td[data-l]::before{content:attr(data-l);display:block;font-size:12.5px;color:var(--muted);margin-bottom:3px}.cpset td:first-child{grid-column:1/3}.cpset td:last-child{grid-column:3;grid-row:1;align-self:end;width:auto}.cpset tr>td:nth-child(3):not(:last-child){grid-column:2/4}.cpset td[colspan]{grid-column:1/-1}.cpset td[data-l="ชื่อสินค้า"],.cpset td[data-l="ชิ้นต่อ 1 ลัง"]{grid-column:1/3}.cpset .icon-btn{width:44px;height:44px}}',
     '.cpset td:last-child,.cpset th:last-child{width:44px;text-align:center}.cpset input.bad{border-color:#dc2626;background:#fef2f2}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}',
