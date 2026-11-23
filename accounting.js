@@ -488,7 +488,10 @@
   function makeLineImage(map, m) {
     return loadScript(H2C_URL, function () { return !!window.html2canvas; }).then(function () { return document.fonts ? document.fonts.ready : null; }).then(function () {
       // ภาพ = รายงานแบบเดียวกับที่เห็นในระบบ (ต้นแบบรับออเดอร์) ความกว้างคงที่ 1200px
-      var box = document.createElement('div'); box.className = 'a7imgbox'; box.innerHTML = '<div class="a7imgrep">' + reportHtml(map, m, n0(m.poCount) + ' ใบสั่งซื้อ') + '</div>'; document.body.appendChild(box);
+      // ตัดสินค้าที่ไม่มีออเดอร์ (รวม 0 ลัง) และศูนย์ที่ไม่มีออเดอร์ออกจากภาพ LINE (ผู้ใช้ขอ 23/11/69) — หน้าจอ / PDF / Excel ยังครบทุกคอลัมน์
+      var pz = map.products.filter(function (p) { return (m.byProduct[p.key] || 0) > 0; }), dz = m.dcs.filter(function (d) { return d.cases; });
+      var mapL = pz.length ? Object.assign({}, map, { products: pz }) : map, mL = dz.length ? Object.assign({}, m, { dcs: dz }) : m;
+      var box = document.createElement('div'); box.className = 'a7imgbox'; box.innerHTML = '<div class="a7imgrep">' + reportHtml(mapL, mL, n0(m.poCount) + ' ใบสั่งซื้อ') + '</div>'; document.body.appendChild(box);
       var el = box.firstChild;
       return imgsReady(el).then(function () { return window.html2canvas(el, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true }); }).then(function (cv) {
         document.body.removeChild(box);
