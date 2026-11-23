@@ -167,7 +167,24 @@
 
   // ==================== ตาราง (หน้าตาเหมือนไฟล์ Excel) ====================
   // rows เรียงตามวันส่ง · opt.preview = แสดงสถานะ ใหม่/มีแล้ว/เปลี่ยน · opt.edit = แตะแถวเพื่อแก้สถานะ
+  // ชิ้น → ลัง (เหมือน cpCase_ ใน AccCpram.gs): สินค้าที่ตั้ง "ชิ้นต่อ 1 ลัง" ไว้ แสดงเป็นลัง + จำนวนชิ้นตามใบ PO
+  function curMap() { return (C.imp && C.imp.preview && C.imp.preview.map) || (C.data && C.data.map) || { products: [] }; }
+  function isCase(u) { return /^(ลัง|CAS|CTN|CT)$/i.test(String(u || '').trim()); }
+  function caseRows(rows) {
+    var ps = curMap().products || [];
+    return rows.map(function (r) {
+      var code = String(r.itemCode || ''), p = ps.filter(function (x) { return (code && x.code === code) || (!code && r.product && x.name === r.product); })[0];
+      var n = p && Number(p.perCase) > 0 ? Number(p.perCase) : 0, u = r.unitTh || r.unit;
+      if (!n || isCase(u) || r.pcs) return r;
+      var o = Object.assign({}, r);
+      o.pcs = Number(r.qty) || 0; o.pcsUnit = /^PCS?$|^EA$/i.test(String(u)) ? 'ชิ้น' : (u || 'ชิ้น'); o.perCase = n;
+      o.qty = Math.round(o.pcs / n * 100) / 100; o.unit = o.unitTh = 'ลัง'; o.price = (Number(r.price) || 0) * n;
+      return o;
+    });
+  }
+  function nq(v) { return Number(v || 0).toLocaleString('th-TH', { maximumFractionDigits: 2 }); }
   function schedTable(rows, opt) {
+    rows = caseRows(rows);
     var groups = [], g = null;
     rows.forEach(function (r) { if (!g || g.date !== r.deliveryDate) { g = { date: r.deliveryDate, rows: [] }; groups.push(g); } g.rows.push(r); });
     var total = 0, body = groups.map(function (gr) {
@@ -179,14 +196,14 @@
         return '<tr class="' + (cancel ? 'cpx' : '') + (opt.edit ? ' cped' : '') + '"' + (opt.edit ? ' data-cpl="' + esc(r.id) + '" tabindex="0"' : '') + '>'
           + (first ? '<td' + rs + '>' + dayOf(gr.date) + '</td><td' + rs + '>' + slash(gr.date) + '</td>' : '')
           + (sameP ? (first ? '<td' + rs + ' class="cpp">' + pname(r) + '</td>' : '') : '<td class="cpp">' + pname(r) + '</td>')
-          + '<td class="cpo">' + esc(r.poNo) + '</td><td>' + esc(r.wh || (r.place ? '-' : '?')) + '</td><td class="cpq">' + n0(r.qty) + '</td><td>' + esc(r.unitTh || r.unit || 'ลัง') + '</td>'
-          + (first ? '<td' + rs + ' class="cpt">' + n0(sum) + '</td>' : '')
+          + '<td class="cpo">' + esc(r.poNo) + '</td><td class="cpwh">' + esc(r.wh || (r.place ? '-' : '?')) + '</td><td class="cpq">' + nq(r.qty) + (r.pcs ? '<small class="cppcs">= ' + n0(r.pcs) + ' ' + esc(r.pcsUnit) + '</small>' : '') + '</td><td>' + esc(r.unitTh || r.unit || 'ลัง') + '</td>'
+          + (first ? '<td' + rs + ' class="cpt">' + nq(sum) + '</td>' : '')
           + (sameL ? (first ? '<td' + rs + '>' + (r.place ? esc(r.place) : '<span class="cpq0">?</span>') + '</td>' : '') : '<td>' + (r.place ? esc(r.place) : '<span class="cpq0">?</span>') + '</td>')
           + (opt.noNote ? '' : '<td class="cpn">' + (opt.preview ? stateTag(r) : noteHtml(r)) + '</td>') + '</tr>';
       }).join('');
     }).join('');
     return '<div class="cpwrap"><table class="cptab"><thead><tr><th>วัน</th><th>วันที่</th><th>สินค้า</th><th>PO</th><th>คลัง</th><th>จำนวนสินค้า</th><th>หน่วย</th><th>Total</th><th>สถานที่ส่ง</th>' + (opt.noNote ? '' : '<th>' + (opt.preview ? 'สถานะ' : 'หมายเหตุ') + '</th>') + '</tr></thead>'
-      + '<tbody>' + body + '</tbody><tfoot><tr><td colspan="4"></td><td class="cpy">Total</td><td class="cpy">' + n0(total) + '</td><td class="cpy">' + unitOf(rows.filter(function (r) { return r.status !== 'cancel'; })) + '</td><td colspan="' + (opt.noNote ? 2 : 3) + '"></td></tr></tfoot></table></div>';
+      + '<tbody>' + body + '</tbody><tfoot><tr><td colspan="4"></td><td class="cpy">Total</td><td class="cpy">' + nq(total) + '</td><td class="cpy">' + unitOf(rows.filter(function (r) { return r.status !== 'cancel'; })) + '</td><td colspan="' + (opt.noNote ? 2 : 3) + '"></td></tr></tfoot></table></div>';
   }
   function pname(r) { return r.product ? esc(r.product) : '<span class="cpq0">รหัส ' + esc(r.itemCode) + '</span>'; }
   function histText(h) { var t = String(h).split(' | ').pop().replace(/^[\d-]+: /, ''); return /^เลื่อนส่ง/.test(t) ? '📅 ' + t : 'เปลี่ยน: ' + t; }
@@ -205,14 +222,15 @@
     if (!rounds.length) return '';
     var sum = rounds.reduce(function (s, x) { return s + x.total; }, 0);
     return '<div class="cpwrap"><table class="cptab cpr"><thead><tr><th>รอบเงินเข้า</th><th>จำนวน</th><th>ราคา</th><th>ยอดเงิน</th><th>Vat 7%</th><th>Total</th></tr></thead><tbody>'
-      + rounds.map(function (x) { return '<tr><td>' + slash(x.dueDate) + '</td><td>' + n0(x.qty) + '</td><td>' + (x.price === '' ? '-' : n2(x.price)) + '</td><td>' + n2(x.amount) + '</td><td>' + n2(x.vat) + '</td><td><b>' + n2(x.total) + '</b></td></tr>'; }).join('')
+      + rounds.map(function (x) { return '<tr><td>' + slash(x.dueDate) + '</td><td>' + nq(x.qty) + '</td><td>' + (x.price === '' ? '-' : n2(x.price)) + '</td><td>' + n2(x.amount) + '</td><td>' + n2(x.vat) + '</td><td><b>' + n2(x.total) + '</b></td></tr>'; }).join('')
       + '</tbody><tfoot><tr><td colspan="4"></td><td class="cpy">รวม</td><td class="cpy">' + n2(sum) + '</td></tr></tfoot></table></div>';
   }
   function kpis(list) {
+    list = caseRows(list);
     var a = list.filter(function (r) { return r.status !== 'cancel'; }), amt = a.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
     var pos = {}; a.forEach(function (r) { pos[r.poNo] = 1; });
     var tile = function (v, l, c) { return '<div class="kpi" style="--k:' + c + '"><b>' + v + '</b><span>' + l + '</span></div>'; };
-    return '<div class="kpis xk">' + tile(n0(Object.keys(pos).length), 'ใบสั่งซื้อ', '#2563eb') + tile(n0(a.reduce(function (s, r) { return s + (Number(r.qty) || 0); }, 0)), 'จำนวนสินค้า (' + unitOf(a) + ')', '#16a34a')
+    return '<div class="kpis xk">' + tile(n0(Object.keys(pos).length), 'ใบสั่งซื้อ', '#2563eb') + tile(nq(a.reduce(function (s, r) { return s + (Number(r.qty) || 0); }, 0)), 'จำนวนสินค้า (' + unitOf(a) + ')', '#16a34a')
       + tile('฿' + n0(amt), 'มูลค่า (ก่อน VAT)', '#d97706') + tile('฿' + n0(amt * 1.07), 'รวม VAT 7%', '#7c3aed') + '</div>';
   }
 
@@ -233,8 +251,8 @@
     if (unP.length || unS.length) {
       fix = '<div class="panel pbox a7fix"><h4>' + icon('warn', 18) + ' จับคู่ครั้งแรก (ระบบจำไว้ใช้ครั้งต่อไป)</h4>'
         + '<p class="cphow">พิมพ์ชื่อให้ครบทุกช่อง แล้วกด <b>บันทึกการจับคู่ แล้วตรวจใหม่</b> — ระบบจะจำรหัสนี้ไว้ ใบ PO ครั้งต่อไปขึ้นชื่อเอง · แก้ / ลบภายหลังได้ที่เมนู <a href="#" id="cpGoSet">ตั้งค่าคลัง / สถานที่ส่ง CP Ram</a></p>'
-        + unP.map(function (u, i) { return '<div class="a7fixrow"><span>รหัสสินค้า <b>' + esc(u.itemCode) + '</b> <small>(' + n0(u.qty) + ' ' + esc(u.unit || 'ลัง') + ')</small></span><input data-cpp="' + i + '" list="cpPL" placeholder="ชื่อสินค้า เช่น น้ำพริกหนังไก่กรอบ"></div>'; }).join('')
-        + unS.map(function (u, i) { return '<div class="a7fixrow cps"><span>ส่งที่ <b>' + (esc(u.shipTo) || '<i class="cpbad">อ่านรหัสไม่ได้</i>') + '</b> <small>(PO ' + esc(u.pos.slice(0, 3).join(', ')) + (u.pos.length > 3 ? ' …' : '') + ')</small></span><input data-cpw="' + i + '" placeholder="คลัง เช่น ขอนแก่น / -" aria-label="คลัง"><input data-cps="' + i + '" list="cpSL" placeholder="สถานที่ส่ง เช่น คล้ายนคร" aria-label="สถานที่ส่ง"></div>'; }).join('')
+        + unP.map(function (u, i) { return '<div class="a7fixrow"><span>รหัสสินค้า <b>' + esc(u.itemCode) + '</b> <small>(' + n0(u.qty) + ' ' + esc(u.unit || 'ลัง') + ')</small></span><input data-cpp="' + i + '" list="cpPL" placeholder="ชื่อสินค้า เช่น น้ำพริกหนังไก่กรอบ" aria-label="ชื่อสินค้า">' + (/ลัง/.test(u.unit || 'ลัง') ? '' : '<input data-cppc="' + i + '" inputmode="numeric" placeholder="กี่' + esc(u.unit) + ' = 1 ลัง (ไม่ใส่ก็ได้)" aria-label="ชิ้นต่อ 1 ลัง" class="cppc">') + '</div>'; }).join('')
+        + unS.map(function (u, i) { return '<div class="a7fixrow cps"><span>ส่งที่ <b>' + (esc(u.shipTo) || '<i class="cpbad">อ่านรหัสไม่ได้</i>') + '</b> <small>(PO ' + esc(u.pos.slice(0, 3).join(', ')) + (u.pos.length > 3 ? ' …' : '') + ')</small></span><input data-cpw="' + i + '" placeholder="คลัง เช่น บ่อเงิน / -" aria-label="คลัง"><input data-cps="' + i + '" list="cpSL" placeholder="สถานที่ส่ง เช่น คล้ายนคร" aria-label="สถานที่ส่ง"></div>'; }).join('')
         + '<datalist id="cpPL">' + r.map.products.map(function (p) { return '<option value="' + esc(p.name) + '">'; }).join('') + '</datalist>'
         + '<datalist id="cpSL">' + uniq(r.map.ships.map(function (s) { return s.place; }).concat(['ลาดหลุมแก้ว', 'คล้ายนคร'])).map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>'
         + '<button class="btn btn-primary" id="cpMapSave">' + icon('check', 16) + ' บันทึกการจับคู่ แล้วตรวจใหม่</button></div>';
@@ -255,7 +273,7 @@
     var ms = $('cpMapSave');
     if (ms) ms.addEventListener('click', function () {
       var cfg = { products: [], ships: [] }, miss = 0;
-      unP.forEach(function (u, i) { var v = $('main').querySelector('[data-cpp="' + i + '"]').value.trim(); if (v) cfg.products.push({ code: u.itemCode, name: v }); else miss++; });
+      unP.forEach(function (u, i) { var v = $('main').querySelector('[data-cpp="' + i + '"]').value.trim(), pe = $('main').querySelector('[data-cppc="' + i + '"]'), pc = pe ? Number(pe.value.replace(/,/g, '')) || '' : ''; if (v) cfg.products.push({ code: u.itemCode, name: v, perCase: pc }); else miss++; });
       unS.forEach(function (u, i) {
         var w = $('main').querySelector('[data-cpw="' + i + '"]').value.trim(), p = $('main').querySelector('[data-cps="' + i + '"]').value.trim();
         if (p && u.shipTo) cfg.ships.push({ key: shipKey(u.shipTo), wh: w || '-', place: p }); else miss++;
@@ -307,11 +325,11 @@
       + (seen.length ? '<div class="a7chk warn" style="margin-top:10px"><i>!</i><span>ข้อมูลเดิมมี "ส่งที่" ที่ยังไม่ได้ตั้ง: ' + seen.map(esc).join(', ') + '</span></div>' : '')
       + '</div>'
       + '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('table', 18) + ' สินค้า</h4>'
-      + '<p class="cphow">จับคู่จาก<b>รหัสสินค้า</b>ในใบ PO (ตัวเลข 8 หลัก เช่น 72400524) กับชื่อที่ใช้ในตารางส่งสินค้า</p>'
-      + '<div class="ptable-wrap"><table class="ptable a7set cpset"><thead><tr><th>รหัสสินค้า</th><th>ชื่อสินค้า</th><th><span class="sr">ลบ</span></th></tr></thead><tbody>'
+      + '<p class="cphow">จับคู่จาก<b>รหัสสินค้า</b>ในใบ PO (ตัวเลข 8 หลัก เช่น 72400524) กับชื่อที่ใช้ในตารางส่งสินค้า · ใบ PO สั่งเป็น<b>ชิ้น</b>แต่อยากดูเป็น<b>ลัง</b> ให้ใส่ <b>ชิ้นต่อ 1 ลัง</b> — ตาราง ไฟล์ และ LINE จะแสดงเป็นลัง พร้อมจำนวนชิ้นตามใบ PO</p>'
+      + '<div class="ptable-wrap"><table class="ptable a7set cpset"><thead><tr><th>รหัสสินค้า</th><th>ชื่อสินค้า</th><th>ชิ้นต่อ 1 ลัง</th><th><span class="sr">ลบ</span></th></tr></thead><tbody>'
       + cfg.products.map(function (r, i) {
-        return '<tr><td data-l="รหัสสินค้า"><input data-sp="' + i + '" data-k="code" value="' + esc(r.code) + '" inputmode="numeric" placeholder="เช่น 72400524" aria-label="รหัสสินค้า"></td><td data-l="ชื่อสินค้า"><input data-sp="' + i + '" data-k="name" value="' + esc(r.name) + '" placeholder="ชื่อสินค้า" aria-label="ชื่อสินค้า"></td><td><button class="icon-btn" data-rmp="' + i + '" aria-label="ลบแถวนี้">' + icon('x', 16) + '</button></td></tr>';
-      }).join('') + (cfg.products.length ? '' : '<tr><td colspan="3" class="muted">ยังไม่มี</td></tr>')
+        return '<tr><td data-l="รหัสสินค้า"><input data-sp="' + i + '" data-k="code" value="' + esc(r.code) + '" inputmode="numeric" placeholder="เช่น 72400524" aria-label="รหัสสินค้า"></td><td data-l="ชื่อสินค้า"><input data-sp="' + i + '" data-k="name" value="' + esc(r.name) + '" placeholder="ชื่อสินค้า" aria-label="ชื่อสินค้า"></td><td data-l="ชิ้นต่อ 1 ลัง"><input data-sp="' + i + '" data-k="perCase" value="' + esc(r.perCase || '') + '" inputmode="numeric" placeholder="เช่น 200 (ว่าง = หน่วยตามใบ PO)" aria-label="ชิ้นต่อ 1 ลัง"></td><td><button class="icon-btn" data-rmp="' + i + '" aria-label="ลบแถวนี้">' + icon('x', 16) + '</button></td></tr>';
+      }).join('') + (cfg.products.length ? '' : '<tr><td colspan="4" class="muted">ยังไม่มี</td></tr>')
       + '</tbody></table></div><button class="btn btn-line btn-sm" id="cpAddP" style="margin-top:8px">+ เพิ่มสินค้า</button></div>'
       + '<p class="muted cpnote">การตั้งค่านี้ใช้กับใบ PO ที่นำเข้าครั้งต่อไป — รายการที่บันทึกไปแล้วไม่เปลี่ยน</p>'
       + '<div class="a7bar"><button class="btn btn-line" id="cpSUndo">ยกเลิกการแก้ไข</button><button class="btn btn-primary" id="cpSSave">' + icon('check', 18) + ' บันทึกการตั้งค่า</button></div>';
@@ -331,15 +349,15 @@
         if (!r.key) bad.push(['ss', r.i, 'key']); if (!r.place) bad.push(['ss', r.i, 'place']);
         if (k && keys[k]) bad.push(['ss', r.i, 'key']); keys[k] = 1;
       });
-      var prods = cfg.products.map(function (r, i) { return { i: i, code: String(r.code || '').replace(/\D/g, ''), name: String(r.name || '').trim() }; }).filter(function (r) { return r.code || r.name; });
-      prods.forEach(function (r) { if (!r.code) bad.push(['sp', r.i, 'code']); if (!r.name) bad.push(['sp', r.i, 'name']); if (r.code && codes[r.code]) bad.push(['sp', r.i, 'code']); codes[r.code] = 1; });
+      var prods = cfg.products.map(function (r, i) { var pc = String(r.perCase == null ? '' : r.perCase).replace(/,/g, '').trim(); return { i: i, code: String(r.code || '').replace(/\D/g, ''), name: String(r.name || '').trim(), pcRaw: pc, perCase: pc === '' ? 0 : Number(pc) }; }).filter(function (r) { return r.code || r.name; });
+      prods.forEach(function (r) { if (!r.code) bad.push(['sp', r.i, 'code']); if (!r.name) bad.push(['sp', r.i, 'name']); if (r.pcRaw !== '' && !(r.perCase > 0)) bad.push(['sp', r.i, 'perCase']); if (r.code && codes[r.code]) bad.push(['sp', r.i, 'code']); codes[r.code] = 1; });
       if (bad.length) {
         bad.forEach(function (b) { var el = $('main').querySelector('input[data-' + b[0] + '="' + b[1] + '"][data-k="' + b[2] + '"]'); if (el) el.classList.add('bad'); });
         var f = $('main').querySelector('input.bad'); if (f) f.focus();
-        toast('ช่องสีแดง: ยังไม่ได้ใส่ หรือรหัสซ้ำกัน'); return;
+        toast('ช่องสีแดง: ยังไม่ได้ใส่ / รหัสซ้ำกัน / ชิ้นต่อลังต้องเป็นตัวเลขมากกว่า 0'); return;
       }
       var btn = this; btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> กำลังบันทึก';
-      call('cpSaveMap', state.token, JSON.stringify({ full: 1, ships: ships.map(function (r) { return { key: r.key, wh: r.wh, place: r.place }; }), products: prods.map(function (r) { return { code: r.code, name: r.name }; }) })).then(function (x) {
+      call('cpSaveMap', state.token, JSON.stringify({ full: 1, ships: ships.map(function (r) { return { key: r.key, wh: r.wh, place: r.place }; }), products: prods.map(function (r) { return { code: r.code, name: r.name, perCase: r.perCase || '' }; }) })).then(function (x) {
         if (!x.ok) throw new Error(x.error);
         C.data.map = x.map; C.set = null; if (C.imp && C.imp.preview) C.imp.stale = 1; C.settingsPage(); toast('บันทึกการตั้งค่าแล้ว');
       }).catch(function (e) { btn.disabled = false; btn.innerHTML = icon('check', 18) + ' บันทึกการตั้งค่า'; toast(e.message || 'บันทึกไม่สำเร็จ'); });
@@ -440,6 +458,7 @@
     });
   }
   function roundsOf(rows) {
+    rows = caseRows(rows);
     var by = {};
     rows.forEach(function (r) {
       if (r.status === 'cancel' || !r.dueDate) return;
@@ -451,7 +470,8 @@
   function editLine(id) {
     var r = C.data.lines.filter(function (x) { return x.id === id; })[0]; if (!r) return;
     var mv = (C.data.moves || []).filter(function (m) { return m.lineId === id; });
-    openModal({ color: state.dept.color, icon: 'edit', title: 'PO ' + r.poNo, sub: (r.product || '') + ' · ' + n0(r.qty) + ' ' + (r.unit || 'ลัง') + (r.place ? ' · ' + r.place : ''),
+    var cv = caseRows([r])[0];
+    openModal({ color: state.dept.color, icon: 'edit', title: 'PO ' + r.poNo, sub: (r.product || '') + ' · ' + nq(cv.qty) + ' ' + (cv.unit || 'ลัง') + (cv.pcs ? ' (' + n0(cv.pcs) + ' ' + cv.pcsUnit + ')' : '') + (r.place ? ' · ' + r.place : ''),
       body: '<label class="cpnl">วันที่ส่ง<input type="date" id="cpDate" value="' + esc(r.deliveryDate) + '"></label>'
         + '<div id="cpMoveBox" class="cpmove" hidden><div class="cpmh">📅 เลื่อนส่งจาก <b>' + slash(r.deliveryDate) + '</b> เป็น <b id="cpNewD"></b></div>'
         + '<label class="cpnl">เหตุผลที่เลื่อนส่ง <span class="req">*</span><input id="cpWhy" maxlength="200" list="cpWhyL" placeholder="เช่น ลูกค้าขอเลื่อน / คลังเต็ม"></label>'
@@ -528,8 +548,9 @@
     '.cpmove{border:1.5px solid #fdba74;background:#fff7ed;border-radius:12px;padding:12px;margin-bottom:12px}.cpmh{color:#9a3412;margin-bottom:8px}.cpchk{display:flex;gap:8px;align-items:center;font-weight:600;color:#9a3412}.cpchk input{width:18px;height:18px}',
     '.cpmh2{font-weight:700;margin:6px 0 4px}.cpmrow{padding:6px 0;border-top:1px solid var(--line);font-size:14px}.cpmrow small{display:block;color:var(--muted)}',
     '#cpMapSave{margin-top:10px}.cpchips{margin:4px 0 12px}',
+    '.cppcs{display:block;font-size:12px;color:var(--muted);font-weight:400;white-space:nowrap}.cptab .cpwh{white-space:nowrap}.a7fixrow .cppc{flex:0 1 190px}',
     '.cphow{margin:0 0 10px;font-size:13.5px;color:var(--muted);line-height:1.55}.cphow b{color:var(--ink,#0f172a)}.cphow a{color:var(--c);font-weight:600}.cpbad{color:#dc2626;font-style:normal}.cpnote{font-size:13px;margin:12px 2px 0}',
-    '@media (max-width:640px){.cpset{min-width:0!important}.cpset thead{display:none}.cpset tr{display:grid;grid-template-columns:1fr 1fr 44px;gap:6px 8px;padding:10px 0;border-bottom:1px solid var(--line)}.cpset td{display:block;padding:0!important;border:0!important}.cpset td[data-l]::before{content:attr(data-l);display:block;font-size:12.5px;color:var(--muted);margin-bottom:3px}.cpset td:first-child{grid-column:1/3}.cpset td:last-child{grid-column:3;grid-row:1;align-self:end;width:auto}.cpset tr>td:nth-child(3):not(:last-child){grid-column:2/4}.cpset td[colspan]{grid-column:1/-1}.cpset td[data-l="ชื่อสินค้า"]{grid-column:1/3}.cpset .icon-btn{width:44px;height:44px}}',
+    '@media (max-width:640px){.cpset{min-width:0!important}.cpset thead{display:none}.cpset tr{display:grid;grid-template-columns:1fr 1fr 44px;gap:6px 8px;padding:10px 0;border-bottom:1px solid var(--line)}.cpset td{display:block;padding:0!important;border:0!important}.cpset td[data-l]::before{content:attr(data-l);display:block;font-size:12.5px;color:var(--muted);margin-bottom:3px}.cpset td:first-child{grid-column:1/3}.cpset td:last-child{grid-column:3;grid-row:1;align-self:end;width:auto}.cpset tr>td:nth-child(3):not(:last-child){grid-column:2/4}.cpset td[colspan]{grid-column:1/-1}.cpset td[data-l="ชื่อสินค้า"],.cpset td[data-l="ชิ้นต่อ 1 ลัง"]{grid-column:1/3}.cpset .icon-btn{width:44px;height:44px}}',
     '.cpset td:last-child,.cpset th:last-child{width:44px;text-align:center}.cpset input.bad{border-color:#dc2626;background:#fef2f2}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}',
     '.cpst3{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.cpst3 label{flex:1 1 30%}.cpst3 input{position:absolute;opacity:0}.cpst3 span{display:block;text-align:center;padding:11px 8px;border:1.5px solid var(--line);border-radius:12px;font-weight:600;cursor:pointer}',
     '.cpst3 input:checked+span{border-color:var(--c);background:color-mix(in srgb,var(--c) 12%,white);color:var(--c)}.cpst3 input:focus-visible+span{outline:2px solid var(--c)}'
