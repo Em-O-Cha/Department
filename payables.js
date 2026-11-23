@@ -77,20 +77,10 @@
   function roundFor(iso, credit) { return roundInfo(iso, credit).round; }
   // ผู้ใช้ขอ 23/11/69: ส่วนลด/มัดจำ (disc, บาท ต่อบรรทัด) หักก่อนคิด VAT · หัก ณ ที่จ่าย = มูลค่ารายการ × % (เหมือนเดิม)
   // รวม = มูลค่ารายการ − ส่วนลด/มัดจำ + VAT · ชำระ = รวม − หัก ณ ที่จ่าย
-  // แก้ 23/11/69 (ผู้ใช้: ยอดที่เคยเป็น "หัก ณ ที่จ่าย" คือส่วนลด): % ที่เลือก = % ส่วนลด/มัดจำ → ส่วนลด = มูลค่ารายการ × %
-  //   ใส่ส่วนลดเป็นบาทเองในบรรทัดได้ (ทับ %) · VAT คิดจากยอดหลังหักส่วนลด · ไม่มีหัก ณ ที่จ่ายแล้ว (wht = 0) · ชำระ = รวม
-  // ส่วนลดที่เก็บไว้: ว่าง หรือเท่ากับ มูลค่า × % ของบิล = คิดตาม % (undefined) · อย่างอื่น = บาทที่ใส่เอง
-  function dOf(l, b) {
-    if (l.disc === '' || l.disc == null) return undefined;
-    var d = Number(l.disc) || 0, a = calc({ qty: Number(l.qty) || 0, price: Number(l.price) || 0 }, b.vatMode, b.pct).disc;
-    return Math.abs(d - a) < 0.01 ? undefined : d;
-  }
-  function manualDisc(l) { return !(l.disc === undefined || l.disc === null || l.disc === ''); }
   function calc(l, mode, pct) {
-    var amount = r2(mode === 'inc' ? l.qty * l.price * 100 / 107 : l.qty * l.price);
-    var disc = manualDisc(l) ? r2(Number(l.disc) || 0) : r2(amount * (Number(pct) || 0) / 100);
+    var amount = r2(mode === 'inc' ? l.qty * l.price * 100 / 107 : l.qty * l.price), disc = r2(Number(l.disc) || 0);
     var vat = mode === 'none' ? 0 : r2((amount - disc) * 0.07);
-    return { amount: amount, disc: disc, vat: vat, total: r2(amount - disc + vat), wht: 0 };
+    return { amount: amount, disc: disc, vat: vat, total: r2(amount - disc + vat), wht: r2(amount * (Number(pct) || 0) / 100) };
   }
   P.reset = function () { P.data = null; P.cur = null; P.round = ''; P.inc = {}; };
   function ensure(title, fn) {
@@ -461,7 +451,7 @@
     var v = vendorOf(b.vendor);
     P.cur = Object.assign(newBill(b.kind), { billId: b.billId, category: b.category, vendor: b.vendor, taxId: b.taxId, invNo: b.invNo, issueDate: b.issueDate, creditDays: b.creditDays, payRound: b.payRound,
       vatMode: b.vatMode || 'exc', pct: b.pct, note: b.note, bank: v ? v.bank || '' : '', keepFiles: b.files, autoRound: false, poRef: b.poRef, log: b.log,
-      lines: b.lines.map(function (l) { return { desc: l.desc, qty: Number(l.qty) || 0, price: Number(l.price) || 0, disc: dOf(l, b), recv: Number(l.recvQty) || 0 }; }) });
+      lines: b.lines.map(function (l) { return { desc: l.desc, qty: Number(l.qty) || 0, price: Number(l.price) || 0, disc: Number(l.disc) || 0, recv: Number(l.recvQty) || 0 }; }) });
     var pg = b.kind === 'po' ? 'a_appo' : 'a_apin';
     if (state.page !== pg && !(state.page === 'a_appo' && pg === 'a_apin')) go(pg); else form();
   }
@@ -482,7 +472,7 @@
   function poCtx(id) {
     var b = billsOf(P.data.lines.filter(function (l) { return l.billId === id && l.kind === 'po'; }))[0];
     if (!b) return null;
-    return { id: id, lines: b.lines.map(function (l) { return { n: Number(l.lineNo), desc: l.desc, qty: Number(l.qty) || 0, price: Number(l.price) || 0, disc: dOf(l, b), recv: Number(l.recvQty) || 0 }; }),
+    return { id: id, lines: b.lines.map(function (l) { return { n: Number(l.lineNo), desc: l.desc, qty: Number(l.qty) || 0, price: Number(l.price) || 0, disc: Number(l.disc) || 0, recv: Number(l.recvQty) || 0 }; }),
       vatMode: b.vatMode || 'exc', pct: b.pct, log: b.log, pay: b.pay, total: b.total, vendor: b.vendor, round: b.payRound };
   }
   // นำเข้าบิลตามปกติ (ผู้ใช้ขอ 23/11/69): ตรวจ PO ล่วงหน้าที่รอบิลของบริษัทเดียวกัน (สแกนรวมหลายใบก็ตรวจทีละใบ)
@@ -758,7 +748,7 @@
       + (!po && !b.pages.length ? '<div class="apatt"><label class="btn apsm">' + icon('upload', 16) + ' ถ่ายรูป / แนบไฟล์บิล<input type="file" id="apAttach" accept="image/*,application/pdf" multiple hidden></label><small>' + (b.fromPo ? 'เลือกได้หลายไฟล์ (ใบกำกับ / ใบส่งของ / หลายหน้า) · ระบบอ่านรายการแล้วจับคู่กับ PO ให้' : 'ระบบอ่านเลขที่ใบกำกับ วันที่ และรายการให้') + '</small></div>' : '')
       + '<div class="aphl"><b>1. หมวดของ' + (po ? ' PO' : 'บิล') + 'นี้ <span class="req">*</span></b><div class="apchips" id="apCats">' + d.cats.map(function (c, i) {
           return '<label><input type="radio" name="apCat" value="' + c.key + '"' + (b.category === c.key ? ' checked' : '') + '><span>' + (i + 1) + '. ' + esc(c.name) + '</span></label>'; }).join('') + '</div></div>'
-      + '<div class="aphl"><b>2. % ส่วนลด / มัดจำ</b> <small>ส่วนลด/มัดจำ = มูลค่ารายการ × % · หักก่อนคิด VAT · บรรทัดไหนต่างจากนี้ พิมพ์เป็นบาทในตารางได้</small><div class="apchips sm" id="apPcts">' + PCTS.map(function (p) {
+      + '<div class="aphl"><b>2. % หัก ณ ที่จ่าย</b> <small>ลงคอลัมน์ % · ส่วนลด/มัดจำ/หัก ณ ที่จ่าย = มูลค่ารายการ × %</small><div class="apchips sm" id="apPcts">' + PCTS.map(function (p) {
           return '<label><input type="radio" name="apPct" value="' + p + '"' + (Number(b.pct) === p ? ' checked' : '') + '><span>' + (p ? p + '%' : 'ไม่หัก') + '</span></label>'; }).join('')
         + '<label class="apother">อื่น ๆ <input id="apPctX" inputmode="decimal" value="' + (PCTS.indexOf(Number(b.pct)) < 0 ? esc(b.pct) : '') + '" placeholder="%"></label></div></div>'
       + '<div class="apgrid">'
@@ -773,7 +763,7 @@
       + '</div>'
       + '<div class="aphl"><b>ราคา' + (po ? 'ที่ตกลง' : 'ในบิล') + '</b><div class="apchips sm" id="apVat">' + Object.keys(VAT_SHORT).map(function (k) {
           return '<label><input type="radio" name="apVat" value="' + k + '"' + (b.vatMode === k ? ' checked' : '') + '><span>' + VAT_SHORT[k] + '</span></label>'; }).join('') + '</div></div>'
-      + '<div class="cpwrap"><table class="aptab' + (po ? ' po' : '') + '"><thead><tr><th>' + (po ? 'ชื่อสินค้า' : 'คำอธิบาย') + (b.fromPo ? ' / หักจาก PO' : '') + '</th><th>' + (po && b.log && b.log.length ? 'จำนวนค้าง' : 'จำนวน') + '</th><th>ราคา</th><th>มูลค่ารายการ</th><th class="apred">ส่วนลด/มัดจำ<small>บาท หรือ %</small></th><th>VAT<small>หลังหักส่วนลด</small></th><th>รวม</th><th></th></tr></thead><tbody id="apLines"></tbody></table></div>'
+      + '<div class="cpwrap"><table class="aptab' + (po ? ' po' : '') + '"><thead><tr><th>' + (po ? 'ชื่อสินค้า' : 'คำอธิบาย') + (b.fromPo ? ' / หักจาก PO' : '') + '</th><th>' + (po && b.log && b.log.length ? 'จำนวนค้าง' : 'จำนวน') + '</th><th>ราคา</th><th>มูลค่ารายการ</th><th class="apred">ส่วนลด/มัดจำ<small>บาท หรือ %</small></th><th>VAT<small>หลังหักส่วนลด</small></th><th>รวม</th><th class="apred">หัก ณ ที่จ่าย</th><th></th></tr></thead><tbody id="apLines"></tbody></table></div>'
       + '<button type="button" class="btn apsm" id="apAdd">+ เพิ่มรายการ</button>'
       + '<div id="apSum"></div><div id="apPoSum"></div>'
       + '<div class="apgrid"><label class="apwide">บัญชีธนาคารของผู้ขาย (แสดงที่แถวรวมในรายงาน)<input id="apBank" value="' + esc(b.bank) + '" placeholder="เช่น ธ.กสิกรไทย 123-4-56789-0 บริษัท …"></label>'
@@ -872,7 +862,7 @@
       if (!b.invNo) checks += chk('warn', 'อ่านเลขที่ใบกำกับจากภาพไม่ได้ — พิมพ์เองตามภาพ (กด "ข้อความที่อ่านได้" ใต้ภาพเพื่อดูว่าระบบอ่านได้อะไร)');
       if (!vendorOf(b.vendor)) checks += chk('warn', 'ผู้ขายใหม่ — ระบบจะจำ หมวด เครดิต แบบ VAT % และบัญชีธนาคารไว้ใช้ครั้งต่อไป');
     }
-    $('apSum').innerHTML = '<div class="apsum"><span>มูลค่ารายการ<b>' + m2(t.amount) + '</b></span>' + '<span class="apred">ส่วนลด/มัดจำ' + (b.pct ? ' ' + b.pct + '%' : '') + '<b>' + (t.disc ? '−' : '') + m2(t.disc) + '</b></span><span>VAT<b>' + m2(t.vat) + '</b></span><span>รวม<b>' + m2(t.total) + '</b></span><span class="appay">ชำระ<b>' + m2(pay) + '</b></span></div>' + (checks ? '<div class="a7checks">' + checks + '</div>' : '');
+    $('apSum').innerHTML = '<div class="apsum"><span>มูลค่ารายการ<b>' + m2(t.amount) + '</b></span>' + (t.disc ? '<span class="apred">ส่วนลด/มัดจำ<b>−' + m2(t.disc) + '</b></span>' : '') + '<span>VAT<b>' + m2(t.vat) + '</b></span><span>รวม<b>' + m2(t.total) + '</b></span><span class="apred">หัก ' + (b.pct || 0) + '%<b>' + m2(t.wht) + '</b></span><span class="appay">ชำระ<b>' + m2(pay) + '</b></span></div>' + (checks ? '<div class="a7checks">' + checks + '</div>' : '');
   }
   function drawLines() {
     var b = P.cur;
@@ -885,19 +875,17 @@
           return '<option value="' + p.n + '"' + (l.po === p.n ? ' selected' : '') + (p.qty <= 0 && l.po !== p.n ? ' disabled' : '') + '>หัก PO: ' + p.n + '. ' + esc(p.desc || '-') + ' (ค้าง ' + q0(p.qty) + ')</option>'; }).join('') + '</select>'
         + (l.dup || l.dupSet ? '<button type="button" class="apdupb' + (l.dup ? ' on' : '') + '" data-dup="' + i + '">' + (l.dup ? 'ซ้ำ · ไม่นับ — กดเพื่อนับด้วย' : 'นับรายการนี้ด้วย — กดถ้าซ้ำ') + '</button>' : '') + '</div>' : '';
       return '<tr data-row="' + i + '"' + (l.dup ? ' class="apdupl"' : set ? ' class="apset"' : '') + '><td><input data-i="' + i + '" data-k="desc" value="' + esc(l.desc) + '">' + map + '</td><td><input class="apn" data-i="' + i + '" data-k="qty" inputmode="decimal" value="' + esc(l.qty) + '"></td><td><input class="apn" data-i="' + i + '" data-k="price" inputmode="decimal" value="' + esc(l.price) + '"></td>'
-        + '<td class="apv" data-c="amount">' + m2(c.amount) + '</td><td><input class="apn apdisc' + (manualDisc(l) ? '' : ' auto') + '" data-i="' + i + '" data-k="disc" inputmode="decimal" value="' + (manualDisc(l) ? esc(l.disc) : '') + '" placeholder="' + (c.disc ? m2(c.disc) : '0') + '" aria-label="ส่วนลด/มัดจำ" title="ว่าง = คิดตาม % ที่เลือก"></td><td class="apv" data-c="vat">' + m2(c.vat) + '</td><td class="apv" data-c="total">' + m2(c.total) + '</td>'
+        + '<td class="apv" data-c="amount">' + m2(c.amount) + '</td><td><input class="apn apdisc" data-i="' + i + '" data-k="disc" inputmode="decimal" value="' + (c.disc ? esc(l.disc) : '') + '" placeholder="0" aria-label="ส่วนลด/มัดจำ"></td><td class="apv" data-c="vat">' + m2(c.vat) + '</td><td class="apv" data-c="total">' + m2(c.total) + '</td><td class="apv apred" data-c="wht">' + m2(c.wht) + '</td>'
         + '<td>' + (b.lines.length > 1 ? '<button type="button" class="apx" data-del="' + i + '" aria-label="ลบรายการ">✕</button>' : '') + '</td></tr>'
         + (lastOf[l.po] === i ? '<tr class="apgrp" data-grp="' + l.po + '">' + grpCells(G[l.po], b) + '</tr>' : '');
     }).join('');
     on('#apLines input', 'input', function (el) {
       var i = +el.getAttribute('data-i'), k = el.getAttribute('data-k'), l = b.lines[i];
       if (k === 'disc' && /%\s*$/.test(el.value)) l.discPct = num(el.value); else if (k === 'disc') delete l.discPct;
-      if (k === 'disc' && !el.value.trim()) delete l.disc;   // ว่าง = กลับไปคิดตาม %
-      else l[k] = k === 'desc' ? el.value : num(el.value);
+      l[k] = k === 'desc' ? el.value : num(el.value);
       discOf(l, b);
       var c = calc(l, b.vatMode, b.pct), tr = el.closest('tr');
-      ['amount', 'vat', 'total'].forEach(function (f) { tr.querySelector('[data-c=' + f + ']').textContent = m2(c[f]); });
-      var di = tr.querySelector('input[data-k=disc]'); if (di && k !== 'disc') di.placeholder = c.disc ? m2(c.disc) : '0';
+      ['amount', 'vat', 'total', 'wht'].forEach(function (f) { tr.querySelector('[data-c=' + f + ']').textContent = m2(c[f]); });
       updGroups(); refresh();
     });
     on('[data-del]', 'click', function (el) { b.lines.splice(+el.getAttribute('data-del'), 1); drawLines(); refresh(); });
@@ -918,8 +906,7 @@
       var l = b.lines[+tr.getAttribute('data-row')]; if (!l) return;
       discOf(l, b);
       var c = calc(l, b.vatMode, b.pct);
-      ['amount', 'vat', 'total'].forEach(function (f) { var el = tr.querySelector('[data-c=' + f + ']'); if (el) el.textContent = m2(c[f]); });
-      var di = tr.querySelector('input[data-k=disc]'); if (di) di.placeholder = c.disc ? m2(c.disc) : '0';
+      ['amount', 'vat', 'total', 'wht'].forEach(function (f) { var el = tr.querySelector('[data-c=' + f + ']'); if (el) el.textContent = m2(c[f]); });
     });
     updGroups();
   }
@@ -929,7 +916,7 @@
   function grpCells(x, b) {
     var p = b.po.lines.filter(function (y) { return y.n === x.n; })[0] || {};
     return '<td>รวมหัก PO ' + x.n + '. ' + esc(p.desc || '') + '<small>' + x.rows + ' บรรทัด · จำนวนเท่ากันนับครั้งเดียว</small></td><td class="apv">' + q0(x.q) + '</td><td class="apv">' + m2(x.unit) + '</td>'
-      + '<td class="apv">' + m2(x.amount + x.disc) + '</td><td class="apv apred">' + (x.disc ? '−' + m2(x.disc) : '') + '</td><td class="apv">' + m2(x.vat) + '</td><td class="apv">' + m2(x.total) + '</td><td></td>';
+      + '<td class="apv">' + m2(x.amount + x.disc) + '</td><td class="apv apred">' + (x.disc ? '−' + m2(x.disc) : '') + '</td><td class="apv">' + m2(x.vat) + '</td><td class="apv">' + m2(x.total) + '</td><td class="apv apred">' + m2(x.wht) + '</td><td></td>';
   }
   function updGroups() {
     var b = P.cur; if (!b.fromPo) return;
@@ -979,7 +966,8 @@
   // ==================== โครงรายงาน (ใช้ทั้งหน้าเว็บและ Excel) ====================
   // สไตล์ตามไฟล์ต้นแบบ: Angsana New · หัว 18 ตัวหนา · ข้อมูล 18 · เส้นบาง (thin) ซ้าย-ขวา / เส้นจาง (hair) บน-ล่าง · แถวรวมผู้ขายพื้น #FFF2CC ตัวแดง · ช่องชำระรวมพื้นเหลือง
   var RED = 'FF0000', NF_AMT = '#,##0.00_);(#,##0.00)', NF2 = '#,##0.00', NF_ACC = '_(* #,##0.00_);_(* \\(#,##0.00\\);_(* "-"??_);_(@_)';
-  // คอลัมน์ (ผู้ใช้ขอ 23/11/69): J % ส่วนลด/มัดจำ · K ส่วนลด/มัดจำ (= L × J% หรือบาทที่ใส่เอง) · L มูลค่ารายการ · M VAT (หลังหักส่วนลด) · N รวม · O ชำระ (= Σ รวม)
+  // คอลัมน์ (ผู้ใช้ขอ 23/11/69): J % หัก ณ ที่จ่าย · K ส่วนลด/มัดจำ · L มูลค่ารายการ · M VAT (หลังหักส่วนลด) · N รวม · O ชำระ (= รวม − มูลค่า × %)
+  //   ไม่มีคอลัมน์ยอดหัก ณ ที่จ่ายแยก (ผู้ใช้: มี % อยู่แล้ว) — ยอดหักคิดในสูตรช่องชำระ
   var WIDTHS = [3.85546875, 8.5703125, 32.42578125, 15.7109375, 16.5703125, 19, 56.85546875, 13.28515625, 15.7109375, 12, 15, 17.5703125, 17.5703125, 17.5703125, 17.5703125];
   var COLS = 'ABCDEFGHIJKLMNO';
   function S(o) { return o; }
@@ -1025,7 +1013,7 @@
         var rB = R(28.5); put(rB, 'B', c.title + ' ' + payTxt, si ? ST.big : ST.big18, '=G' + r1); put(rB, 'C', '', si ? ST.big : ST.big18); merge('B' + rB, 'C' + rB);
         var r3 = R(48.95);
         [['B', 'ผู้ขาย/ผู้จ่ายเงิน', ST.hd], ['C', '', ST.hd], ['D', 'วันที่ออก', ST.hd], ['E', 'วันที่ครบกำหนด', ST.hd], ['F', 'เลขที่ใบกำกับภาษี', ST.hd], ['G', 'คำอธิบาย', ST.hd], ['H', 'จำนวน', ST.hd], ['I', 'ราคา', ST.hd],
-          ['J', '% ส่วนลด/มัดจำ', ST.hdK], ['K', 'ส่วนลด/มัดจำ', ST.hdK], ['L', 'มูลค่ารายการ', ST.hd], ['M', 'ภาษีมูลค่าเพิ่ม', ST.hd], ['N', 'รวม', ST.hd], ['O', 'ชำระ', ST.hdR]].forEach(function (x) { put(r3, x[0], x[1], x[2]); });
+          ['J', '% หัก ณ ที่จ่าย', ST.hdK], ['K', 'ส่วนลด/มัดจำ', ST.hdK], ['L', 'มูลค่ารายการ', ST.hd], ['M', 'ภาษีมูลค่าเพิ่ม', ST.hd], ['N', 'รวม', ST.hd], ['O', 'ชำระ', ST.hdR]].forEach(function (x) { put(r3, x[0], x[1], x[2]); });
         merge('B' + r3, 'C' + r3);
         var first = r3 + 1, totRows = [], secTotal = 0;
         var bills = billsOf(lines.filter(function (l) { return l.category === ck; }));
@@ -1058,9 +1046,8 @@
               put(r, 'G', l.desc || '', isPo ? ST.descR : ST.desc);
               put(r, 'H', qty, Math.round(qty) === qty ? (isPo ? ST.qtyR : ST.qty) : (isPo ? ST.qty2R : ST.qty2));
               put(r, 'I', price, price < 0 || isPo ? (isPo ? ST.priceR : ST.priceNeg) : ST.price);
-              var der = dOf(l, b) === undefined;   // ส่วนลดคิดตาม % ของบิล (ไม่ได้ใส่บาทเอง)
-              put(r, 'J', der && pct ? pct : '', ST.pct);
-              put(r, 'K', c.disc ? c.disc : '', ST.wht, c.disc && der && pct ? '=+L' + x + '*J' + x + '%' : null);   // ส่วนลด/มัดจำ = มูลค่า × % (หรือบาทที่ใส่เอง)
+              put(r, 'J', pct || '', ST.pct);
+              put(r, 'K', c.disc ? c.disc : '', ST.wht);
               put(r, 'L', c.amount, ST.amt, b.vatMode === 'inc' ? '=H' + x + '*I' + x + '*100/107' : '=+H' + x + '*I' + x);
               put(r, 'M', c.vat, ST.amt, b.vatMode === 'none' ? null : '=ROUND((L' + x + '-K' + x + ')*7%,2)');   // VAT จากยอดหลังหักส่วนลด/มัดจำ
               put(r, 'N', c.total, ST.amt, '=+L' + x + '-K' + x + '+M' + x);
@@ -1070,8 +1057,8 @@
             });
             if (b.empty) return;
             var bEnd = bStart + b.lines.length - 1, ns = [], ks = [];
-            for (var q = bStart; q <= bEnd; q++) ns.push('N' + q);   // ชำระ = รวม (ไม่มีหัก ณ ที่จ่ายแล้ว)
-            var payV = r2(nSum);
+            for (var q = bStart; q <= bEnd; q++) { ns.push('N' + q); if (Number(b.pct)) ks.push('ROUND(L' + q + '*J' + q + '%,2)'); }   // หัก ณ ที่จ่าย = มูลค่า × %
+            var payV = r2(nSum - kSum);
             put(bStart, 'O', payV, ST.pay, '=+' + ns.join('+') + (ks.length ? '-' + ks.join('-') : ''));
             if (bEnd > bStart) merge('O' + bStart, 'O' + bEnd);
             sums.O += payV;
@@ -1227,7 +1214,7 @@
             var x = cnt[r.nominal];
             return '<button class="apround' + (r.nominal === P.round ? ' on' : '') + '" data-r="' + r.nominal + '"><b>จ่าย ' + dotAD(r.nominal, true) + '</b><small>' + (x ? Object.keys(x.bills).length + ' บิล · ' + m2(x.pay) : 'ยังไม่มีบิล') + '</small></button>';
           }).join('') + '</div>'
-        + (model ? '<div class="kpis xk"><div class="kpi"><b>' + m2(tot.pay) + '</b><span>ยอดชำระรอบนี้ (บาท)</span></div><div class="kpi"><b>' + (bills.length - tot.po) + (tot.po ? ' <em class="apred">+ PO ' + tot.po + '</em>' : '') + '</b><span>บิล' + (tot.po ? ' · PO ล่วงหน้า ' + m2(tot.poPay) + ' บาท (ตัวแดง)' : '') + '</span></div><div class="kpi"><b>' + m2(tot.disc + tot.wht) + '</b><span>ส่วนลด / มัดจำ</span></div><div class="kpi"><b>' + dotAD(model.actual) + '</b><span>วันจ่ายจริง' + (roundOf(P.round).why ? ' (' + esc(roundOf(P.round).why) + ' เลื่อนจาก ' + dotAD(P.round) + ')' : '') + '</span></div></div>'
+        + (model ? '<div class="kpis xk"><div class="kpi"><b>' + m2(tot.pay) + '</b><span>ยอดชำระรอบนี้ (บาท)</span></div><div class="kpi"><b>' + (bills.length - tot.po) + (tot.po ? ' <em class="apred">+ PO ' + tot.po + '</em>' : '') + '</b><span>บิล' + (tot.po ? ' · PO ล่วงหน้า ' + m2(tot.poPay) + ' บาท (ตัวแดง)' : '') + '</span></div><div class="kpi"><b>' + m2(tot.wht) + '</b><span>หัก ณ ที่จ่าย' + (tot.disc ? ' · ส่วนลด/มัดจำ ' + m2(tot.disc) : '') + '</span></div><div class="kpi"><b>' + dotAD(model.actual) + '</b><span>วันจ่ายจริง' + (roundOf(P.round).why ? ' (' + esc(roundOf(P.round).why) + ' เลื่อนจาก ' + dotAD(P.round) + ')' : '') + '</span></div></div>'
           + '<div class="apbtns noprint"><button class="btn btn-primary" id="apXls">' + icon('table', 18) + ' Excel ตามแบบฟอร์ม</button><button class="btn" id="apPdf">' + icon('pdf', 18) + ' PDF</button><button class="btn" id="apNew">' + icon('upload', 18) + ' นำเข้าบิล</button><button class="btn appob" id="apNewPo">' + icon('clock', 18) + ' + PO ล่วงหน้า</button></div>'
           + '<div class="apcats">' + d.cats.map(function (c, i) { var t = model.catTotals[c.key]; return '<span><i>' + (i + 1) + '</i>' + esc(c.name) + '<b>' + m2(t ? t.total : 0) + '</b></span>'; }).join('') + '</div>'
           + (tot.po ? '<div class="aplegend"><i></i> ตัวแดง = PO ล่วงหน้า ยังไม่ได้รับบิล (แตะแถวเพื่อแก้ / กด "ได้รับบิลแล้ว")</div>' : '')
@@ -1450,7 +1437,7 @@
         + '<label class="cpnl">บัญชีธนาคาร (แถวรวมในรายงาน)<input id="vB" value="' + esc(v.bank || '') + '" placeholder="ธ.กสิกรไทย 123-4-56789-0 บริษัท …"></label>'
         + '<label class="cpnl">เครดิต (วัน)<input id="vD" inputmode="numeric" value="' + esc(v.creditDays == null ? '' : v.creditDays) + '"></label>'
         + '<label class="cpnl">ราคาในบิล<select id="vV">' + Object.keys(VAT_SHORT).map(function (k) { return '<option value="' + k + '"' + ((v.vatMode || 'exc') === k ? ' selected' : '') + '>' + VAT_SHORT[k] + '</option>'; }).join('') + '</select></label>'
-        + '<label class="cpnl">% ส่วนลด / มัดจำ<input id="vP" inputmode="decimal" value="' + esc(v.pct || '') + '"></label>'
+        + '<label class="cpnl">% หัก ณ ที่จ่าย<input id="vP" inputmode="decimal" value="' + esc(v.pct || '') + '"></label>'
         + '<label class="cpnl">คำที่ใช้จับชื่อในบิล (คั่นด้วย ,)<input id="vK" value="' + esc(v.keywords || '') + '" placeholder="เช่น ชื่อย่อ / ชื่อภาษาอังกฤษ"></label>'
         + (v.id ? '<button type="button" class="btn apdel" id="vDel">' + icon('trash', 16) + ' ลบผู้ขาย</button>' : ''),
       onOpen: function () {
@@ -1569,7 +1556,7 @@
       if (!l.payRound) return;
       var r = by[l.payRound] = by[l.payRound] || { nominal: l.payRound, actual: (rmap[l.payRound] || {}).actual || l.payRound, why: (rmap[l.payRound] || {}).why || '', pay: 0, vat: 0, wht: 0, bills: {}, po: {}, poPay: 0, cat: {}, ven: {} };
       var pay = (Number(l.lineTotal) || 0) - (Number(l.wht) || 0);
-      r.pay += pay; r.vat += Number(l.vat) || 0; r.wht += (Number(l.wht) || 0) + (Number(l.disc) || 0); r.bills[l.billId] = 1;
+      r.pay += pay; r.vat += Number(l.vat) || 0; r.wht += Number(l.wht) || 0; r.bills[l.billId] = 1;
       if (l.kind === 'po') { r.po[l.billId] = 1; r.poPay += pay; }
       r.cat[l.category || ''] = (r.cat[l.category || ''] || 0) + pay;
       var v = r.ven[l.vendor || '-'] = r.ven[l.vendor || '-'] || { pay: 0, bills: {} }; v.pay += pay; v.bills[l.billId] = 1;
@@ -1613,7 +1600,7 @@
       + tile(M.upPo ? M.upPo + ' ใบ' : '0', 'PO ล่วงหน้า (รอบิล)', '#b91c1c', M.upPo ? b0(M.upPoPay) + ' บาท · ยังไม่ได้รับบิล' : 'ไม่มีรายการรอบิล')
       + tile(b0(M.pay), 'ยอดจ่ายตามรอบ · ' + rangeName, '#2563eb', M.list.length + ' รอบ · จ่ายไปแล้ว ' + b0(M.pastPay))
       + tile(b0(M.vat), 'ภาษีซื้อ (VAT) · ' + rangeName, '#0d9488', 'จากบิลที่มี VAT')
-      + tile(b0(M.wht), 'ส่วนลด / มัดจำ · ' + rangeName, '#7c3aed', 'หักออกจากยอดชำระแล้ว')
+      + tile(b0(M.wht), 'หัก ณ ที่จ่าย · ' + rangeName, '#7c3aed', 'หักออกจากยอดชำระแล้ว')
       + '</div>';
     var chart = M.list.length && DCH ? DCH.area({
       labels: M.list.map(function (r) { return thd(r.actual, true); }), unit: ' บาท', height: 200, fmt: function (v) { return b0(v); },
