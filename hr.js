@@ -257,10 +257,10 @@
     return H.data ? H.data.leaves.filter(function (l) { return newFiles(l).length; }).sort(function (a, b) {
       var t = function (l) { return newFiles(l).map(function (f) { return String(f.at || ''); }).sort().pop() || ''; }; return t(b).localeCompare(t(a)); }) : [];
   }
-  // เปิดใบลาที่มีเอกสารแนบใหม่ = รับทราบ → ป้าย "📎 แนบเอกสารใหม่" หายไป (ผู้ใช้ขอ 23/11/69: แจ้งแค่ที่แถวรายการลาก็พอ)
+  // เปิดใบลาที่มีเอกสารแนบใหม่ = รับทราบ → ป้ายแดงกระพริบ "แนบเอกสารใหม่" เปลี่ยนเป็นป้ายน้ำเงิน "เอกสารแนบ" (ผู้ใช้ขอ 23/11/69)
   function ackAttach(l, rowEl) {
     if (!l || !newFiles(l).length) return;
-    var tag = rowEl && rowEl.querySelector('.hnew'); if (tag) tag.remove();
+    var tag = rowEl && rowEl.querySelector('.hnew'); if (tag) { tag.classList.add('seen'); tag.textContent = '📎 เอกสารแนบ ' + l.files.length + ' ไฟล์'; }
     l.files = l.files.map(function (f) { var c = Object.assign({}, f); delete c.notice; return c; }); renderNav();
     call('hrAckAttach', state.token, l.id).then(function (r) { if (r.ok) H.data.leaves = H.data.leaves.map(function (x) { return x.id === r.leave.id ? r.leave : x; }); }).catch(function () {});
   }
@@ -652,7 +652,7 @@
       + '<div class="plist">' + (rows.map(function (l) {
         var e = emp(l.empId) || { fullName: '(ไม่พบพนักงาน)' };
         return '<button class="prow click" data-lv="' + l.id + '">' + photo(e, 'hph sm') + '<div class="pinfo"><b>' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</b><small>' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + (l.reason ? ' · ' + esc(l.reason) : '') + (l.filledBy ? ' · ผู้กรอก ' + esc(l.filledBy) : l.supervisor ? ' · หัวหน้างาน ' + esc(l.supervisor) : '') + '</small></div>'
-          + '<div class="pprice"><span class="htype ' + l.type + '">' + LT[l.type] + '</span><small>' + lvLen(l) + '</small>' + stTag(l) + (newFiles(l).length ? '<span class="hnew">📎 แนบเอกสารใหม่ ' + newFiles(l).length + ' ไฟล์</span>' : '') + '</div></button>';
+          + '<div class="pprice"><span class="htype ' + l.type + '">' + LT[l.type] + '</span><small>' + lvLen(l) + '</small>' + stTag(l) + (newFiles(l).length ? '<span class="hnew">📎 แนบเอกสารใหม่ ' + newFiles(l).length + ' ไฟล์</span>' : (l.files || []).length ? '<span class="hnew seen">📎 เอกสารแนบ ' + l.files.length + ' ไฟล์</span>' : '') + '</div></button>';
       }).join('') || '<div class="panel muted">ไม่มีรายการ</div>') + '</div>';
     $('lM').addEventListener('change', function () { q.lm = v('lM'); if (q.lm && q.lm.slice(0, 4) < String(+H.data.today.slice(0, 4) - 1)) loadOld(q.lm); else leaves(); });
     $('lT').addEventListener('change', function () { q.lt = v('lT'); leaves(); });
@@ -1210,7 +1210,8 @@
   // ---------- CSS ของโมดูล ----------
   var css = document.createElement('style');
   css.textContent = [
-    '.hnew{display:inline-flex;align-items:center;gap:4px;background:#2563eb;color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;margin-top:4px;white-space:nowrap;animation:hnewp 1.6s ease-in-out infinite}@keyframes hnewp{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.45)}50%{box-shadow:0 0 0 5px rgba(37,99,235,0)}}',
+    '.hnew{display:inline-flex;align-items:center;gap:4px;background:#dc2626;color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;margin-top:4px;white-space:nowrap;animation:hnewp 1.2s ease-in-out infinite}.hnew.seen{background:#2563eb;animation:none}',
+    '@keyframes hnewp{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.55);opacity:1}50%{box-shadow:0 0 0 6px rgba(220,38,38,0);opacity:.75}}',
     '.hpcs{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}.hpc{background:#fff;border:1px solid var(--line);border-left:5px solid #f59e0b;border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow);min-width:0}',
     '.hpc-head{display:flex;gap:12px;align-items:center}.hpc-head .hph{flex:0 0 auto}.hpc-who{min-width:0;display:flex;flex-direction:column;gap:2px}.hpc-who b{font-size:16px;line-height:1.3;word-break:break-word}.hpc-nick{align-self:flex-start;font-size:13px;font-weight:700;color:#1e40af;background:#eff6ff;border-radius:99px;padding:1px 10px}',
     '.hpc-what{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:14.5px}.hpc-len{color:var(--muted)}',
