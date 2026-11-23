@@ -971,7 +971,7 @@
   var RED = 'FF0000', NF_AMT = '#,##0.00_);(#,##0.00)', NF2 = '#,##0.00', NF_ACC = '_(* #,##0.00_);_(* \\(#,##0.00\\);_(* "-"??_);_(@_)';
   // คอลัมน์ (ผู้ใช้ขอ 23/11/69): J % หัก ณ ที่จ่าย · K ส่วนลด/มัดจำ · L มูลค่ารายการ · M VAT (หลังหักส่วนลด) · N รวม · O ชำระ (= รวม − มูลค่า × %)
   //   ไม่มีคอลัมน์ยอดหัก ณ ที่จ่ายแยก (ผู้ใช้: มี % อยู่แล้ว) — ยอดหักคิดในสูตรช่องชำระ
-  // v26 (ผู้ใช้ขอ 23/11/69 เพิ่มคอลัมน์หัก ณ ที่จ่ายกลับ): J % · K ส่วนลด/มัดจำ · L หัก ณ ที่จ่าย (= M × J%) · M มูลค่ารายการ · N VAT · O รวม · P ชำระ
+  // v27 (ผู้ใช้ขอ 23/11/69): J % · K หัก ณ ที่จ่าย (= M × J%) · L ส่วนลด/มัดจำ · M มูลค่ารายการ · N VAT (หลังหักส่วนลด) · O รวม · P ชำระ
   var WIDTHS = [3.85546875, 8.5703125, 32.42578125, 15.7109375, 16.5703125, 19, 56.85546875, 13.28515625, 15.7109375, 11, 15, 15, 17.5703125, 17.5703125, 17.5703125, 17.5703125];
   var COLS = 'ABCDEFGHIJKLMNOP';
   function S(o) { return o; }
@@ -1018,7 +1018,7 @@
         var rB = R(28.5); put(rB, 'B', c.title + ' ' + payTxt, si ? ST.big : ST.big18, '=G' + r1); put(rB, 'C', '', si ? ST.big : ST.big18); merge('B' + rB, 'C' + rB);
         var r3 = R(48.95);
         [['B', 'ผู้ขาย/ผู้จ่ายเงิน', ST.hd], ['C', '', ST.hd], ['D', 'วันที่ออก', ST.hd], ['E', 'วันที่ครบกำหนด', ST.hd], ['F', 'เลขที่ใบกำกับภาษี', ST.hd], ['G', 'คำอธิบาย', ST.hd], ['H', 'จำนวน', ST.hd], ['I', 'ราคา', ST.hd],
-          ['J', '% หัก ณ ที่จ่าย', ST.hdK], ['K', 'ส่วนลด/มัดจำ', ST.hdK], ['L', 'หัก ณ ที่จ่าย', ST.hdK], ['M', 'มูลค่ารายการ', ST.hd], ['N', 'ภาษีมูลค่าเพิ่ม', ST.hd], ['O', 'รวม', ST.hd], ['P', 'ชำระ', ST.hdR]].forEach(function (x) { put(r3, x[0], x[1], x[2]); });
+          ['J', '% หัก ณ ที่จ่าย', ST.hdK], ['K', 'หัก ณ ที่จ่าย', ST.hdK], ['L', 'ส่วนลด/มัดจำ', ST.hdK], ['M', 'มูลค่ารายการ', ST.hd], ['N', 'ภาษีมูลค่าเพิ่ม', ST.hd], ['O', 'รวม', ST.hd], ['P', 'ชำระ', ST.hdR]].forEach(function (x) { put(r3, x[0], x[1], x[2]); });
         merge('B' + r3, 'C' + r3);
         var first = r3 + 1, totRows = [], secTotal = 0;
         var bills = billsOf(lines.filter(function (l) { return l.category === ck; }));
@@ -1052,18 +1052,18 @@
               put(r, 'H', qty, Math.round(qty) === qty ? (isPo ? ST.qtyR : ST.qty) : (isPo ? ST.qty2R : ST.qty2));
               put(r, 'I', price, price < 0 || isPo ? (isPo ? ST.priceR : ST.priceNeg) : ST.price);
               put(r, 'J', pct || '', ST.pct);
-              put(r, 'K', c.disc ? c.disc : '', ST.wht);
-              put(r, 'L', pct ? c.wht : '', ST.wht, pct ? '=ROUND(M' + x + '*J' + x + '%,2)' : null);   // หัก ณ ที่จ่าย = มูลค่ารายการ × %
+              put(r, 'K', pct ? c.wht : '', ST.wht, pct ? '=ROUND(M' + x + '*J' + x + '%,2)' : null);   // หัก ณ ที่จ่าย = มูลค่ารายการ × % (ผู้ใช้ขอให้อยู่หน้าส่วนลด 23/11/69)
+              put(r, 'L', c.disc ? c.disc : '', ST.wht);
               put(r, 'M', c.amount, isPo ? ST.amtR : ST.amt, b.vatMode === 'inc' ? '=H' + x + '*I' + x + '*100/107' : '=+H' + x + '*I' + x);
-              put(r, 'N', c.vat, isPo ? ST.amtR : ST.amt, b.vatMode === 'none' ? null : '=ROUND((M' + x + '-K' + x + ')*7%,2)');   // VAT จากยอดหลังหักส่วนลด/มัดจำ
-              put(r, 'O', c.total, isPo ? ST.amtR : ST.amt, '=+M' + x + '-K' + x + '+N' + x);
+              put(r, 'N', c.vat, isPo ? ST.amtR : ST.amt, b.vatMode === 'none' ? null : '=ROUND((M' + x + '-L' + x + ')*7%,2)');   // VAT จากยอดหลังหักส่วนลด/มัดจำ
+              put(r, 'O', c.total, isPo ? ST.amtR : ST.amt, '=+M' + x + '-L' + x + '+N' + x);
               put(r, 'P', '', isPo ? ST.payR : ST.pay);
               nSum += c.total; kSum += pct ? c.wht : 0; if (c.disc || pct) anyWht = true;
-              sums.K += c.disc; sums.L += pct ? c.wht : 0; sums.M += c.amount; sums.N += c.vat; sums.O += c.total;
+              sums.K += pct ? c.wht : 0; sums.L += c.disc; sums.M += c.amount; sums.N += c.vat; sums.O += c.total;
             });
             if (b.empty) return;
             var bEnd = bStart + b.lines.length - 1, ns = [], ks = [];
-            for (var q = bStart; q <= bEnd; q++) { ns.push('O' + q); if (Number(b.pct)) ks.push('L' + q); }   // ชำระ = Σ รวม − Σ หัก ณ ที่จ่าย
+            for (var q = bStart; q <= bEnd; q++) { ns.push('O' + q); if (Number(b.pct)) ks.push('K' + q); }   // ชำระ = Σ รวม − Σ หัก ณ ที่จ่าย
             var payV = r2(nSum - kSum);
             put(bStart, 'P', payV, b.kind === 'po' ? ST.payR : ST.pay, '=+' + ns.join('+') + (ks.length ? '-' + ks.join('-') : ''));
             if (bEnd > bStart) merge('P' + bStart, 'P' + bEnd);
