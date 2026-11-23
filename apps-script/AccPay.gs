@@ -14,7 +14,8 @@ var AP_TABLES_ = {
     ['issueDate', 'วันที่ออก'], ['creditDays', 'เครดิต (วัน)'], ['dueDate', 'วันที่ครบกำหนด'], ['invNo', 'เลขที่ใบกำกับภาษี'], ['lineNo', 'ลำดับ'],
     ['desc', 'คำอธิบาย'], ['qty', 'จำนวน'], ['price', 'ราคา'], ['vatMode', 'ราคา / VAT'], ['pct', '%'], ['wht', 'ส่วนลด/มัดจำ/หัก ณที่จ่าย'],
     ['amount', 'มูลค่ารายการ'], ['vat', 'ภาษีมูลค่าเพิ่ม'], ['lineTotal', 'รวม'], ['note', 'หมายเหตุ'], ['files', 'ไฟล์บิล'],
-    ['createdAt', 'บันทึกเมื่อ'], ['updatedAt', 'แก้ไขเมื่อ'], ['kind', 'ประเภท']] },
+    ['createdAt', 'บันทึกเมื่อ'], ['updatedAt', 'แก้ไขเมื่อ'], ['kind', 'ประเภท'],
+    ['recvQty', 'รับบิลแล้ว (จำนวน)'], ['poLog', 'ประวัติรับบิล (PO)'], ['poRef', 'หักจาก PO']] },
   ap_vendors: { tab: 'ผู้ขาย (จ่าย)', cols: [
     ['id', 'รหัส'], ['name', 'ชื่อผู้ขาย'], ['taxId', 'เลขผู้เสียภาษี'], ['category', 'หมวด'], ['bank', 'บัญชีธนาคาร (แถวรวม)'],
     ['creditDays', 'เครดิต (วัน)'], ['vatMode', 'ราคา / VAT'], ['pct', '% หัก ณ ที่จ่าย'], ['keywords', 'คำที่ใช้จับในบิล'], ['sort', 'ลำดับ'],
@@ -33,12 +34,16 @@ var AP_VAT_ = { inc: 'ราคารวม VAT แล้ว', exc: 'ราค�
 var AP_FOLDER_ = 'บิลค่าใช้จ่าย (จ่าย)';
 // PO ล่วงหน้า (ผู้ใช้ขอ 20/11/69): สั่งซื้อแล้วแต่ยังไม่ได้รับบิล — มีแค่ ชื่อสินค้า / จำนวน / ราคา · แสดงตัวแดงในรายงานเหมือนในไฟล์ · รับบิลแล้ว = บันทึกทับ billId เดิมเป็นบิลจริง
 var AP_PO_ = 'PO ล่วงหน้า';
+// รับบิลบางส่วน (ผู้ใช้ขอ 23/11/69): บิลที่มาไม่ครบหักจำนวน / ยอดเงินออกจาก PO · PO เก็บไว้จนรับครบ แล้วเปลี่ยนเป็น "ครบแล้ว" (ไม่นับในรายงาน)
+//   แถว PO: qty = จำนวนคงเหลือ · recvQty = รับบิลแล้ว · poLog (แถวแรก) = JSON [{at, billId, invNo, date, total, pay, lines: [{n, desc, q, a}]}]
+//   แถวบิลที่หักจาก PO: poRef = billId ของ PO (ลบบิล → คืนจำนวนให้ PO)
+var AP_PO_DONE_ = 'PO ล่วงหน้า (รับครบแล้ว)';
 
 function apRegister_() {
   accRegister_();
   Object.keys(AP_TABLES_).forEach(function (k) { PUR_TABLES_[k] = AP_TABLES_[k]; });
   ['payRound', 'issueDate', 'dueDate'].forEach(function (k) { PUR_DATE_KEYS_[k] = 1; });
-  ['creditDays', 'lineNo', 'qty', 'price', 'pct', 'wht', 'amount', 'vat', 'lineTotal', 'sort'].forEach(function (k) { PUR_NUM_KEYS_[k] = 1; });
+  ['creditDays', 'lineNo', 'qty', 'price', 'pct', 'wht', 'amount', 'vat', 'lineTotal', 'sort', 'recvQty'].forEach(function (k) { PUR_NUM_KEYS_[k] = 1; });
 }
 function apR2_(n) { return Math.round(Number(n || 0) * 100) / 100; }
 function apTxt_(v) { return String(v == null ? '' : v).replace(/^'/, ''); }
@@ -90,11 +95,12 @@ function apLoad(token) {
   var main = purBook_(dept), st = apSettings_(main), ss = null, err = '';
   try { ss = apBook_(main); } catch (e) { err = 'เปิดชีตค่าใช้จ่ายไม่ได้ — ตรวจว่าแชร์ให้บัญชีระบบเป็นผู้แก้ไขแล้ว'; }
   var hol = accHolidaySet_(accMap_(main));
-  var lines = ss ? purRead_(ss, 'ap_lines').map(apOut_) : [];
+  var all = ss ? purRead_(ss, 'ap_lines').map(apOut_) : [];
+  var lines = all.filter(function (l) { return l.kind !== 'podone'; }), poDone = all.filter(function (l) { return l.kind === 'podone'; });
   var vendors = ss ? purRead_(ss, 'ap_vendors').map(function (v) { v.taxId = apTxt_(v.taxId); delete v._row; return v; }) : [];
   var used = {}; lines.forEach(function (l) { if (l.payRound) used[l.payRound] = 1; });
   return { ok: true, linked: !!ss, error: err, sheetUrl: ss ? ss.getUrl() : '', sheetName: ss ? ss.getName() : '', settings: st,
-    cats: AP_CATS_, vatModes: AP_VAT_, lines: lines, vendors: vendors, rounds: apRounds_(st, hol, Object.keys(used)), today: purToday_(), ai: typeof apAiInfo_ === 'function' ? apAiInfo_() : null };
+    cats: AP_CATS_, vatModes: AP_VAT_, lines: lines, poDone: poDone, vendors: vendors, rounds: apRounds_(st, hol, Object.keys(used)), today: purToday_(), ai: typeof apAiInfo_ === 'function' ? apAiInfo_() : null };
 }
 // Dashboard การจ่าย (ผู้ใช้ขอ 21/11/69): ข้อมูลเบา ๆ ของทุกบรรทัดบิล + รอบจ่าย — ใช้ในหน้าผู้บริหาร (หน้าฝ่ายใช้ apLoad)
 function apDashData_(dept) {
@@ -102,14 +108,20 @@ function apDashData_(dept) {
   var main = purBook_(dept), st = apSettings_(main), ss = apBook_(main);
   if (!ss) return { linked: false };
   var hol = accHolidaySet_(accMap_(main)), used = {};
-  var lines = purRead_(ss, 'ap_lines').map(function (l) {
+  var lines = purRead_(ss, 'ap_lines').filter(function (l) { return String(l.kind || '') !== AP_PO_DONE_; }).map(function (l) {
     if (l.payRound) used[l.payRound] = 1;
     return { payRound: l.payRound, category: l.category, vendor: l.vendor, billId: l.billId, kind: String(l.kind || '') === AP_PO_ ? 'po' : '',
       amount: Number(l.amount) || 0, vat: Number(l.vat) || 0, lineTotal: Number(l.lineTotal) || 0, wht: Number(l.wht) || 0 };
   });
   return { linked: true, settings: { payDay: st.payDay }, cats: AP_CATS_, lines: lines, rounds: apRounds_(st, hol, Object.keys(used)), today: purToday_() };
 }
-function apOut_(l) { l.invNo = apTxt_(l.invNo); l.taxId = apTxt_(l.taxId); l.kind = String(l.kind || '') === AP_PO_ ? 'po' : ''; delete l._row; return l; }
+function apOut_(l) {
+  var k = String(l.kind || '');
+  l.invNo = apTxt_(l.invNo); l.taxId = apTxt_(l.taxId); l.kind = k === AP_PO_ ? 'po' : k === AP_PO_DONE_ ? 'podone' : '';
+  l.recvQty = Number(l.recvQty) || 0; l.poRef = String(l.poRef || '');
+  try { l.poLog = l.poLog ? JSON.parse(l.poLog) : []; } catch (e) { l.poLog = []; }
+  delete l._row; return l;
+}
 
 function apSetSheet(token, url) {
   var dept = requireAcc_(token); apRegister_();
@@ -152,13 +164,13 @@ function apCleanBill_(b) {
     billId: accClean_(b.billId, 40), payRound: accDate_(b.payRound), category: apCat_(b.category), vendor: accClean_(b.vendor, 120),
     taxId: String(b.taxId || '').replace(/\D/g, '').slice(0, 13), issueDate: accDate_(b.issueDate), creditDays: Math.max(0, Math.min(365, Math.round(Number(purNum_(b.creditDays)) || 0))),
     invNo: accClean_(b.invNo, 40), vatMode: AP_VAT_[b.vatMode] ? b.vatMode : 'exc', pct: Math.max(0, Math.min(100, Number(purNum_(b.pct)) || 0)),
-    note: accClean_(b.note, 300), bank: accClean_(b.bank, 150), kind: b.kind === 'po' ? 'po' : ''
+    note: accClean_(b.note, 300), bank: accClean_(b.bank, 150), kind: b.kind === 'po' ? 'po' : '', poRef: b.kind === 'po' ? '' : accClean_(b.poRef, 40)
   };
   if (x.kind === 'po') { x.invNo = ''; x.issueDate = ''; x.creditDays = 0; }
   x.dueDate = accDate_(b.dueDate) || (x.issueDate ? accAddDays_(x.issueDate, x.creditDays) : '');
   x.lines = (Array.isArray(b.lines) ? b.lines : []).slice(0, 80).map(function (l) {
     var qty = Number(purNum_(l.qty)), price = Number(purNum_(l.price));
-    return { desc: accClean_(l.desc, 200), qty: isFinite(qty) ? qty : 0, price: isFinite(price) ? price : 0 };
+    return { desc: accClean_(l.desc, 200), qty: isFinite(qty) ? qty : 0, price: isFinite(price) ? price : 0, po: Math.max(0, Math.round(Number(l.po) || 0)) };
   }).filter(function (l) { return l.desc || l.qty || l.price; });
   return x;
 }
@@ -198,6 +210,14 @@ function apSaveBill(token, bill, files) {
     var billId = mine.length ? x.billId : purId_('AP');
     var keepFiles = (bill && Array.isArray(bill.keepFiles) ? bill.keepFiles : String(mine[0] && mine[0].files || '').split(/\s+/)).filter(function (u) { return /^https:\/\/drive\.google\.com\//.test(u); });
     var createdAt = mine[0] && mine[0].createdAt || now;
+    // แก้ PO ที่รับบิลไปบางส่วนแล้ว: เก็บประวัติ + จำนวนที่รับแล้ว (จับคู่ชื่อสินค้า แล้วค่อยลำดับ) · แก้บิลที่หักจาก PO: เก็บ poRef
+    var first = mine.slice().sort(function (a, b) { return a.lineNo - b.lineNo; })[0] || {};
+    var poLog = x.kind === 'po' ? String(first.poLog || '') : '', poRef = x.kind === 'po' ? '' : (x.poRef || String(first.poRef || ''));
+    var recvOf = function (l, i) {
+      if (x.kind !== 'po') return '';
+      var m = mine.filter(function (o) { return accNorm_(o.desc) === accNorm_(l.desc); })[0] || mine.filter(function (o) { return Number(o.lineNo) === i + 1; })[0];
+      return m && Number(m.recvQty) ? Number(m.recvQty) : '';
+    };
     var sh = purSheet_(ss, 'ap_lines');
     mine.map(function (l) { return l._row; }).sort(function (a, b) { return b - a; }).forEach(function (r) { sh.deleteRow(r); });
     var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
@@ -208,7 +228,8 @@ function apSaveBill(token, bill, files) {
         id: purId_('APL'), billId: billId, payRound: x.payRound, category: x.category, vendor: x.vendor, taxId: x.taxId ? "'" + x.taxId : '',
         issueDate: x.issueDate, creditDays: x.creditDays, dueDate: x.dueDate, invNo: x.invNo ? "'" + x.invNo : '', lineNo: i + 1,
         desc: l.desc, qty: l.qty, price: l.price, vatMode: x.vatMode, pct: x.pct, wht: c.wht, amount: c.amount, vat: c.vat, lineTotal: c.lineTotal,
-        note: i ? '' : x.note, files: filesTxt, createdAt: createdAt, updatedAt: mine.length ? now : '', kind: x.kind === 'po' ? AP_PO_ : ''
+        note: i ? '' : x.note, files: filesTxt, createdAt: createdAt, updatedAt: mine.length ? now : '', kind: x.kind === 'po' ? AP_PO_ : '',
+        recvQty: recvOf(l, i), poLog: i ? '' : poLog, poRef: poRef
       }, head);
     });
     sh.getRange(sh.getLastRow() + 1, 1, values.length, values[0].length).setValues(values);
@@ -223,7 +244,92 @@ function apSaveBill(token, bill, files) {
     v.updatedAt = now;
     purWrite_(ss, 'ap_vendors', v);
     purLogWrite_(main, (mine.length ? 'แก้' : 'บันทึก') + (x.kind === 'po' ? 'PO ล่วงหน้า' : (mine.length && String(mine[0].kind) === AP_PO_ ? 'บิลจาก PO ล่วงหน้า' : 'บิลค่าใช้จ่าย')), 'ap_lines', billId, x.vendor + ' ' + x.invNo + ' รอบ ' + x.payRound);
-    return { ok: true, billId: billId, files: filesTxt, uploaded: saved.length };
+    return { ok: true, billId: billId, files: filesTxt, uploaded: saved.length, lines: x.lines.map(function (l) { var c = apCalc_(l, x.vatMode, x.pct); return { po: l.po, desc: l.desc, qty: l.qty, total: c.lineTotal, wht: c.wht }; }) };
+  });
+}
+
+// ---------- รับบิลจาก PO ล่วงหน้า (ครบ หรือบางส่วน) — ผู้ใช้ขอ 23/11/69 ----------
+// บิลจริงบันทึกเป็นบิลใหม่ (poRef = PO) · แต่ละรายการในบิลบอกว่าหักจาก PO บรรทัดไหน (po = ลำดับ, 0 = ไม่หัก)
+// PO: จำนวนคงเหลือ = เดิม − จำนวนในบิล · ยอดเงินคำนวณใหม่จากจำนวนคงเหลือ · บันทึกประวัติ (ยอดเงินรวมของบิลที่หัก) · คงเหลือ 0 ทุกบรรทัด = รับครบ
+function apReceivePo(token, poId, bill, files) {
+  var dept = requireAcc_(token); apRegister_();
+  poId = String(poId || '');
+  var main = purBook_(dept), ss = apBook_(main);
+  if (!ss) return { ok: false, error: 'ยังไม่ได้เชื่อม Google Sheet ค่าใช้จ่าย' };
+  if (!purRead_(ss, 'ap_lines').some(function (l) { return l.billId === poId && String(l.kind) === AP_PO_; })) return { ok: false, error: 'ไม่พบ PO นี้ (อาจรับครบหรือถูกลบไปแล้ว) — โหลดหน้าใหม่' };
+  var b = Object.assign({}, bill || {}, { kind: '', billId: '', poRef: poId });
+  var r = apSaveBill(token, b, files);
+  if (!r.ok) return r;
+  var res = apDeductPo_(main, ss, poId, r.billId, apCleanBill_(b), r.lines);
+  r.po = res;
+  return r;
+}
+function apDeductPo_(main, ss, poId, billId, x, lines) {
+  return purLocked_(function () {
+    var rows = purRead_(ss, 'ap_lines').filter(function (l) { return l.billId === poId && String(l.kind) === AP_PO_; }).sort(function (a, b) { return a.lineNo - b.lineNo; });
+    if (!rows.length) return { done: false, missing: true };
+    var by = {}, total = 0, pay = 0;
+    (lines || []).forEach(function (l) {
+      if (!l.po) return;
+      var d = by[l.po] = by[l.po] || { q: 0, a: 0 };
+      d.q += Number(l.qty) || 0; d.a += Number(l.total) || 0;
+      total += Number(l.total) || 0; pay += (Number(l.total) || 0) - (Number(l.wht) || 0);
+    });
+    var now = purNow_(), logLines = [];
+    rows.forEach(function (row) {
+      var d = by[row.lineNo]; if (!d) return;
+      var left = Math.max(0, Math.round(((Number(row.qty) || 0) - d.q) * 10000) / 10000);
+      row.recvQty = Math.round(((Number(row.recvQty) || 0) + d.q) * 10000) / 10000;
+      row.qty = left;
+      var c = apCalc_({ qty: left, price: Number(row.price) || 0 }, row.vatMode, Number(row.pct) || 0);
+      row.amount = c.amount; row.vat = c.vat; row.lineTotal = c.lineTotal; row.wht = c.wht; row.updatedAt = now;
+      logLines.push({ n: row.lineNo, desc: row.desc, q: d.q, a: apR2_(d.a) });
+    });
+    var log = []; try { log = rows[0].poLog ? JSON.parse(rows[0].poLog) : []; } catch (e) { log = []; }
+    log.push({ at: now, billId: billId, invNo: x.invNo, date: x.issueDate, round: x.payRound, total: apR2_(total), pay: apR2_(pay), lines: logLines });
+    rows[0].poLog = log;
+    var done = rows.every(function (row) { return !(Number(row.qty) > 0); });
+    if (done) rows.forEach(function (row) { row.kind = AP_PO_DONE_; });
+    rows.forEach(function (row) {
+      row.taxId = apTxt_(row.taxId); row.invNo = apTxt_(row.invNo);
+      if (!row.updatedAt) row.updatedAt = now;
+      purWrite_(ss, 'ap_lines', row);
+    });
+    purLogWrite_(main, done ? 'รับบิลจาก PO ล่วงหน้า (ครบ)' : 'รับบิลจาก PO ล่วงหน้า (บางส่วน)', 'ap_lines', poId, x.vendor + ' บิล ' + x.invNo + ' หัก ' + apR2_(total) + ' บาท');
+    return { done: done, left: rows.map(function (row) { return { n: row.lineNo, desc: row.desc, qty: row.qty }; }) };
+  });
+}
+// ลบบิลที่หักจาก PO → คืนจำนวนให้ PO (ลบประวัติรายการนั้น · ถ้า PO รับครบแล้วกลับเป็นรอบิล)
+function apRestorePo_(ss, poId, billId) {
+  var rows = purRead_(ss, 'ap_lines').filter(function (l) { return l.billId === poId && (String(l.kind) === AP_PO_ || String(l.kind) === AP_PO_DONE_); }).sort(function (a, b) { return a.lineNo - b.lineNo; });
+  if (!rows.length) return false;
+  var log = []; try { log = rows[0].poLog ? JSON.parse(rows[0].poLog) : []; } catch (e) { log = []; }
+  var ent = log.filter(function (e) { return e.billId === billId; })[0];
+  if (!ent) return false;
+  var now = purNow_();
+  (ent.lines || []).forEach(function (el) {
+    var row = rows.filter(function (r) { return Number(r.lineNo) === Number(el.n); })[0]; if (!row) return;
+    row.qty = Math.round(((Number(row.qty) || 0) + (Number(el.q) || 0)) * 10000) / 10000;
+    row.recvQty = Math.max(0, Math.round(((Number(row.recvQty) || 0) - (Number(el.q) || 0)) * 10000) / 10000) || '';
+    var c = apCalc_({ qty: row.qty, price: Number(row.price) || 0 }, row.vatMode, Number(row.pct) || 0);
+    row.amount = c.amount; row.vat = c.vat; row.lineTotal = c.lineTotal; row.wht = c.wht;
+  });
+  rows[0].poLog = log.filter(function (e) { return e !== ent; });
+  rows.forEach(function (row) { row.kind = AP_PO_; row.updatedAt = now; row.taxId = apTxt_(row.taxId); row.invNo = apTxt_(row.invNo); purWrite_(ss, 'ap_lines', row); });
+  return true;
+}
+// ปิด PO เอง (ผู้ขายไม่ส่งส่วนที่เหลือแล้ว) → ย้ายไป "รับครบแล้ว" ไม่นับในรายงาน · ยังเปิดดูประวัติได้
+function apClosePo(token, poId) {
+  var dept = requireAcc_(token); apRegister_();
+  var main = purBook_(dept), ss = apBook_(main);
+  if (!ss) return { ok: false, error: 'ยังไม่ได้เชื่อม Google Sheet ค่าใช้จ่าย' };
+  return purLocked_(function () {
+    var rows = purRead_(ss, 'ap_lines').filter(function (l) { return l.billId === String(poId || '') && String(l.kind) === AP_PO_; });
+    if (!rows.length) return { ok: false, error: 'ไม่พบ PO นี้' };
+    var now = purNow_();
+    rows.forEach(function (row) { row.kind = AP_PO_DONE_; row.updatedAt = now; row.taxId = apTxt_(row.taxId); row.invNo = apTxt_(row.invNo); purWrite_(ss, 'ap_lines', row); });
+    purLogWrite_(main, 'ปิด PO ล่วงหน้า (ไม่รอส่วนที่เหลือ)', 'ap_lines', poId, rows[0].vendor);
+    return { ok: true };
   });
 }
 function apDeleteBill(token, billId) {
@@ -233,10 +339,11 @@ function apDeleteBill(token, billId) {
   return purLocked_(function () {
     var rows = purRead_(ss, 'ap_lines').filter(function (l) { return l.billId === String(billId || ''); });
     if (!rows.length) return { ok: false, error: 'ไม่พบบิลนี้' };
-    var sh = purSheet_(ss, 'ap_lines');
+    var sh = purSheet_(ss, 'ap_lines'), ref = String(rows[0].poRef || '');
     rows.map(function (l) { return l._row; }).sort(function (a, b) { return b - a; }).forEach(function (r) { sh.deleteRow(r); });
-    purLogWrite_(main, 'ลบบิลค่าใช้จ่าย', 'ap_lines', billId, rows[0].vendor + ' ' + apTxt_(rows[0].invNo));
-    return { ok: true };
+    var restored = ref && String(rows[0].kind) !== AP_PO_ && String(rows[0].kind) !== AP_PO_DONE_ ? apRestorePo_(ss, ref, String(billId)) : false;
+    purLogWrite_(main, 'ลบบิลค่าใช้จ่าย' + (restored ? ' (คืนจำนวนให้ PO ' + ref + ')' : ''), 'ap_lines', billId, rows[0].vendor + ' ' + apTxt_(rows[0].invNo));
+    return { ok: true, restored: restored };
   });
 }
 // ย้ายบิลไปรอบจ่ายอื่น
