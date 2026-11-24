@@ -305,18 +305,26 @@
     // รายการ: บรรทัดหลัก = ลำดับ · บาร์โค้ด · ชื่อสินค้า · ขนาดบรรจุ · จำนวนหีบ · แถม · ราคาต่อหีบ · ส่วนลด 4 ช่อง · จำนวนเงิน
     rows.forEach(function (r, i) {
       var it = r.it;
-      if (it.length < 6 || !/^\d{1,3}$/.test(String(it[0].s).trim()) || !/^\d{8,14}$/.test(String(it[1].s).trim())) return;
+      // แบบเดิม: ลำดับ · บาร์โค้ด (8–14 หลัก) · ชื่อ … (รหัสสินค้าอยู่บรรทัดบน "3203072 / EXC 7.00")
+      // แบบใหม่ (ใบ 08.01.69): ลำดับ · รหัสสินค้า (4–7 หลัก) · ชื่อ … (บรรทัดบนมีแค่ "EXC 7.00 0.00")
+      if (it.length < 6) return;
+      var c0 = String(it[0].s).trim(), c1 = String(it[1].s).trim();
+      if (!/^\d{1,3}$/.test(c0)) return;
+      var hasBar = /^\d{8,14}$/.test(c1);
+      if (!hasBar && !/^\d{4,7}$/.test(c1)) return;
       var name = [], nums = [];
       for (var k = 2; k < it.length; k++) { var s = String(it[k].s).trim(); if (PO_NUM.test(s) && (nums.length || it[k].x > 300)) nums.push(poNum(s)); else if (!nums.length) name.push(s); }
       if (nums.length < 5) return;
-      var prev = rows[i - 1], next = rows[i + 1], code = '', tax = '', vat = '';
+      var prev = rows[i - 1], next = rows[i + 1], code = hasBar ? '' : c1, tax = '', vat = '';
       if (prev && prev.y - r.y < 14) {
-        var pm = prev.text.match(/^(\d{5,10})\s*\/\s*(INC|EXC|NON)?\s*([\d.]+)?/); if (pm) { code = pm[1]; tax = pm[2] || ''; vat = pm[3] ? Number(pm[3]) : ''; }
+        var pm = prev.text.match(/^(\d{5,10})\s*\/\s*(INC|EXC|NON)?\s*([\d.]+)?/), pm2 = prev.text.match(/^(INC|EXC|NON)\s+([\d.]+)/);
+        if (pm) { code = pm[1]; tax = pm[2] || ''; vat = pm[3] ? Number(pm[3]) : ''; }
+        else if (pm2) { tax = pm2[1]; vat = Number(pm2[2]); }
       }
       // ชื่อสินค้าต่อบรรทัดถัดไป (เช่น "G.") — บรรทัดที่มีแต่ข้อความในช่องรายการ
       if (next && r.y - next.y < 12 && next.it.every(function (x) { return x.x > 90 && x.x < 305; }) && !/^\d{5,10}\s*\//.test(next.text)) name.push(next.text);
       var nm = name.join(' ').replace(/\s+/g, ' ').replace(/^[@H]+(?=[^\x00-\x7F])/, '').trim();
-      po.lines.push({ lineNo: +String(it[0].s).trim(), barcode: String(it[1].s).trim(), itemCode: code, itemName: nm, packSize: nums[0], cases: nums[1],
+      po.lines.push({ lineNo: +c0, barcode: hasBar ? c1 : '', itemCode: code, itemName: nm, packSize: nums[0], cases: nums[1],
         freeQty: nums[2], casePrice: nums[3], amount: nums[nums.length - 1], vatRate: vat === '' ? 7 : vat, taxType: tax });
     });
     return po;
