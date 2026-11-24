@@ -73,6 +73,7 @@ function doPost(e) {
       // LINE ส่งเหตุการณ์ซ้ำ (redelivery) เพราะเว็บแอปตอบกลับเป็น redirect → ข้ามเหตุการณ์ที่เคยทำแล้ว ไม่ให้ตอบ/ทำซ้ำ
       req.events = lineFreshEvents_(req.events);   // Webhook ของ LINE OA: ฝ่ายบัญชี (Acc.gs) แยกด้วย destination ไม่ใช่ = ฝ่ายบุคคล (HrPublic.gs)
       var isAcc = accIsMyBot_(req.destination), isPrd = prdIsMyBot_(req.destination);
+      if (isAcc || isPrd) accSeenGroups_(req.events);   // จำกลุ่มที่บอทเห็นล่าสุด (ใช้หา Group ID ตอนเปลี่ยน OA)
       if (req.events.length) accDiagLog_({ ev: 'webhook', acc: isAcc, prd: isPrd, types: req.events.map(function (x) { return x.type + (x.source ? '/' + x.source.type : ''); }).join(',') });
       // ฝ่ายผลิต (Prod.gs) ใช้ OA ของตัวเอง หรือใช้ OA เดียวกับฝ่ายบัญชีก็ได้ (แยกด้วยคำว่า "ผลิต" ในคำสั่ง)
       // ฝ่ายบุคคล (HrDaily.gs) ส่งเช็คพนักงานผ่านบอทฝ่ายบัญชีเข้ากลุ่มเดียวกับฝ่ายบัญชี — ไม่มีคำสั่งผูกกลุ่มของตัวเอง

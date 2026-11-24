@@ -745,12 +745,25 @@ function accLineGroupName_(tok, gid) {
   if (r.getResponseCode() !== 200) return { ok: false, code: r.getResponseCode() };
   return { ok: true, name: JSON.parse(r.getContentText()).groupName || '' };
 }
+// กลุ่มที่บอทฝ่ายบัญชี / ผลิตเห็นล่าสุด (จากเหตุการณ์ webhook: เข้ากลุ่ม / มีคนพิมพ์ / ออกจากกลุ่ม) — เก็บ ID ไว้ 10 กลุ่ม
+// เพื่อหา Group ID ได้โดยไม่ต้องพิมพ์คำสั่งผูกกลุ่ม (ผู้ใช้ขอ 24/11/69 — ถอนบอทเดิมออกจากกลุ่มแล้ว ID ที่บันทึกไว้ถูกลบ)
+function accSeenGroups_(events) {
+  try {
+    var ids = (events || []).map(function (ev) { return (ev.source || {}).groupId || ''; }).filter(function (g) { return /^C[0-9a-f]{32}$/.test(g); });
+    if (!ids.length) return;
+    var p = props_(), list = []; try { list = JSON.parse(p.getProperty('ACC_SEEN_GROUPS') || '[]'); } catch (e) { list = []; }
+    ids.forEach(function (g) { list = list.filter(function (x) { return x.id !== g; }); list.unshift({ id: g, at: purNow_() }); });
+    p.setProperty('ACC_SEEN_GROUPS', JSON.stringify(list.slice(0, 10)));
+  } catch (e) {}
+}
 function accLineOaInfo(token) {
   requireAcc_(token);
   var p = props_(), tok = p.getProperty('ACC_LINE_TOKEN'), bot = accLineBot_(tok);
   var g = { acc: p.getProperty('ACC_LINE_GROUP') || '', prod: p.getProperty('PROD_LINE_GROUP') || '', hr: p.getProperty('HR_DAILY_GROUP') || '' };
   var names = {}; Object.keys(g).forEach(function (k) { if (g[k]) names[k] = accLineGroupName_(tok, g[k]).name || ''; });
-  return { ok: true, bot: bot ? bot.name : '', groups: g, names: names, prodSame: p.getProperty('PROD_LINE_TOKEN') === tok };
+  var seen = []; try { seen = JSON.parse(p.getProperty('ACC_SEEN_GROUPS') || '[]'); } catch (e) { seen = []; }
+  seen = seen.map(function (x) { var s = accLineGroupName_(tok, x.id); return { id: x.id, at: x.at, name: s.ok ? s.name : '', inGroup: s.ok }; });
+  return { ok: true, bot: bot ? bot.name : '', groups: g, names: names, prodSame: p.getProperty('PROD_LINE_TOKEN') === tok, seen: seen, webhook: ACC_WEBHOOK_URL_ };
 }
 function accSwitchOa(token, newToken, groups, dry) {
   requireAcc_(token);
@@ -767,8 +780,14 @@ function accSwitchOa(token, newToken, groups, dry) {
     res[k] = s.ok ? { ok: true, name: s.name } : { ok: false, error: 'บอท "' + bot.name + '" ยังไม่ได้อยู่ในกลุ่มนี้ — เชิญบอทเข้ากลุ่มก่อน' };
     if (!s.ok) bad.push(keys[k] + ': บอทใหม่ยังไม่ได้อยู่ในกลุ่ม');
   });
-  if (dry || bad.length) return { ok: !bad.length, dry: true, bot: bot.name, groups: res, error: bad.join(' · ') };
   var p = props_(), old = p.getProperty('ACC_LINE_TOKEN');
+  // บันทึก Token อย่างเดียว (ยังไม่มี Group ID) → บอทใหม่รับ webhook ได้ แล้วพิมพ์อะไรก็ได้ในกลุ่มเพื่อให้ระบบเห็น Group ID
+  if (dry === 'token') {
+    if (old && old !== tok) p.setProperty('ACC_LINE_TOKEN_PREV', old);
+    p.setProperty('ACC_LINE_TOKEN', tok); p.setProperty('PROD_LINE_TOKEN', tok);
+    return { ok: true, tokenOnly: true, bot: bot.name, webhook: ACC_WEBHOOK_URL_ };
+  }
+  if (dry || bad.length) return { ok: !bad.length, dry: true, bot: bot.name, groups: res, error: bad.join(' · ') };
   if (old && old !== tok) p.setProperty('ACC_LINE_TOKEN_PREV', old);   // เก็บ token เดิมไว้เผื่อย้อนกลับ
   p.setProperty('ACC_LINE_TOKEN', tok); p.setProperty('PROD_LINE_TOKEN', tok);
   p.setProperty('ACC_LINE_GROUP', String(g.acc).trim());

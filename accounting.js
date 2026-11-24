@@ -915,7 +915,8 @@
           + (L.token ? '' : '<li>ใส่ Channel access token ของ OA ฝ่ายบัญชีใน Apps Script → Project Settings → Script Properties ชื่อ <code>ACC_LINE_TOKEN</code></li>'
             + '<li>ใน LINE Developers → Messaging API ของ OA ฝ่ายบัญชี: ใส่ Webhook URL ด้านล่าง แล้วเปิด Use webhook และ Allow bot to join group chats'
             + (L.webhook ? copyBox(L.webhook, 'Webhook URL') : '') + '</li>')
-          + '<li>' + bindStep(L.setupCode) + '</li></ol>')
+          + '<li>' + bindStep(L.setupCode) + '</li></ol>'
+          + '<div class="a7lineacts"><button class="btn btn-line btn-sm" id="sOa">' + icon('key', 16) + ' เปลี่ยน LINE OA / หา Group ID</button></div>')
       + '</div>'
       + '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('table', 18) + ' ศูนย์กระจายสินค้า</h4><div class="ptable-wrap"><table class="ptable a7set"><thead><tr><th></th><th>ชื่อศูนย์ (ในรายงาน)</th><th>คำค้นใน Delivery Location</th><th>รหัสคลัง</th><th></th></tr></thead><tbody>'
       + cfg.dcs.map(function (d, i) {
@@ -1014,13 +1015,40 @@
         + '<ol class="a7ol"><li>เชิญ LINE OA ตัวใหม่เข้ากลุ่มที่ใช้อยู่ทุกกลุ่มก่อน (ไม่ต้องพิมพ์คำสั่งในกลุ่ม)</li><li>วาง Channel access token ของ OA ใหม่ แล้วกด "ตรวจสอบ"</li><li>ผ่านครบแล้วกด "เปลี่ยนเป็น OA นี้"</li></ol>'
         + '<label class="a7oa"><span><b>Channel access token ของ OA ใหม่</b><small>LINE Developers → Messaging API → Channel access token</small></span><input id="oaTok" type="password" spellcheck="false" autocomplete="off" placeholder="วาง token ที่นี่"></label>'
         + gRow('acc', 'Group ID · ฝ่ายบัญชี', 'กลุ่มที่รับรายงานออเดอร์') + gRow('prod', 'Group ID · ฝ่ายผลิต', 'ว่าง = ไม่ส่ง') + gRow('hr', 'Group ID · เช็คพนักงานรายวัน (HR)', 'ว่าง = ส่งเข้ากลุ่มฝ่ายบัญชี')
+        + '<div class="a7oaseen"><b>กลุ่มที่บอทเห็นล่าสุด</b><small>ไม่มี Group ID? กด "บันทึก Token ก่อน" → ใส่ Webhook URL ให้ OA ใหม่ → พิมพ์อะไรก็ได้ในกลุ่ม → กด "ค้นหากลุ่ม"</small><div id="oaSeen"><span class="spinner dark"></span></div>'
+        + '<div class="a7lineacts"><button type="button" class="btn btn-line btn-sm" id="oaTokOnly">' + icon('key', 16) + ' บันทึก Token ก่อน (ยังไม่มี Group ID)</button><button type="button" class="btn btn-line btn-sm" id="oaFind">' + icon('check', 16) + ' ค้นหากลุ่ม</button></div><div id="oaHook"></div></div>'
         + '<div class="a7lineacts"><button type="button" class="btn btn-line btn-sm" id="oaChk">' + icon('check', 16) + ' ตรวจสอบ</button></div><div id="oaRes"></div>',
       ok: 'เปลี่ยนเป็น OA นี้', cancel: 'ยกเลิก',
       onOpen: function () {
         var okb = $('mOk'); okb.disabled = true;
         var reset = function () { ok = false; okb.disabled = true; };
+        
         ['oaTok', 'oaG_acc', 'oaG_prod', 'oaG_hr'].forEach(function (id) { $(id).addEventListener('input', reset); });
-        call('accLineOaInfo', state.token).then(function (r) {
+        var seenHtml = function (r) {
+          var a = (r.seen || []).filter(function (x) { return x.inGroup; });
+          if (!a.length) return '<div class="muted" style="font-size:13px">ยังไม่พบกลุ่ม — บอทต้องอยู่ในกลุ่ม และมีคนพิมพ์ในกลุ่มหลังตั้ง Webhook แล้ว</div>';
+          return a.map(function (x) {
+            return '<div class="a7oag"><span><b>' + esc(x.name || '(ไม่ทราบชื่อกลุ่ม)') + '</b><code>' + esc(x.id) + '</code></span><span class="a7oab">'
+              + [['acc', 'บัญชี'], ['prod', 'ผลิต'], ['hr', 'HR']].map(function (k) { return '<button type="button" class="btn btn-line btn-sm" data-oause="' + k[0] + '" data-gid="' + esc(x.id) + '" data-gname="' + esc(x.name || '') + '">ใช้กับ' + k[1] + '</button>'; }).join('') + '</span></div>';
+          }).join('');
+        };
+        var bindSeen = function () {
+          on('[data-oause]', 'click', function (el) {
+            var k = el.getAttribute('data-oause'); $('oaG_' + k).value = el.getAttribute('data-gid'); $('oaN_' + k).textContent = 'เลือกแล้ว: กลุ่ม "' + el.getAttribute('data-gname') + '"'; reset(); toast('ใส่ Group ID แล้ว — กด "ตรวจสอบ" ต่อ');
+          }, $('oaSeen'));
+        };
+        var loadInfo = function () { return call('accLineOaInfo', state.token).then(function (r) { if (r.ok && $('oaSeen')) { $('oaSeen').innerHTML = seenHtml(r); bindSeen(); } return r; }); };
+        $('oaFind').addEventListener('click', function () { var b = this; b.disabled = true; $('oaSeen').innerHTML = '<span class="spinner dark"></span> กำลังค้นหา…'; loadInfo().then(function () { b.disabled = false; }, function (e) { b.disabled = false; onServerError(e); }); });
+        $('oaTokOnly').addEventListener('click', function () {
+          var b = this; b.disabled = true;
+          call('accSwitchOa', state.token, $('oaTok').value, {}, 'token').then(function (r) {
+            b.disabled = false;
+            if (!r.ok) { $('oaHook').innerHTML = chk(false, r.error || 'บันทึกไม่สำเร็จ'); return; }
+            $('oaHook').innerHTML = chk(true, 'บันทึก Token ของ OA "' + r.bot + '" แล้ว') + '<ol class="a7ol"><li>LINE Developers → OA "' + esc(r.bot) + '" → Messaging API: ใส่ Webhook URL นี้ แล้วเปิด Use webhook' + copyBox(r.webhook, 'Webhook URL') + '</li><li>พิมพ์อะไรก็ได้ในทุกกลุ่มที่บอทอยู่ (เช่น "สวัสดี")</li><li>กด "ค้นหากลุ่ม" แล้วเลือกกลุ่มให้แต่ละฝ่าย</li></ol>';
+            bindCopy($('oaHook'));
+          }).catch(function (e) { b.disabled = false; onServerError(e); });
+        });
+        loadInfo().then(function (r) {
           info = r; var c = $('oaCur'); if (!c || !r.ok) return;
           c.innerHTML = 'ตอนนี้ใช้ OA <b>' + esc(r.bot || '(token เดิมใช้ไม่ได้)') + '</b>' + ['acc', 'prod', 'hr'].map(function (k) { return r.groups[k] ? '' : ''; }).join('');
           ['acc', 'prod', 'hr'].forEach(function (k) {
@@ -1072,6 +1100,7 @@
   // ---------- CSS ของโมดูล ----------
   var css = document.createElement('style');
   css.textContent = [
+    '.a7oaseen{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:10px 12px;margin:4px 0 12px}.a7oaseen>b{display:block}.a7oaseen>small{display:block;color:var(--muted);font-size:12.5px;margin:2px 0 8px}.a7oag{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid #e2e8f0}.a7oag code{display:block;font-size:11.5px;color:#475569;word-break:break-all}.a7oab{display:flex;gap:6px;flex-wrap:wrap}',
     '.a7oa{display:block;margin:0 0 12px}.a7oa>span{display:block;margin-bottom:5px}.a7oa small{display:block;color:var(--muted);font-size:12.5px;font-weight:400}.a7oa input,.a7oa textarea{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-family:ui-monospace,Menlo,monospace;font-size:13.5px;box-sizing:border-box}.a7oacur{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:14px}',
     '.a7band{margin:22px 0 12px;padding:10px 16px;border-radius:14px;font-weight:800;font-size:16px;color:#fff;letter-spacing:.2px}.a7band.in{background:linear-gradient(90deg,#15803d,#22c55e)}.a7band.out{background:linear-gradient(90deg,#b91c1c,#ef4444);margin-top:30px}.a7band:first-of-type{margin-top:6px}.a7jump{color:#b91c1c;font-weight:700;white-space:nowrap}',
     '.a7steps{display:flex;gap:6px;list-style:none;padding:0;margin:0 0 14px;flex-wrap:wrap}.a7steps li{display:flex;align-items:center;gap:6px;background:#fff;border:1.5px solid var(--line);border-radius:99px;padding:5px 12px 5px 5px;font-size:13.5px;color:var(--muted)}',
