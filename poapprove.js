@@ -77,13 +77,14 @@
     var chips = [['', 'ทั้งหมด'], ['new', '🔴 อนุมัติใหม่ · ยังไม่เปิดดู'], ['pending', '⏳ รออนุมัติ'], ['approved', '✓ อนุมัติแล้ว'], ['rejected', '✕ ไม่อนุมัติ']];
     $('main').innerHTML = '<h3>ขออนุมัติ PO (LINE)</h3>'
       + '<details class="panel pa-set" id="paSet"><summary><b>' + icon('line', 18) + ' ตั้งค่า LINE / ผู้อนุมัติ / ลายเซ็น</b> <small class="muted" id="paSetSum">กำลังตรวจ…</small></summary><div id="paSetBody"><span class="spinner dark"></span></div></details>'
-      + '<div class="pbar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button class="btn btn-primary" id="paNew">' + icon('line', 18) + 'ส่ง PO ขออนุมัติ</button><button class="btn btn-line" id="paRe">↻ ตรวจสถานะล่าสุด</button></div>'
+      + '<div class="pbar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button class="btn btn-primary" id="paImp">' + icon('upload', 18) + 'แนบไฟล์ PO (PDF จาก PEAK)</button><button class="btn btn-line" id="paNew">' + icon('doc', 18) + 'เลือกใบ PO ที่มีในระบบ</button><button class="btn btn-line" id="paRe">↻ ตรวจสถานะล่าสุด</button></div>'
       + '<div class="pchips">' + chips.map(function (c) { var n = count(c[0]); return '<button class="chip' + (f === c[0] ? ' on' : '') + '" data-pf="' + c[0] + '">' + c[1] + (c[0] ? ' (' + n + ')' : '') + '</button>'; }).join('') + '</div>'
       + '<div id="paList"></div>';
     var list = A.list.filter(function (r) { return f === 'new' ? r.status === 'approved' && !r.seenAt : f ? r.status === f : r.status !== 'replaced'; });
     $('paList').innerHTML = list.map(cardHtml).join('') || '<div class="panel muted">' + (f === 'new' ? 'ไม่มี PO ที่อนุมัติใหม่ค้างเปิดดู' : 'ยังไม่มีรายการ — กด "ส่ง PO ขออนุมัติ" หรือเปิดใบ PO แล้วกด "ใส่ลายเซ็น & ส่งขออนุมัติ"') + '</div>';
     Array.prototype.forEach.call(document.querySelectorAll('[data-pf]'), function (b) { b.addEventListener('click', function () { P().q.paF = b.getAttribute('data-pf'); A.page(); }); });
     $('paNew').addEventListener('click', pickDoc);
+    $('paImp').addEventListener('click', A.importPdf);
     $('paRe').addEventListener('click', function () { var b = this; b.disabled = true; A.refresh(true).then(function () { A.page(); toast('อัปเดตสถานะแล้ว'); }); });
     $('paList').addEventListener('click', function (e) {
       var b = e.target.closest('[data-pa]'); if (!b) return;
@@ -245,6 +246,139 @@
   function getSigs() {
     if (A.sigs) return Promise.resolve(A.sigs);
     return call('purPoSigs', state.token).then(function (r) { A.sigs = (r && r.sigs) || {}; return A.sigs; });
+  }
+
+  // ---------- แนบ PDF ใบสั่งซื้อจาก PEAK → อ่านข้อมูลลงใบ PO ให้เอง (ผู้ใช้ขอ 24/11/69: "แนบเลยไม่ต้องกรอกอะไร") ----------
+  // ฟอนต์ไทยใน PDF ของ PEAK ใช้รหัสพิเศษ U+F7xx แทนวรรณยุกต์ / สระบางตัว → แปลงกลับเป็นตัวอักษรไทยปกติ
+  var PUA = { 0xF700: 'ฐ', 0xF701: '่', 0xF702: '้', 0xF703: '๊', 0xF704: '๋', 0xF705: '่', 0xF706: '้', 0xF707: '๊', 0xF708: '๋', 0xF709: '์', 0xF70A: '่', 0xF70B: '้', 0xF70C: '๊', 0xF70D: '๋', 0xF70E: '์', 0xF70F: 'ญ', 0xF710: 'ั', 0xF711: 'ํ', 0xF712: '็', 0xF713: '่', 0xF714: '้', 0xF715: '๊', 0xF716: '๋', 0xF717: '์', 0xF718: 'ุ', 0xF719: 'ู', 0xF71A: 'ฺ' };
+  function thFix(t) { return String(t || '').replace(/[\uF700-\uF71A]/g, function (c) { return PUA[c.charCodeAt(0)]; }).replace(/[\uE000-\uF8FF]/g, ' ').replace(/\u0e4d([\u0e48-\u0e4b]?)\u0e32/g, '$1\u0e33'); }
+  function pdfRows(pdf) {
+    var out = [], pages = []; for (var i = 1; i <= pdf.numPages; i++) pages.push(i);
+    return pages.reduce(function (p, n) {
+      return p.then(function () {
+        return pdf.getPage(n).then(function (pg) {
+          var vp = pg.getViewport({ scale: 1 });
+          return pg.getTextContent().then(function (tc) {
+            var rows = [];
+            tc.items.map(function (t) { var m = window.pdfjsLib.Util.transform(vp.transform, t.transform); return { x: m[4], y: m[5], w: t.width, s: thFix(t.str) }; }).filter(function (t) { return t.s; })
+              .sort(function (a, b) { return a.y - b.y || a.x - b.x; }).forEach(function (t) {
+                var r = rows.filter(function (r) { return Math.abs(r.y - t.y) <= 2.5; })[0]; if (!r) rows.push(r = { y: t.y, it: [] }); r.it.push(t);
+              });
+            rows.sort(function (a, b) { return a.y - b.y; }).forEach(function (r) {
+              r.it.sort(function (a, b) { return a.x - b.x; });
+              var s = '', end = -1;
+              r.it.forEach(function (t) { if (!t.s.trim()) { end = -1e9; return; } if (s && (end < 0 || t.x - end > 2.5)) s += '  '; s += t.s; end = t.x + t.w; });
+              out.push({ page: n, y: r.y, x: r.it[0].x, s: s.trim() });
+            });
+          });
+        });
+      });
+    }, Promise.resolve()).then(function () { return out; });
+  }
+  function num(v) { var n = parseFloat(String(v || '').replace(/,/g, '')); return isFinite(n) ? n : ''; }
+  function isoOf(t) {
+    var m = String(t || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (!m) return '';
+    var y = +m[3]; if (y > 2400) y -= 543;
+    return y + '-' + pad(+m[2]) + '-' + pad(+m[1]);
+  }
+  function oneSp(t) { return String(t || '').replace(/\s+/g, ' ').trim(); }
+  // ใบสั่งซื้อของ PEAK: เลขที่เอกสาร / วันที่ออก / ผู้ขาย + เลขที่ภาษี + ที่อยู่ / รายการ "1. ชื่อ (รหัส) จำนวน ราคา ส่วนลด VAT มูลค่า" / สรุปยอด
+  A.parsePo = function (rows) {
+    var o = { items: [] }, val = function (r) { return oneSp(r.s.replace(/^[^:]*:\s*/, '')); }, vi = -1;
+    rows.forEach(function (r, k) {
+      var s = r.s, m;
+      if (!o.docNo && /เลขที่เอกสาร/.test(s)) o.docNo = (s.match(/เลขที่เอกสาร\s*:?\s*(\S+)/) || [])[1] || '';
+      if (!o.date && /วันที่ออก|วันที่เอกสาร/.test(s)) o.date = isoOf(s);
+      if (!o.due && /กำหนดส่ง|วันที่ส่งของ|วันที่จัดส่ง/.test(s)) o.due = isoOf(s);
+      if (vi < 0 && /^ผู้ขาย\s*:/.test(s)) {
+        vi = k;
+        var parts = s.replace(/^ผู้ขาย\s*:\s*/, '').split(/\s{2,}/), name = [];
+        for (var i = 0; i < parts.length; i++) { if (/^-$|^[\d\s()+-]{8,}$|@|✉/.test(parts[i].trim())) break; name.push(parts[i].trim()); }
+        o.vendor = oneSp(name.join(' '));
+      }
+      if (vi >= 0 && !o.vendorTax && k > vi && /เลขที่ภาษี|เลขประจำตัวผู้เสียภาษี/.test(s)) o.vendorTax = ((s.replace(/[\s-]/g, '').match(/\d{13}/)) || [])[0] || '';
+      if (vi >= 0 && !o.vendorAddr && k > vi && /^ที่อยู่\s*:/.test(s)) {
+        var ad = [s.replace(/^ที่อยู่\s*:\s*/, '')];
+        for (var j = k + 1; j < rows.length && j < k + 4; j++) { if (/เลขที่ภาษี|เรียน|ผู้/.test(rows[j].s)) break; if (rows[j].x < 120) ad.push(rows[j].s); }
+        o.vendorAddr = oneSp(ad.join(' ').replace(/✉\s*\S*/g, '').replace(/(^|\s)-(\s|$)/g, ' ').replace(/\s{2,}.*$/, function (x) { return x; }));
+      }
+      if ((m = oneSp(s).match(/^(\d{1,3})\.\s+(.+?)\s+([\d,]+(?:\.\d+)?)\s+([\d,]+(?:\.\d+)?)\s+([\d,]+(?:\.\d+)?%?)\s+(\d+%|-|ไม่มี|0%)?\s*([\d,]+\.\d{2})$/))) {
+        var nm = m[2], code = (nm.match(/\(([A-Za-z]{0,3}\d{3,})\)\s*$/) || [])[1] || '';
+        if (code) nm = nm.replace(/\s*\([A-Za-z]{0,3}\d{3,}\)\s*$/, '');
+        var qty = num(m[3]), price = num(m[4]), amt = num(m[7]);
+        o.items.push({ n: +m[1], name: oneSp(nm), code: code, qty: qty, price: qty && amt !== '' && Math.abs(qty * price - amt) > 0.01 ? Math.round(amt / qty * 10000) / 10000 : price, amount: amt, vat: m[6] || '' });
+      }
+      if (!o.sub && /มูลค่าที่คำนวณภาษี|รวมเป็นเงิน/.test(s)) { var a1 = s.match(/([\d,]+\.\d{2})\s*บาท/); if (a1) o.sub = num(a1[1]); }
+      if (!o.total && /จำนวนเงินทั้งสิ้น/.test(s)) { var a2 = s.match(/จำนวนเงินทั้งสิ้น\s+([\d,]+\.\d{2})/); if (a2) o.total = num(a2[1]); }
+    });
+    o.sum = Math.round(o.items.reduce(function (t, x) { return t + (Number(x.amount) || 0); }, 0) * 100) / 100;
+    return o;
+  };
+  function vkey(t) { return String(t || '').replace(/\s+/g, '').replace(/^(บริษัท|บจก\.?|ห้างหุ้นส่วนจำกัด|หจก\.?)/, '').replace(/(จำกัด\(มหาชน\)|จำกัด|\(มหาชน\))$/, '').toLowerCase(); }
+  function findVendor(po) {
+    var vs = P().data.vendors || [], tax = po.vendorTax;
+    return (tax && vs.filter(function (v) { return String(v.taxId || '').replace(/\D/g, '') === tax; })[0]) || vs.filter(function (v) { return po.vendor && vkey(v.name) === vkey(po.vendor); })[0] || null;
+  }
+  function findMat(it) {
+    var k = vkey(it.name);
+    return (P().data.materials || []).filter(function (m) { return vkey(m.name) === k || (it.code && String(m.note || '').indexOf(it.code) >= 0); })[0] || null;
+  }
+  A.importPdf = function () {
+    css();
+    var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'application/pdf,.pdf';
+    inp.onchange = function () {
+      var f = inp.files && inp.files[0]; if (!f) return;
+      openModal({ wide: true, color: state.dept.color, icon: 'doc', title: 'กำลังอ่านไฟล์ PO…', noOk: true, body: '<div class="panel"><span class="spinner dark"></span> กำลังอ่านข้อมูลจาก ' + esc(f.name) + '</div>' });
+      var bytes;
+      Promise.all([readFile(f), libs()]).then(function (x) { bytes = x[0]; return window.pdfjsLib.getDocument({ data: bytes.slice(0) }).promise; }).then(pdfRows).then(function (rows) {
+        var po = A.parsePo(rows);
+        if (!po.docNo || !po.items.length) throw new Error('อ่านข้อมูลใบสั่งซื้อจากไฟล์นี้ไม่ได้ (ไม่พบเลขที่เอกสารหรือรายการสินค้า) — ไฟล์ต้องเป็น PDF ใบสั่งซื้อที่ดาวน์โหลดจาก PEAK');
+        importPreview(f, bytes, po);
+      }).catch(function (e) { $('mTitle').textContent = 'อ่านไฟล์ไม่ได้'; $('mBody').innerHTML = '<div class="pas-hint warn">' + esc(e.message || e) + '</div>'; });
+    };
+    inp.click();
+  };
+  function importPreview(file, bytes, po) {
+    var vn = findVendor(po), old = (P().data.docs || []).filter(function (d) { return d.docNo === po.docNo; })[0] || null;
+    var okSum = po.sub === '' || po.sub == null || Math.abs(po.sum - po.sub) < 0.05;
+    var rows = po.items.map(function (it) {
+      var m = findMat(it);
+      return '<tr><td>' + it.n + '</td><td>' + esc(it.name) + (it.code ? ' <small class="muted">' + esc(it.code) + '</small>' : '') + (m ? '<br><small class="pa-ok">✓ ตรงกับวัตถุดิบ ' + esc(m.name) + '</small>' : '') + '</td><td class="r">' + Number(it.qty).toLocaleString('th-TH') + '</td><td class="r">' + Number(it.price).toLocaleString('th-TH', { maximumFractionDigits: 4 }) + '</td><td class="r">' + money(it.amount).replace(' บาท', '') + '</td></tr>';
+    }).join('');
+    openModal({ wide: true, color: state.dept.color, icon: 'doc', title: (old ? 'อัปเดต ' : 'ลง ') + po.docNo + ' จากไฟล์ PEAK', sub: file.name,
+      body: '<div class="pas-hint' + (okSum ? '' : ' warn') + '">' + (okSum ? '✓ อ่านข้อมูลครบ — ยอดรวมรายการตรงกับในใบ (' + money(po.sum) + ' ก่อน VAT)' : '⚠ ยอดรวมรายการ ' + money(po.sum) + ' ไม่ตรงกับมูลค่าในใบ ' + money(po.sub) + ' — ตรวจรายการด้านล่างก่อนบันทึก') + '</div>'
+        + (old ? '<div class="pas-hint warn">มีใบ ' + esc(po.docNo) + ' ในระบบแล้ว — จะอัปเดตผู้ขาย วันที่ และรายการตามไฟล์นี้ (สถานะ / การชำระเงินเดิมไม่เปลี่ยน)</div>' : '')
+        + '<div class="pas-sum"><div><small>เลขที่ PO</small><b>' + esc(po.docNo) + '</b></div><div><small>วันที่ออก</small><b>' + th(po.date) + '</b></div>'
+        + '<div><small>ผู้ขาย</small><b>' + esc(po.vendor || '-') + '</b><small>' + (vn ? '<span class="pa-ok">✓ มีในรายชื่อผู้ขาย</span>' : '<span class="pa-no">ผู้ขายใหม่ — จะเพิ่มเข้ารายชื่อให้</span>') + '</small></div>'
+        + '<div><small>จำนวนเงินทั้งสิ้น</small><b>' + money(po.total || po.sum) + '</b></div></div>'
+        + '<div class="cpwrap"><table class="ptable"><thead><tr><th>#</th><th>รายการ</th><th class="r">จำนวน</th><th class="r">ราคา</th><th class="r">มูลค่า</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        + '<div class="muted" style="margin-top:8px">กดบันทึกแล้ว ระบบแนบไฟล์นี้เข้าใบ PO และเปิดหน้าใส่ลายเซ็นเพื่อส่งขออนุมัติต่อ · วันที่ส่งของ ยืนยันอีกครั้งหลังพี่เก้อนุมัติ</div>',
+      ok: 'บันทึก & ใส่ลายเซ็นส่งขออนุมัติ',
+      foot: '<button type="button" class="link-btn" id="piOnly">บันทึกอย่างเดียว (ยังไม่ส่ง)</button>',
+      onOpen: function () { $('piOnly').addEventListener('click', function () { var b = this; b.disabled = true; saveImport(file, bytes, po, vn, old, false).then(function (e) { if (e) { b.disabled = false; $('mErr').textContent = e; } }); }); },
+      submit: function () { return saveImport(file, bytes, po, vn, old, true); } });
+  }
+  function saveImport(file, bytes, po, vn, old, sign) {
+    var vp = vn ? Promise.resolve(vn) : call('purSaveVendor', state.token, { name: po.vendor || 'ไม่ระบุผู้ขาย', taxId: po.vendorTax || '', address: po.vendorAddr || '', note: 'เพิ่มอัตโนมัติจากไฟล์ PO ' + po.docNo }).then(function (r) { if (!r.ok) throw new Error(r.error); return r.vendor; });
+    return vp.then(function (v) {
+      var d = old || {}, due = d.dueDate || (v.creditDays !== '' && v.creditDays != null && po.date ? (function () { var x = new Date(po.date + 'T00:00:00'); x.setDate(x.getDate() + (Number(v.creditDays) || 0)); return x.getFullYear() + '-' + pad(x.getMonth() + 1) + '-' + pad(x.getDate()); })() : '');
+      var rec = { id: d.id || '', type: 'PO', docNo: po.docNo, refId: d.refId || '', vendorId: v.id, vendorName: v.name, vendorPhone: d.vendorPhone || v.phone || '', orderDate: po.date || todayIso(), deliveryDate: d.deliveryDate || po.due || '',
+        status: d.status || 'draft', approvedBy: d.approvedBy || '', approvedDate: d.approvedDate || '', paymentStatus: d.paymentStatus || 'unpaid', dueDate: due, paidDate: d.paidDate || '', paidAmount: d.paidAmount || '',
+        note: d.note || ('นำเข้าจากไฟล์ PEAK ' + file.name), matchNote: d.matchNote || '', rfqId: d.rfqId || '' };
+      var items = po.items.map(function (it) { var m = findMat(it); return { materialId: m ? m.id : '', materialName: m ? m.name : it.name + (it.code ? ' (' + it.code + ')' : ''), qty: it.qty, unit: m ? m.unit : '', price: it.price }; });
+      return call('purSaveDoc', state.token, rec, items);
+    }).then(function (r) {
+      if (!r.ok) return r.error;
+      return call('purUploadFile', state.token, 'doc', r.id, file.name, 'application/pdf', bytesToB64(bytes), 'ไฟล์ PR / PO').then(function (u) {
+        if (!u.ok) throw new Error('บันทึกใบแล้ว แต่แนบไฟล์ไม่สำเร็จ: ' + u.error);
+        return P().load().then(function () {
+          var doc = P().idx.doc[r.id];
+          toast((old ? 'อัปเดต ' : 'ลง ') + r.docNo + ' จากไฟล์แล้ว');
+          if (sign && doc) getPdf(doc, { file: file, fileId: u.file && u.file.id });
+          else { closeModal(); if (String(state.page).indexOf('p_') === 0) P().render(state.page); }
+        });
+      });
+    }).catch(function (e) { if (String(e && e.message).indexOf('SESSION_EXPIRED') >= 0) return onServerError(e); return String(e && e.message || e); });
   }
 
   // ---------- เลือกใบ PO + ไฟล์ PDF ----------

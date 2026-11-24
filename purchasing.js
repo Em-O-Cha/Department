@@ -513,7 +513,7 @@
   function docs() {
     var f = P.q.docType || '';
     $('main').innerHTML = '<h3>ใบ PR / PO</h3><p class="lead">ลง PR / PO: ใส่เลขที่ + แนบไฟล์ + รายการ · ใช้รับของตาม PO และตรวจ 3 ทางกับใบแจ้งหนี้ · ใบขอซื้อ (PR) และใบสั่งซื้อ (PO) หลายรายการต่อใบ · แนบไฟล์ใบที่อนุมัติ / ภาพอนุมัติทาง LINE · ติดตามการชำระเงิน</p>'
-      + searchBar('doc', 'ค้นหาเลขที่ / ผู้ขาย / วัตถุดิบ', '<button class="btn btn-sm btn-primary" data-new="PR">' + icon('plus', 16) + 'PR</button><button class="btn btn-sm btn-primary" data-new="PO">' + icon('plus', 16) + 'PO</button>')
+      + searchBar('doc', 'ค้นหาเลขที่ / ผู้ขาย / วัตถุดิบ', (window.PURPO ? '<button class="btn btn-sm btn-primary" id="pImpPo">' + icon('clip', 16) + 'แนบ PO (PDF จาก PEAK)</button>' : '') + '<button class="btn btn-sm btn-primary" data-new="PR">' + icon('plus', 16) + 'PR</button><button class="btn btn-sm btn-primary" data-new="PO">' + icon('plus', 16) + 'PO</button>')
       + '<div class="pchips">' + [['', 'ทั้งหมด'], ['PR', 'PR'], ['PO', 'PO'], ['open', 'PO รอรับของ'], ['unpaid', 'ค้างชำระ']].map(function (c) { return '<button class="chip' + (f === c[0] ? ' on' : '') + '" data-f="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>'
       + '<div id="pList" class="plist"></div>';
     var draw = function () {
@@ -536,6 +536,7 @@
     bindSearch('doc', draw);
     on('[data-f]', 'click', function (el) { P.q.docType = el.getAttribute('data-f'); docs(); }, $('main'));
     on('[data-new]', 'click', function (el) { docModal(null, el.getAttribute('data-new')); }, $('main'));
+    if ($('pImpPo')) $('pImpPo').addEventListener('click', function () { window.PURPO.importPdf(); });
     draw();
   }
 
