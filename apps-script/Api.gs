@@ -49,7 +49,7 @@ function apiFunctions_() {
     prdLoad: prdLoad, prdSaveProduct: prdSaveProduct, prdSavePlans: prdSavePlans, prdImportYield: prdImportYield, prdDeletePlan: prdDeletePlan, prdSaveBreakdown: prdSaveBreakdown, prdUploadBdPhoto: prdUploadBdPhoto, prdRemoveBdPhoto: prdRemoveBdPhoto,
     prdDeleteBreakdown: prdDeleteBreakdown, prdSaveReport: prdSaveReport, prdUploadPhoto: prdUploadPhoto, prdRemovePhoto: prdRemovePhoto,
     prdSaveSettings: prdSaveSettings, prdSetWorkDate: prdSetWorkDate, prdLog: prdLog, prdDashboard: prdDashboard, prdSendLine: prdSendLine, prdLinePreview: prdLinePreview, prdLineTest: prdLineTest, prdSetLineToken: prdSetLineToken,
-    purPoInfo: purPoInfo, purPoSetToken: purPoSetToken, purPoTest: purPoTest, purPoApproverCode: purPoApproverCode, purPoRemoveApprover: purPoRemoveApprover, purPoSaveSig: purPoSaveSig, purPoSigs: purPoSigs, purPoFile: purPoFile, purPoSend: purPoSend, purPoList: purPoList, purPoSeen: purPoSeen, purPoConfirm: purPoConfirm, prdUseAccBot: prdUseAccBot,
+    purPoInfo: purPoInfo, purPoSetToken: purPoSetToken, purPoTest: purPoTest, purPoApproverCode: purPoApproverCode, purPoRemoveApprover: purPoRemoveApprover, purPoSaveSig: purPoSaveSig, purPoSigs: purPoSigs, purPoFile: purPoFile, purPoSend: purPoSend, purPoList: purPoList, purPoSeen: purPoSeen, purPoConfirm: purPoConfirm, purPoUseGroup: purPoUseGroup, purPoNewCode: purPoNewCode, prdUseAccBot: prdUseAccBot,
     // ผู้บริหาร (Executive.gs)
     execOverview: execOverview, execDashboard: execDashboard, execPart: execPart, execVerify: execVerify
   };

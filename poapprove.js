@@ -37,6 +37,7 @@
       + '.pas-h{position:absolute;right:-9px;bottom:-9px;width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid currentColor;color:#2563eb;cursor:nwse-resize;touch-action:none}.pas-box.ceo .pas-h{color:#16a34a}'
       + '.pas-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px}.pas-sum div{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:8px 10px}.pas-sum small{display:block;color:var(--muted);font-size:12px}.pas-sum b{font-size:15px}'
       + '.pas-hint{font-size:13px;color:#334155;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:8px 12px;margin-bottom:10px}.pas-hint.warn{background:#fff7ed;border-color:#fed7aa;color:#9a3412}'
+      + '.pas-att{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#fafafa}.pas-atth{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px}.pas-ai{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0;border-bottom:1px dashed var(--line);cursor:pointer}.pas-ai input{width:20px;height:20px}.pas-ai span{font-size:11px;font-weight:700;background:#e2e8f0;border-radius:6px;padding:1px 6px}.pas-ai b{font-weight:600;overflow-wrap:anywhere}.pas-ai small{color:var(--muted)}.pas-ai .link-btn{margin-left:auto}'
       + '.pas-files{display:grid;gap:8px}.pas-files button{text-align:left}'
       + '.pa-card{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:#fff;margin-bottom:10px}.pa-card.new{border:2px solid #dc2626;background:#fef2f2}.pa-card .pa-i{flex:1;min-width:0}.pa-card .pa-i b{display:block;font-size:15px}.pa-card small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}'
       + '.pa-card .pa-a{display:flex;flex-direction:column;gap:6px;align-items:flex-end}.pa-card .pa-t{font-weight:800;white-space:nowrap}.pa-new{display:inline-block;background:#dc2626;color:#fff;font-size:12px;font-weight:700;border-radius:99px;padding:2px 9px;animation:paPulse 1.6s infinite}@keyframes paPulse{50%{opacity:.55}}'
@@ -96,7 +97,7 @@
   };
   function cardHtml(r) {
     var st = ST[r.status] || ['', r.status], isNew = r.status === 'approved' && !r.seenAt;
-    var sub = 'ส่งขออนุมัติ ' + thT(r.sentAt) + (r.sentBy ? ' · ผู้ออกเอกสาร ' + esc(r.sentBy) : '');
+    var sub = 'ส่งขออนุมัติ ' + thT(r.sentAt) + (r.sentBy ? ' · ผู้ออกเอกสาร ' + esc(r.sentBy) : '') + (r.attach ? '<br>📎 แนบท้าย: ' + esc(r.attach) : '');
     if (r.status === 'approved' || r.status === 'rejected') sub += '<br>' + (r.status === 'approved' ? 'อนุมัติโดย ' : 'ไม่อนุมัติโดย ') + esc(r.decidedBy || '-') + ' · ' + thT(r.decidedAt);
     if (r.confirmedAt) sub += '<br><span class="pa-ok">✓ ยืนยันวันที่จัดส่ง ' + th(r.deliveryDate) + '</span>';
     else if (r.status === 'approved') sub += '<br><span class="pa-no">ยังไม่ยืนยันวันที่จัดส่ง</span>';
@@ -145,14 +146,23 @@
       + '<button class="btn btn-sm btn-primary" id="paTokSave">บันทึก Token</button>'
       + '<div class="muted" style="margin-top:8px">ใน LINE Developers → Messaging API → Webhook URL ใส่ลิงก์นี้ แล้วเปิด "Use webhook":</div><div class="pa-cmd"><code id="paHook">' + esc(i.webhookUrl) + '</code><button class="btn btn-sm btn-line" data-copy="paHook">คัดลอก</button></div></div>'
       + '<div class="pa-step"><h5>' + ok(i.group) + ' 2. กลุ่ม LINE ที่ส่งขออนุมัติ</h5>'
-      + (i.group ? '<div>ผูกกับกลุ่ม <b>' + esc(i.groupName || '(อ่านชื่อกลุ่มไม่ได้)') + '</b></div>' : '<div class="muted">เชิญบอทเข้ากลุ่ม (ที่มีพี่เก้ + ฝ่ายจัดซื้อ) แล้วพิมพ์คำสั่งนี้ในกลุ่ม · ใช้ได้ครั้งเดียว</div>')
-      + '<div class="pa-cmd"><code id="paBind">' + esc(i.bindCmd) + '</code><button class="btn btn-sm btn-line" data-copy="paBind">คัดลอก</button><button class="btn btn-sm btn-line" id="paChk">ตรวจสอบ</button>' + (i.group ? '<button class="btn btn-sm btn-line" id="paTest">ส่งข้อความทดสอบ</button>' : '') + '</div></div>'
+      + (i.group ? '<div class="pa-cmd" style="margin-bottom:8px"><span>ส่งเข้ากลุ่ม <b>' + esc(i.groupName || '(อ่านชื่อกลุ่มไม่ได้)') + '</b></span><button class="btn btn-sm btn-line" id="paTest">ส่งข้อความทดสอบ</button><button class="btn btn-sm btn-primary" id="paGrpChg">เปลี่ยนกลุ่ม</button></div>' : '')
+      + '<div id="paGrpBox"' + (i.group ? ' hidden' : '') + '>' + grpBox(i) + '</div></div>'
       + '<div class="pa-step"><h5>' + ok(i.approvers.length) + ' 3. ผู้มีสิทธิ์กดอนุมัติใน LINE</h5>'
       + (i.approvers.length ? i.approvers.map(function (a) { return '<div class="pa-cmd" style="margin-bottom:6px"><b>' + esc(a.name) + '</b><small class="muted">เพิ่มเมื่อ ' + thT(a.addedAt) + '</small><button class="link-btn danger" data-rmap="' + esc(a.userId) + '">ลบสิทธิ์</button></div>'; }).join('') : '<div class="muted">ยังไม่มี — คนที่ไม่ได้อยู่ในรายชื่อนี้กดอนุมัติไม่ได้</div>')
       + '<div id="paApCode">' + (i.apprCode ? apCodeHtml(i.apprCode) : '') + '</div><button class="btn btn-sm btn-line" id="paApAdd">+ เพิ่มผู้อนุมัติ (เช่น พี่เก้)</button></div>'
       + '<div class="pa-step"><h5>' + ok(i.sigs.buyer.has && i.sigs.ceo.has) + ' 4. ลายเซ็น</h5><div class="pa-sigs">' + sigBox('buyer', i.sigs.buyer) + sigBox('ceo', i.sigs.ceo) + '</div></div>';
     bindInfo();
     if (i.sigs.buyer.has || i.sigs.ceo.has) getSigs().then(function (s) { ['buyer', 'ceo'].forEach(function (r) { var el = $('paSigIm_' + r); if (el && s[r]) el.innerHTML = '<img src="' + s[r].data + '" alt="' + esc(s[r].label) + '">'; }); });
+  }
+  // เปลี่ยนกลุ่ม: เลือกจากกลุ่มที่บอทอยู่ (ไม่ต้องพิมพ์) หรือพิมพ์คำสั่งในกลุ่มใหม่ (ผู้ใช้ขอ 24/11/69)
+  function grpBox(i) {
+    var others = (i.seen || []).filter(function (g) { return !g.current; });
+    return '<div class="pas-hint"><b>วิธีที่ 1 · เลือกกลุ่มที่บอทอยู่แล้ว</b>'
+      + (others.length ? others.map(function (g) { return '<div class="pa-cmd" style="margin-top:6px"><span>' + esc(g.name) + ' <small class="muted">· เห็นล่าสุด ' + thT(g.at) + '</small></span><button class="btn btn-sm btn-primary" data-ug="' + esc(g.id) + '" data-un="' + esc(g.name) + '">ใช้กลุ่มนี้</button></div>'; }).join('')
+        : '<div class="muted" style="margin-top:4px">ยังไม่พบกลุ่มอื่น — เชิญบอทเข้ากลุ่มใหม่ แล้วพิมพ์ข้อความอะไรก็ได้ในกลุ่ม 1 ครั้ง จากนั้นกด "ตรวจสอบ"</div>') + '</div>'
+      + '<div class="pas-hint"><b>วิธีที่ 2 · พิมพ์คำสั่งนี้ในกลุ่มใหม่</b> (ใช้ได้ครั้งเดียว)<div class="pa-cmd" style="margin-top:6px"><code id="paBind">' + esc(i.bindCmd) + '</code><button class="btn btn-sm btn-line" data-copy="paBind">คัดลอก</button></div></div>'
+      + '<div class="pa-cmd"><button class="btn btn-sm btn-line" id="paChk">ตรวจสอบ</button>' + (i.group ? '<button class="btn btn-sm btn-line" id="paGrpCancel">ไม่เปลี่ยน</button>' : '') + '</div>';
   }
   function apCodeHtml(c) { return '<div class="pas-hint">ให้ผู้อนุมัติพิมพ์คำสั่งนี้ในกลุ่มที่ผูกไว้ ภายใน <b id="paLeft">' + Math.ceil(c.left / 60) + ' นาที</b>:<div class="pa-cmd" style="margin-top:6px"><code id="paApCmd">' + esc(c.cmd) + '</code><button class="btn btn-sm btn-line" data-copy="paApCmd">คัดลอก</button></div></div>'; }
   function sigBox(role, s) {
@@ -169,7 +179,19 @@
       b.disabled = true; b.innerHTML = '<span class="spinner"></span>กำลังตรวจ';
       call('purPoSetToken', state.token, t).then(function (r) { if (!r.ok) { toast(r.error); b.disabled = false; b.textContent = 'บันทึก Token'; return; } toast('ใช้บอท ' + r.botName + ' แล้ว'); loadInfo(); }).catch(onServerError);
     });
-    $('paChk').addEventListener('click', function () { this.disabled = true; loadInfo(); });
+    $('paChk').addEventListener('click', function () { this.disabled = true; this.innerHTML = '<span class="spinner dark"></span>กำลังตรวจ'; P().q.paGrpOpen = true; loadInfo(); });
+    if ($('paGrpChg')) $('paGrpChg').addEventListener('click', function () { $('paGrpBox').hidden = false; this.style.display = 'none'; P().q.paGrpOpen = true; });
+    if ($('paGrpCancel')) $('paGrpCancel').addEventListener('click', function () { $('paGrpBox').hidden = true; if ($('paGrpChg')) $('paGrpChg').style.display = ''; P().q.paGrpOpen = false; });
+    if (P().q.paGrpOpen && $('paGrpChg')) { $('paGrpBox').hidden = false; $('paGrpChg').style.display = 'none'; }
+    Array.prototype.forEach.call(box.querySelectorAll('[data-ug]'), function (b) {
+      b.addEventListener('click', function () {
+        var nm = b.getAttribute('data-un');
+        ask({ title: 'ส่งขออนุมัติ PO เข้ากลุ่ม "' + nm + '"?', text: 'ใบขออนุมัติใหม่จะส่งเข้ากลุ่มนี้แทนกลุ่มเดิม · การ์ดที่ส่งไปแล้วในกลุ่มเดิมยังกดอนุมัติได้', ok: 'เปลี่ยนกลุ่ม' }).then(function (ok) {
+          if (!ok) return; b.disabled = true;
+          call('purPoUseGroup', state.token, b.getAttribute('data-ug')).then(function (r) { if (!r.ok) { b.disabled = false; return toast(r.error); } P().q.paGrpOpen = false; toast('เปลี่ยนเป็นกลุ่ม ' + r.groupName + ' แล้ว'); loadInfo(); }).catch(onServerError);
+        });
+      });
+    });
     if ($('paTest')) $('paTest').addEventListener('click', function () { var b = this; b.disabled = true; call('purPoTest', state.token).then(function (r) { b.disabled = false; toast(r.ok ? 'ส่งข้อความทดสอบแล้ว — ดูในกลุ่ม LINE' : r.error); }).catch(onServerError); });
     $('paApAdd').addEventListener('click', function () { var b = this; b.disabled = true; call('purPoApproverCode', state.token).then(function (r) { b.disabled = false; $('paApCode').innerHTML = apCodeHtml(r); bindInfo2(); }).catch(onServerError); });
     Array.prototype.forEach.call(box.querySelectorAll('[data-rmap]'), function (b) {
@@ -266,7 +288,7 @@
     var bytesP = src.file ? readFile(src.file) : call('purPoFile', state.token, doc.id, src.fileId).then(function (r) { if (!r.ok) throw new Error(r.error); return b64ToBytes(r.b64); });
     var upP = src.file && src.upload ? readFile(src.file).then(function (u) { return call('purUploadFile', state.token, 'doc', doc.id, src.file.name, 'application/pdf', bytesToB64(u), 'ไฟล์ PR / PO'); }).then(function (r) { if (r && r.ok) { doc.files = r.files; } }) : Promise.resolve();
     Promise.all([bytesP, libs(), getSigs(), A.info ? A.info : call('purPoInfo', state.token).then(function (i) { A.info = i; return i; }), upP]).then(function (x) {
-      signDialog(doc, x[0], x[2]);
+      signDialog(doc, x[0], x[2], src);
     }).catch(function (e) {
       if (String(e.message).indexOf('SESSION_EXPIRED') >= 0) return onServerError(e);
       $('mBody').innerHTML = '<div class="pas-hint warn">' + esc(e.message || e) + '</div>';
@@ -317,7 +339,7 @@
     }, Promise.resolve()).then(function () { return out; });
   }
   function imgInfo(data) { return new Promise(function (ok) { var im = new Image(); im.onload = function () { ok({ data: data, ar: im.width / im.height || 2.6, img: im }); }; im.onerror = function () { ok(null); }; im.src = data; }); }
-  function signDialog(doc, bytes, sigs) {
+  function signDialog(doc, bytes, sigs, src) {
     var i = A.info || {}, miss = [];
     if (!sigs.buyer) miss.push('ลายเซ็นผู้ออกเอกสาร (เนย)'); if (!sigs.ceo) miss.push('ลายเซ็นผู้อนุมัติ (พี่เก้)');
     if (!i.tokenOk) miss.push('บอท LINE'); if (!i.group) miss.push('กลุ่ม LINE'); if (!(i.approvers || []).length) miss.push('ผู้มีสิทธิ์อนุมัติ');
@@ -329,10 +351,13 @@
     var copy = bytes.slice(0);
     Promise.all([window.pdfjsLib.getDocument({ data: copy }).promise, imgInfo(sigs.buyer.data), imgInfo(sigs.ceo.data)]).then(function (x) {
       var pdf = x[0], S = { buyer: x[1], ceo: x[2] };
-      return findSlots(pdf, S).then(function (slots) { drawSign(doc, bytes, pdf, S, slots, sigs); });
+      return findSlots(pdf, S).then(function (slots) { drawSign(doc, bytes, pdf, S, slots, sigs, src || {}); });
     }).catch(function (e) { $('mBody').innerHTML = '<div class="pas-hint warn">เปิด PDF ไม่ได้: ' + esc(e.message || e) + '</div>'; });
   }
-  function drawSign(doc, bytes, pdf, S, slots, sigs) {
+  function drawSign(doc, bytes, pdf, S, slots, sigs, src) {
+    // ไฟล์แนบท้าย PO (ผู้ใช้ขอ 24/11/69): PDF / รูปที่แนบในใบ PO หรือเลือกจากเครื่อง → ต่อเป็นหน้าถัดไปในไฟล์ PO เดียวกัน
+    var att = (doc.files || []).filter(function (f) { return f.id !== src.fileId && (isPdf(f) || /^image\/(jpeg|png|webp)/.test(f.mime || '')) && !/ขออนุมัติ|อนุมัติแล้ว|ตัวอย่าง/.test(f.name) && !/PO ที่อนุมัติ|PO ส่งขออนุมัติ/.test(f.label || ''); })
+      .map(function (f) { return { name: f.name, label: f.label, fileId: f.id, on: false }; });
     var saved = store('pos') || {}, n = pdf.numPages;
     var def = function (role) {
       var s = slots[role];
@@ -344,6 +369,8 @@
     openModal({ wide: true, sticky: true, color: state.dept.color, icon: 'line', title: 'ตรวจ PO ก่อนส่งขออนุมัติ · ' + doc.docNo, sub: (doc.vendorName || '') + ' — ลายเซ็นวางตามช่องในใบ ลากย้าย / ลากมุมเพื่อปรับขนาดได้',
       body: '<div class="pas-sum"><div><small>ใบสั่งซื้อ</small><b>' + esc(doc.docNo) + '</b></div><div><small>ผู้ขาย</small><b>' + esc(doc.vendorName || '-') + '</b></div><div><small>จำนวนเงินทั้งสิ้น (ในไฟล์)</small><b>' + money(slots.total || doc.total) + '</b></div><div><small>ผู้ออกเอกสาร</small><b>' + esc(by) + '</b></div></div>'
         + '<div class="pas-hint' + (found ? '' : ' warn') + '">' + (found ? 'วางลายเซ็น <b style="color:#2563eb">' + esc(sigs.buyer.label) + '</b> ที่ช่องผู้ออกเอกสารแล้ว · กรอบเขียวประ = ตำแหน่ง <b style="color:#16a34a">' + esc(sigs.ceo.label) + '</b> จะใส่ให้เมื่อกดอนุมัติใน LINE (ตอนนี้ยังไม่แสดงในไฟล์ที่ส่ง)' : 'ไม่พบช่องลงชื่อในไฟล์ — ลากลายเซ็นไปวางในช่องเองก่อนส่ง') + '</div>'
+        + '<div class="pas-att"><div class="pas-atth"><b>' + icon('clip', 16) + ' ไฟล์แนบท้าย PO</b><small class="muted">เช่น ใบเสนอราคา · ต่อเป็นหน้าถัดไปในไฟล์ PO ไฟล์เดียว</small></div><div id="pasAtt"></div>'
+        + '<label class="btn btn-sm btn-line">' + icon('plus', 15) + 'เพิ่มไฟล์จากเครื่อง (PDF / รูป)<input type="file" accept="application/pdf,.pdf,image/jpeg,image/png,image/webp" multiple id="pasAttF" hidden></label></div>'
         + '<div class="pas-wrap" id="pasWrap"></div>',
       ok: 'ส่งขออนุมัติทาง LINE', cancel: 'ยกเลิก',
       foot: '<button type="button" class="link-btn" id="pasReset">↺ วางตำแหน่งอัตโนมัติใหม่</button>',
@@ -361,9 +388,28 @@
             });
           });
         }, Promise.resolve());
+        var drawAtt = function () {
+          $('pasAtt').innerHTML = att.length ? att.map(function (a, k) {
+            return '<label class="pas-ai"><input type="checkbox" data-ai="' + k + '"' + (a.on ? ' checked' : '') + '><span>' + (/\.pdf$/i.test(a.name) || (a.file && /pdf/.test(a.file.type)) ? 'PDF' : 'รูป') + '</span><b>' + esc(a.name) + '</b>' + (a.label ? '<small>' + esc(a.label) + '</small>' : a.file ? '<small>จากเครื่อง</small>' : '')
+              + (a.file ? '<button type="button" class="link-btn danger" data-ar="' + k + '">เอาออก</button>' : '') + '</label>';
+          }).join('') : '<div class="muted">ยังไม่มีไฟล์แนบ — ไม่แนบก็ส่งได้</div>';
+          var n2 = att.filter(function (a) { return a.on; }).length;
+          $('mOk').textContent = 'ส่งขออนุมัติทาง LINE' + (n2 ? ' (แนบ ' + n2 + ' ไฟล์)' : '');
+        };
+        drawAtt();
+        $('pasAtt').addEventListener('change', function (e) { var k = e.target.getAttribute('data-ai'); if (k != null) { att[+k].on = e.target.checked; drawAtt(); } });
+        $('pasAtt').addEventListener('click', function (e) { var b = e.target.closest('[data-ar]'); if (b) { e.preventDefault(); att.splice(+b.getAttribute('data-ar'), 1); drawAtt(); } });
+        $('pasAttF').addEventListener('change', function () {
+          Array.prototype.forEach.call(this.files, function (f) {
+            if (!/pdf|image\/(jpeg|png|webp)/.test(f.type) && !/\.pdf$/i.test(f.name)) return toast('แนบได้เฉพาะ PDF หรือรูป JPG / PNG: ' + f.name);
+            if (f.size > 10 * 1024 * 1024) return toast('ไฟล์ใหญ่เกิน 10 MB: ' + f.name);
+            att.push({ name: f.name, file: f, on: true });
+          });
+          this.value = ''; drawAtt();
+        });
         $('pasReset').addEventListener('click', function () { var s = store('pos') || {}; delete s.buyer_d; delete s.ceo_d; delete s.buyer; delete s.ceo; store('pos', s); saved = s; box = { buyer: def('buyer'), ceo: def('ceo') }; ['buyer', 'ceo'].forEach(place); });
       },
-      submit: function () { return send(doc, bytes, pdf, S, box, slots, by); }
+      submit: function () { return send(doc, bytes, pdf, S, box, slots, by, att.filter(function (a) { return a.on; })); }
     });
     function addBox(div, role) {
       var b = document.createElement('div'); b.className = 'pas-box ' + role; b.id = 'pasB_' + role;
@@ -393,7 +439,7 @@
     function place(role) { var el = $('pasB_' + role), o = box[role]; if (!el) return; el.style.left = o.x * 100 + '%'; el.style.top = o.y * 100 + '%'; el.style.width = o.w * 100 + '%'; el.style.height = o.h * 100 + '%'; }
   }
   // สร้างไฟล์ 2 แบบ + ภาพตัวอย่างหน้าที่มีลายเซ็น → purPoSend
-  function stamp(bytes, list) {
+  function stamp(bytes, list, atts) {
     var L = window.PDFLib;
     return L.PDFDocument.load(bytes).then(function (pd) {
       return Promise.all(list.map(function (s) { return pd.embedPng(b64ToBytes(s.img.data.split(',')[1])); })).then(function (embs) {
@@ -401,7 +447,36 @@
           var page = pd.getPages()[s.box.page - 1], mb = page.getMediaBox(), W = mb.width, H = mb.height;
           page.drawImage(embs[k], { x: mb.x + s.box.x * W, y: mb.y + H - (s.box.y + s.box.h) * H, width: s.box.w * W, height: s.box.h * H });
         });
-        return pd.save();
+        // ต่อไฟล์แนบท้าย: PDF = คัดลอกทุกหน้า · รูป = 1 หน้า A4 ย่อให้พอดี
+        return (atts || []).reduce(function (p, a) {
+          return p.then(function () {
+            if (a.pdf) return L.PDFDocument.load(a.bytes, { ignoreEncryption: true }).then(function (sd) {
+              return pd.copyPages(sd, sd.getPageIndices()).then(function (pgs) { pgs.forEach(function (pg) { pd.addPage(pg); }); });
+            });
+            return pd.embedJpg(a.bytes).then(function (im) {
+              var land = a.w > a.h, PW = land ? 841.89 : 595.28, PH = land ? 595.28 : 841.89, m = 24, k = Math.min((PW - 2 * m) / a.w, (PH - 2 * m) / a.h);
+              var pg = pd.addPage([PW, PH]); pg.drawImage(im, { x: (PW - a.w * k) / 2, y: (PH - a.h * k) / 2, width: a.w * k, height: a.h * k });
+            });
+          });
+        }, Promise.resolve()).then(function () { return pd.save(); });
+      });
+    });
+  }
+  // โหลดไฟล์แนบ: จากใบ PO (purPoFile) หรือจากเครื่อง · รูปแปลงเป็น JPEG ผ่าน canvas (ด้านยาวไม่เกิน 2000px)
+  function loadAtt(doc, a) {
+    var get = a.file ? readFile(a.file).then(function (u) { return { bytes: u, mime: a.file.type || (/\.pdf$/i.test(a.name) ? 'application/pdf' : '') }; })
+      : call('purPoFile', state.token, doc.id, a.fileId).then(function (r) { if (!r.ok) throw new Error(r.error + ': ' + a.name); return { bytes: b64ToBytes(r.b64), mime: r.mime || 'application/pdf' }; });
+    return get.then(function (x) {
+      if (/pdf/.test(x.mime)) return { pdf: true, bytes: x.bytes, name: a.name };
+      return new Promise(function (ok, no) {
+        var url = URL.createObjectURL(new Blob([x.bytes], { type: x.mime })), im = new Image();
+        im.onload = function () {
+          var k = Math.min(1, 2000 / Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+          var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+          ok({ pdf: false, bytes: b64ToBytes(c.toDataURL('image/jpeg', 0.85).split(',')[1]), w: c.width, h: c.height, name: a.name });
+        };
+        im.onerror = function () { URL.revokeObjectURL(url); no(new Error('เปิดรูปไม่ได้: ' + a.name)); };
+        im.src = url;
       });
     });
   }
@@ -417,14 +492,21 @@
       });
     });
   }
-  function send(doc, bytes, pdf, S, box, slots, by) {
+  function send(doc, bytes, pdf, S, box, slots, by, atts) {
     var prev = A.forDoc(doc.id);
     var go2 = prev && prev.status === 'pending' ? ask({ title: 'ส่งขออนุมัติใหม่?', text: 'PO นี้ส่งขออนุมัติไปแล้วเมื่อ ' + thT(prev.sentAt) + ' — ส่งใหม่แล้วการ์ดเดิมใน LINE จะกดอนุมัติไม่ได้', ok: 'ส่งใหม่' }) : Promise.resolve(true);
     return go2.then(function (ok) {
       if (!ok) return 'ยังไม่ได้ส่ง';
-      return Promise.all([stamp(bytes, [{ img: S.buyer, box: box.buyer }]), stamp(bytes, [{ img: S.buyer, box: box.buyer }, { img: S.ceo, box: box.ceo }]), preview(pdf, S, box)]).then(function (x) {
-        return call('purPoSend', state.token, doc.id, { pdf1: bytesToB64(x[0]), pdf2: bytesToB64(x[1]), img: x[2].b64, ratio: x[2].ratio, total: slots.total || '', sentBy: by });
-      }).then(function (r) {
+      if ($('mErr') && atts.length) $('mErr').textContent = 'กำลังรวมไฟล์แนบ ' + atts.length + ' ไฟล์…';
+      return Promise.all((atts || []).map(function (a) { return loadAtt(doc, a); })).then(function (A2) {
+        var size = A2.reduce(function (t, a) { return t + a.bytes.length; }, 0);
+        if (size > 15 * 1024 * 1024) throw new Error('ไฟล์แนบรวมกันใหญ่เกิน 15 MB — ลดจำนวนไฟล์ หรือใช้ไฟล์ที่เล็กลง');
+        return Promise.all([stamp(bytes, [{ img: S.buyer, box: box.buyer }], A2), stamp(bytes, [{ img: S.buyer, box: box.buyer }, { img: S.ceo, box: box.ceo }], A2), preview(pdf, S, box)]);
+      }).then(function (x) {
+        if ($('mErr')) $('mErr').textContent = '';
+        return call('purPoSend', state.token, doc.id, { pdf1: bytesToB64(x[0]), pdf2: bytesToB64(x[1]), img: x[2].b64, ratio: x[2].ratio, total: slots.total || '', sentBy: by, attach: atts.map(function (a) { return a.name; }) });
+      }, function (e) { if ($('mErr')) $('mErr').textContent = ''; if (String(e && e.message).indexOf('SESSION_EXPIRED') >= 0) throw e; return String(e && e.message || e).indexOf('ncrypt') >= 0 ? 'ไฟล์ PDF แนบมีรหัสผ่าน — ใช้ไฟล์ที่ไม่ล็อก' : 'รวมไฟล์แนบไม่สำเร็จ: ' + (e && e.message || e); }).then(function (r) {
+        if (typeof r === 'string') return r;
         if (!r.ok) return r.error;
         closeModal(); toast('ส่ง ' + doc.docNo + ' ขออนุมัติเข้ากลุ่ม LINE แล้ว');
         P().load().then(function () { A.list = P().data.poApprovals; P().q.paF = 'pending'; go('p_poa'); });

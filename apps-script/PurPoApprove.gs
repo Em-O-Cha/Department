@@ -9,7 +9,7 @@
 var PURPO_COLS_ = [['id', 'รหัส'], ['docId', 'รหัสใบ PO'], ['docNo', 'เลขที่ PO'], ['vendorName', 'ผู้ขาย'], ['total', 'ยอดรวม'], ['status', 'สถานะ'],
   ['sentAt', 'ส่งขออนุมัติเมื่อ'], ['sentBy', 'ผู้ส่ง'], ['pdf1', 'ไฟล์ PO (ลายเซ็นผู้ออกเอกสาร)'], ['pdf2', 'ไฟล์ PO (อนุมัติแล้ว)'], ['img', 'ภาพตัวอย่าง'],
   ['decidedAt', 'อนุมัติ / ไม่อนุมัติเมื่อ'], ['decidedBy', 'ผู้อนุมัติ'], ['seenAt', 'จัดซื้อเปิดดูเมื่อ'], ['deliveryDate', 'วันที่จัดส่ง (ยืนยันหลังอนุมัติ)'],
-  ['confirmedAt', 'ยืนยันวันส่งเมื่อ'], ['note', 'หมายเหตุ']];
+  ['confirmedAt', 'ยืนยันวันส่งเมื่อ'], ['note', 'หมายเหตุ'], ['attach', 'ไฟล์แนบท้าย PO']];
 var PURPO_ST_ = { pending: 'รออนุมัติ', approved: 'อนุมัติแล้ว', rejected: 'ไม่อนุมัติ', replaced: 'ส่งใหม่แล้ว' };
 function purPoReg_() { if (!PUR_TABLES_.po_approvals) PUR_TABLES_.po_approvals = { tab: 'ขออนุมัติ PO (LINE)', cols: PURPO_COLS_ }; }
 function purPoDept_() { return DEPARTMENTS.filter(function (x) { return x.key === 'PUR'; })[0]; }
@@ -105,7 +105,7 @@ function purPoInfo(token) {
   var tok = purPoTok_(), bot = null; try { bot = purPoBot_(tok); } catch (e) {}
   var gid = props_().getProperty('PUR_LINE_GROUP') || '', sigs = purPoJson_('PUR_SIGS', {}), code = purPoJson_('PUR_LINE_APPR_CODE', null);
   return { ok: true, hasToken: !!tok, tokenOk: !!bot, botName: bot ? bot.name : '', webhookUrl: ScriptApp.getService().getUrl(),
-    group: !!gid, groupName: gid ? purPoGroupName_(gid) : '', bindCmd: 'ตั้งค่ากลุ่ม จัดซื้อ ' + hrProp_('PUR_LINE_SETUP', hrSetupCode_),
+    group: !!gid, groupName: gid ? purPoGroupName_(gid) : '', seen: purPoSeenGroups_(gid), bindCmd: 'ตั้งค่ากลุ่ม จัดซื้อ ' + hrProp_('PUR_LINE_SETUP', hrSetupCode_),
     approvers: purPoApprovers_().map(function (a) { return { userId: a.userId, name: a.name, addedAt: a.addedAt }; }),
     apprCode: code && code.exp > Date.now() ? { cmd: 'ขอสิทธิ์อนุมัติ PO ' + code.code, left: Math.round((code.exp - Date.now()) / 1000) } : null,
     sigs: { buyer: sigs.buyer ? { label: sigs.buyer.label, has: true } : { label: 'ลายเซ็นเนย', has: false },
@@ -127,6 +127,30 @@ function purPoSetToken(token, newTok) {
   props_().setProperty('PUR_LINE_TOKEN', newTok);
   if (!old || old.userId !== bot.userId) { props_().deleteProperty('PUR_LINE_GROUP'); props_().deleteProperty('PUR_LINE_APPROVERS'); }
   return { ok: true, botName: bot.name };
+}
+// กลุ่มที่บอทจัดซื้อเห็นล่าสุด (เข้ากลุ่ม / มีคนพิมพ์) — ใช้เปลี่ยนกลุ่มได้โดยไม่ต้องพิมพ์รหัส (ผู้ใช้ขอ 24/11/69)
+function purPoSeenGroups_(cur) {
+  return purPoJson_('PUR_SEEN_GROUPS', []).filter(function (g) { return g && g.id; }).map(function (g) {
+    return { id: g.id, name: purPoGroupName_(g.id) || '(อ่านชื่อกลุ่มไม่ได้ — บอทอาจไม่อยู่ในกลุ่มแล้ว)', at: g.at, current: g.id === cur };
+  });
+}
+function purPoNoteGroup_(gid, gone) {
+  if (!gid) return;
+  var list = purPoJson_('PUR_SEEN_GROUPS', []).filter(function (g) { return g && g.id && g.id !== gid; });
+  if (!gone) list.unshift({ id: gid, at: purNow_() });
+  props_().setProperty('PUR_SEEN_GROUPS', JSON.stringify(list.slice(0, 10)));
+}
+function purPoUseGroup(token, gid) {
+  var dept = requirePur_(token), name = purPoGroupName_(gid);
+  if (!name) return { ok: false, error: 'บอทไม่ได้อยู่ในกลุ่มนี้แล้ว — เชิญบอทเข้ากลุ่ม แล้วพิมพ์ข้อความอะไรก็ได้ 1 ครั้ง' };
+  props_().setProperty('PUR_LINE_GROUP', gid);
+  purPoReg_(); purLogWrite_(purBook_(dept), 'เปลี่ยนกลุ่ม LINE ขออนุมัติ PO', 'po_approvals', '', name);
+  return { ok: true, groupName: name };
+}
+function purPoNewCode(token) {
+  requirePur_(token);
+  props_().setProperty('PUR_LINE_SETUP', hrSetupCode_());
+  return { ok: true, bindCmd: 'ตั้งค่ากลุ่ม จัดซื้อ ' + props_().getProperty('PUR_LINE_SETUP') };
 }
 function purPoTest(token) {
   requirePur_(token);
@@ -171,8 +195,9 @@ function purPoFile(token, docId, fileId) {
   var doc = purRead_(ss, 'docs').filter(function (x) { return x.id === docId; })[0];
   if (!doc || !purParseFiles_(doc.files).some(function (f) { return f.id === fileId; })) return { ok: false, error: 'ไม่พบไฟล์ในใบนี้' };
   var b = DriveApp.getFileById(fileId).getBlob();
-  if (b.getContentType() !== 'application/pdf') return { ok: false, error: 'ไฟล์นี้ไม่ใช่ PDF' };
-  return { ok: true, b64: Utilities.base64Encode(b.getBytes()), name: b.getName() };
+  var mime = b.getContentType();
+  if (!/^(application\/pdf|image\/(jpeg|png|webp))$/.test(mime)) return { ok: false, error: 'ไฟล์นี้ไม่ใช่ PDF หรือรูป' };
+  return { ok: true, b64: Utilities.base64Encode(b.getBytes()), name: b.getName(), mime: mime };
 }
 
 // ---------- ส่งขออนุมัติ ----------
@@ -193,7 +218,8 @@ function purPoSend(token, docId, f) {
     var list = purRead_(ss, 'po_approvals');
     list.filter(function (r) { return r.docId === docId && r.status === 'pending'; }).forEach(function (r) { r.status = 'replaced'; r.decidedAt = now; purWrite_(ss, 'po_approvals', r); });
     var o = { id: purId_('PA'), docId: docId, docNo: doc.docNo, vendorName: doc.vendorName, total: Number(f.total) || Number(doc.total) || '', status: 'pending',
-      sentAt: now, sentBy: purClean_(f.sentBy, 60), pdf1: p1.getId(), pdf2: p2.getId(), img: im ? im.getId() : '', note: purClean_(f.note, 300) };
+      sentAt: now, sentBy: purClean_(f.sentBy, 60), pdf1: p1.getId(), pdf2: p2.getId(), img: im ? im.getId() : '', note: purClean_(f.note, 300),
+      attach: (Array.isArray(f.attach) ? f.attach : []).map(function (x) { return purClean_(x, 80); }).filter(String).slice(0, 15).join(' · ') };
     purWrite_(ss, 'po_approvals', o);
     var files = purParseFiles_(doc.files);
     files.push({ id: p1.getId(), name: p1.getName(), mime: 'application/pdf', label: 'PO ส่งขออนุมัติ (ลายเซ็นผู้ออกเอกสาร)', url: purPoUrl_(p1.getId()), at: now });
@@ -232,6 +258,7 @@ function purPoFlex_(rec, doc, items, kind, by) {
   body.push({ type: 'box', layout: 'horizontal', margin: 'md', contents: [
     { type: 'text', text: 'ยอดรวม', size: 'md', weight: 'bold', color: '#0F172A' },
     { type: 'text', text: purPoMoney_(rec.total), size: 'lg', weight: 'bold', color: head[0], align: 'end' }] });
+  if (rec.attach) body.push(purPoRow_('ไฟล์แนบ', String(rec.attach).split(' · ').length + ' ไฟล์ (ต่อท้ายในไฟล์ PO): ' + rec.attach));
   if (rec.sentBy) body.push(purPoRow_('ผู้ออกเอกสาร', rec.sentBy));
   if (kind !== 'pending' && by) body.push(purPoRow_(kind === 'approved' ? 'อนุมัติโดย' : 'โดย', by + ' · ' + purPoDay_(String(rec.decidedAt).slice(0, 10)) + ' ' + String(rec.decidedAt).slice(11, 16) + ' น.', true, head[0]));
   if (kind === 'approved') body.push({ type: 'text', text: 'ฝ่ายจัดซื้อ: เปิดไฟล์ PO ที่อนุมัติแล้ว และยืนยันวันที่จัดส่งในระบบ', size: 'xs', color: '#16A34A', wrap: true, margin: 'md' });
@@ -258,6 +285,7 @@ function purLineWebhook_(events) {
   (events || []).forEach(function (ev) {
     try {
       var src = ev.source || {}, gid = src.groupId || '', bound = props_().getProperty('PUR_LINE_GROUP') || '';
+      if (gid) purPoNoteGroup_(gid, ev.type === 'leave');
       if (ev.type === 'join') return;   // ไม่ทักทาย
       if (ev.type === 'leave') { if (gid && gid === bound) props_().deleteProperty('PUR_LINE_GROUP'); return; }
       if (ev.type === 'postback') { purPoPostback_(ev, gid, bound); return; }
@@ -331,7 +359,7 @@ function purPoPostback_(ev, gid, bound) {
 function purPoOut_(r) {
   return { id: r.id, docId: r.docId, docNo: r.docNo, vendorName: r.vendorName, total: r.total, status: r.status, sentAt: r.sentAt, sentBy: r.sentBy,
     pdf1: purPoUrl_(r.pdf1), pdf2: r.status === 'approved' ? purPoUrl_(r.pdf2) : '', img: r.img ? 'https://lh3.googleusercontent.com/d/' + r.img : '',
-    decidedAt: r.decidedAt, decidedBy: r.decidedBy, seenAt: r.seenAt, deliveryDate: r.deliveryDate, confirmedAt: r.confirmedAt, note: r.note };
+    decidedAt: r.decidedAt, decidedBy: r.decidedBy, seenAt: r.seenAt, deliveryDate: r.deliveryDate, confirmedAt: r.confirmedAt, note: r.note, attach: r.attach || '' };
 }
 function purPoList_(ss) { purPoReg_(); return purRead_(ss, 'po_approvals').map(purPoOut_).sort(function (a, b) { return String(b.sentAt).localeCompare(String(a.sentAt)); }); }
 function purPoList(token) { var dept = requirePur_(token); return { ok: true, list: purPoList_(purBook_(dept)) }; }
