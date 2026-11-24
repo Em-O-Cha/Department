@@ -363,7 +363,7 @@
     return vp.then(function (v) {
       var d = old || {}, due = d.dueDate || (v.creditDays !== '' && v.creditDays != null && po.date ? (function () { var x = new Date(po.date + 'T00:00:00'); x.setDate(x.getDate() + (Number(v.creditDays) || 0)); return x.getFullYear() + '-' + pad(x.getMonth() + 1) + '-' + pad(x.getDate()); })() : '');
       var rec = { id: d.id || '', type: 'PO', docNo: po.docNo, refId: d.refId || '', vendorId: v.id, vendorName: v.name, vendorPhone: d.vendorPhone || v.phone || '', orderDate: po.date || todayIso(), deliveryDate: d.deliveryDate || po.due || '',
-        status: d.status || 'draft', approvedBy: d.approvedBy || '', approvedDate: d.approvedDate || '', paymentStatus: d.paymentStatus || 'unpaid', dueDate: due, paidDate: d.paidDate || '', paidAmount: d.paidAmount || '',
+        status: d.status || 'draft', approvedBy: d.approvedBy || '', approvedDate: d.approvedDate || '', paymentStatus: d.paymentStatus || 'none', dueDate: due, paidDate: d.paidDate || '', paidAmount: d.paidAmount || '',
         note: d.note || ('นำเข้าจากไฟล์ PEAK ' + file.name), matchNote: d.matchNote || '', rfqId: d.rfqId || '' };
       var items = po.items.map(function (it) { var m = findMat(it); return { materialId: m ? m.id : '', materialName: m ? m.name : it.name + (it.code ? ' (' + it.code + ')' : ''), qty: it.qty, unit: m ? m.unit : '', price: it.price }; });
       return call('purSaveDoc', state.token, rec, items);

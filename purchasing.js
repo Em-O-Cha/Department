@@ -27,7 +27,6 @@
     { id: 'p_dash', label: 'ภาพรวม', ic: 'home' },
     { id: 'p_stock', label: 'รับเข้า / จ่ายออก', ic: 'box' },
     { id: 'p_mat', label: 'วัตถุดิบ & ราคา', ic: 'tag' },
-    { id: 'p_doc', label: 'ใบ PR / PO', ic: 'doc' },
     { id: 'p_poa', label: 'ขออนุมัติ PO (LINE)', ic: 'line' },
     { id: 'p_rfq', label: 'เปรียบเทียบราคา', ic: 'list' },
     { id: 'p_ven', label: 'ผู้ขาย (Vendor)', ic: 'phone' },
@@ -116,7 +115,7 @@
       });
       return;
     }
-    ({ p_dash: dash, p_stock: stock, p_mat: materials, p_doc: docs, p_poa: function () { window.PURPO.page(); }, p_rfq: rfqs, p_ven: vendors, p_rep: report, p_log: logPage }[page] || dash)();
+    ({ p_dash: dash, p_stock: stock, p_mat: materials, p_doc: function () { window.PURPO.page(); }, p_poa: function () { window.PURPO.page(); }, p_rfq: rfqs, p_ven: vendors, p_rep: report, p_log: logPage }[page] || dash)();
   };
 
   // ==================== ภาพรวม ====================
@@ -134,8 +133,8 @@
     var kpi = function (n, label, color, page) { return '<button class="kpi" data-go="' + page + '" style="--k:' + color + '"><b>' + n + '</b><span>' + label + '</span></button>'; };
     var html = '<h3>ภาพรวม จัดซื้อ & สต๊อก</h3><p class="lead">ข้อมูล ณ ' + dd(t) + ' · <a href="' + esc(d.sheetUrl) + '" target="_blank" rel="noopener">เปิด Google Sheet</a></p>'
       + '<div class="kpis">' + kpi(active.length, 'วัตถุดิบ', '#0f766e', 'p_mat') + kpi(low.length, 'สินค้าที่ต้องจัดซื้อ (ต่ำกว่า Minimum)', low.length ? '#dc2626' : '#64748b', 'p_stock')
-      + kpi(exp.length, 'LOT ใกล้หมดอายุ (30 วัน)', exp.length ? '#d97706' : '#64748b', 'p_stock') + kpi(waiting.length, 'PO รอรับของ', '#2563eb', 'p_doc')
-      + kpi(baht(unpaidSum).replace('.00', ''), 'ค้างชำระผู้ขาย (' + unpaid.length + ' ใบ)', unpaid.length ? '#7c3aed' : '#64748b', 'p_doc') + '</div>';
+      + kpi(exp.length, 'LOT ใกล้หมดอายุ (30 วัน)', exp.length ? '#d97706' : '#64748b', 'p_stock') + kpi(waiting.length, 'PO รอรับของ', '#2563eb', 'p_poa')
+      + kpi(baht(unpaidSum).replace('.00', ''), 'ค้างชำระผู้ขาย (' + unpaid.length + ' ใบ)', unpaid.length ? '#7c3aed' : '#64748b', 'p_poa') + '</div>';
     var paN = window.PURPO ? (window.PURPO.setList(d.poApprovals), window.PURPO.newCount()) : 0;
     if (paN) html = html.replace('<div class="kpis">', '<div class="pa-banner" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;border:2px solid #dc2626;background:#fef2f2;border-radius:14px;padding:10px 14px;margin-bottom:12px"><span><b style="color:#b91c1c">🔴 PO อนุมัติใหม่ ' + paN + ' ใบ · ยังไม่เปิดดู</b><br><small>เปิดไฟล์ PO ที่อนุมัติแล้ว และยืนยันวันที่จัดส่งอีกครั้ง</small></span><button class="btn btn-sm btn-primary" style="flex:none" data-go="p_poa">เปิดดู & ยืนยันวันส่ง</button></div><div class="kpis">');
     var box = function (title, rows, empty) { return '<div class="panel pbox"><h4>' + title + '</h4>' + (rows.length ? rows.join('') : '<div class="muted">' + empty + '</div>') + '</div>'; };
