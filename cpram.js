@@ -186,8 +186,8 @@
   function nq(v) { return Number(v || 0).toLocaleString('th-TH', { maximumFractionDigits: 2 }); }
   function schedTable(rows, opt) {
     rows = caseRows(rows);
-    // วันที่อัพเดทล่าสุดในตาราง → ข้อความ "อัพเดท …" ของแถวนั้นเป็นสีแดง (ผู้ใช้ขอ 24/11/69)
-    var maxU = rows.reduce(function (m, r) { var u = updOf(r, opt && opt.line); return /^\d{4}-\d{2}-\d{2}$/.test(u) && u > m ? u : m; }, '');
+    // สีแดง = อัพเดทวันนี้เท่านั้น (ผู้ใช้ขอ 24/11/69)
+    var maxU = (C.data && C.data.today) || new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
     var groups = [], g = null;
     rows.forEach(function (r) { if (!g || g.date !== r.deliveryDate) { g = { date: r.deliveryDate, rows: [] }; groups.push(g); } g.rows.push(r); });
     var total = 0, body = groups.map(function (gr) {

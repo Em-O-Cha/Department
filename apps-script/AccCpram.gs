@@ -357,7 +357,8 @@ function cpDraw_(sh, rows, title, withRounds) {
   rows.forEach(function (r) { if (!g || g.date !== r.deliveryDate) { g = { date: r.deliveryDate, rows: [] }; groups.push(g); } g.rows.push(r); });
   var vals = [], merges = [], row = 5, cancelRows = [], total = 0, redCells = [];
   // วันที่อัพเดทล่าสุดของตาราง → ข้อความ "อัพเดท …" ของแถวนั้นเป็นสีแดง (ผู้ใช้ขอ 24/11/69)
-  var maxU = rows.reduce(function (m, r) { var u = cpUpd_(r); return u > m ? u : m; }, '');
+  // สีแดง = อัพเดทวันนี้เท่านั้น (ผู้ใช้ขอ 24/11/69: เช่น PO ใหม่วันที่ 24/11 → แดงเฉพาะ 24/11)
+  var maxU = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   groups.forEach(function (gr) {
     // วันเดียวกันแต่คนละสถานที่ส่ง → แยก Total ตามสถานที่ (ผู้ใช้ขอ 24/11/69): เรียงให้สถานที่เดียวกันติดกัน แล้ว Total / สถานที่ส่ง รวมช่องทีละสถานที่
     var pl = []; gr.rows.forEach(function (r) { var k = String(r.place || ''); if (pl.indexOf(k) < 0) pl.push(k); });
