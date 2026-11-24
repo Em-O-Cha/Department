@@ -671,44 +671,59 @@
       if (/^(กรัม|ก|g|gm|gram)$/.test(u)) return { price: Math.round(x.price * 1000 * 100) / 100, note: 'แปลงจาก ' + baht(x.price) + ' บาท/กรัม' };
       return { price: x.price, note: 'ราคาต่อ ' + (x.unit || 'หน่วย') + ' — ตรวจว่าเป็นราคา/กก.' };
     };
-    var vendLine = function (x, i) {
-      return x.vendor || x.pnote ? '<div class="rcvend">' + (x.vendor ? 'ผู้ขาย <b>' + esc(x.vendor) + '</b>' : '') + (x.pnote ? ' <span class="' + (/ตรวจ/.test(x.pnote) ? 'warn' : '') + '">· ' + esc(x.pnote) + '</span>' : '') + ' <button type="button" class="rcx sm" data-vclr="' + i + '" >✕ ล้างผู้ขาย</button></div>' : '';
+    // บรรจุภัณฑ์ (ผู้ใช้ 24/11/69): ราคาต่อหน่วยของผู้ขาย (ม้วน / ใบ / ชิ้น) ใช้ตามนั้น · หน่วยน้ำหนักให้ตรวจ
+    var perPc = function (x) {
+      var u = String(x.unit || '').trim().toLowerCase().replace(/\.$/, '');
+      if (!u || /^(ชิ้น|pc|pcs|piece)$/.test(u)) return { price: x.price, note: '' };
+      if (/^(กก|กิโล|กิโลกรัม|kg|kgs|กรัม|ก|g|gm|gram)$/.test(u)) return { price: x.price, note: 'ราคาต่อ ' + x.unit + ' — ตรวจหน่วย' };
+      return { price: x.price, note: 'ราคาต่อ ' + x.unit };
     };
-    // ผู้ใช้ 24/11/69: คนคีย์ชื่อส่วนผสมกับคนคีย์ราคาเป็นคนละคน → รายชื่อผู้ขายขึ้นที่ช่องราคา (ค้นจากชื่อในแถว แก้คำค้นได้)
-    var sugHide = function (i) { var b = document.querySelector('[data-sug="' + i + '"]'); if (b) b.hidden = true; };
-    var sugList = function (i, text) {
-      var box = document.querySelector('[data-sug="' + i + '"]'), L = box && box.querySelector('.rcsl'); if (!L) return;
+    // k = 'i' ส่วนผสม / 'p' บรรจุภัณฑ์ · คีย์แถว = 'i:3' / 'p:0'
+    var KD = { i: { rows: function () { return ing; }, attr: 'data-ci', conv: perKg, draw: function () { drawIng(); } },
+      p: { rows: function () { return pack; }, attr: 'data-cp', conv: perPc, draw: function () { drawPk(); } } };
+    var vendLine = function (x, key) {
+      return x.vendor || x.pnote ? '<div class="rcvend">' + (x.vendor ? 'ผู้ขาย <b>' + esc(x.vendor) + '</b>' : '') + (x.pnote ? ' <span class="' + (/ตรวจ/.test(x.pnote) ? 'warn' : '') + '">· ' + esc(x.pnote) + '</span>' : '') + ' <button type="button" class="rcx sm" data-vclr="' + key + '" >✕ ล้างผู้ขาย</button></div>' : '';
+    };
+    // ผู้ใช้ 24/11/69: คนคีย์ชื่อกับคนคีย์ราคาเป็นคนละคน → รายชื่อผู้ขายขึ้นที่ช่องราคา (ค้นจากชื่อในแถว แก้คำค้นได้)
+    var sugHide = function (key) { var b = document.querySelector('[data-sug="' + key + '"]'); if (b) b.hidden = true; };
+    var sugList = function (key, text) {
+      var box = document.querySelector('[data-sug="' + key + '"]'), L = box && box.querySelector('.rcsl'); if (!L) return;
+      var conv = KD[key.charAt(0)].conv;
       var n = nrm(text), words = String(text || '').split(/\s+/).map(nrm).filter(function (w) { return w.length > 1; });
       var hits = !n ? [] : PUR_ITEMS.map(function (x) {
         var m = nrm(x.name); var sc = m === n ? 0 : m.indexOf(n) === 0 ? 1 : m.indexOf(n) >= 0 ? 2 : n.indexOf(m) >= 0 && m.length > 1 ? 3 : words.some(function (w) { return m.indexOf(w) >= 0; }) ? 4 : 9; return { x: x, sc: sc };
-      }).filter(function (h) { return h.sc < 9; }).sort(function (a, b) { return a.sc - b.sc || String(a.x.name).localeCompare(String(b.x.name)) || perKg(a.x).price - perKg(b.x).price; }).slice(0, 12);
+      }).filter(function (h) { return h.sc < 9; }).sort(function (a, b) { return a.sc - b.sc || String(a.x.name).localeCompare(String(b.x.name)) || conv(a.x).price - conv(b.x).price; }).slice(0, 12);
       SUG = hits.map(function (h) { return h.x; });
       if (!n) { L.innerHTML = '<div class="rcsn">พิมพ์ชื่อสินค้าในช่องค้นหาด้านบน หรือพิมพ์ราคาเองในช่องราคา</div>'; return; }
       if (!hits.length) { L.innerHTML = '<div class="rcsn">ไม่พบ "' + esc(text) + '" ในฝ่ายจัดซื้อ — ลองคำอื่นในช่องค้นหา หรือพิมพ์ราคาเองในช่องราคา</div>'; return; }
-      var low = Math.min.apply(null, SUG.map(function (x) { return perKg(x).price; }));
+      // ถูกสุด = เทียบเฉพาะหน่วยเดียวกัน (ส่วนผสมแปลงเป็นต่อ กก. แล้ว)
+      var low = {};
+      SUG.forEach(function (x) { var u = key.charAt(0) === 'i' && !/ตรวจ/.test(conv(x).note) ? 'kg' : String(x.unit || ''); var v = conv(x).price; if (low[u] == null || v < low[u].v) low[u] = { v: v, n: (low[u] ? low[u].n : 0) + 1 }; else low[u].n++; });
       L.innerHTML = '<div class="rcsh2">พบ ' + hits.length + ' รายการ — แตะเพื่อใส่ราคา</div>' + SUG.map(function (x, k) {
-        var pk = perKg(x);
-        return '<button type="button" class="rcsi" data-pick="' + i + ':' + k + '"><span><b>' + esc(x.vendor || 'ไม่ระบุผู้ขาย') + '</b><small>' + esc(x.name) + (x.date ? ' · ราคาวันที่ ' + slashTh(x.date) : '') + '</small></span>'
-          + '<em>' + baht(x.price) + ' / ' + esc(x.unit || 'หน่วย') + (pk.price === low && SUG.length > 1 ? ' <i>ถูกสุด</i>' : '') + '</em></button>';
+        var u = key.charAt(0) === 'i' && !/ตรวจ/.test(conv(x).note) ? 'kg' : String(x.unit || ''), lw = low[u];
+        return '<button type="button" class="rcsi" data-pick="' + key + ':' + k + '"><span><b>' + esc(x.vendor || 'ไม่ระบุผู้ขาย') + '</b><small>' + esc(x.name) + (x.date ? ' · ราคาวันที่ ' + slashTh(x.date) : '') + '</small></span>'
+          + '<em>' + baht(x.price) + ' / ' + esc(x.unit || 'หน่วย') + (lw && lw.n > 1 && conv(x).price === lw.v ? ' <i>ถูกสุด</i>' : '') + '</em></button>';
       }).join('');
     };
-    var showSug = function (i) {
-      var box = document.querySelector('[data-sug="' + i + '"]'); if (!box) return;
+    var showSug = function (key) {
+      var box = document.querySelector('[data-sug="' + key + '"]'); if (!box) return;
       document.querySelectorAll('.rcsug').forEach(function (b) { if (b !== box) b.hidden = true; });
       if (!PUR_ITEMS.length) { box.hidden = true; return; }
+      var row = KD[key.charAt(0)].rows()[+key.slice(2)] || {};
       if (box.hidden || !box.querySelector('.rcsl')) {
-        box.innerHTML = '<div class="rcsh"><span>ผู้ขายจากฝ่ายจัดซื้อ</span><input data-sq="' + i + '" value="' + esc(ing[i].name || '') + '" placeholder="ค้นหาชื่อสินค้า" autocomplete="off" aria-label="ค้นหาชื่อสินค้าในฝ่ายจัดซื้อ"><button type="button" class="rcx sm" data-sclose="' + i + '">ปิด</button></div><div class="rcsl"></div>';
-        sugList(i, ing[i].name);
+        box.innerHTML = '<div class="rcsh"><span>ผู้ขายจากฝ่ายจัดซื้อ</span><input data-sq="' + key + '" value="' + esc(row.name || '') + '" placeholder="ค้นหาชื่อสินค้า" autocomplete="off" aria-label="ค้นหาชื่อสินค้าในฝ่ายจัดซื้อ"><button type="button" class="rcx sm" data-sclose="' + key + '">ปิด</button></div><div class="rcsl"></div>';
+        sugList(key, row.name);
       }
       box.hidden = false;
     };
-    var applyPick = function (i, x) {
-      if (!x) return; var pk = perKg(x), diff;
-      if (!String(ing[i].name || '').trim()) ing[i].name = x.name;
-      diff = nrm(x.name) !== nrm(ing[i].name);
-      ing[i].price = pk.price; ing[i].vendor = x.vendor || '';
-      ing[i].pnote = (diff ? 'สินค้า: ' + x.name : '') + (pk.note ? (diff ? ' · ' : '') + pk.note : '');
-      drawIng(); toast('ใส่ราคาจาก ' + (x.vendor || 'ฝ่ายจัดซื้อ') + ' แล้ว');
+    var applyPick = function (key, x) {
+      if (!x) return; var K = KD[key.charAt(0)], r = K.rows()[+key.slice(2)], pk = K.conv(x), diff;
+      if (!r) return;
+      if (!String(r.name || '').trim()) r.name = x.name;
+      diff = nrm(x.name) !== nrm(r.name);
+      r.price = pk.price; r.vendor = x.vendor || '';
+      r.pnote = (diff ? 'สินค้า: ' + x.name : '') + (pk.note ? (diff ? ' · ' : '') + pk.note : '');
+      K.draw(); toast('ใส่ราคาจาก ' + (x.vendor || 'ฝ่ายจัดซื้อ') + ' แล้ว');
     };
     var drawIng = function () {
       $('cIng').innerHTML = '<div class="rci rcih"><span>#</span><span>ชื่อส่วนผสม</span><span>น้ำหนัก</span><span>หน่วย</span><span>ราคา/กก. รวม VAT</span><span>ราคารวม</span><span></span></div>'
@@ -718,18 +733,19 @@
             + '<select data-ci="' + i + ':unit" aria-label="หน่วย">' + Object.keys(WU).map(function (u) { return '<option' + ((x.unit || 'กรัม') === u ? ' selected' : '') + '>' + u + '</option>'; }).join('') + '</select>'
             + '<input data-ci="' + i + ':price" inputmode="decimal" value="' + esc(x.price == null ? '' : x.price) + '" placeholder="' + (PUR_ITEMS.length ? 'แตะเลือกผู้ขาย' : 'ราคา/กก.') + '" autocomplete="off" aria-label="ราคาต่อกิโลกรัม รวม VAT (แตะเพื่อเลือกผู้ขาย)">'
             + '<span class="m" data-cc="' + i + '" aria-label="ราคารวม"></span><button type="button" class="rcx" data-cdel="' + i + '" aria-label="ลบแถว">✕</button></div>'
-            + '<div class="rcsug" data-sug="' + i + '" hidden></div>' + vendLine(x, i) + '</div>';
+            + '<div class="rcsug" data-sug="i:' + i + '" hidden></div>' + vendLine(x, 'i:' + i) + '</div>';
         }).join('') + '<div class="rci rcit"><span></span><span>รวม</span><span id="cTg"></span><span>กรัม</span><span></span><span class="m" id="cTm"></span><span></span></div>';
       recalc();
     };
     var drawPk = function () {
       $('cPk').innerHTML = '<div class="rcp2 rcih"><span>#</span><span>ชื่อบรรจุภัณฑ์</span><span>ราคา/ชิ้น รวม VAT</span><span>ใช้ได้กี่ชิ้นสินค้า</span><span>หมายเหตุ</span><span></span></div>'
         + pack.map(function (x, i) {
-          return '<div class="rcp2"><span class="n">' + (i + 1) + '</span><input data-cp="' + i + ':name" value="' + esc(x.name || '') + '" placeholder="ชื่อบรรจุภัณฑ์" aria-label="ชื่อบรรจุภัณฑ์ ' + (i + 1) + '">'
-            + '<input data-cp="' + i + ':price" inputmode="decimal" value="' + esc(x.price == null ? '' : x.price) + '" placeholder="ราคา/ชิ้น" aria-label="ราคาต่อชิ้น รวม VAT">'
+          return '<div class="rcirow"><div class="rcp2"><span class="n">' + (i + 1) + '</span><input data-cp="' + i + ':name" value="' + esc(x.name || '') + '" placeholder="ชื่อบรรจุภัณฑ์" aria-label="ชื่อบรรจุภัณฑ์ ' + (i + 1) + '">'
+            + '<input data-cp="' + i + ':price" inputmode="decimal" value="' + esc(x.price == null ? '' : x.price) + '" placeholder="' + (PUR_ITEMS.length ? 'แตะเลือกผู้ขาย' : 'ราคา/ชิ้น') + '" autocomplete="off" aria-label="ราคาต่อชิ้น รวม VAT (แตะเพื่อเลือกผู้ขาย)">'
             + '<input data-cp="' + i + ':per" inputmode="decimal" value="' + esc(x.per == null ? '' : x.per) + '" placeholder="เช่น 4900" aria-label="ใช้ได้กี่ชิ้นสินค้า">'
             + '<input data-cp="' + i + ':note" value="' + esc(x.note || '') + '" placeholder="เช่น 1 ม้วน มี 4900 ซอง" aria-label="หมายเหตุ">'
-            + '<button type="button" class="rcx" data-pdel="' + i + '" aria-label="ลบแถว">✕</button></div>';
+            + '<button type="button" class="rcx" data-pdel="' + i + '" aria-label="ลบแถว">✕</button></div>'
+            + '<div class="rcsug" data-sug="p:' + i + '" hidden></div>' + vendLine(x, 'p:' + i) + '</div>';
         }).join('');
       recalc();
     };
@@ -762,26 +778,35 @@
         $('cIng').addEventListener('input', function (e) {
           var a = (e.target.getAttribute('data-ci') || '').split(':'); if (a.length < 2) return;
           ing[+a[0]][a[1]] = a[1] === 'name' || a[1] === 'unit' ? e.target.value : e.target.value.replace(/,/g, '').trim();
-          if (a[1] === 'price') { ing[+a[0]].pnote = ''; }
-          if (a[1] === 'price') sugHide(+a[0]);
+          if (a[1] === 'price') { ing[+a[0]].pnote = ''; sugHide('i:' + a[0]); }
           recalc();
         });
-        $('cIng').addEventListener('input', function (e) { var q = e.target.getAttribute('data-sq'); if (q != null) sugList(+q, e.target.value); });
-        var inBox = function (i) { setTimeout(function () { var b = document.querySelector('[data-sug="' + i + '"]'), pr = document.querySelector('[data-ci="' + i + ':price"]'); if (b && !b.contains(document.activeElement) && document.activeElement !== pr) b.hidden = true; }, 200); };
-        $('cIng').addEventListener('focusin', function (e) { var a = (e.target.getAttribute('data-ci') || '').split(':'); if (a[1] === 'price') showSug(+a[0]); });
-        $('cIng').addEventListener('focusout', function (e) { var a = (e.target.getAttribute('data-ci') || '').split(':'), q = e.target.getAttribute('data-sq'); if (a[1] === 'price') inBox(a[0]); else if (q != null) inBox(q); });
-        $('cIng').addEventListener('keydown', function (e) { var a = (e.target.getAttribute('data-ci') || '').split(':'), q = e.target.getAttribute('data-sq'); if (e.key === 'Escape' && (a[1] === 'price' || q != null)) sugHide(q != null ? q : a[0]); });
-        $('cIng').addEventListener('mousedown', function (e) { if (e.target.closest('[data-pick]')) e.preventDefault(); });
-        $('cIng').addEventListener('change', function (e) { var a = (e.target.getAttribute('data-ci') || '').split(':'); if (a[1] === 'unit') { ing[+a[0]].unit = e.target.value; recalc(); } });
-        $('cIng').addEventListener('click', function (e) {
-          var pk = e.target.closest('[data-pick]');
-          if (pk) { var ab = pk.getAttribute('data-pick').split(':'); applyPick(+ab[0], SUG[+ab[1]]); return; }
-          var sc = e.target.closest('[data-sclose]'); if (sc) { sugHide(sc.getAttribute('data-sclose')); return; }
-          var vx = e.target.closest('[data-vclr]');
-          if (vx) { var k = +vx.getAttribute('data-vclr'); ing[k].vendor = ''; ing[k].pnote = ''; drawIng(); return; }
-          var b = e.target.closest('[data-cdel]'); if (!b) return; ing.splice(+b.getAttribute('data-cdel'), 1); if (!ing.length) ing.push({ name: '', qty: '', unit: 'กรัม', price: '' }); drawIng();
+        $('cPk').addEventListener('input', function (e) {
+          var a = (e.target.getAttribute('data-cp') || '').split(':'); if (a.length < 2) return;
+          pack[+a[0]][a[1]] = a[1] === 'name' || a[1] === 'note' ? e.target.value : e.target.value.replace(/,/g, '').trim();
+          if (a[1] === 'price') { pack[+a[0]].pnote = ''; sugHide('p:' + a[0]); }
+          recalc();
         });
-        $('cPk').addEventListener('input', function (e) { var a = (e.target.getAttribute('data-cp') || '').split(':'); if (a.length < 2) return; pack[+a[0]][a[1]] = a[1] === 'name' || a[1] === 'note' ? e.target.value : e.target.value.replace(/,/g, '').trim(); recalc(); });
+        // ช่องราคา → เปิดรายชื่อผู้ขาย (ใช้ร่วมกันทั้งส่วนผสม / บรรจุภัณฑ์)
+        var priceKey = function (el) { var t = el.getAttribute('data-ci') ? 'i' : el.getAttribute('data-cp') ? 'p' : ''; if (!t) return ''; var a = el.getAttribute('data-c' + t).split(':'); return a[1] === 'price' ? t + ':' + a[0] : ''; };
+        var inBox = function (key) { setTimeout(function () { var b = document.querySelector('[data-sug="' + key + '"]'), pr = document.querySelector('[' + KD[key.charAt(0)].attr + '="' + key.slice(2) + ':price"]'); if (b && !b.contains(document.activeElement) && document.activeElement !== pr) b.hidden = true; }, 200); };
+        ['cIng', 'cPk'].forEach(function (id) {
+          var el = $(id);
+          el.addEventListener('input', function (e) { var q = e.target.getAttribute('data-sq'); if (q != null) sugList(q, e.target.value); });
+          el.addEventListener('focusin', function (e) { var k = priceKey(e.target); if (k) showSug(k); });
+          el.addEventListener('focusout', function (e) { var k = priceKey(e.target) || e.target.getAttribute('data-sq'); if (k) inBox(k); });
+          el.addEventListener('keydown', function (e) { var k = priceKey(e.target) || e.target.getAttribute('data-sq'); if (k && e.key === 'Escape') sugHide(k); });
+          el.addEventListener('mousedown', function (e) { if (e.target.closest('[data-pick]')) e.preventDefault(); });
+          el.addEventListener('click', function (e) {
+            var pk = e.target.closest('[data-pick]');
+            if (pk) { var ab = pk.getAttribute('data-pick').split(':'); applyPick(ab[0] + ':' + ab[1], SUG[+ab[2]]); return; }
+            var sc = e.target.closest('[data-sclose]'); if (sc) { sugHide(sc.getAttribute('data-sclose')); return; }
+            var vx = e.target.closest('[data-vclr]');
+            if (vx) { var vk = vx.getAttribute('data-vclr'), K = KD[vk.charAt(0)], r = K.rows()[+vk.slice(2)]; if (r) { r.vendor = ''; r.pnote = ''; } K.draw(); return; }
+          });
+        });
+        $('cIng').addEventListener('change', function (e) { var a = (e.target.getAttribute('data-ci') || '').split(':'); if (a[1] === 'unit') { ing[+a[0]].unit = e.target.value; recalc(); } });
+        $('cIng').addEventListener('click', function (e) { var b = e.target.closest('[data-cdel]'); if (!b) return; ing.splice(+b.getAttribute('data-cdel'), 1); if (!ing.length) ing.push({ name: '', qty: '', unit: 'กรัม', price: '' }); drawIng(); });
         $('cPk').addEventListener('click', function (e) { var b = e.target.closest('[data-pdel]'); if (!b) return; pack.splice(+b.getAttribute('data-pdel'), 1); if (!pack.length) pack.push({ name: '', price: '', per: '', note: '' }); drawPk(); });
         $('cAddI').addEventListener('click', function () { ing.push({ name: '', qty: '', unit: 'กรัม', price: '' }); drawIng(); var a = document.querySelectorAll('[data-ci$=":name"]'); a[a.length - 1].focus(); });
         $('cAddP').addEventListener('click', function () { pack.push({ name: '', price: '', per: '', note: '' }); drawPk(); var a = document.querySelectorAll('[data-cp$=":name"]'); a[a.length - 1].focus(); });
@@ -924,7 +949,7 @@
         if (state.page === page) costPage();
       }).catch(function (e) {
         if (String(e.message).indexOf('SESSION_EXPIRED') >= 0) return onServerError(e);
-        $('main').innerHTML = '<h3>ต้นทุนสินค้า</h3><div class="panel status off"><div class="dot">' + icon('warn', 20) + '</div><div><b>เปิดข้อมูลไม่ได้</b><span>' + esc(e.message || e) + ' — ข้อมูลต้นทุนเก็บในชีตของฝ่ายวิจัยและพัฒนา ต้องตั้งลิงก์ชีต / โฟลเดอร์ของ RD ในหน้าผู้ดูแลก่อน</span></div></div>';
+        $('main').innerHTML = '<h3>ต้นทุนสินค้า</h3><div class="panel status off"><div class="dot">' + icon('warn', 20) + '</div><div><b>เปิดข้อมูลไม่ได้</b><span>' + esc(e.message || e) + ' — ให้ผู้ดูแลระบบตั้งลิงก์ชีต / โฟลเดอร์ของการ์ด "ต้นทุนสินค้า" ในหน้าผู้ดูแลก่อน</span></div></div>';
       });
       return;
     }
@@ -1045,7 +1070,7 @@
     '.rci input,.rci select,.rcp2 input{min-width:0;width:100%;height:38px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px;background:#fff;color:inherit}.rci input:focus,.rci select:focus,.rcp2 input:focus{outline:2px solid #9ca3af;border-color:#111827}.rci input[inputmode],.rcp2 input[inputmode]{text-align:right}.rcih{font-size:12px;color:var(--muted);font-weight:700;border-bottom:2px solid var(--line)}.rci .n,.rcp2 .n{color:var(--muted);font-size:12px;text-align:center}.rci .m{text-align:right;color:#b91c1c;font-weight:600}.rcit{background:#f8fafc;font-weight:700}.rcit span:nth-child(3){text-align:right}.rcx{border:0;background:none;color:#94a3b8;font-size:16px;cursor:pointer;min-height:36px}.rcx:hover{color:#b91c1c}',
     '.rcyl{margin-top:12px}.rcu{display:flex;gap:6px}.rcu input:first-child{flex:1;min-width:0}.rcu input:last-child{width:74px;flex:none}.rcph2{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.rcphv{width:110px;height:110px;border:1px dashed var(--line);border-radius:10px;display:grid;place-items:center;overflow:hidden;color:var(--muted);font-size:12px;background:#f8fafc}.rcphv img{width:100%;height:100%;object-fit:contain;background:#fff}.rcphb{display:flex;gap:6px;flex-wrap:wrap}.rcphb .btn{width:auto}',
     '.rctool{gap:8px;flex-wrap:wrap}.rctool label.btn{cursor:pointer}.rctool .busy{opacity:.6;pointer-events:none}.rcfrom{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13.5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}.rcimpl{display:grid;gap:8px}.rcdup{display:grid;gap:8px}.rcdup .btn{width:100%;justify-content:center;min-height:46px}.rcimp{display:grid;gap:2px;text-align:left;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#fff;cursor:pointer;font:inherit}.rcimp:hover{border-color:#111827}.rcimp small{color:var(--muted)}.rcimp span{color:#b91c1c;font-weight:700;font-size:13px}',
-    '.rcirow{position:relative;border-bottom:1px solid var(--line)}.rcirow .rci{border-bottom:0}.rcsug{margin:2px 0 8px 30px;border:1px solid #c7d2fe;border-radius:12px;background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.12);max-height:280px;overflow:auto}.rcsh{font-size:12.5px;color:#334155;font-weight:700;padding:6px 8px 6px 10px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#f8fafc;display:flex;align-items:center;gap:8px;z-index:1}.rcsh input{flex:1;min-width:0;min-height:38px;font-weight:400}.rcsh .rcx.sm{margin-left:0}.rcsh2{font-size:12px;color:var(--muted);padding:6px 10px}.rcsn{font-size:13px;color:var(--muted);padding:8px 10px}',
+    '.rcirow{position:relative;border-bottom:1px solid var(--line)}.rcirow .rci,.rcirow .rcp2{border-bottom:0}.rcsug{margin:2px 0 8px 30px;border:1px solid #c7d2fe;border-radius:12px;background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.12);max-height:280px;overflow:auto}.rcsh{font-size:12.5px;color:#334155;font-weight:700;padding:6px 8px 6px 10px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#f8fafc;display:flex;align-items:center;gap:8px;z-index:1}.rcsh input{flex:1;min-width:0;min-height:38px;font-weight:400}.rcsh .rcx.sm{margin-left:0}.rcsh2{font-size:12px;color:var(--muted);padding:6px 10px}.rcsn{font-size:13px;color:var(--muted);padding:8px 10px}',
     '.rcsi{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;border:0;border-bottom:1px solid #f1f5f9;background:#fff;padding:8px 10px;font:inherit;cursor:pointer;min-height:44px;align-items:center}.rcsi:hover,.rcsi:focus{background:#eef2ff;outline:0}.rcsi span{display:flex;flex-direction:column;min-width:0}.rcsi small{color:var(--muted);font-size:12px}.rcsi em{font-style:normal;font-weight:700;white-space:nowrap;color:#1e293b}.rcsi em i{font-style:normal;font-size:11px;background:#dcfce7;color:#15803d;border-radius:99px;padding:1px 6px;margin-left:4px}',
     '.rcvend{font-size:12.5px;color:#475569;margin:-2px 0 6px 30px;display:flex;align-items:center;gap:4px;flex-wrap:wrap}.rcvend .warn{color:#b45309}.rcx.sm{min-height:34px;font-size:12.5px;padding:4px 10px;border:1px solid #e2e8f0;border-radius:99px;background:#fff;color:#475569;margin-left:auto}.rcwait{display:inline-block;margin-top:4px;font-size:12px;font-weight:700;color:#b45309;background:#fef3c7;border-radius:99px;padding:2px 8px;width:max-content}.rcsum .w{color:#b45309;font-size:13px}.rcpu{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}.rcpc{color:#334155;font-size:14px;font-weight:700}',
     '.rcsum{margin-top:14px;border:1px solid #c4b5fd;background:#f5f3ff;border-radius:12px;padding:10px 14px;display:grid;gap:4px}.rcsum div{display:flex;justify-content:space-between;gap:10px}.rcsum .t{border-top:1px solid #c4b5fd;padding-top:6px;font-size:15px}.rcsum .t b{color:#b91c1c}',

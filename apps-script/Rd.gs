@@ -77,12 +77,16 @@ function rdOut_(p, today) {
 function rdPartnerOut_(x) { x.products = rdLines_(x.products, 200); return x; }
 
 // ---------- โหลด ----------
+// ต้นทุนอยู่ชีตการ์ด COST เมื่อผูกแล้ว (Cost.gs costHome_) ไม่งั้นอยู่ชีต RD
+function rdCostsFor_(ss) {
+  try { var h = costHome_(); return purRead_(h.key === 'RD' ? ss : rdBook_(h), 'rd_costs').map(rdCostOut_); } catch (e) { return []; }
+}
 function rdLoad(token) {
   var dept = requireRd_(token), ss = rdBook_(dept), today = purToday_();
   return { ok: true, today: today, sheetUrl: ss.getUrl(), settings: rdSettings_(ss),
     products: purRead_(ss, 'rd_products').map(function (p) { return rdOut_(p, today); }),
     partners: purRead_(ss, 'rd_partners').map(rdPartnerOut_),
-    trials: purRead_(ss, 'rd_trials').map(rdTrialOut_), costs: purRead_(ss, 'rd_costs').map(rdCostOut_), hasFolder: !!deptConfig_(dept.key).folderId };
+    trials: purRead_(ss, 'rd_trials').map(rdTrialOut_), costs: rdCostsFor_(ss), hasFolder: !!deptConfig_(dept.key).folderId };
 }
 function rdJson_(v, def) { try { var o = typeof v === 'string' ? JSON.parse(v || '') : v; return o == null ? def : o; } catch (e) { return def; } }
 function rdTrialOut_(t) {
@@ -326,7 +330,7 @@ function rdSaveCost(token, c) {
     return { name: rdText_(x && x.name, 120), qty: rdNum_(x && x.qty) || '', unit: RD_WUNITS_[x && x.unit] ? x.unit : 'กรัม', price: rdNum_(x && x.price) || '', vendor: rdText_(x && x.vendor, 120), pnote: rdText_(x && x.pnote, 80) };
   }).filter(function (x) { return x.name || x.qty || x.price; });
   var pack = (Array.isArray(c.packaging) ? c.packaging : []).slice(0, 40).map(function (x) {
-    return { name: rdText_(x && x.name, 120), price: rdNum_(x && x.price) || '', per: rdNum_(x && x.per) || '', note: rdText_(x && x.note, 200) };
+    return { name: rdText_(x && x.name, 120), price: rdNum_(x && x.price) || '', per: rdNum_(x && x.per) || '', note: rdText_(x && x.note, 200), vendor: rdText_(x && x.vendor, 120), pnote: rdText_(x && x.pnote, 80) };
   }).filter(function (x) { return x.name || x.price; });
   return purLocked_(function () {
     var ss = rdBook_(dept), now = purNow_();
@@ -366,8 +370,8 @@ function rdUploadCostPhoto(token, costId, fileName, mimeType, base64) {
     if (!o) return { ok: false, error: 'บันทึกรายการก่อน แล้วค่อยใส่รูป' };
     var folderId = deptConfig_(dept.key).folderId;
     if (!folderId) return { ok: false, error: 'ผู้ดูแลระบบยังไม่ได้ตั้งโฟลเดอร์ของฝ่าย' };
-    var parent = DriveApp.getFolderById(folderId), it = parent.getFoldersByName('รูปต้นทุนสินค้า RD');
-    var folder = it.hasNext() ? it.next() : parent.createFolder('รูปต้นทุนสินค้า RD');
+    var parent = DriveApp.getFolderById(folderId), it = parent.getFoldersByName(dept.key === 'COST' ? 'รูปต้นทุนสินค้า' : 'รูปต้นทุนสินค้า RD');
+    var folder = it.hasNext() ? it.next() : parent.createFolder(dept.key === 'COST' ? 'รูปต้นทุนสินค้า' : 'รูปต้นทุนสินค้า RD');
     var safe = purClean_(fileName, 80).replace(/[\\/:*?"<>|]/g, '_') || 'photo.jpg';
     var f = folder.createFile(Utilities.newBlob(bytes, mimeType, String(o.name).slice(0, 40) + '_' + safe));
     try { f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}

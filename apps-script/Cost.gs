@@ -4,7 +4,23 @@
 function costDept_(token) {
   var dept = requireDept_(token), m = DEPT_MODULES_[dept.key];
   if (m !== 'rd' && m !== 'cost') throw new Error('แผนกนี้ไม่มีระบบต้นทุนสินค้า');
-  return DEPARTMENTS.filter(function (x) { return x.key === 'RD'; })[0];
+  return costHome_();
+}
+// ที่เก็บข้อมูลต้นทุน: ชีต / โฟลเดอร์ของการ์ด COST ถ้าผูกแล้ว (ผู้ใช้ 24/11/69) · ยังไม่ผูก = ใช้ของฝ่าย RD เหมือนเดิม
+function costHome_() {
+  var key = deptConfig_('COST').sheetId ? 'COST' : 'RD';
+  return DEPARTMENTS.filter(function (x) { return x.key === key; })[0];
+}
+// ผูกชีต COST ครั้งแรก: คัดลอกต้นทุนที่เคยบันทึกในชีต RD มาให้ (ครั้งเดียว · ชีต RD ไม่ถูกแก้)
+function costMigrate_(ss) {
+  var P = PropertiesService.getScriptProperties(), flag = 'COST_MIGRATED_' + deptConfig_('COST').sheetId;
+  if (P.getProperty(flag)) return;
+  if (!deptConfig_('RD').sheetId || purRead_(ss, 'rd_costs').length) { P.setProperty(flag, '1'); return; }
+  var rd = DEPARTMENTS.filter(function (x) { return x.key === 'RD'; })[0], rows = [];
+  try { rows = purRead_(rdBook_(rd), 'rd_costs'); } catch (e) { return; }
+  rows.forEach(function (r) { var o = Object.assign({}, r); delete o._row; purWrite_(ss, 'rd_costs', o); });
+  if (rows.length) purLogWrite_(ss, 'คัดลอกต้นทุนจากชีต RD', 'rd_costs', '', rows.length + ' รายการ');
+  P.setProperty(flag, '1');
 }
 function costPurItems_() {
   var pur = DEPARTMENTS.filter(function (x) { return x.key === 'PUR'; })[0], ss;
@@ -38,9 +54,14 @@ function costPurItems_() {
 }
 // โหลดหน้าต้นทุน (การ์ด COST)
 function costLoad(token) {
-  var rd = costDept_(token), ss = rdBook_(rd), today = purToday_();
+  var home = costDept_(token), ss = rdBook_(home), today = purToday_(), prods = [];
+  if (home.key === 'COST') purLocked_(function () { costMigrate_(ss); });
+  try {
+    var rd = DEPARTMENTS.filter(function (x) { return x.key === 'RD'; })[0];
+    if (deptConfig_('RD').sheetId) prods = purRead_(home.key === 'RD' ? ss : rdBook_(rd), 'rd_products').map(function (p) { return rdOut_(p, today); });
+  } catch (e) {}
   return { ok: true, today: today, settings: rdSettings_(ss), costs: purRead_(ss, 'rd_costs').map(rdCostOut_),
-    products: purRead_(ss, 'rd_products').map(function (p) { return rdOut_(p, today); }), pur: costPurItems_(), hasFolder: !!deptConfig_('RD').folderId };
+    products: prods, pur: costPurItems_(), hasFolder: !!deptConfig_(home.key).folderId, home: home.key };
 }
 // ราคาจากจัดซื้อ (ใช้ทั้งการ์ด COST และ RD)
 function costPurPrices(token) { costDept_(token); return Object.assign({ ok: true }, costPurItems_()); }
