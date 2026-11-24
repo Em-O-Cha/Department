@@ -319,11 +319,11 @@ function rdCostOut_(c) {
 // ราคาวัตถุดิบ 1 แถว = (ราคา/กก. ÷ 1000) × น้ำหนัก (กรัม) — เหมือนสูตรในไฟล์ =(L6/1000)*I6
 function rdIngCost_(x) { return Math.round(rdNum_(x.price) * rdNum_(x.qty) * (RD_WUNITS_[x.unit] || 1) / 1000 * 100) / 100; }
 function rdSaveCost(token, c) {
-  var dept = requireRd_(token); c = c || {};
+  var dept = costDept_(token); c = c || {};
   var name = rdText_(c.name, 150);
   if (!name) return { ok: false, error: 'กรอกชื่อสินค้า' };
   var ing = (Array.isArray(c.ingredients) ? c.ingredients : []).slice(0, 80).map(function (x) {
-    return { name: rdText_(x && x.name, 120), qty: rdNum_(x && x.qty) || '', unit: RD_WUNITS_[x && x.unit] ? x.unit : 'กรัม', price: rdNum_(x && x.price) || '' };
+    return { name: rdText_(x && x.name, 120), qty: rdNum_(x && x.qty) || '', unit: RD_WUNITS_[x && x.unit] ? x.unit : 'กรัม', price: rdNum_(x && x.price) || '', vendor: rdText_(x && x.vendor, 120), pnote: rdText_(x && x.pnote, 80) };
   }).filter(function (x) { return x.name || x.qty || x.price; });
   var pack = (Array.isArray(c.packaging) ? c.packaging : []).slice(0, 40).map(function (x) {
     return { name: rdText_(x && x.name, 120), price: rdNum_(x && x.price) || '', per: rdNum_(x && x.per) || '', note: rdText_(x && x.note, 200) };
@@ -345,7 +345,7 @@ function rdSaveCost(token, c) {
   });
 }
 function rdDeleteCost(token, id) {
-  var dept = requireRd_(token);
+  var dept = costDept_(token);
   return purLocked_(function () {
     var ss = rdBook_(dept), row = purRead_(ss, 'rd_costs').filter(function (x) { return x.id === id; })[0];
     if (!row) return { ok: false, error: 'ไม่พบรายการ' };
@@ -357,7 +357,7 @@ function rdDeleteCost(token, id) {
 }
 // รูปสินค้า 1 รูปต่อรายการ (อัปโหลดใหม่ = แทนรูปเดิม) · โฟลเดอร์ฝ่าย / "รูปต้นทุนสินค้า RD" · แชร์แบบมีลิงก์ดูได้
 function rdUploadCostPhoto(token, costId, fileName, mimeType, base64) {
-  var dept = requireRd_(token);
+  var dept = costDept_(token);
   if (!/^image\/(jpeg|png)$/.test(mimeType)) return { ok: false, error: 'แนบได้เฉพาะรูป JPG / PNG' };
   var bytes = Utilities.base64Decode(String(base64 || ''));
   if (!bytes.length || bytes.length > 8 * 1024 * 1024) return { ok: false, error: 'รูปว่างหรือใหญ่เกิน 8 MB' };
@@ -379,7 +379,7 @@ function rdUploadCostPhoto(token, costId, fileName, mimeType, base64) {
   });
 }
 function rdRemoveCostPhoto(token, costId) {
-  var dept = requireRd_(token);
+  var dept = costDept_(token);
   return purLocked_(function () {
     var ss = rdBook_(dept), o = purRead_(ss, 'rd_costs').filter(function (x) { return x.id === costId; })[0];
     if (!o) return { ok: false, error: 'ไม่พบรายการ' };

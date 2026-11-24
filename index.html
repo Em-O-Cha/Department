@@ -666,7 +666,7 @@
   window.matchMedia('(max-width: 1023px)').addEventListener('change', function () { navClose(); moreToggle(false); });
   function go(page) { state.page = page; renderNav(); renderPage(); window.scrollTo(0, 0); keepSave(); }
   // แผนกที่มีระบบงานแล้ว (โมดูล) — เช่น PUR = purchasing.js
-  function deptModule() { var m = state.dept && state.dept.module; return (m === 'purchasing' && window.PUR) || (m === 'safety' && window.SHE) || (m === 'hr' && window.HRM) || (m === 'accounting' && window.ACC) || (m === 'quality' && window.QAM) || (m === 'production' && window.PRDM) || (m === 'rd' && window.RDM) || (m === 'executive' && window.EXEC) || null; }
+  function deptModule() { var m = state.dept && state.dept.module; return (m === 'purchasing' && window.PUR) || (m === 'safety' && window.SHE) || (m === 'hr' && window.HRM) || (m === 'accounting' && window.ACC) || (m === 'quality' && window.QAM) || (m === 'production' && window.PRDM) || (m === 'rd' && window.RDM) || (m === 'cost' && window.COSTM) || (m === 'executive' && window.EXEC) || null; }
 
   function renderPage() {
     xpShow();
@@ -1265,7 +1265,7 @@
 <script src="payables.js?v=28"></script>
 <script src="quality.js?v=10"></script>
 <script src="production.js?v=33"></script>
-<script src="rd.js?v=6"></script>
+<script src="rd.js?v=7"></script>
 <script src="executive.js?v=27"></script>
 </body>
 </html>

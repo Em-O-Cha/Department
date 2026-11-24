@@ -45,7 +45,7 @@ function apiFunctions_() {
     // ฝ่ายผลิต (Prod.gs)
     rdLoad: rdLoad, rdSaveProduct: rdSaveProduct, rdDeleteProduct: rdDeleteProduct, rdSavePartner: rdSavePartner, rdDeletePartner: rdDeletePartner,
     rdSaveSettings: rdSaveSettings, rdLog: rdLog, rdDashboard: rdDashboard,
-    rdSaveTrial: rdSaveTrial, rdDeleteTrial: rdDeleteTrial, rdUploadTrialPhoto: rdUploadTrialPhoto, rdRemoveTrialPhoto: rdRemoveTrialPhoto, rdSaveCost: rdSaveCost, rdDeleteCost: rdDeleteCost, rdUploadCostPhoto: rdUploadCostPhoto, rdRemoveCostPhoto: rdRemoveCostPhoto,
+    rdSaveTrial: rdSaveTrial, rdDeleteTrial: rdDeleteTrial, rdUploadTrialPhoto: rdUploadTrialPhoto, rdRemoveTrialPhoto: rdRemoveTrialPhoto, costLoad: costLoad, costPurPrices: costPurPrices, rdSaveCost: rdSaveCost, rdDeleteCost: rdDeleteCost, rdUploadCostPhoto: rdUploadCostPhoto, rdRemoveCostPhoto: rdRemoveCostPhoto,
     prdLoad: prdLoad, prdSaveProduct: prdSaveProduct, prdSavePlans: prdSavePlans, prdImportYield: prdImportYield, prdDeletePlan: prdDeletePlan, prdSaveBreakdown: prdSaveBreakdown, prdUploadBdPhoto: prdUploadBdPhoto, prdRemoveBdPhoto: prdRemoveBdPhoto,
     prdDeleteBreakdown: prdDeleteBreakdown, prdSaveReport: prdSaveReport, prdUploadPhoto: prdUploadPhoto, prdRemovePhoto: prdRemovePhoto,
     prdSaveSettings: prdSaveSettings, prdSetWorkDate: prdSetWorkDate, prdLog: prdLog, prdDashboard: prdDashboard, prdSendLine: prdSendLine, prdLinePreview: prdLinePreview, prdLineTest: prdLineTest, prdSetLineToken: prdSetLineToken, prdUseAccBot: prdUseAccBot,

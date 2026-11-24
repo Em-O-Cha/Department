@@ -49,7 +49,10 @@ var DEPARTMENTS = [
   { key: 'LOG',  name: 'ขนส่งและคลัง',       en: 'Logistics & Warehouse', color: '#db2777',
     sheetId: '', ownerEmail: '', appUrl: '',
     menus: ['รับสินค้าเข้าคลัง', 'จ่ายสินค้า / ส่งของ', 'ตารางรถขนส่ง', 'สินค้าคงคลัง'] },
-  // ต้นทุนสินค้า (COST) ย้ายไปรวมในระบบ RD แล้ว (17/11/69) — ไม่มีการ์ดแยก
+  // ต้นทุนสินค้า (COST) — การ์ดแยกอีกครั้ง (ผู้ใช้ขอ 24/11/69): รหัสผ่านของตัวเอง · ข้อมูลต้นทุนเก็บในชีตของ RD · ราคาวัตถุดิบดึงจากจัดซื้อ & สต๊อก (Cost.gs)
+  { key: 'COST', name: 'ต้นทุนสินค้า',        en: 'Product Costing',     color: '#4f46e5',
+    sheetId: '', ownerEmail: '', appUrl: '',
+    menus: ['ต้นทุนสินค้า'] },
   // ผู้บริหาร: ไม่ใช่แผนก — ดู Dashboard ของทุกฝ่ายได้อย่างเดียว (Executive.gs) · ตั้งรหัสผ่านเองด้วยรหัสตั้งค่าจากผู้ดูแลระบบ
   { key: 'EXEC', name: 'ผู้บริหาร',            en: 'Executive Dashboard', color: '#c62828', exec: true,
     sheetId: '', ownerEmail: '', appUrl: '',
@@ -137,7 +140,7 @@ function findDept_(key) {
 }
 
 // โมดูลที่ทำแล้วของแต่ละแผนก (หน้าเว็บสร้างเมนูตามโมดูล) — ยังไม่มี = เมนูตัวอย่าง
-var DEPT_MODULES_ = { HR: 'hr', ACC: 'accounting', PUR: 'purchasing', QA: 'quality', SHE: 'safety', PROD: 'production', RD: 'rd', EXEC: 'executive' };
+var DEPT_MODULES_ = { HR: 'hr', ACC: 'accounting', PUR: 'purchasing', QA: 'quality', SHE: 'safety', PROD: 'production', RD: 'rd', COST: 'cost', EXEC: 'executive' };
 function deptView_(d) {
   return { key: d.key, name: d.name, en: d.en, color: d.color, menus: d.menus.slice(), ownerEmail: d.ownerEmail || '', module: DEPT_MODULES_[d.key] || '' };
 }
