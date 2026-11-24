@@ -355,20 +355,30 @@
       o.pdfUrl = r.pdfUrl; o.xlsxUrl = r.xlsxUrl; C.listPage();
     }).catch(onServerError);
   }
+  // ส่ง LINE: สร้างภาพตารางก่อน ให้ดูตัวอย่างในหน้าต่าง แล้วค่อยกดส่ง (ผู้ใช้ขอ 24/11/69 — ดูภาพก่อนส่งทุกครั้ง)
   function sendLine(id, afterSave) {
     var o = byId(id); if (!o) return;
-    ask({ title: afterSave ? 'บันทึกแล้ว · ส่งออเดอร์เข้ากลุ่ม LINE เลยไหม?' : 'ส่งออเดอร์ต่างประเทศเข้ากลุ่ม LINE?',
-      text: o.invNo + ' · ' + o.customer + ' · ' + m2(o.amount) + ' ' + o.currency + (o.shipDate ? ' · ส่ง ' + slash(o.shipDate) : ' · ยังไม่กำหนดวันส่ง') + (o.sentAt ? ' · เคยส่งแล้วเมื่อ ' + o.sentAt : ''),
-      ok: 'ส่ง LINE', cancel: afterSave ? 'ไว้ทีหลัง' : 'ยกเลิก', tone: 'info' }).then(function (yes) {
-      if (!yes) return;
-      toast('กำลังสร้างภาพตารางและส่ง LINE…');
-      lineImage(o).catch(function () { return null; }).then(function (img) {
-        return call('exSendLine', state.token, id, img ? img.png : '', img ? img.ratio : '');
-      }).then(function (r) {
-        if (!r.ok) { toast(r.error); return; }
-        o.sentAt = r.sentAt; if (r.pdfUrl) { o.pdfUrl = r.pdfUrl; o.xlsxUrl = r.xlsxUrl; } toast('ส่ง LINE แล้ว'); C.listPage();
-      }).catch(onServerError);
-    });
+    var img = null;
+    openModal({ color: state.dept.color, icon: 'send', wide: true, title: afterSave ? 'บันทึกแล้ว · ส่งออเดอร์เข้ากลุ่ม LINE เลยไหม?' : 'ส่งออเดอร์ต่างประเทศเข้ากลุ่ม LINE?',
+      sub: o.invNo + ' · ' + o.customer + ' · ' + m2(o.amount) + ' ' + o.currency + (o.shipDate ? ' · ส่ง ' + slash(o.shipDate) : ' · ยังไม่กำหนดวันส่ง'),
+      body: (o.sentAt ? '<div class="a7chk warn"><i>!</i><span>เคยส่งแล้วเมื่อ ' + esc(slash(String(o.sentAt).slice(0, 10)) + ' ' + String(o.sentAt).slice(11, 16) + ' น.') + ' — กดส่งอีกครั้งจะส่งซ้ำเข้ากลุ่ม</span></div>' : '')
+        + '<p class="exsendh">จะส่ง 2 ข้อความ: <b>การ์ดใบแจ้งออเดอร์</b> และ <b>ภาพตารางด้านล่าง</b></p>'
+        + '<div id="exPrev" class="exprev"><span class="spinner dark"></span> กำลังสร้างภาพตัวอย่าง…</div>',
+      ok: 'ส่ง LINE', cancel: afterSave ? 'ไว้ทีหลัง' : 'ยกเลิก',
+      onOpen: function () {
+        var okb = $('mOk'); okb.disabled = true;
+        lineImage(o).catch(function () { return null; }).then(function (r) {
+          img = r; var box = $('exPrev'); if (!box) return;
+          box.innerHTML = r ? '<img src="data:image/png;base64,' + r.png + '" alt="ภาพตารางออเดอร์ที่จะส่งเข้า LINE">' : '<div class="a7chk warn"><i>!</i><span>สร้างภาพตารางไม่ได้ — จะส่งเฉพาะการ์ด</span></div>';
+          okb.disabled = false; okb.focus();
+        });
+      },
+      submit: function () {
+        return call('exSendLine', state.token, id, img ? img.png : '', img ? img.ratio : '').then(function (r) {
+          if (!r.ok) return r.error || 'ส่งไม่สำเร็จ';
+          closeModal(); o.sentAt = r.sentAt; if (r.pdfUrl) { o.pdfUrl = r.pdfUrl; o.xlsxUrl = r.xlsxUrl; } toast('ส่ง LINE แล้ว'); C.listPage();
+        });
+      } });
   }
   // ภาพตารางออเดอร์ (ส่ง LINE) — หน้าตาเหมือนในหน้าเว็บ มียอดเงิน (ผู้ใช้เลือก)
   function lineImage(o) {
@@ -397,6 +407,7 @@
     '.exo{margin-top:12px}.exoh{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}.exoh .cptag{margin-left:4px}.exam{font-size:18px;color:#1e3a8a;white-space:nowrap}',
     '.exmeta{color:var(--muted);font-size:13.5px;margin:4px 0}.exmeta b{color:var(--ink)}.exmeta .exwarn{color:#c2410c}.exnm{text-align:left!important}.expt{margin-top:8px;font-size:13.5px}.expt summary{cursor:pointer;color:var(--muted)}',
     '.exbtn{flex-wrap:wrap;gap:6px;margin-top:10px}.exbtn a.btn{text-decoration:none}#exNew{flex:0 0 auto}.exbtn .exdel{margin-left:auto;color:#b91c1c}',
+    '.exsendh{margin:4px 0 10px;font-size:14px}.exprev{max-height:60vh;overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff;padding:6px;text-align:center;min-height:80px}.exprev img{width:100%;height:auto;display:block}',
     '.eximgbox{position:fixed;left:-3000px;top:0}.eximg{display:inline-block;width:900px;padding:22px;background:#fff;color:#0f172a;font-family:inherit}',
     '.exih{display:flex;gap:14px;align-items:center;border-bottom:3px solid #1e3a8a;padding-bottom:10px;margin-bottom:12px}.exih img{height:54px}.exih b{display:block;font-size:22px;color:#1e3a8a}.exih span{color:#475569;font-size:14px}',
     '.exig{display:grid;grid-template-columns:150px 1fr 150px 1fr;gap:6px 10px;font-size:14.5px;margin-bottom:14px}.exig span{color:#64748b}.eximg .cpwrap{overflow:visible}',
