@@ -81,7 +81,7 @@
       + '<div class="pchips">' + chips.map(function (c) { var n = count(c[0]); return '<button class="chip' + (f === c[0] ? ' on' : '') + '" data-pf="' + c[0] + '">' + c[1] + (c[0] ? ' (' + n + ')' : '') + '</button>'; }).join('') + '</div>'
       + '<div id="paList"></div>';
     var list = A.list.filter(function (r) { return f === 'new' ? r.status === 'approved' && !r.seenAt : f ? r.status === f : r.status !== 'replaced'; });
-    $('paList').innerHTML = list.map(cardHtml).join('') || '<div class="panel muted">' + (f === 'new' ? 'ไม่มี PO ที่อนุมัติใหม่ค้างเปิดดู' : 'ยังไม่มีรายการ — กด "ส่ง PO ขออนุมัติ" หรือเปิดใบ PO แล้วกด "ใส่ลายเซ็น & ส่งขออนุมัติ"') + '</div>';
+    $('paList').innerHTML = list.map(cardHtml).join('') || '<div class="panel muted">' + (f === 'new' ? 'ไม่มี PO ที่อนุมัติใหม่ค้างเปิดดู' : 'ยังไม่มีรายการ — กด "แนบไฟล์ PO (PDF จาก PEAK)" ด้านบนเพื่อเริ่ม') + '</div>';
     Array.prototype.forEach.call(document.querySelectorAll('[data-pf]'), function (b) { b.addEventListener('click', function () { P().q.paF = b.getAttribute('data-pf'); A.page(); }); });
     $('paNew').addEventListener('click', pickDoc);
     $('paImp').addEventListener('click', A.importPdf);
@@ -92,7 +92,17 @@
       var act = b.getAttribute('data-act');
       if (act === 'open') openApproved(r);
       else if (act === 'resend') { var d = P().idx.doc[r.docId]; if (!d) return toast('ไม่พบใบ PO นี้ในระบบแล้ว'); A.openSign(d); }
-      else if (act === 'doc') { var d2 = P().idx.doc[r.docId]; if (d2) P().openDoc(d2); }
+      else if (act === 'doc') { var d2 = P().idx.doc[r.docId]; if (d2) P().openDoc(d2); else toast('ใบ PO นี้ถูกลบไปแล้ว'); }
+      else if (act === 'del') {
+        ask({ title: 'ลบ ' + r.docNo + ' ออกจากระบบ?', text: (r.vendorName ? r.vendorName + ' · ' : '') + 'ใบ PO รายการสินค้า ไฟล์ที่แนบ และคำขออนุมัติทั้งหมดของใบนี้จะถูกลบ · การ์ดใน LINE ที่ส่งไปแล้วจะกดอนุมัติไม่ได้ · ลบแล้วกู้คืนไม่ได้', ok: 'ลบ PO นี้', tone: 'danger' }).then(function (ok) {
+          if (!ok) return; b.disabled = true;
+          call('purPoDelete', state.token, r.id).then(function (x) {
+            if (!x.ok) { b.disabled = false; return toast(x.error); }
+            toast('ลบ ' + r.docNo + ' แล้ว');
+            P().load().then(function () { A.list = P().data.poApprovals; A.page(); try { renderNav(); } catch (e) {} });
+          }).catch(onServerError);
+        });
+      }
     });
     loadInfo();
   };
@@ -107,7 +117,7 @@
       : r.status === 'rejected' ? '<button class="btn btn-sm btn-line" data-pa="' + r.id + '" data-act="resend">แก้ไขแล้วส่งใหม่</button>' : '';
     return '<div class="pa-card' + (isNew ? ' new' : '') + '"><div class="pa-i">' + (isNew ? '<span class="pa-new">🔴 อนุมัติใหม่ · ยังไม่เปิดดู</span>' : '')
       + '<b>' + esc(r.docNo) + ' · ' + esc(r.vendorName || '-') + '</b><small>' + sub + '</small><div style="margin-top:6px"><span class="tag ' + st[0] + '">' + st[1] + '</span></div></div>'
-      + '<div class="pa-a"><span class="pa-t">' + money(r.total) + '</span>' + btns + '<button class="link-btn" data-pa="' + r.id + '" data-act="doc">เปิดใบ PO</button></div></div>';
+      + '<div class="pa-a"><span class="pa-t">' + money(r.total) + '</span>' + btns + '<button class="link-btn" data-pa="' + r.id + '" data-act="doc">เปิดใบ PO</button><button class="link-btn danger" data-pa="' + r.id + '" data-act="del">' + icon('trash', 14) + 'ลบ</button></div></div>';
   }
   // เปิดไฟล์ที่อนุมัติแล้ว = นับว่าเปิดดู → ยืนยันวันที่จัดส่งอีกครั้ง
   function openApproved(r) {

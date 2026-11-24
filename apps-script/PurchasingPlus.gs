@@ -415,9 +415,14 @@ function purDeleteDoc(token, docId) {
     delRows('invoices', invs.map(function (x) { return x._row; }));
     delRows('docItems', purRead_(ss, 'docItems').filter(function (x) { return x.docId === docId; }).map(function (x) { return x._row; }));
     purRead_(ss, 'rfqs').filter(function (r) { return r.poId === docId; }).forEach(function (r) { r.poId = ''; r.updatedAt = purNow_(); purWrite_(ss, 'rfqs', r); });
+    // คำขออนุมัติทาง LINE ของใบนี้ (PurPoApprove.gs): ลบแถว + ไฟล์ที่สร้างตอนส่ง
+    purPoReg_();
+    var apps = purRead_(ss, 'po_approvals').filter(function (x) { return x.docId === docId; });
+    apps.forEach(function (x) { [x.pdf1, x.pdf2, x.img].forEach(function (id) { if (id) { try { DriveApp.getFileById(id).setTrashed(true); } catch (e) {} } }); });
+    delRows('po_approvals', apps.map(function (x) { return x._row; }));
     trash(doc.files);
     purSheet_(ss, 'docs').deleteRow(doc._row);
-    purLogWrite_(ss, 'ลบ', 'docs', docId, doc.type + ' ' + doc.docNo + ' ' + (doc.vendorName || '') + ' ฿' + doc.total + (invs.length ? ' (+ใบแจ้งหนี้ ' + invs.length + ')' : ''));
+    purLogWrite_(ss, 'ลบ', 'docs', docId, doc.type + ' ' + doc.docNo + ' ' + (doc.vendorName || '') + ' ฿' + doc.total + (invs.length ? ' (+ใบแจ้งหนี้ ' + invs.length + ')' : '') + (apps.length ? ' (+คำขออนุมัติ LINE ' + apps.length + ')' : ''));
     return { ok: true };
   });
 }

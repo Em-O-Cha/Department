@@ -326,7 +326,7 @@ function purPoPostback_(ev, gid, bound) {
   var dept = purPoDept_(), ss = purBook_(dept), ok = p[2] === 'ok';
   var res = purLocked_(function () {
     var rec = purRead_(ss, 'po_approvals').filter(function (r) { return r.id === p[1]; })[0];
-    if (!rec) return { text: 'ไม่พบรายการขออนุมัตินี้ในระบบ' };
+    if (!rec) return { text: 'PO นี้ถูกลบออกจากระบบแล้ว — กดอนุมัติไม่ได้' };
     var doc = purRead_(ss, 'docs').filter(function (x) { return x.id === rec.docId; })[0] || {};
     var items = purRead_(ss, 'docItems').filter(function (x) { return x.docId === rec.docId; }).sort(function (a, b) { return (Number(a.line) || 0) - (Number(b.line) || 0); });
     if (rec.status === 'replaced') return { text: 'PO ' + rec.docNo + ' ถูกส่งขออนุมัติใหม่แล้ว — กดที่การ์ดล่าสุด' };
@@ -385,5 +385,21 @@ function purPoConfirm(token, id, date, note) {
     var doc = purRead_(ss, 'docs').filter(function (x) { return x.id === r.docId; })[0];
     if (doc) { var old = doc.deliveryDate; doc.deliveryDate = date; doc.updatedAt = now; purWrite_(ss, 'docs', doc); purLogWrite_(ss, 'ยืนยันวันที่จัดส่งหลังอนุมัติ', 'docs', doc.id, doc.docNo + ' · ' + (old || '-') + ' → ' + date); }
     return { ok: true, item: purPoOut_(r) };
+  });
+}
+
+// ลบคำขออนุมัติ: ถ้าใบ PO ยังอยู่ → ลบใบ PO ทั้งใบ (purDeleteDoc ลบคำขอ + ไฟล์ให้) · ถ้าใบหายไปแล้ว → ลบเฉพาะคำขอ (ผู้ใช้ขอ 24/11/69)
+function purPoDelete(token, id) {
+  var dept = requirePur_(token); purPoReg_();
+  var ss = purBook_(dept), r = purRead_(ss, 'po_approvals').filter(function (x) { return x.id === id; })[0];
+  if (!r) return { ok: false, error: 'ไม่พบรายการ' };
+  if (purRead_(ss, 'docs').some(function (d) { return d.id === r.docId; })) return purDeleteDoc(token, r.docId);
+  return purLocked_(function () {
+    var rows = purRead_(ss, 'po_approvals').filter(function (x) { return x.docId === r.docId; });
+    rows.forEach(function (x) { [x.pdf1, x.pdf2, x.img].forEach(function (fid) { if (fid) { try { DriveApp.getFileById(fid).setTrashed(true); } catch (e) {} } }); });
+    var sh = purSheet_(ss, 'po_approvals');
+    rows.map(function (x) { return x._row; }).sort(function (a, b) { return b - a; }).forEach(function (n) { sh.deleteRow(n); });
+    purLogWrite_(ss, 'ลบคำขออนุมัติ PO', 'po_approvals', id, r.docNo);
+    return { ok: true };
   });
 }
