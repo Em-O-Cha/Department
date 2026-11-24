@@ -730,6 +730,53 @@ function accLineWebhook_(events) {
     } catch (err) { Logger.log('accLineWebhook_ ' + err); }
   });
 }
+// ---------- เปลี่ยน LINE OA ทุกฝ่ายในครั้งเดียว (ผู้ใช้ขอ 24/11/69) ----------
+// ใส่ Channel access token ใหม่ + Group ID (ค่าเดิมกรอกไว้ให้) → ตรวจว่าบอทใหม่อยู่ในกลุ่มแล้ว (ไม่ต้องพิมพ์ผูกกลุ่ม) → เปลี่ยน
+// ACC_LINE_TOKEN / PROD_LINE_TOKEN = token ใหม่ · ACC_LINE_GROUP / PROD_LINE_GROUP / HR_DAILY_GROUP = ID ที่กรอก (HR ว่าง = ใช้กลุ่มฝ่ายบัญชี)
+function accLineBot_(tok) {
+  if (!tok) return null;
+  var r = UrlFetchApp.fetch('https://api.line.me/v2/bot/info', { headers: { Authorization: 'Bearer ' + tok }, muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) return null;
+  var j = JSON.parse(r.getContentText()); return { id: j.userId || '', name: j.displayName || '' };
+}
+function accLineGroupName_(tok, gid) {
+  if (!tok || !gid) return { ok: false };
+  var r = UrlFetchApp.fetch('https://api.line.me/v2/bot/group/' + encodeURIComponent(gid) + '/summary', { headers: { Authorization: 'Bearer ' + tok }, muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) return { ok: false, code: r.getResponseCode() };
+  return { ok: true, name: JSON.parse(r.getContentText()).groupName || '' };
+}
+function accLineOaInfo(token) {
+  requireAcc_(token);
+  var p = props_(), tok = p.getProperty('ACC_LINE_TOKEN'), bot = accLineBot_(tok);
+  var g = { acc: p.getProperty('ACC_LINE_GROUP') || '', prod: p.getProperty('PROD_LINE_GROUP') || '', hr: p.getProperty('HR_DAILY_GROUP') || '' };
+  var names = {}; Object.keys(g).forEach(function (k) { if (g[k]) names[k] = accLineGroupName_(tok, g[k]).name || ''; });
+  return { ok: true, bot: bot ? bot.name : '', groups: g, names: names, prodSame: p.getProperty('PROD_LINE_TOKEN') === tok };
+}
+function accSwitchOa(token, newToken, groups, dry) {
+  requireAcc_(token);
+  var tok = String(newToken || '').replace(/\s+/g, ''), g = groups || {};
+  if (tok.length < 40) return { ok: false, error: 'ใส่ Channel access token ของ LINE OA ใหม่ (ยาวมาก คัดลอกจาก LINE Developers → Messaging API)' };
+  var bot = accLineBot_(tok);
+  if (!bot) return { ok: false, error: 'LINE ไม่รับ token นี้ — ตรวจว่าคัดลอกครบทั้งเส้น (Channel access token แบบ long-lived)' };
+  var keys = { acc: 'ฝ่ายบัญชี', prod: 'ฝ่ายผลิต', hr: 'เช็คพนักงานรายวัน (HR)' }, res = {}, bad = [];
+  Object.keys(keys).forEach(function (k) {
+    var id = String(g[k] || '').trim();
+    if (!id) { res[k] = { ok: true, empty: true }; if (k === 'acc') bad.push('ต้องใส่ Group ID ของฝ่ายบัญชี'); return; }
+    if (!/^C[0-9a-f]{32}$/.test(id)) { res[k] = { ok: false, error: 'รูปแบบ Group ID ไม่ถูกต้อง (ขึ้นต้นด้วย C ตามด้วยตัวอักษร 32 ตัว)' }; bad.push(keys[k] + ': รูปแบบ Group ID ไม่ถูกต้อง'); return; }
+    var s = accLineGroupName_(tok, id);
+    res[k] = s.ok ? { ok: true, name: s.name } : { ok: false, error: 'บอท "' + bot.name + '" ยังไม่ได้อยู่ในกลุ่มนี้ — เชิญบอทเข้ากลุ่มก่อน' };
+    if (!s.ok) bad.push(keys[k] + ': บอทใหม่ยังไม่ได้อยู่ในกลุ่ม');
+  });
+  if (dry || bad.length) return { ok: !bad.length, dry: true, bot: bot.name, groups: res, error: bad.join(' · ') };
+  var p = props_(), old = p.getProperty('ACC_LINE_TOKEN');
+  if (old && old !== tok) p.setProperty('ACC_LINE_TOKEN_PREV', old);   // เก็บ token เดิมไว้เผื่อย้อนกลับ
+  p.setProperty('ACC_LINE_TOKEN', tok); p.setProperty('PROD_LINE_TOKEN', tok);
+  p.setProperty('ACC_LINE_GROUP', String(g.acc).trim());
+  if (String(g.prod || '').trim()) p.setProperty('PROD_LINE_GROUP', String(g.prod).trim()); else p.deleteProperty('PROD_LINE_GROUP');
+  if (String(g.hr || '').trim()) p.setProperty('HR_DAILY_GROUP', String(g.hr).trim()); else p.deleteProperty('HR_DAILY_GROUP');
+  try { var dept = requireAcc_(token); purLogWrite_(purBook_(dept), 'เปลี่ยน LINE OA', 'settings', '', 'บอท ' + bot.name); } catch (e) {}
+  return { ok: true, bot: bot.name, groups: res };
+}
 function accLineTest(token) {
   requireAcc_(token);
   return accLinePush_([{ type: 'text', text: '✅ ทดสอบการเชื่อมต่อ: ระบบงานองค์กร ฝ่ายบัญชี ส่งข้อความเข้ากลุ่มนี้ได้แล้ว' }]);

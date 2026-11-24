@@ -38,7 +38,7 @@ function apiFunctions_() {
     hrTimeInit: hrTimeInit, hrTimeList: hrTimeList, hrTimeSave: hrTimeSave, hrTimeEdit: hrTimeEdit, hrJobs: hrJobs, hrSaveJob: hrSaveJob, hrDeleteJob: hrDeleteJob, hrFormInit: hrFormInit, hrFormFind: hrFormFind, hrFormPhotos: hrFormPhotos, hrFormBalance: hrFormBalance, hrFormSubmit: hrFormSubmit, hrFormUpload: hrFormUpload, hrAckAttach: hrAckAttach,
     // ฝ่ายบัญชี — รายงานรับออเดอร์ 7-11 (Acc.gs)
     accLoad: accLoad, cpLoad: cpLoad, cpSetSheet: cpSetSheet, cpPreview: cpPreview, cpSave: cpSave, cpSaveMap: cpSaveMap, cpUpdateLine: cpUpdateLine, cpRebuild: cpRebuild, cpSendLine: cpSendLine, cpSendMoveLine: cpSendMoveLine, cpMakeImportFiles: cpMakeImportFiles, cpMonthFiles: cpMonthFiles, acc711Preview: acc711Preview, acc711Save: acc711Save, acc711DeleteImport: acc711DeleteImport, acc711Report: acc711Report,
-    acc711Pdf: acc711Pdf, acc711SendLine: acc711SendLine, accLineTest: accLineTest, accLineDiag: accLineDiag, accSaveMap: accSaveMap, accUploadProductImage: accUploadProductImage, accDashboard: accDashboard,
+    acc711Pdf: acc711Pdf, acc711SendLine: acc711SendLine, accLineTest: accLineTest, accLineOaInfo: accLineOaInfo, accSwitchOa: accSwitchOa, accLineDiag: accLineDiag, accSaveMap: accSaveMap, accUploadProductImage: accUploadProductImage, accDashboard: accDashboard,
     // ฝ่ายประกันคุณภาพ — ข้อร้องเรียนลูกค้า (Qa.gs)
     qaLoad: qaLoad, qaSave: qaSave, qaDelete: qaDelete, qaUploadFile: qaUploadFile, qaRemoveFile: qaRemoveFile, qaSaveSettings: qaSaveSettings,
     qaLog: qaLog, qaDashboard: qaDashboard, qaSaveTest: qaSaveTest, qaDeleteTest: qaDeleteTest, qaSaveNewProd: qaSaveNewProd, qaDeleteNewProd: qaDeleteNewProd,

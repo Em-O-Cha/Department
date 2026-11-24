@@ -907,7 +907,8 @@
       + (L.token && L.group
         ? '<div class="a7chk ok"><i>✓</i><span>เชื่อมต่อ LINE เรียบร้อย — รายงานจะส่งเข้ากลุ่มที่ผูกไว้</span></div>'
           + '<div class="a7lineacts"><button class="btn btn-line btn-sm" id="sTest">' + icon('send', 16) + ' ส่งข้อความทดสอบเข้ากลุ่ม</button>'
-          + '<button class="btn btn-line btn-sm" id="sGroup">' + icon('gear', 16) + ' เปลี่ยนกลุ่มที่รับรายงาน</button></div>'
+          + '<button class="btn btn-line btn-sm" id="sGroup">' + icon('gear', 16) + ' เปลี่ยนกลุ่มที่รับรายงาน</button>'
+          + '<button class="btn btn-line btn-sm" id="sOa">' + icon('key', 16) + ' เปลี่ยน LINE OA (ใส่ Token ใหม่)</button></div>'
         : '<div class="a7chk ' + (L.token ? 'ok' : 'bad') + '"><i>' + (L.token ? '✓' : '✕') + '</i><span>ACC_LINE_TOKEN (Channel access token) ' + (L.token ? 'ใส่แล้ว' : 'ยังไม่ได้ใส่') + '</span></div>'
           + '<div class="a7chk bad"><i>✕</i><span>กลุ่ม LINE ที่รับรายงาน ยังไม่ได้ผูก</span></div>'
           + '<ol class="a7ol">'
@@ -983,6 +984,7 @@
     });
     bindCopy($('main'));
     if ($('sGroup')) $('sGroup').addEventListener('click', changeGroup);
+    if ($('sOa')) $('sOa').addEventListener('click', changeOa);
     if ($('sTest')) $('sTest').addEventListener('click', function () {
       var b = this; b.disabled = true;
       call('accLineTest', state.token).then(function (r) { b.disabled = false; toast(r.ok ? 'ส่งข้อความทดสอบแล้ว — ดูในกลุ่ม LINE' : r.error); }).catch(function (e) { b.disabled = false; onServerError(e); });
@@ -999,6 +1001,57 @@
       if (navigator.clipboard) navigator.clipboard.writeText(t).then(done, function () { el.previousSibling.select(); });
       else { el.previousSibling.select(); document.execCommand('copy'); done(); }
     }, root);
+  }
+  // เปลี่ยน LINE OA ของทุกฝ่าย (บัญชี / ผลิต / เช็คพนักงาน HR) ในครั้งเดียว — ใส่ Token ใหม่ + Group ID (กรอกค่าเดิมไว้ให้)
+  // ระบบตรวจว่าบอทใหม่อยู่ในกลุ่มแล้วก่อนเปลี่ยน · ไม่ต้องพิมพ์คำสั่งผูกกลุ่ม (ผู้ใช้ขอ 24/11/69)
+  function changeOa() {
+    var ok = false, info = null;
+    var gRow = function (k, label, hint) {
+      return '<label class="a7oa"><span><b>' + label + '</b><small id="oaN_' + k + '">' + hint + '</small></span><input id="oaG_' + k + '" maxlength="40" spellcheck="false" autocomplete="off" placeholder="C… (Group ID)"></label>';
+    };
+    wide({ icon: 'send', title: 'เปลี่ยน LINE OA ของทุกฝ่าย', sub: 'ใช้กับ ฝ่ายบัญชี · ฝ่ายผลิต · เช็คพนักงานรายวัน (HR)',
+      body: '<div id="oaCur" class="a7oacur"><span class="spinner dark"></span> กำลังโหลด OA และกลุ่มที่ใช้อยู่…</div>'
+        + '<ol class="a7ol"><li>เชิญ LINE OA ตัวใหม่เข้ากลุ่มที่ใช้อยู่ทุกกลุ่มก่อน (ไม่ต้องพิมพ์คำสั่งในกลุ่ม)</li><li>วาง Channel access token ของ OA ใหม่ แล้วกด "ตรวจสอบ"</li><li>ผ่านครบแล้วกด "เปลี่ยนเป็น OA นี้"</li></ol>'
+        + '<label class="a7oa"><span><b>Channel access token ของ OA ใหม่</b><small>LINE Developers → Messaging API → Channel access token</small></span><input id="oaTok" type="password" spellcheck="false" autocomplete="off" placeholder="วาง token ที่นี่"></label>'
+        + gRow('acc', 'Group ID · ฝ่ายบัญชี', 'กลุ่มที่รับรายงานออเดอร์') + gRow('prod', 'Group ID · ฝ่ายผลิต', 'ว่าง = ไม่ส่ง') + gRow('hr', 'Group ID · เช็คพนักงานรายวัน (HR)', 'ว่าง = ส่งเข้ากลุ่มฝ่ายบัญชี')
+        + '<div class="a7lineacts"><button type="button" class="btn btn-line btn-sm" id="oaChk">' + icon('check', 16) + ' ตรวจสอบ</button></div><div id="oaRes"></div>',
+      ok: 'เปลี่ยนเป็น OA นี้', cancel: 'ยกเลิก',
+      onOpen: function () {
+        var okb = $('mOk'); okb.disabled = true;
+        var reset = function () { ok = false; okb.disabled = true; };
+        ['oaTok', 'oaG_acc', 'oaG_prod', 'oaG_hr'].forEach(function (id) { $(id).addEventListener('input', reset); });
+        call('accLineOaInfo', state.token).then(function (r) {
+          info = r; var c = $('oaCur'); if (!c || !r.ok) return;
+          c.innerHTML = 'ตอนนี้ใช้ OA <b>' + esc(r.bot || '(token เดิมใช้ไม่ได้)') + '</b>' + ['acc', 'prod', 'hr'].map(function (k) { return r.groups[k] ? '' : ''; }).join('');
+          ['acc', 'prod', 'hr'].forEach(function (k) {
+            $('oaG_' + k).value = r.groups[k] || '';
+            if (r.groups[k]) $('oaN_' + k).textContent = 'ตอนนี้: ' + (r.names[k] ? 'กลุ่ม "' + r.names[k] + '"' : 'ใช้อยู่');
+          });
+        }).catch(onServerError);
+        $('oaChk').addEventListener('click', function () {
+          var b = this; b.disabled = true; $('oaRes').innerHTML = '<span class="spinner dark"></span> กำลังตรวจกับ LINE…';
+          call('accSwitchOa', state.token, $('oaTok').value, gvals(), true).then(function (r) {
+            b.disabled = false; ok = !!r.ok; okb.disabled = !ok;
+            var lines = r.bot ? [chk(true, 'Token ใช้ได้ · OA "' + r.bot + '"')] : [chk(false, r.error || 'ตรวจไม่ผ่าน')];
+            if (r.groups) [['acc', 'ฝ่ายบัญชี'], ['prod', 'ฝ่ายผลิต'], ['hr', 'เช็คพนักงาน (HR)']].forEach(function (x) {
+              var g = r.groups[x[0]]; if (!g) return;
+              lines.push(g.empty ? chk('warn', x[1] + ': ไม่ได้ใส่ Group ID' + (x[0] === 'hr' ? ' — จะส่งเข้ากลุ่มฝ่ายบัญชี' : x[0] === 'prod' ? ' — ฝ่ายผลิตจะส่ง LINE ไม่ได้' : ''))
+                : chk(g.ok, x[1] + ': ' + (g.ok ? 'บอทอยู่ในกลุ่ม "' + g.name + '" แล้ว' : g.error)));
+            });
+            $('oaRes').innerHTML = lines.join('');
+            if (ok) okb.focus();
+          }).catch(function (e) { b.disabled = false; onServerError(e); });
+        });
+      },
+      submit: function () {
+        if (!ok) return 'กด "ตรวจสอบ" ให้ผ่านก่อน';
+        return call('accSwitchOa', state.token, $('oaTok').value, gvals(), false).then(function (r) {
+          if (!r.ok) return r.error || 'เปลี่ยนไม่สำเร็จ';
+          closeModal(); toast('เปลี่ยนเป็น OA "' + r.bot + '" แล้ว — ลองกด "ส่งข้อความทดสอบเข้ากลุ่ม"');
+          H.load().then(settings).catch(onServerError);
+        });
+      } });
+    function gvals() { return { acc: $('oaG_acc').value.trim(), prod: $('oaG_prod').value.trim(), hr: $('oaG_hr').value.trim() }; }
   }
   // เปลี่ยนกลุ่ม: ดึงรหัสล่าสุดก่อน (รหัสเดิมใช้ไปแล้ว)
   function changeGroup() {
@@ -1019,6 +1072,7 @@
   // ---------- CSS ของโมดูล ----------
   var css = document.createElement('style');
   css.textContent = [
+    '.a7oa{display:block;margin:0 0 12px}.a7oa>span{display:block;margin-bottom:5px}.a7oa small{display:block;color:var(--muted);font-size:12.5px;font-weight:400}.a7oa input,.a7oa textarea{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-family:ui-monospace,Menlo,monospace;font-size:13.5px;box-sizing:border-box}.a7oacur{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:14px}',
     '.a7band{margin:22px 0 12px;padding:10px 16px;border-radius:14px;font-weight:800;font-size:16px;color:#fff;letter-spacing:.2px}.a7band.in{background:linear-gradient(90deg,#15803d,#22c55e)}.a7band.out{background:linear-gradient(90deg,#b91c1c,#ef4444);margin-top:30px}.a7band:first-of-type{margin-top:6px}.a7jump{color:#b91c1c;font-weight:700;white-space:nowrap}',
     '.a7steps{display:flex;gap:6px;list-style:none;padding:0;margin:0 0 14px;flex-wrap:wrap}.a7steps li{display:flex;align-items:center;gap:6px;background:#fff;border:1.5px solid var(--line);border-radius:99px;padding:5px 12px 5px 5px;font-size:13.5px;color:var(--muted)}',
     '.a7steps i{font-style:normal;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#f1f5f9;font-weight:700;font-size:12.5px}.a7steps li.on{border-color:var(--c);color:var(--ink);font-weight:600}.a7steps li.on i{background:var(--c);color:#fff}.a7steps li.done i{background:#16a34a;color:#fff}',
