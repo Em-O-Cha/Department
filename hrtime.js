@@ -1,7 +1,7 @@
 // ==================== ฝ่ายบุคคล — ลงเวลา (ไฟล์จากเครื่องสแกน) ====================
 // เมนู "ลงเวลา (เครื่องสแกน)" (h_time) — hr.js เรียก HRTIME.page() · API ใน HrTime.gs
 // อ่านไฟล์รายงานจากโปรแกรมเครื่องสแกน (PDF ด้วย pdf.js / Excel ด้วย SheetJS) ในเบราว์เซอร์ → ตรวจ + จับคู่รหัสที่เครื่องกับพนักงาน → บันทึก
-// มาสาย / ขาดงาน เซิร์ฟเวอร์ลงในแท็บการลาให้เป็นข้อมูล (ไม่ต้องอนุมัติ) · ลืมสแกน / ออกก่อน ดูได้ในหน้านี้
+// มาสาย เซิร์ฟเวอร์ลงในแท็บการลาให้เป็นข้อมูล (ไม่ต้องอนุมัติ) · ขาดงานตามไฟล์ไม่ลงอัตโนมัติ (24/11/69) HR เลือกเองในตาราง · ลืมสแกน / ออกก่อน ดูได้ในหน้านี้
 (function () {
   var T = window.HRTIME = { init: null, ym: '', rows: null, day: '', f: 'all', tab: 'day' };
   var PDF_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
@@ -179,7 +179,7 @@
           + '<td>' + (r.kind ? '<b class="' + (r.kind === 'ok' ? 'pos' : 'neg') + '">' + esc(kindLabel(r.kind)) + '</b> ' : '') + esc(r.dayStatus === 'วันหยุด' && !r.kind ? 'วันหยุด' : r.remark)
           + (r.editedAt ? ' <small class="htedit">HR แก้</small>' : '') + '</td></tr>';
       }).join('') || '<tr><td colspan="10" class="muted">ไม่มีรายการ</td></tr>') + '</tbody></table></div>'
-      + (cnt('nomap') ? '<p class="muted">มี ' + cnt('nomap') + ' คนที่ยังไม่จับคู่กับทะเบียน — มาสาย / ขาดงานของคนกลุ่มนี้ยังไม่ลงในหน้าการลา · <button class="link-btn" id="htRemap">จับคู่รายชื่อ</button></p>' : '');
+      + (cnt('nomap') ? '<p class="muted">มี ' + cnt('nomap') + ' คนที่ยังไม่จับคู่กับทะเบียน — มาสายของคนกลุ่มนี้ยังไม่ลงในหน้าการลา · <button class="link-btn" id="htRemap">จับคู่รายชื่อ</button></p>' : '');
     $('main').innerHTML = head + body;
     bindTop();
     if ($('htDay')) $('htDay').addEventListener('change', function () { T.day = this.value; render(); });
@@ -225,7 +225,7 @@
         + fld('teIn', 'เวลาเข้า', r.timeIn, 'time') + fld('teOut', 'เวลาออก', r.timeOut, 'time')
         + fld('teLate', 'สาย (นาที)', r.lateMin || 0, 'number', ' min="0" inputmode="numeric"') + fld('teEarly', 'ออกก่อน (นาที)', r.earlyMin || 0, 'number', ' min="0" inputmode="numeric"')
         + '<div class="pf full"><label for="teNote">หมายเหตุ</label><input id="teNote" maxlength="120" value="' + esc(r.remark || '') + '"></div></div>'
-        + '<p class="muted" style="margin:6px 0 0;font-size:13px">บันทึกแล้วระบบปรับหน้าการลา / ขาด / มาสายของวันนี้ให้ตาม (ขาดงาน / ลา = ลงเป็นข้อมูลเลย · มาทำงาน = ลบขาดงานที่เครื่องสแกนลงไว้) · นำเข้าไฟล์วันนี้ซ้ำจะไม่ทับที่ HR แก้</p>',
+        + '<p class="muted" style="margin:6px 0 0;font-size:13px">บันทึกแล้วระบบปรับหน้าการลา / ขาด / มาสายของวันนี้ให้ตาม (เลือกขาดงาน / ลา = ลงหน้าการลาเลย · มาทำงาน = ไม่ลง) · นำเข้าไฟล์วันนี้ซ้ำจะไม่ทับที่ HR แก้</p>',
       ok: 'บันทึก',
       onOpen: function () {
         $('teKind').addEventListener('change', function () { if (['absent', 'sick', 'personal', 'vacation', 'other'].indexOf(this.value) >= 0) { $('teLate').value = 0; $('teEarly').value = 0; } });
@@ -280,14 +280,14 @@
       body: '<div class="htsum"><div><b>' + (days.length === 1 ? th(days[0]) : th(days[0]) + ' – ' + th(days[days.length - 1])) + '</b><span>' + days.length + ' วัน · ' + rows.length + ' รายการ</span></div>'
         + '<div class="late"><b>' + n(function (r) { return r.lateMin > 0; }) + '</b><span>มาสาย</span></div><div class="abs"><b>' + n(isAbsent) + '</b><span>ขาดงาน</span></div>'
         + '<div><b>' + n(isMiss) + '</b><span>ลืมสแกน</span></div><div><b>' + n(function (r) { return r.earlyMin > 0; }) + '</b><span>ออกก่อน</span></div></div>'
-        + '<p class="muted" style="margin:8px 0 0">บันทึกแล้ว: มาสาย / ขาดงาน ลงในหน้าการลาให้เอง (ขาดงานเฉพาะคนที่ไม่มีใบลาวันนั้น) · นำเข้าวันเดิมซ้ำ = แทนข้อมูลเดิมของวันนั้น</p>'
+        + '<p class="muted" style="margin:8px 0 0">บันทึกแล้ว: มาสาย ลงในหน้าการลาให้เอง · ขาดงานตามไฟล์ไม่ลงให้ — HR แตะแถวในตารางเพื่อเลือก ขาดงาน / ลา / มาทำงาน เอง · นำเข้าวันเดิมซ้ำ = แทนข้อมูลเดิมของวันนั้น</p>'
         + mapHtml(list),
       ok: 'บันทึก ' + rows.length + ' รายการ',
       submit: function () {
         return call('hrTimeSave', state.token, rows, readMap(list)).then(function (r) {
           if (!r.ok) return r.error;
           closeModal(); T.init.map = r.map;
-          toast('บันทึกแล้ว ' + r.saved + ' รายการ · มาสาย ' + r.late + ' · ขาดงาน ' + r.absent + (r.unmatched ? ' · ยังไม่จับคู่ ' + r.unmatched + ' คน' : ''));
+          toast('บันทึกแล้ว ' + r.saved + ' รายการ · มาสาย ' + r.late + (r.unmatched ? ' · ยังไม่จับคู่ ' + r.unmatched + ' คน' : '') + ' · ขาดงานตามไฟล์ให้ HR แตะแถวเลือกเอง');
           if (window.HRM && window.HRM.dirtyLeaves) window.HRM.dirtyLeaves();
           T.day = r.days[r.days.length - 1]; loadMonth(T.day.slice(0, 7));
         });
@@ -301,7 +301,7 @@
       submit: function () {
         return call('hrTimeSave', state.token, T.rows, readMap(list)).then(function (r) {
           if (!r.ok) return r.error;
-          closeModal(); T.init.map = r.map; toast('จับคู่แล้ว · มาสาย ' + r.late + ' · ขาดงาน ' + r.absent); loadMonth(T.ym);
+          closeModal(); T.init.map = r.map; toast('จับคู่แล้ว · มาสาย ' + r.late); loadMonth(T.ym);
         });
       } });
   }

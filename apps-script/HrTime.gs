@@ -97,8 +97,9 @@ function hrtSyncLeaves_(ss, rows, now) {
     var other = mine.filter(function (l) { return l.source !== HRT_SRC_ && l.type !== 'late'; });
     var work = r.dayStatus !== 'วันหยุด' || r.kind;
     var lateMin = Number(r.lateMin) || 0;
-    // ประเภทการขาด / ลาของวันนั้น: HR เลือกเอง หรือ "ขาดงาน" ตามไฟล์ · มีใบลาอื่นอยู่แล้ว = ไม่ลงซ้ำ
-    var off = r.kind ? (r.kind === 'ok' ? '' : r.kind) : (/ขาดงาน/.test(r.remark) ? 'absent' : '');
+    // ประเภทการขาด / ลาของวันนั้น: เฉพาะที่ HR เลือกเองในหน้าลงเวลา · "ขาดงาน" ตามไฟล์ไม่ลงหน้าการลาอัตโนมัติแล้ว (ผู้ใช้ขอ 24/11/69)
+    // มีใบลาอื่นอยู่แล้ว = ไม่ลงซ้ำ · รายการขาดงานอัตโนมัติเดิมของวันนั้นจะถูกลบเมื่อนำเข้า / แก้แถวนั้นอีกครั้ง
+    var off = r.kind ? (r.kind === 'ok' ? '' : r.kind) : '';
     if (off && other.length) off = '';
     var wantLate = work && lateMin > 0 && !(r.kind && r.kind !== 'ok');
     var keep = {};
