@@ -205,7 +205,7 @@
           + (sameP ? (first ? '<td' + rs + ' class="cpp">' + pname(r) + '</td>' : '') : '<td class="cpp">' + pname(r) + '</td>')
           + '<td class="cpo">' + esc(r.poNo) + '</td><td class="cpwh">' + esc(r.wh || (r.place ? '-' : '?')) + '</td><td class="cpq">' + nq(r.qty) + (r.pcs ? '<small class="cppcs">= ' + n0(r.pcs) + ' ' + esc(r.pcsUnit) + '</small>' : '') + '</td><td>' + esc(r.unitTh || r.unit || 'ลัง') + '</td>'
           + (sub ? '<td' + srs + ' class="cpt">' + nq(sub.sum) + '</td><td' + srs + '>' + (r.place ? esc(r.place) : '<span class="cpq0">?</span>') + '</td>' : '')
-          + (opt.noNote ? '' : '<td class="cpn">' + (opt.preview ? stateTag(r) : noteHtml(r)) + '</td>') + '</tr>';
+          + (opt.noNote ? '' : '<td class="cpn">' + (opt.preview ? stateTag(r) : noteHtml(r, opt.line)) + '</td>') + '</tr>';
       }).join('');
     }).join('');
     return '<div class="cpwrap"><table class="cptab"><thead><tr><th>วัน</th><th>วันที่</th><th>สินค้า</th><th>PO</th><th>คลัง</th><th>จำนวนสินค้า</th><th>หน่วย</th><th>Total</th><th>สถานที่ส่ง</th>' + (opt.noNote ? '' : '<th>' + (opt.preview ? 'สถานะ' : 'หมายเหตุ') + '</th>') + '</tr></thead>'
@@ -221,10 +221,10 @@
   }
   function fmtV(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? slash(v) : String(v); }
   // หมายเหตุ "อัพเดท dd/mm/yy" = วันที่เพิ่ม PO เข้าระบบ หรือวันที่ PO เปลี่ยนครั้งล่าสุด (ผู้ใช้ขอ 24/11/69 — เหมือน cpUpd_ ใน AccCpram.gs)
-  // PO ใหม่ไม่ต้องมีหมายเหตุ "อัพเดท" (ผู้ใช้ขอ 24/11/69: วันที่อัพเดทอยู่บนหัวตารางสีแดงแทน) — เฉพาะ PO ที่เปลี่ยนแปลง
-  function updOf(r) { var m = String(r.history || '').split(' | ').pop().match(/^(\d{4}-\d{2}-\d{2}):/); return m ? m[1] : ''; }
-  function noteHtml(r) {
-    var t = r.status === 'done' ? '<span class="cptag done">*ส่งสินค้าแล้ว</span>' : r.status === 'cancel' ? '<span class="cptag cancel">ยกเลิก</span>' : '', u = updOf(r);
+  // ภาพที่ส่ง LINE: PO ใหม่ไม่มีหมายเหตุ "อัพเดท" (วันที่อยู่บนหัวตารางสีแดง) · หน้าจอ / PDF / Excel ยังแสดงวันที่นำเข้า PO (ผู้ใช้ขอ 24/11/69)
+  function updOf(r, line) { var m = String(r.history || '').split(' | ').pop().match(/^(\d{4}-\d{2}-\d{2}):/); return m ? m[1] : line ? '' : String(r.createdAt || '').slice(0, 10); }
+  function noteHtml(r, line) {
+    var t = r.status === 'done' ? '<span class="cptag done">*ส่งสินค้าแล้ว</span>' : r.status === 'cancel' ? '<span class="cptag cancel">ยกเลิก</span>' : '', u = updOf(r, line);
     return t + (/^\d{4}-\d{2}-\d{2}$/.test(u) ? '<small class="cpu">อัพเดท ' + slash(u) + '</small>' : '') + (r.note ? '<small>' + esc(r.note) + '</small>' : '') + (r.history ? '<small class="cph">' + esc(histText(r.history)) + '</small>' : '');
   }
   function roundsTable(rounds) {
@@ -474,7 +474,7 @@
       var dates = uniq(rows.map(function (r) { return r.deliveryDate; })), pos = uniq(rows.map(function (r) { return r.poNo; }));
       var box = document.createElement('div'); box.className = 'cpimgbox';
       box.innerHTML = '<div class="cpimg"><div class="cpimh"><b>' + esc(o.title || 'ตารางส่งสินค้า CP Ram') + '</b><span>' + (o.sub ? esc(o.sub) : 'ส่ง ' + slash(dates[0]) + (dates.length > 1 ? ' – ' + slash(dates[dates.length - 1]) : '')) + ' · ' + pos.length + ' ใบสั่งซื้อ · <b class="cpupd">Update ' + slash(isoToday()) + '</b></span></div>'
-        + schedTable(rows, { hi: o.hi, noNote: !rows.some(function (r) { return r.status === 'cancel' || r.note || r.history; }) }) + '</div>';
+        + schedTable(rows, { hi: o.hi, line: true, noNote: !rows.some(function (r) { return r.status === 'cancel' || r.note || r.history; }) }) + '</div>';
       document.body.appendChild(box);
       return window.html2canvas(box.firstChild, { scale: 2, backgroundColor: '#ffffff', logging: false }).then(function (cv) {
         document.body.removeChild(box);

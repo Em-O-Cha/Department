@@ -246,8 +246,8 @@ function cpSave(token, pos, fileName) {
   });
 }
 // วันที่ของหมายเหตุ "อัพเดท" = วันที่ PO เปลี่ยนครั้งล่าสุด (จากประวัติ) หรือวันที่เพิ่ม PO เข้าระบบ (createdAt) — ผู้ใช้ขอ 24/11/69
-// PO ใหม่ไม่ต้องมีหมายเหตุ "อัพเดท" (ผู้ใช้ขอ 24/11/69: วันที่อัพเดทอยู่บนหัวสีแดงแทน) → เฉพาะ PO ที่เปลี่ยนแปลง
-function cpUpd_(r) { var m = String(r.history || '').split(' | ').pop().match(/^(\d{4}-\d{2}-\d{2}):/); return m ? m[1] : ''; }
+// หมายเหตุ "อัพเดท" ในแท็บรายเดือน / PDF / Excel: วันที่ PO เปลี่ยนครั้งล่าสุด หรือวันที่นำเข้า PO (ผู้ใช้ขอ 24/11/69 — เอาออกเฉพาะภาพที่ส่ง LINE)
+function cpUpd_(r) { var m = String(r.history || '').split(' | ').pop().match(/^(\d{4}-\d{2}-\d{2}):/), c = String(r.createdAt || '').replace(/^'/, '').slice(0, 10); return m ? m[1] : /^\d{4}-\d{2}-\d{2}$/.test(c) ? c : ''; }
 function cpHistLast_(h) { var t = String(h).split(' | ').pop().replace(/^[\d-]+: /, ''); return /^(เลื่อนส่ง|เพิ่มจำนวน|ลดจำนวน)/.test(t) ? t : 'เปลี่ยน: ' + t; }
 function cpHistVal_(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? cpSlash_(v) : String(v); }
 function cpSaveMap(token, json) {
