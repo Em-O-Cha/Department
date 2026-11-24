@@ -165,7 +165,7 @@
       im.onload = function () {
         var k = Math.min(1, 1600 / Math.max(im.width, im.height)), c = document.createElement('canvas');
         c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
-        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
         res({ b64: c.toDataURL('image/jpeg', 0.85).split(',')[1], name: (file.name || 'photo').replace(/\.\w+$/, '') + '.jpg' });
       };
       im.onerror = function () { URL.revokeObjectURL(url); res(null); };
@@ -420,7 +420,8 @@
     var rows = all.filter(function (c) { return !s || (c.name + ' ' + c.size + ' ' + c.brand).toLowerCase().indexOf(s) >= 0; })
       .sort(function (a, b) { return String(b.costDate).localeCompare(String(a.costDate)) || String(a.name).localeCompare(String(b.name)); });
     $('main').innerHTML = '<h3>ต้นทุนสินค้า</h3>'
-      + '<div class="rtool"><button class="btn btn-primary" id="cAdd">' + icon('plus', 18) + ' เพิ่มต้นทุนสินค้า</button></div>'
+      + '<div class="rtool rctool"><label class="btn btn-line" id="cImp" tabindex="0">' + icon('upload', 18) + ' นำเข้าจากไฟล์ Excel<input type="file" id="cImpF" accept=".xlsx,.xls" multiple hidden></label>'
+      + '<button class="btn btn-primary" id="cAdd">' + icon('plus', 18) + ' เพิ่มต้นทุนสินค้า</button></div>'
       + '<div class="pbar rbar r1"><div class="psearch">' + icon('search', 18) + '<input id="cS" type="search" placeholder="ค้นหาชื่อสินค้า / ตรา" value="' + esc(q.cs || '') + '" aria-label="ค้นหาต้นทุนสินค้า"></div></div>'
       + (rows.length ? '<div class="rccards">' + rows.map(function (c) {
         var r = costRows(c);
@@ -432,7 +433,150 @@
         : '<div class="panel empty">' + (all.length ? 'ไม่พบรายการที่ค้นหา' : 'ยังไม่มีต้นทุนสินค้า — กด "เพิ่มต้นทุนสินค้า" เพื่อเริ่ม') + '</div>');
     $('cS').addEventListener('input', function () { q.cs = this.value; clearTimeout(H.t); H.t = setTimeout(function () { costPage(); var e = $('cS'); e.focus(); e.setSelectionRange(e.value.length, e.value.length); }, 250); });
     $('cAdd').addEventListener('click', function () { costForm(null); });
+    $('cImpF').addEventListener('change', function () { var f = this.files; costImport(f); this.value = ''; });
+    $('cImp').addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('cImpF').click(); } });
     on('[data-cost]', 'click', function (el) { q.costId = el.getAttribute('data-cost'); window.scrollTo(0, 0); costPage(); }, $('main'));
+  }
+
+  // ---- นำเข้าไฟล์ Excel ต้นทุน (แบบเดียวกับไฟล์ "ต้นทุนสินค้า … 15 g" ของ R&D — ผู้ใช้ขอ 24/11/69)
+  // หาตำแหน่งจากหัวข้อ (ไม่ยึดเซลล์ตายตัว): "อัพเดท" · "ต้นทุนสินค้า :" · "ชื่อส่วนผสม" · Yield / Loss / จำนวนสินค้าที่ได้ · "ชื่อบรรจุภัณฑ์"
+  // รูปสินค้า = รูปที่ใหญ่ที่สุดที่วางไว้ทางขวาของหัวกระดาษ (ไม่ใช่โลโก้มุมซ้าย)
+  function costParseSheet(XLSX, ws) {
+    var ref = ws['!ref']; if (!ref) return null;
+    var R = XLSX.utils.decode_range(ref), cell = function (r, c) { var x = ws[XLSX.utils.encode_cell({ r: r, c: c })]; return x ? x.v : ''; };
+    var txt = function (r, c) { var v = cell(r, c); return v == null ? '' : String(v).replace(/\s+/g, ' ').trim(); };
+    var num = function (v) { if (typeof v === 'number') return v; var s = String(v == null ? '' : v).replace(/,/g, '').trim(); return /^-?\d+(\.\d+)?$/.test(s) ? Number(s) : null; };
+    var find = function (re, r0, r1) { for (var r = r0 || R.s.r; r <= (r1 == null ? R.e.r : r1); r++) for (var c = R.s.c; c <= R.e.c; c++) if (re.test(txt(r, c))) return { r: r, c: c }; return null; };
+    var out = { ingredients: [], packaging: [] }, m;
+    // วันที่อัพเดท dd/mm/yyyy (ค.ศ. หรือ พ.ศ.)
+    var u = find(/อัพเดท|อัปเดต/);
+    if (u) {
+      var raw = cell(u.r, u.c), dm = String(raw).match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+      if (!dm) for (var c = u.c + 1; c <= Math.min(R.e.c, u.c + 6) && !dm; c++) { var v = cell(u.r, c); if (typeof v === 'number' && v > 30000) { var d0 = XLSX.SSF.parse_date_code(v); dm = [0, d0.d, d0.m, d0.y]; } else dm = String(v).match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/); }
+      if (dm) { var y = +dm[3]; if (y < 100) y += 2500; if (y > 2400) y -= 543; out.costDate = y + '-' + ('0' + dm[2]).slice(-2) + '-' + ('0' + dm[1]).slice(-2); }
+    }
+    // ชื่อสินค้า / ขนาด / ตรา จากหัวข้อ "ต้นทุนสินค้า : …"
+    var t = find(/ต้นทุนสินค้า/);
+    if (t) {
+      var lines = String(cell(t.r, t.c)).split(/\n/).map(function (s) { return s.replace(/\s+/g, ' ').trim(); }).filter(String);
+      var first = (lines.shift() || '').replace(/^.*ต้นทุนสินค้า\s*:?\s*/, '').trim();
+      lines.forEach(function (l) { if (/^ตรา/.test(l)) out.brand = l.replace(/^ตรา\s*/, '').trim(); else if (l && !out.brand) first += ' ' + l; });
+      if ((m = first.match(/^(.*?)\s*(\d+(?:\.\d+)?\s*(?:g|gm|กรัม|kg|กก\.?|ml|มล\.?|ลิตร|l)\.?)\s*$/i))) { out.name = m[1].trim(); out.size = m[2].replace(/\s+/g, ' ').trim(); } else out.name = first;
+      var bm = out.name.match(/^(.*?)\s*ตรา\s*(\S.*)$/); if (bm && !out.brand) { out.name = bm[1].trim(); out.brand = bm[2].trim(); }
+    }
+    // ส่วนผสม
+    var hi = find(/ชื่อส่วนผสม/);
+    if (hi) {
+      var head = function (re) { for (var c = R.s.c; c <= R.e.c; c++) if (re.test(txt(hi.r, c))) return c; return -1; };
+      var cW = head(/น้ำหนัก/), cP = head(/ราคา\s*\/\s*(กก|kg)/i);
+      for (var r = hi.r + 1; r <= R.e.r; r++) {
+        var nm = txt(r, hi.c);
+        if (/น้ำหนักสินค้า|yield|บรรจุภัณฑ์/i.test(nm + ' ' + txt(r, R.s.c + 1) + ' ' + txt(r, R.s.c + 2))) break;
+        if (!nm) { if (find(/น้ำหนักสินค้า|yield/i, r, r)) break; continue; }
+        var qty = null, unit = 'กรัม';
+        for (var c2 = cW < 0 ? hi.c + 1 : cW; c2 < (cP < 0 ? R.e.c : cP); c2++) { var q = num(cell(r, c2)); if (q != null) { qty = q; var un = txt(r, c2 + 1); if (/^(กก\.?|kg)$/i.test(un)) unit = 'กก.'; break; } }
+        var price = cP >= 0 ? num(cell(r, cP)) : null;
+        out.ingredients.push({ name: nm, qty: qty == null ? '' : qty, unit: unit, price: price == null ? '' : price });
+      }
+    }
+    // Yield / Loss / จำนวนสินค้าที่ได้ — ตัวเลขตัวแรกทางขวา + หน่วยถัดไป
+    [['yield', /น้ำหนักสินค้าที่ได้|yield/i], ['loss', /สูญเสีย|loss/i], ['out', /จำนวนสินค้าที่ได้/]].forEach(function (k) {
+      var p = find(k[1], hi ? hi.r : 0); if (!p) return;
+      for (var c = p.c + 1; c <= R.e.c; c++) { var v = num(cell(p.r, c)); if (v != null) { out[k[0] + 'Qty'] = v; var un = txt(p.r, c + 1); if (un && un.length < 15) out[k[0] + 'Unit'] = un; break; } }
+    });
+    // บรรจุภัณฑ์
+    var hp = find(/ชื่อบรรจุภัณฑ์/);
+    if (hp) {
+      var cN = -1, cPr = -1;
+      for (var c3 = R.s.c; c3 <= R.e.c; c3++) { var h = txt(hp.r, c3); if (/หมายเหตุ/.test(h)) cN = c3; if (/ราคา/.test(h)) cPr = c3; }
+      for (var r2 = hp.r + 1; r2 <= R.e.r; r2++) {
+        var pn = txt(r2, hp.c); if (!pn) continue;
+        var pr = null;
+        for (var c4 = cPr < 0 ? hp.c + 1 : cPr; c4 < (cN < 0 ? R.e.c + 1 : cN); c4++) { var pv = num(cell(r2, c4)); if (pv != null) { pr = pv; break; } }
+        out.packaging.push({ name: pn, price: pr == null ? '' : pr, per: '', note: cN >= 0 ? txt(r2, cN) : '' });
+      }
+    }
+    return out.name || out.ingredients.length ? out : null;
+  }
+  // รูปในชีต: อ่าน zip ของไฟล์ (SheetJS CFB) → drawing ของชีต → รูปที่วางทางขวา (คอลัมน์ ≥ 5) ที่ใหญ่ที่สุด
+  function costSheetImage(XLSX, buf, sheetIdx) {
+    try {
+      var z = XLSX.CFB.read(new Uint8Array(buf), { type: 'array' });
+      var get = function (p) { for (var i = 0; i < z.FullPaths.length; i++) if (z.FullPaths[i].replace(/^Root Entry\//, '') === p) return z.FileIndex[i].content || null; return null; };
+      var str = function (p) { var c = get(p); return c ? new TextDecoder().decode(c instanceof Uint8Array ? c : new Uint8Array(c)) : ''; };
+      var wbx = str('xl/workbook.xml'), wbr = str('xl/_rels/workbook.xml.rels');
+      var rids = []; wbx.replace(/<sheet\b[^>]*r:id="([^"]+)"/g, function (a, id) { rids.push(id); });
+      var rel = function (xml, id) { var mm = xml.match(new RegExp('<Relationship\\b[^>]*Id="' + id + '"[^>]*Target="([^"]+)"')) || xml.match(new RegExp('<Relationship\\b[^>]*Target="([^"]+)"[^>]*Id="' + id + '"')); return mm ? mm[1] : ''; };
+      var norm = function (base, t) { if (t.charAt(0) === '/') return t.slice(1); var parts = (base + t).split('/'), o = []; parts.forEach(function (p) { if (p === '..') o.pop(); else if (p && p !== '.') o.push(p); }); return o.join('/'); };
+      var sheetPath = norm('xl/', rel(wbr, rids[sheetIdx] || 'x')); if (!sheetPath) return null;
+      var sdir = sheetPath.replace(/[^\/]+$/, ''), srel = str(sdir + '_rels/' + sheetPath.split('/').pop() + '.rels');
+      var dm = str(sheetPath).match(/<drawing\b[^>]*r:id="([^"]+)"/); if (!dm) return null;
+      var dPath = norm(sdir, rel(srel, dm[1])), ddir = dPath.replace(/[^\/]+$/, ''), dxml = str(dPath), drel = str(ddir + '_rels/' + dPath.split('/').pop() + '.rels');
+      var best = null;
+      dxml.replace(/<xdr:(?:oneCellAnchor|twoCellAnchor|absoluteAnchor)\b[\s\S]*?<\/xdr:(?:oneCellAnchor|twoCellAnchor|absoluteAnchor)>/g, function (a) {
+        var col = +((a.match(/<xdr:from>\s*<xdr:col>(\d+)<\/xdr:col>/) || [])[1] || 0), emb = (a.match(/r:embed="([^"]+)"/) || [])[1];
+        if (!emb || col < 5) return a;
+        var p = norm(ddir, rel(drel, emb)), data = get(p); if (!data) return a;
+        if (!best || data.length > best.data.length) best = { data: data, name: p.split('/').pop() };
+        return a;
+      });
+      if (!best) return null;
+      var ext = best.name.split('.').pop().toLowerCase(), mime = ext === 'png' ? 'image/png' : /jpe?g/.test(ext) ? 'image/jpeg' : '';
+      if (!mime) return null;
+      return new Blob([best.data instanceof Uint8Array ? best.data : new Uint8Array(best.data)], { type: mime });
+    } catch (e) { return null; }
+  }
+
+  var XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  function loadXlsx() {
+    if (window.XLSX && window.XLSX.CFB) return Promise.resolve(window.XLSX);
+    return new Promise(function (ok, fail) { var sc = document.createElement('script'); sc.src = XLSX_URL; sc.onload = function () { ok(window.XLSX); }; sc.onerror = function () { fail(new Error('โหลดตัวอ่าน Excel ไม่ได้ — ตรวจอินเทอร์เน็ต')); }; document.head.appendChild(sc); });
+  }
+  function costImport(files) {
+    files = Array.prototype.slice.call(files || []).filter(function (f) { return /\.xlsx?$/i.test(f.name); });
+    if (!files.length) return toast('เลือกไฟล์ Excel (.xlsx)');
+    var btn = $('cImp'); if (btn) btn.classList.add('busy');
+    loadXlsx().then(function (X) {
+      return Promise.all(files.map(function (f) {
+        return f.arrayBuffer().then(function (buf) {
+          var wb = X.read(buf, { type: 'array' });
+          return wb.SheetNames.map(function (sn, i) { var c = costParseSheet(X, wb.Sheets[sn]); if (!c) return null; c._file = f.name; c._sheet = sn; c._img = costSheetImage(X, buf, i); return c; }).filter(Boolean);
+        }).catch(function () { return [{ _bad: f.name }]; });
+      }));
+    }).then(function (lists) {
+      if (btn) btn.classList.remove('busy');
+      var all = [].concat.apply([], lists), bad = all.filter(function (x) { return x._bad; }), ok = all.filter(function (x) { return !x._bad; });
+      if (bad.length) toast('อ่านไฟล์ไม่ได้: ' + bad.map(function (x) { return x._bad; }).join(', '));
+      if (!ok.length) { if (!bad.length) toast('ไม่พบข้อมูลต้นทุนในไฟล์ — ต้องมีหัวข้อ "ต้นทุนสินค้า" และตาราง "ชื่อส่วนผสม"'); return; }
+      if (ok.length === 1) return openImported(ok[0]);
+      wide({ icon: 'upload', title: 'พบ ' + ok.length + ' รายการในไฟล์', sub: 'เลือกรายการที่จะนำเข้า (ทีละรายการ ตรวจในฟอร์มก่อนบันทึก)', noOk: true, cancel: 'ปิด',
+        body: '<div class="rcimpl">' + ok.map(function (c, i) {
+          var r = costRows(c);
+          return '<button type="button" class="rcimp" data-imp="' + i + '"><b>' + costTitle(c) + '</b><small>' + esc(c._file) + ' · ชีต ' + esc(c._sheet) + ' · ส่วนผสม ' + c.ingredients.length + ' · บรรจุภัณฑ์ ' + c.packaging.length + (c._img ? ' · มีรูป' : '') + '</small><span>วัตถุดิบ ' + baht(r.mat) + ' บาท</span></button>';
+        }).join('') + '</div>',
+        onOpen: function () { on('[data-imp]', 'click', function (el) { var c = ok[+el.getAttribute('data-imp')]; closeModal(); setTimeout(function () { openImported(c); }, 50); }, $('mBody')); } });
+    }).catch(function (e) { if (btn) btn.classList.remove('busy'); toast(e.message || String(e)); });
+  }
+  // ชื่อ + ขนาดซ้ำกับรายการที่มี → ถามว่าจะอัปเดตรายการเดิม หรือเพิ่มเป็นรายการใหม่
+  function openImported(c) {
+    var key = function (x) { return (String(x.name || '') + '|' + String(x.size || '')).replace(/\s+/g, '').toLowerCase(); };
+    var same = (H.data.costs || []).filter(function (x) { return key(x) === key(c); })[0];
+    var go = function (id) {
+      var img = c._img, x = { id: id || '', name: c.name || '', size: c.size || '', brand: c.brand || '', costDate: c.costDate || H.data.today, ingredients: c.ingredients, packaging: c.packaging,
+        yieldQty: c.yieldQty, yieldUnit: c.yieldUnit || 'กรัม', lossQty: c.lossQty, lossUnit: c.lossUnit || 'กรัม', outQty: c.outQty, outUnit: c.outUnit || 'ซอง', productId: same && id ? same.productId : '', note: same && id ? same.note : '' };
+      if (same && id) x.photo = same.photo;
+      var open = function (pf) { costForm(x, false, { photoFile: pf, from: c._file }); };
+      if (!img) return open(null);
+      shrink(img).then(function (r) { open(r ? { b64: r.b64, name: 'รูปจากไฟล์.jpg', preview: 'data:image/jpeg;base64,' + r.b64 } : null); });
+    };
+    if (!same) return go('');
+    // 3 ทาง (อัปเดต / เพิ่มใหม่ / ยกเลิก) — ปิดหน้าต่าง = ยกเลิก ไม่เพิ่มรายการโดยไม่ตั้งใจ
+    openModal({ icon: 'warn', color: state.dept.color, title: 'มี "' + c.name + (c.size ? ' ' + c.size : '') + '" อยู่แล้ว', sub: 'อัปเดต ' + slashTh(same.costDate) + ' · จะใช้ข้อมูลจากไฟล์อย่างไร?', noOk: true, cancel: 'ยกเลิก',
+      body: '<div class="rcdup"><button type="button" class="btn btn-primary" id="dUpd">อัปเดตรายการเดิม</button><button type="button" class="btn btn-line" id="dNew">เพิ่มเป็นรายการใหม่</button></div>',
+      onOpen: function () {
+        $('dUpd').addEventListener('click', function () { closeModal(); setTimeout(function () { go(same.id); }, 50); });
+        $('dNew').addEventListener('click', function () { closeModal(); setTimeout(function () { go(''); }, 50); });
+      } });
   }
 
   // ---- รายงานตามแบบไฟล์ (หน้าจอ + พิมพ์)
@@ -488,11 +632,11 @@
   }
 
   // ---- ฟอร์มกรอกต้นทุน
-  function costForm(c0, isCopy) {
+  function costForm(c0, isCopy, preset) {
     var isNew = !c0 || !c0.id, c = c0 ? JSON.parse(JSON.stringify(c0)) : { costDate: H.data.today, yieldUnit: 'กรัม', lossUnit: 'กรัม', outUnit: 'ซอง' };
     var ing = (c.ingredients || []).length ? c.ingredients : [{ name: '', qty: '', unit: 'กรัม', price: '' }];
     var pack = (c.packaging || []).length ? c.packaging : [{ name: '', price: '', per: '', note: '' }];
-    var photoFile = null, dropPhoto = false;
+    var photoFile = preset && preset.photoFile || null, dropPhoto = false;
     var prods = H.data.products.slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
     var I = function (id, label, v, ph, extra) { return '<div class="pf"><label for="' + id + '">' + label + '</label><input id="' + id + '" value="' + esc(v == null ? '' : v) + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + (extra || '') + '></div>'; };
     var N = function (id, v) { return '<input id="' + id + '" inputmode="decimal" value="' + esc(v == null ? '' : v) + '">'; };
@@ -547,7 +691,7 @@
       if ($('cTg')) $('cTg').textContent = baht(r.grams, 0); if ($('cTm')) $('cTm').textContent = baht(r.mat);
       $('cSum').innerHTML = '<div><span>ราคาวัตถุดิบรวม</span><b>' + baht(r.mat) + ' บาท</b></div>'
         + (r.out ? '<div><span>วัตถุดิบต่อ 1 ' + esc(r.unit) + '</span><b>' + baht(r.matUnit, 4) + '</b></div>'
-          + '<div><span>บรรจุภัณฑ์ต่อ 1 ' + esc(r.unit) + (r.packN < r.pack.filter(function (x) { return x.name || x.price; }).length ? ' <small>(เฉพาะที่ใส่จำนวน)</small>' : '') + '</span><b>' + baht(r.packUnit, 4) + '</b></div>'
+          + '<div><span>บรรจุภัณฑ์ต่อ 1 ' + esc(r.unit) + (r.packN && r.packN < r.pack.filter(function (x) { return x.name || x.price; }).length ? ' <small>(เฉพาะที่ใส่จำนวน)</small>' : '') + '</span>' + (r.packN ? '<b>' + baht(r.packUnit, 4) + '</b>' : '<small class="muted">ใส่ "ใช้ได้กี่ชิ้นสินค้า" เพื่อคิดรวม</small>') + '</div>'
           + '<div class="t"><span>รวมต้นทุนต่อ 1 ' + esc(r.unit) + '</span><b>' + baht(r.total) + ' บาท</b></div>' : '<div class="muted">ใส่ "จำนวนสินค้าที่ได้" เพื่อดูต้นทุนต่อชิ้น</div>');
     };
     var showPhoto = function () {
@@ -559,7 +703,8 @@
       var f = inp.files && inp.files[0]; inp.value = ''; if (!f) return;
       shrink(f).then(function (x) { if (!x) return toast('อ่านรูปไม่ได้'); photoFile = { b64: x.b64, name: x.name, preview: 'data:image/jpeg;base64,' + x.b64 }; dropPhoto = false; showPhoto(); });
     };
-    wide({ icon: 'coin', title: isNew ? (isCopy ? 'ต้นทุนสินค้า (สำเนา)' : 'เพิ่มต้นทุนสินค้า') : 'แก้ไขต้นทุน · ' + c.name, ok: 'บันทึก', body: body,
+    if (preset && preset.from) body = '<div class="rcfrom">' + icon('upload', 16) + ' อ่านจากไฟล์ <b>' + esc(preset.from) + '</b> — ตรวจข้อมูลแล้วกด "บันทึก"' + (isNew ? '' : ' (จะอัปเดตรายการเดิม)') + '</div>' + body;
+    wide({ icon: 'coin', title: preset && preset.from ? (isNew ? 'นำเข้าต้นทุนจากไฟล์' : 'อัปเดตต้นทุนจากไฟล์') : isNew ? (isCopy ? 'ต้นทุนสินค้า (สำเนา)' : 'เพิ่มต้นทุนสินค้า') : 'แก้ไขต้นทุน · ' + c.name, ok: 'บันทึก', body: body,
       onOpen: function () {
         drawIng(); drawPk(); showPhoto();
         $('cIng').addEventListener('input', function (e) { var a = (e.target.getAttribute('data-ci') || '').split(':'); if (a.length < 2) return; ing[+a[0]][a[1]] = a[1] === 'name' || a[1] === 'unit' ? e.target.value : e.target.value.replace(/,/g, '').trim(); if (a[1] !== 'name') recalc(); });
@@ -714,6 +859,7 @@
     '.rch{margin:16px 0 6px;font-size:15px}.rch small{font-weight:400;color:var(--muted);font-size:12px;margin-left:6px}.rci,.rcp2{display:grid;gap:6px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line)}.rci{grid-template-columns:24px minmax(0,2fr) 90px 72px 110px 96px 30px}.rcp2{grid-template-columns:24px minmax(0,2fr) 110px 110px minmax(0,1.6fr) 30px}',
     '.rci input,.rci select,.rcp2 input{min-width:0;width:100%;height:38px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px;background:#fff;color:inherit}.rci input:focus,.rci select:focus,.rcp2 input:focus{outline:2px solid #f9a8d4;border-color:#db2777}.rci input[inputmode],.rcp2 input[inputmode]{text-align:right}.rcih{font-size:12px;color:var(--muted);font-weight:700;border-bottom:2px solid var(--line)}.rci .n,.rcp2 .n{color:var(--muted);font-size:12px;text-align:center}.rci .m{text-align:right;color:#b91c1c;font-weight:600}.rcit{background:#f8fafc;font-weight:700}.rcit span:nth-child(3){text-align:right}.rcx{border:0;background:none;color:#94a3b8;font-size:16px;cursor:pointer;min-height:36px}.rcx:hover{color:#b91c1c}',
     '.rcyl{margin-top:12px}.rcu{display:flex;gap:6px}.rcu input:first-child{flex:1;min-width:0}.rcu input:last-child{width:74px;flex:none}.rcph2{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.rcphv{width:110px;height:110px;border:1px dashed var(--line);border-radius:10px;display:grid;place-items:center;overflow:hidden;color:var(--muted);font-size:12px;background:#f8fafc}.rcphv img{width:100%;height:100%;object-fit:contain;background:#fff}.rcphb{display:flex;gap:6px;flex-wrap:wrap}.rcphb .btn{width:auto}',
+    '.rctool{gap:8px;flex-wrap:wrap}.rctool label.btn{cursor:pointer}.rctool .busy{opacity:.6;pointer-events:none}.rcfrom{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13.5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}.rcimpl{display:grid;gap:8px}.rcdup{display:grid;gap:8px}.rcdup .btn{width:100%;justify-content:center;min-height:46px}.rcimp{display:grid;gap:2px;text-align:left;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#fff;cursor:pointer;font:inherit}.rcimp:hover{border-color:#db2777}.rcimp small{color:var(--muted)}.rcimp span{color:#b91c1c;font-weight:700;font-size:13px}',
     '.rcsum{margin-top:14px;border:1px solid #c4b5fd;background:#f5f3ff;border-radius:12px;padding:10px 14px;display:grid;gap:4px}.rcsum div{display:flex;justify-content:space-between;gap:10px}.rcsum .t{border-top:1px solid #c4b5fd;padding-top:6px;font-size:15px}.rcsum .t b{color:#b91c1c}',
     // แบบรายงาน (เลียนแบบไฟล์ Excel: กรอบเขียว หัวตารางเขียว ตัวเลขราคาสีแดง)
     '.rcpwrap{overflow-x:auto}.rcp{background:#fff;color:#111;max-width:820px;padding:16px 18px;font-size:14px;border-radius:10px}.rcp table{border-collapse:collapse;width:100%}.rcpu{color:#e00;font-weight:800;font-size:17px;margin-bottom:4px}.rcpb{border:1.5px solid #70ad47;padding:0 0 14px}',
