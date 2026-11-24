@@ -179,9 +179,8 @@
   };
   // หัวรายงาน + ตาราง + ช่องเซ็น (ใช้ทั้งหน้าจอและพิมพ์)
   function reportHtml(map, m, sub) {
-    // ตัดสินค้าที่ไม่มีออเดอร์ (รวม 0 ลัง) และศูนย์ที่ไม่มีออเดอร์ออก ทั้งหน้าจอ / พิมพ์ / ภาพ LINE (ผู้ใช้ขอ 23/11/69)
-    var pz = map.products.filter(function (p) { return (m.byProduct[p.key] || 0) > 0; }), dz = m.dcs.filter(function (d) { return d.cases; });
-    if (pz.length) map = Object.assign({}, map, { products: pz });
+    // ตัดศูนย์ที่ไม่มีออเดอร์ออก (ผู้ใช้ขอ 23/11/69) · สินค้าแสดงครบทุกตัวแม้ไม่มีออเดอร์ (ผู้ใช้ขอ 24/11/69)
+    var dz = m.dcs.filter(function (d) { return d.cases; });
     if (dz.length) m = Object.assign({}, m, { dcs: dz });
     return '<div class="a7rep"><div class="a7head">' + logoHtml() + '<div class="a7title"><b>แบบฟอร์มบันทึกออเดอร์ 7-Eleven</b><span>บริษัท สปังกี้ ฟู้ด จำกัด</span></div>'
       + '<div class="a7meta"><div>วันที่สั่ง <b>' + thRange(m.poDates) + '</b></div><div>วันที่ส่ง <b>' + thRange(m.deliveryDates) + '</b></div>' + (sub ? '<div>' + sub + '</div>' : '') + '</div></div>'
@@ -197,7 +196,7 @@
 
   // ==================== 1) นำเข้าไฟล์ ====================
   function steps(n) {
-    return '<ol class="a7steps">' + ['เลือกไฟล์ Excel', 'ตรวจข้อมูล', 'บันทึก & ส่ง LINE'].map(function (t, i) {
+    return '<ol class="a7steps">' + ['เลือกไฟล์ Excel / PDF', 'ตรวจข้อมูล', 'บันทึก & ส่ง LINE'].map(function (t, i) {
       return '<li class="' + (i + 1 < n ? 'done' : i + 1 === n ? 'on' : '') + '"><i>' + (i + 1 < n ? '✓' : i + 1) + '</i>' + t + '</li>';
     }).join('') + '</ol>';
   }
@@ -207,8 +206,8 @@
     $('main').innerHTML = '<h3>นำเข้าไฟล์ออเดอร์ 7-11</h3><p class="lead">ดาวน์โหลดไฟล์ใบสั่งซื้อ (po_export) จากระบบ 7-11 แล้วเลือกไฟล์ที่นี่ · ระบบจะจัดเป็นตารางเหมือนต้นแบบรับออเดอร์ให้ตรวจก่อนบันทึก</p>'
       + steps(1)
       + (H.data.hasFolder ? '' : '<div class="panel status off" style="margin-bottom:12px"><div class="dot">' + icon('warn', 20) + '</div><div><b>ยังไม่ได้ตั้งโฟลเดอร์ไฟล์ของฝ่าย</b><span>นำเข้าและบันทึกได้ แต่จะสร้าง PDF / ส่ง LINE พร้อมไฟล์ได้เมื่อผู้ดูแลระบบใส่ลิงก์โฟลเดอร์ Google Drive ของฝ่ายแล้ว</span></div></div>')
-      + '<label class="a7drop" id="aDrop" tabindex="0"><input type="file" id="aFile" accept=".xlsx,.xls,.csv" multiple hidden>'
-      + '<span class="a7dic">' + icon('upload', 34) + '</span><b>แตะเพื่อเลือกไฟล์ Excel (เลือกได้หลายไฟล์)</b><span>หรือลากไฟล์มาวางตรงนี้ · ไฟล์ .xlsx จากระบบ 7-11 · หลายไฟล์จะรวมเป็นรอบเดียว</span></label>'
+      + '<label class="a7drop" id="aDrop" tabindex="0"><input type="file" id="aFile" accept=".xlsx,.xls,.csv,.pdf,application/pdf" multiple hidden>'
+      + '<span class="a7dic">' + icon('upload', 34) + '</span><b>แตะเพื่อเลือกไฟล์ Excel หรือ PDF (เลือกได้หลายไฟล์)</b><span>หรือลากไฟล์มาวางตรงนี้ · ไฟล์ .xlsx (po_export) จากระบบ 7-11 หรือใบสั่งซื้อ PDF ของ CP ALL · หลายไฟล์จะรวมเป็นรอบเดียว</span></label>'
       + '<div id="aMsg"></div>'
       + (H.data.imports.length ? '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('clock', 18) + ' นำเข้าล่าสุด</h4>' + H.data.imports.slice(0, 5).map(impRow).join('') + '</div>' : '');
     var inp = $('aFile'), drop = $('aDrop');
@@ -269,8 +268,106 @@
     if (!out.length) throw new Error('ไม่พบรายการสั่งซื้อในไฟล์');
     return out;
   }
+  // ---- ใบสั่งซื้อ CP ALL แบบ PDF (ผู้ใช้ขอ 24/11/69) — 1 หน้า = 1 ใบสั่งซื้อ (ใบเดียวหลายหน้าจะรวมกัน) → แถวรูปแบบเดียวกับไฟล์ po_export
+  // อ่านตัวหนังสือจากชั้นข้อความของ PDF (pdf.js) แล้วจัดเป็นบรรทัดตามตำแหน่ง y
+  function pdfRows(items) {
+    var rows = [];
+    items.filter(function (i) { return String(i.s).trim(); }).sort(function (a, b) { return b.y - a.y || a.x - b.x; }).forEach(function (i) {
+      var r = null; for (var k = 0; k < rows.length; k++) if (Math.abs(rows[k].y - i.y) <= 2) { r = rows[k]; break; }
+      if (!r) { r = { y: i.y, it: [] }; rows.push(r); }
+      r.it.push(i);
+    });
+    rows.forEach(function (r) { r.it.sort(function (a, b) { return a.x - b.x; }); r.text = r.it.map(function (i) { return String(i.s).trim(); }).join(' ').replace(/\s+/g, ' '); });
+    return rows;
+  }
+  var PO_NUM = /^-?[\d,]+(\.\d+)?$/;
+  function poNum(s) { return Number(String(s).replace(/,/g, '')); }
+  function parsePoPage(items) {
+    var rows = pdfRows(items), all = rows.map(function (r) { return r.text; }).join('\n'), m;
+    var po = { poNo: '', poDate: '', deliveryDate: '', deliveryTime: '', locCode: '', location: '', termDays: '', page: 1, pages: 1, lines: [], taxable: '', total: '' };
+    if ((m = all.match(/เลขที่\s*:\s*(\d{6,15})/))) po.poNo = m[1];
+    if ((m = all.match(/วันที่\s*:\s*(\d{1,2}\/\d{1,2}\/\d{4})/))) po.poDate = m[1];
+    if ((m = all.match(/กำหนดส่ง\s*:\s*(\d{1,2}\/\d{1,2}\/\d{4})(?:\s*เวลา\s*(\d{1,2}:\d{2}))?/))) { po.deliveryDate = m[1]; po.deliveryTime = m[2] || ''; }
+    if ((m = all.match(/หน้าที่\s*:\s*(\d+)\s*\/\s*(\d+)/))) { po.page = +m[1]; po.pages = +m[2]; }
+    if ((m = all.match(/เงื่อนไขการชำระเงิน\s*(\d+)\s*วัน/))) po.termDays = +m[1];
+    rows.forEach(function (r) {
+      var t = r.text;
+      if ((m = t.match(/^นำส่ง\s*:\s*([A-Z]\d{2,5})\s+(.*?)(?:\s+อ้างถึง.*)?$/))) { po.locCode = m[1]; po.location = m[2].trim(); }
+      if ((m = t.match(/มูลค่าสินค้าที่เสีย VAT\s*([\d,]+\.\d\d)/)) || (/มูลค่าสินค้าที่ไม่เสีย VAT/.test(t) && (m = t.match(/([\d,]+\.\d\d)\s+([\d,]+\.\d\d)\s+([\d,]+\.\d\d)\s*$/)))) po.taxable = poNum(m[1] && m[2] && m[3] ? m[2] : m[1]);
+      if ((m = t.match(/จำนวนเงินที่ต้องชำระ\s*([\d,]+\.\d\d)/))) po.total = poNum(m[1]);
+    });
+    // รายการ: บรรทัดหลัก = ลำดับ · บาร์โค้ด · ชื่อสินค้า · ขนาดบรรจุ · จำนวนหีบ · แถม · ราคาต่อหีบ · ส่วนลด 4 ช่อง · จำนวนเงิน
+    rows.forEach(function (r, i) {
+      var it = r.it;
+      if (it.length < 6 || !/^\d{1,3}$/.test(String(it[0].s).trim()) || !/^\d{8,14}$/.test(String(it[1].s).trim())) return;
+      var name = [], nums = [];
+      for (var k = 2; k < it.length; k++) { var s = String(it[k].s).trim(); if (PO_NUM.test(s) && (nums.length || it[k].x > 300)) nums.push(poNum(s)); else if (!nums.length) name.push(s); }
+      if (nums.length < 5) return;
+      var prev = rows[i - 1], next = rows[i + 1], code = '', tax = '', vat = '';
+      if (prev && prev.y - r.y < 14) {
+        var pm = prev.text.match(/^(\d{5,10})\s*\/\s*(INC|EXC|NON)?\s*([\d.]+)?/); if (pm) { code = pm[1]; tax = pm[2] || ''; vat = pm[3] ? Number(pm[3]) : ''; }
+      }
+      // ชื่อสินค้าต่อบรรทัดถัดไป (เช่น "G.") — บรรทัดที่มีแต่ข้อความในช่องรายการ
+      if (next && r.y - next.y < 12 && next.it.every(function (x) { return x.x > 90 && x.x < 305; }) && !/^\d{5,10}\s*\//.test(next.text)) name.push(next.text);
+      var nm = name.join(' ').replace(/\s+/g, ' ').replace(/^[@H]+(?=[^\x00-\x7F])/, '').trim();
+      po.lines.push({ lineNo: +String(it[0].s).trim(), barcode: String(it[1].s).trim(), itemCode: code, itemName: nm, packSize: nums[0], cases: nums[1],
+        freeQty: nums[2], casePrice: nums[3], amount: nums[nums.length - 1], vatRate: vat === '' ? 7 : vat, taxType: tax });
+    });
+    return po;
+  }
+  // หลายหน้า → ใบสั่งซื้อ (ใบเดียวกันหลายหน้ารวมกัน) → แถวแบบ po_export + ข้อตรวจ
+  function poPdfToRows(pages) {
+    var pos = [], by = {};
+    pages.forEach(function (items, pi) {
+      var p = parsePoPage(items); p.pageNo = pi + 1;
+      if (!p.poNo) return;
+      if (by[p.poNo]) { var o = by[p.poNo]; o.lines = o.lines.concat(p.lines); if (p.taxable !== '') o.taxable = p.taxable; if (p.total !== '') o.total = p.total; o.pageNos.push(pi + 1); return; }
+      p.pageNos = [pi + 1]; by[p.poNo] = p; pos.push(p);
+    });
+    var rows = [], warn = [];
+    pos.forEach(function (p) {
+      if (!p.lines.length) warn.push('ใบสั่งซื้อ ' + p.poNo + ' (หน้า ' + p.pageNos.join(', ') + '): อ่านรายการสินค้าไม่ได้');
+      var sum = p.lines.reduce(function (s, l) { return s + (Number(l.amount) || 0); }, 0);
+      if (p.taxable !== '' && Math.abs(sum - p.taxable) > 0.05 * Math.max(1, p.lines.length)) warn.push('ใบสั่งซื้อ ' + p.poNo + ': ยอดรวมรายการ ' + sum.toFixed(2) + ' ไม่ตรงกับมูลค่าสินค้าในใบ ' + p.taxable.toFixed(2));
+      p.lines.forEach(function (l) {
+        if (!l.itemCode) warn.push('ใบสั่งซื้อ ' + p.poNo + ' รายการที่ ' + l.lineNo + ': ไม่พบรหัสสินค้า');
+        rows.push({ poNo: p.poNo, poDate: p.poDate, deliveryDate: p.deliveryDate, deliveryTime: p.deliveryTime, locCode: p.locCode, location: p.location, termDays: p.termDays,
+          lineNo: l.lineNo, barcode: l.barcode, itemName: l.itemName, itemCode: l.itemCode, packSize: l.packSize, cases: l.cases, unit: 'CT', freeQty: l.freeQty,
+          casePrice: l.casePrice, vatRate: l.vatRate, amount: l.amount });
+      });
+    });
+    return { rows: rows, pos: pos, warn: warn };
+  }
+  var PDF_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', PDF_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  function loadPdfJs() {
+    if (window.pdfjsLib) return Promise.resolve();
+    return new Promise(function (ok, fail) {
+      var s = document.createElement('script'); s.src = PDF_URL;
+      s.onload = function () { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER; ok(); };
+      s.onerror = function () { fail(new Error('โหลดตัวอ่าน PDF ไม่ได้ — ตรวจอินเทอร์เน็ตแล้วลองใหม่')); };
+      document.head.appendChild(s);
+    });
+  }
+  function isPdf(f) { return /\.pdf$/i.test(f.name) || f.type === 'application/pdf'; }
+  function readPdf(file) {
+    return file.arrayBuffer().then(function (buf) { return window.pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise; }).then(function (doc) {
+      var pages = [], chain = Promise.resolve();
+      for (var n = 1; n <= doc.numPages; n++) (function (n) {
+        chain = chain.then(function () { return doc.getPage(n); }).then(function (pg) { return pg.getTextContent(); }).then(function (tc) {
+          pages.push(tc.items.map(function (i) { return { s: i.str, x: i.transform[4], y: i.transform[5] }; }));
+        });
+      })(n);
+      return chain.then(function () {
+        var r = poPdfToRows(pages);
+        if (!r.rows.length) throw new Error(file.name + ': ไม่พบรายการสั่งซื้อในไฟล์ PDF — ต้องเป็นใบสั่งซื้อ CP ALL ที่ดาวน์โหลดจากระบบ (ไม่ใช่ภาพสแกน)');
+        var out = r.rows; out.pdf = { pos: r.pos.length, warn: r.warn.map(function (w) { return file.name + ': ' + w; }) };
+        return out;
+      });
+    }, function () { throw new Error(file.name + ': เปิดไฟล์ PDF ไม่ได้'); });
+  }
   // เลือกได้หลายไฟล์ (ผู้ใช้ขอ 20/11/69): อ่านทุกไฟล์แล้วรวมเป็นรอบเดียว · ใบสั่ง + ลำดับรายการเดียวกันที่ซ้ำกันระหว่างไฟล์นับครั้งเดียว
   function readOne(file) {
+    if (isPdf(file)) return readPdf(file);
     return new Promise(function (ok, fail) {
       var fr = new FileReader();
       fr.onload = function () {
@@ -286,12 +383,14 @@
   }
   function readFiles(files) {
     msg('<span class="spinner dark"></span> กำลังอ่าน ' + (files.length > 1 ? files.length + ' ไฟล์' : 'ไฟล์ ' + esc(files[0].name)) + '…');
-    loadXlsx().then(function () {
+    var anyPdf = files.some(isPdf), anyX = files.some(function (f) { return !isPdf(f); });
+    Promise.all([anyX ? loadXlsx() : null, anyPdf ? loadPdfJs() : null]).then(function () {
       return Promise.all(files.map(readOne));
     }).then(function (all) {
-      var seen = {}, lines = [], dup = 0;
+      var seen = {}, lines = [], dup = 0, pdfPos = 0, pdfWarn = [];
+      all.forEach(function (ls) { if (ls.pdf) { pdfPos += ls.pdf.pos; pdfWarn = pdfWarn.concat(ls.pdf.warn); } });
       all.forEach(function (ls) { ls.forEach(function (l) { var k = String(l.poNo) + '|' + Number(l.lineNo); if (seen[k]) { dup++; return; } seen[k] = 1; lines.push(l); }); });
-      H.imp = { fileName: files.map(function (f) { return f.name; }).join(', '), lines: lines, files: files.length, dupAcross: dup };
+      H.imp = { fileName: files.map(function (f) { return f.name; }).join(', '), lines: lines, files: files.length, dupAcross: dup, pdfPos: pdfPos, pdfWarn: pdfWarn };
       msg('<span class="spinner dark"></span> อ่านได้ ' + lines.length + ' รายการ' + (files.length > 1 ? ' จาก ' + files.length + ' ไฟล์' + (dup ? ' (ตัดรายการซ้ำระหว่างไฟล์ ' + dup + ')' : '') : '') + ' — กำลังจัดเป็นตารางตามต้นแบบ…');
       return runPreview();
     }).catch(function (e) {
@@ -317,6 +416,8 @@
     checks.push(chk(!unItem.length, unItem.length ? 'มี ' + unItem.length + ' สินค้าที่ยังไม่มีคอลัมน์ในรายงาน — เลือกคอลัมน์ให้ด้านล่าง' : 'จับคู่สินค้าได้ครบทุกรายการ'));
     checks.push(dup ? (r.newLines ? chk('warn', dup + ' รายการเคยบันทึกแล้ว (ใบสั่ง ' + r.duplicatePos.slice(0, 4).join(', ') + (r.duplicatePos.length > 4 ? ' …' : '') + ') — จะบันทึกเฉพาะ ' + r.newLines + ' รายการใหม่')
       : chk(false, 'ไฟล์นี้บันทึกไปแล้วทั้งหมด — ไม่ต้องบันทึกซ้ำ')) : chk(true, 'ไม่มีใบสั่งซื้อซ้ำกับที่บันทึกไว้'));
+    if (I.pdfPos) checks.push(I.pdfWarn && I.pdfWarn.length ? chk('warn', 'อ่านจาก PDF ' + I.pdfPos + ' ใบสั่งซื้อ — มีจุดที่ต้องตรวจ: ' + I.pdfWarn.slice(0, 3).join(' · ') + (I.pdfWarn.length > 3 ? ' …' : ''))
+      : chk(true, 'อ่านจาก PDF ' + I.pdfPos + ' ใบสั่งซื้อ · ยอดเงินรวมรายการตรงกับมูลค่าสินค้าในใบทุกใบ'));
     if (I.files > 1) checks.push(chk(true, 'รวม ' + I.files + ' ไฟล์เป็นรอบเดียว' + (I.dupAcross ? ' · ตัดรายการที่ซ้ำกันระหว่างไฟล์ ' + I.dupAcross + ' รายการ' : '')));
     if (m.deliveryDates && m.deliveryDates.length > 1) checks.push(chk('warn', 'มีวันส่งหลายวัน (' + m.deliveryDates.map(thDate).join(', ') + ') — ถ้าต้องการแยกรายงานตามวันส่ง ให้นำเข้าทีละรอบ'));
     r.warnings.forEach(function (w) { checks.push(chk('warn', w)); });
@@ -495,8 +596,9 @@
     return loadScript(H2C_URL, function () { return !!window.html2canvas; }).then(function () { return document.fonts ? document.fonts.ready : null; }).then(function () {
       // ภาพ = รายงานแบบเดียวกับที่เห็นในระบบ (ต้นแบบรับออเดอร์) ความกว้างคงที่ 1200px
       // ตัดสินค้าที่ไม่มีออเดอร์ (รวม 0 ลัง) และศูนย์ที่ไม่มีออเดอร์ออกจากภาพ LINE (ผู้ใช้ขอ 23/11/69) — หน้าจอ / PDF / Excel ยังครบทุกคอลัมน์
-      var pz = map.products.filter(function (p) { return (m.byProduct[p.key] || 0) > 0; }), dz = m.dcs.filter(function (d) { return d.cases; });
-      var mapL = pz.length ? Object.assign({}, map, { products: pz }) : map, mL = dz.length ? Object.assign({}, m, { dcs: dz }) : m;
+      // สินค้าแสดงครบทุกตัวแม้ไม่มีออเดอร์ (ผู้ใช้ขอ 24/11/69) · ศูนย์ที่ไม่มีออเดอร์ยังตัดออก
+      var dz = m.dcs.filter(function (d) { return d.cases; });
+      var mapL = map, mL = dz.length ? Object.assign({}, m, { dcs: dz }) : m;
       var box = document.createElement('div'); box.className = 'a7imgbox'; box.innerHTML = '<div class="a7imgrep">' + reportHtml(mapL, mL, n0(m.poCount) + ' ใบสั่งซื้อ') + '</div>'; document.body.appendChild(box);
       var el = box.firstChild;
       return imgsReady(el).then(function () { return window.html2canvas(el, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true }); }).then(function (cv) {
