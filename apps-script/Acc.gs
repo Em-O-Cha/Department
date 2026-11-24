@@ -469,8 +469,11 @@ function accAngsanaXml_(xml, isStyles) {
 }
 // titles = { sheet, rows } → ตั้ง "พิมพ์แถวหัวซ้ำทุกหน้า" (Print_Titles) ให้ไฟล์ Excel (ผู้ใช้ขอ 23/11/69: ขึ้นหน้าใหม่ต้องมีหัวคอลัมน์)
 function accXlsxPrintTitles_(xml, titles) {
-  if (!titles || !titles.rows || /_xlnm\.Print_Titles/.test(xml)) return xml;
-  var dn = '<definedName name="_xlnm.Print_Titles" localSheetId="0">\'' + String(titles.sheet).replace(/'/g, "''").replace(/&/g, '&amp;').replace(/</g, '&lt;') + '\'!$1:$' + titles.rows + '</definedName>';
+  // titles = { sheet, rows } (แผ่นแรก) หรือ [{ sheet, rows, idx }] (หลายแผ่น — ไฟล์ CP Ram แยกชีตตามเดือน)
+  var list = Array.isArray(titles) ? titles : titles ? [{ sheet: titles.sheet, rows: titles.rows, idx: 0 }] : [];
+  list = list.filter(function (t) { return t && t.rows; });
+  if (!list.length || /_xlnm\.Print_Titles/.test(xml)) return xml;
+  var dn = list.map(function (t) { return '<definedName name="_xlnm.Print_Titles" localSheetId="' + (t.idx || 0) + '">\'' + String(t.sheet).replace(/'/g, "''").replace(/&/g, '&amp;').replace(/</g, '&lt;') + '\'!$1:$' + t.rows + '</definedName>'; }).join('');
   if (/<definedNames>/.test(xml)) return xml.replace('<definedNames>', '<definedNames>' + dn);
   return xml.replace('</sheets>', '</sheets><definedNames>' + dn + '</definedNames>');
 }
@@ -479,18 +482,19 @@ function accXlsxAngsana_(blob, titles) {
     var parts = Utilities.unzip(blob.setContentType('application/zip'));
     var out = parts.map(function (f) {
       var n = f.getName();
-      if (n === 'xl/workbook.xml' && titles && titles.rows) return Utilities.newBlob(accXlsxPrintTitles_(f.getDataAsString('UTF-8'), titles), 'application/xml', n);
+      if (n === 'xl/workbook.xml' && titles && (titles.rows || titles.length)) return Utilities.newBlob(accXlsxPrintTitles_(f.getDataAsString('UTF-8'), titles), 'application/xml', n);
       if (n !== 'xl/styles.xml' && n !== 'xl/sharedStrings.xml') return f;
       return Utilities.newBlob(accAngsanaXml_(f.getDataAsString('UTF-8'), n === 'xl/styles.xml'), 'application/xml', n);
     });
     return Utilities.zip(out, 'report.xlsx').setContentType('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   } catch (e) { return blob; }   // แก้ไม่ได้ → ใช้ไฟล์เดิม
 }
-function accExportXlsx_(ss, folder, name, titleRows) {
+function accExportXlsx_(ss, folder, name, titleRows, allSheets) {
   var res = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=xlsx', { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) throw new Error('สร้างไฟล์ Excel ไม่สำเร็จ (HTTP ' + res.getResponseCode() + ')');
   var sh0 = ss.getSheets()[0], fr = titleRows || 0; if (!fr) try { fr = sh0.getFrozenRows(); } catch (e) {}
-  var f = folder.createFile(accXlsxAngsana_(res.getBlob(), fr ? { sheet: sh0.getName(), rows: fr } : null).setName(name + '.xlsx'));
+  var titles = allSheets ? ss.getSheets().map(function (s, i) { return { sheet: s.getName(), rows: titleRows || 4, idx: i }; }) : fr ? { sheet: sh0.getName(), rows: fr } : null;
+  var f = folder.createFile(accXlsxAngsana_(res.getBlob(), titles).setName(name + '.xlsx'));
   try { f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
   return f;
 }
@@ -501,11 +505,11 @@ function accXlsxDownload_(url, line) {
   return id ? 'https://drive.google.com/uc?export=download&id=' + id[0] + (line ? '&openExternalBrowser=1' : '') : '';
 }
 
-function accExportPdf_(ss, folder, name, onePage) {
+function accExportPdf_(ss, folder, name, onePage, allSheets) {
   // scale=4 = ย่อให้พอดี 1 หน้า · scale=2 = พอดีความกว้าง (หลายหน้า) + fzr=true พิมพ์แถวหัวที่แช่แข็งซ้ำทุกหน้า
   var url = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=pdf&size=A4&portrait=false&scale=' + (onePage === false ? 2 : 4) + '&gridlines=false'
     + '&printtitle=false&sheetnames=false&pagenumbers=' + (onePage === false ? 'true' : 'false') + '&fzr=' + (onePage === false ? 'true' : 'false') + '&top_margin=0.3&bottom_margin=0.3&left_margin=0.3&right_margin=0.3'
-    + '&horizontal_alignment=CENTER&gid=' + ss.getSheets()[0].getSheetId();
+    + '&horizontal_alignment=CENTER' + (allSheets ? '' : '&gid=' + ss.getSheets()[0].getSheetId());   // allSheets = ทุกแผ่นในไฟล์เดียว
   var res = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) throw new Error('สร้าง PDF ไม่สำเร็จ (HTTP ' + res.getResponseCode() + ')');
   var pdf = folder.createFile(res.getBlob().setName(name + '.pdf'));

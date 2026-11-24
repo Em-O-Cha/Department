@@ -386,14 +386,18 @@
     if (!d.linked) { C.importPage(); return; }
     var months = uniq(lines.map(function (x) { return String(x.deliveryDate).slice(0, 7); })).filter(Boolean);
     var cur = d.today.slice(0, 7);
-    if (!C.month || months.indexOf(C.month) < 0) C.month = months.indexOf(cur) >= 0 ? cur : (months.filter(function (m) { return m > cur; })[0] || months[months.length - 1] || cur);
-    var rows = lines.filter(function (x) { return String(x.deliveryDate).slice(0, 7) === C.month; });
+    if (!C.month || (C.month !== 'all' && months.indexOf(C.month) < 0)) C.month = months.indexOf(cur) >= 0 ? cur : (months.filter(function (m) { return m > cur; })[0] || months[months.length - 1] || cur);
+    // "ทั้งหมด" = ทุกเดือน (ผู้ใช้ขอ 24/11/69): ตารางแยกทีละเดือน + ไฟล์ Excel แยกชีตตามเดือน
+    var all = C.month === 'all' && months.length > 0;
+    var rows = all ? lines.filter(function (x) { return months.indexOf(String(x.deliveryDate).slice(0, 7)) >= 0; }) : lines.filter(function (x) { return String(x.deliveryDate).slice(0, 7) === C.month; });
     var rounds = roundsOf(rows);
     $('main').innerHTML = '<h3>ตารางส่งสินค้า CP Ram</h3><p class="lead">แตะแถวเพื่อบันทึกว่าส่งสินค้าแล้ว / ยกเลิก / หมายเหตุ · ข้อมูลอยู่ใน <a href="' + esc(d.sheetUrl) + '" target="_blank" rel="noopener">' + esc(d.sheetName) + '</a> (แท็บรายเดือนสร้างให้อัตโนมัติ)</p>'
       + linePanel(d) + movesPanel(d)
-      + '<div class="pchips cpchips">' + (months.length ? months.map(function (m) { return '<button class="chip' + (m === C.month ? ' on' : '') + '" data-cpm="' + m + '">' + monthTh(m) + '</button>'; }).join('') : '<span class="muted">ยังไม่มีข้อมูล — นำเข้า PO ก่อน</span>') + '</div>'
+      + '<div class="pchips cpchips">' + (months.length > 1 ? '<button class="chip' + (all ? ' on' : '') + '" data-cpm="all">ทั้งหมด (' + months.length + ' เดือน)</button>' : '') + (months.length ? months.map(function (m) { return '<button class="chip' + (m === C.month ? ' on' : '') + '" data-cpm="' + m + '">' + monthTh(m) + '</button>'; }).join('') : '<span class="muted">ยังไม่มีข้อมูล — นำเข้า PO ก่อน</span>') + '</div>'
       + (rows.length ? kpis(rows)
-        + '<div class="panel pbox"><h4 class="cph4">' + icon('table', 18) + ' ตารางส่งสินค้า CP Ram ' + monthTh(C.month) + '<button class="btn btn-sm btn-line" id="cpMonthFiles">' + icon('pdf', 15) + ' PDF / Excel ทั้งเดือน</button></h4>' + schedTable(rows, { edit: true }) + '</div>'
+        + (all ? '<div class="panel pbox cpallbar"><h4 class="cph4">' + icon('table', 18) + ' ตารางส่งสินค้า CP Ram ทุกเดือน · ' + months.length + ' เดือน<button class="btn btn-sm btn-line" id="cpMonthFiles">' + icon('pdf', 15) + ' PDF / Excel ทุกเดือน</button></h4><p class="muted cpallnote">ไฟล์ Excel แยกชีตตามเดือน · PDF แต่ละเดือนขึ้นหน้าใหม่</p></div>'
+          + months.map(function (m) { var mr = rows.filter(function (x) { return String(x.deliveryDate).slice(0, 7) === m; }); return '<div class="panel pbox"><h4 class="cph4">' + icon('table', 18) + ' ' + monthTh(m) + ' <small class="muted">' + mr.length + ' รายการ</small></h4>' + schedTable(mr, { edit: true }) + '</div>'; }).join('')
+          : '<div class="panel pbox"><h4 class="cph4">' + icon('table', 18) + ' ตารางส่งสินค้า CP Ram ' + monthTh(C.month) + '<button class="btn btn-sm btn-line" id="cpMonthFiles">' + icon('pdf', 15) + ' PDF / Excel ทั้งเดือน</button></h4>' + schedTable(rows, { edit: true }) + '</div>')
         + '<div class="panel pbox"><h4>' + icon('clock', 18) + ' รอบเงินเข้า</h4>' + roundsTable(rounds) + '</div>' : '');
     on('[data-cpm]', 'click', function (el) { C.month = el.getAttribute('data-cpm'); C.listPage(); });
     on('[data-cpsend]', 'click', function (el) { sendLine(el.getAttribute('data-cpsend')); });
@@ -430,9 +434,10 @@
     }).catch(onServerError);
   }
   function monthFiles(el) {
-    el.disabled = true; el.innerHTML = '<span class="spinner dark"></span> กำลังสร้างไฟล์';
-    call('cpMonthFiles', state.token, C.month).then(function (r) {
-      if (!r.ok) { el.disabled = false; el.textContent = 'PDF / Excel ทั้งเดือน'; toast(r.error); return; }
+    var allM = C.month === 'all', label = allM ? 'PDF / Excel ทุกเดือน' : 'PDF / Excel ทั้งเดือน';
+    el.disabled = true; el.innerHTML = '<span class="spinner dark"></span> กำลังสร้างไฟล์' + (allM ? ' (อาจใช้เวลาสักครู่)' : '');
+    (allM ? call('cpAllFiles', state.token) : call('cpMonthFiles', state.token, C.month)).then(function (r) {
+      if (!r.ok) { el.disabled = false; el.textContent = label; toast(r.error); return; }
       el.outerHTML = fileLinks(r.pdfUrl, r.xlsxUrl);
     }).catch(onServerError);
   }
