@@ -396,6 +396,7 @@ function cpDraw_(sh, rows, title, withRounds) {
   sh.getRange(4, 1, last - 3, 10).setBorder(true, true, true, true, true, true, '#000000', SpreadsheetApp.BorderStyle.SOLID)
     .setHorizontalAlignment('center').setVerticalAlignment('middle');
   sh.getRange(5, 10, vals.length, 1).setFontSize(11).setWrap(true);
+  sh.getRange(5, 3, vals.length, 1).setWrap(true);   // ชื่อสินค้ายาว (เช่น พริกผัดน้ำมันมะกอกอัลมอนด์ 15g.) ขึ้นบรรทัดใหม่ ไม่โดนตัด
   var red = SpreadsheetApp.newTextStyle().setForegroundColor('#DC2626').setBold(true).build();
   redCells.forEach(function (c) { try { sh.getRange(c.r, 10).setRichTextValue(SpreadsheetApp.newRichTextValue().setText(c.text).setTextStyle(0, c.len, red).build()); } catch (e) {} });
   var tr = last + 2;
@@ -418,7 +419,7 @@ function cpDraw_(sh, rows, title, withRounds) {
   sh.getRange(5, 13, rounds.length + 1, 6).setBorder(true, true, true, true, true, true, '#000000', SpreadsheetApp.BorderStyle.SOLID);
   }
   sh.getRange(1, 1, Math.max(tr + 4, rt), 18).setFontFamily('Sarabun');
-  [70, 80, 170, 100, 80, 95, 50, 65, 100, 210, 20, 20, 95, 70, 70, 100, 90, 110].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
+  [70, 80, 200, 100, 80, 95, 50, 65, 100, 210, 20, 20, 95, 70, 70, 100, 90, 110].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
   sh.setFrozenRows(4);
 }
 function cpTabYm_(name) { var m = name.match(/(\d{2})\.(\d{2})$/); return m ? (2000 + +m[2] - 43) + '-' + m[1] : ''; }
