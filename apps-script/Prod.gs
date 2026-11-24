@@ -38,7 +38,8 @@ var PRD_EVE_SEC_ = { G2: 'งานผัด/งานอบ/ทำเย็น'
 var PRD_STATUS_ = { plan: 'ตามแผน', done: 'เสร็จแล้ว', cancel: 'ยกเลิก' };
 var PRD_SETTINGS_DEFAULT_ = {
   target: '85', machines: '', people: '', units: 'ซอง, ถ้วย, กระปุก, ขวด, ชิ้น',
-  checks: 'ปิดน้ำ, ปิดไฟ, ปิดแอร์, ปิดแก๊ส', sectionTitles: 'เตรียมวัตถุดิบ, สรุปงานลงถ้วย, สรุปงานลงซอง, น้ำพริกค้างแพ็ค, หมายเหตุ', morningNote: 'ไลน์ผลิตและบรรจุเลิก 20.00', lateCauses: 'Breakdown เครื่องจักร, วัตถุดิบไม่พอ / มาช้า, บรรจุภัณฑ์ไม่พอ / มาช้า (ซอง ถ้วย ลัง ฉลาก), วัตถุดิบไม่ผ่าน QC / รอผลตรวจ, สินค้าไม่ผ่าน QC ต้องแก้ไข / ทำใหม่, รอสินค้าจากขั้นก่อนหน้า (ผัด / ทำเย็นยังไม่เสร็จ), คนไม่พอ / พนักงานขาดงาน, งานแทรก / เปลี่ยนแผนด่วน, ปริมาณงานมากกว่ากำลังผลิต, ไฟดับ / น้ำไม่ไหล / แก๊สหมด, ทำความสะอาด / ล้างไลน์ / เปลี่ยนสินค้า', lossCauses: 'ไหม้ / สุกเกิน, หกหล่น, ซีลไม่ติด / ซองรั่ว, น้ำหนักไม่ได้, สิ่งแปลกปลอม, อื่น ๆ'
+  checks: 'ปิดน้ำ, ปิดไฟ, ปิดแอร์, ปิดแก๊ส', sectionTitles: 'เตรียมวัตถุดิบ, สรุปงานลงถ้วย, สรุปงานลงซอง, น้ำพริกค้างแพ็ค, หมายเหตุ', morningNote: 'ไลน์ผลิตและบรรจุเลิก 20.00', lateCauses: 'Breakdown เครื่องจักร, วัตถุดิบไม่พอ / มาช้า, บรรจุภัณฑ์ไม่พอ / มาช้า (ซอง ถ้วย ลัง ฉลาก), วัตถุดิบไม่ผ่าน QC / รอผลตรวจ, สินค้าไม่ผ่าน QC ต้องแก้ไข / ทำใหม่, รอสินค้าจากขั้นก่อนหน้า (ผัด / ทำเย็นยังไม่เสร็จ), คนไม่พอ / พนักงานขาดงาน, งานแทรก / เปลี่ยนแผนด่วน, ปริมาณงานมากกว่ากำลังผลิต, ไฟดับ / น้ำไม่ไหล / แก๊สหมด, ทำความสะอาด / ล้างไลน์ / เปลี่ยนสินค้า', lossCauses: 'ไหม้ / สุกเกิน, หกหล่น, ซีลไม่ติด / ซองรั่ว, น้ำหนักไม่ได้, สิ่งแปลกปลอม, อื่น ๆ',
+  workDates: ''   // วันเสาร์ / อาทิตย์ที่มีทำงาน (yyyy-MM-dd คั่นด้วย ,) — ผู้ใช้ขอ 24/11/69
 };
 
 var PRD_PRODUCT_SEED_ = [   // [หมวด, ชื่อสินค้า, น้ำหนักวัตถุดิบต่อ batch (kg), จำนวนที่ควรได้ต่ำสุด, สูงสุด] — จากไฟล์ Yield 02.11.2026
@@ -139,6 +140,7 @@ function prdSettings_(ss) {
       pp.setProperty('PRD_PEOPLE_MERGED_691121', '1');
     }
   }
+  PRD_WORKD_ = String(s.workDates || '').split(/[,\s]+/).filter(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); });
   if (s.checks === 'ปิดน้ำ, ปิดไฟ, ปิดแอร์') s.checks = PRD_SETTINGS_DEFAULT_.checks;   // ชุดเดิม → เพิ่มปิดแก๊ส
   if (s.lateCauses === 'Breakdown เครื่องจักร, วัตถุดิบไม่พอ / มาช้า, คนไม่พอ, งานแทรก / เปลี่ยนแผน') s.lateCauses = PRD_SETTINGS_DEFAULT_.lateCauses;
   return s;
@@ -251,17 +253,39 @@ function prdFinishState_(x, today) {
   if (x.finishDate) return x.finishDate <= dl ? 'ok' : 'late';
   return today > dl ? 'over' : 'wait';
 }
-// วันทำงานถัดไป (ข้ามเสาร์ / อาทิตย์ → วันจันทร์)
-function prdNextWork_(iso) {
+// วันทำงานถัดไป: ข้ามเสาร์ / อาทิตย์ → วันจันทร์ ยกเว้นเสาร์ / อาทิตย์ที่ตั้งว่ามีทำงาน (setting workDates) หรือมีแผนผลิตของวันนั้น (ผู้ใช้ขอ 24/11/69)
+var PRD_WORKD_ = [];
+function prdIsWork_(iso, all) {
+  var p = String(iso).split('-'), w = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay();
+  if (w !== 0 && w !== 6) return true;
+  if (PRD_WORKD_.indexOf(iso) >= 0) return true;
+  return (all || []).some(function (x) { return x.date === iso && x.status !== 'cancel'; });
+}
+function prdNextWork_(iso, all) {
   var p = String(iso).split('-'), t = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + 1));
-  while (t.getUTCDay() === 0 || t.getUTCDay() === 6) t.setUTCDate(t.getUTCDate() + 1);
+  for (var k = 0; k < 7 && !prdIsWork_(t.toISOString().slice(0, 10), all); k++) t.setUTCDate(t.getUTCDate() + 1);
   return t.toISOString().slice(0, 10);
+}
+// เปิด / ปิด วันเสาร์ / อาทิตย์เป็นวันทำงาน (งาน G1 ที่ค้างจะยกมาวันนั้น)
+function prdSetWorkDate(token, date, on) {
+  var dept = requirePrd_(token);
+  date = purDate_(date);
+  if (!date) return { ok: false, error: 'ใส่วันที่' };
+  return purLocked_(function () {
+    var ss = prdBook_(dept), s = prdSettings_(ss), list = PRD_WORKD_.filter(function (d) { return d !== date; });
+    if (on) list.push(date);
+    list = list.filter(function (d) { return d >= Utilities.formatDate(new Date(Date.now() - 400 * 864e5), PUR_TZ_, 'yyyy-MM-dd'); }).sort();
+    var rows = purRead_(ss, 'prd_settings'), r = rows.filter(function (x) { return x.id === 'workDates'; })[0];
+    purWrite_(ss, 'prd_settings', r ? Object.assign(r, { value: list.join(', ') }) : { id: 'workDates', value: list.join(', ') });
+    purLogWrite_(ss, on ? 'ตั้งเป็นวันทำงาน' : 'ยกเลิกวันทำงาน', 'prd_settings', 'workDates', date);
+    return { ok: true, workDates: list.join(', ') };
+  });
 }
 // งานค้างจากวันก่อน (ย้อนไม่เกิน 14 วัน): ยังไม่เสร็จ หรือเพิ่งเสร็จในวันนี้ — แสดงต่อในสรุปเย็นของวันนี้
 // G1: ค้างไปเป็นแผนของวันทำงานถัดไป (ตรงเสาร์ / อาทิตย์ → วันจันทร์; ผู้ใช้ขอ 24/11/69)
 function prdCarried_(all, date) {
   var p = String(date).split('-'), t = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] - 14)), from = t.toISOString().slice(0, 10);
-  return all.filter(function (x) { return x.date < date && x.date >= from && x.status !== 'cancel' && (!x.finishDate || x.finishDate === date) && (x.grp !== 'G1' || prdNextWork_(x.date) <= date); });
+  return all.filter(function (x) { return x.date < date && x.date >= from && x.status !== 'cancel' && (!x.finishDate || x.finishDate === date) && (x.grp !== 'G1' || prdNextWork_(x.date, all) <= date); });
 }
 // แผนเช้า = แผนของวันนี้ + งาน G1 ที่ยังค้าง (ยังไม่เสร็จ)
 function prdMorningPlans_(all, date) {

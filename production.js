@@ -30,7 +30,12 @@
   function pad(n) { return ('0' + n).slice(-2); }
   function addDays(iso, n) { var p = iso.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2] + n); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
   // วันทำงานถัดไป (ข้ามเสาร์ / อาทิตย์ → วันจันทร์) — ตรงกับ prdNextWork_ ใน Prod.gs
-  function nextWork(iso) { var d = addDays(iso, 1), w = function (x) { var p = x.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]).getDay(); }; while (w(d) === 0 || w(d) === 6) d = addDays(d, 1); return d; }
+  // เสาร์ / อาทิตย์ = วันทำงาน เมื่อตั้งไว้ (setting workDates) หรือมีแผนผลิตของวันนั้น (ผู้ใช้ขอ 24/11/69) — ตรงกับ prdIsWork_
+  function wday(x) { var p = x.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]).getDay(); }
+  function workMarked(d) { return String((H.data && H.data.settings && H.data.settings.workDates) || '').split(/[,\s]+/).indexOf(d) >= 0; }
+  function hasPlans(d) { return ((H.data && H.data.plans) || []).some(function (x) { return x.date === d && x.status !== 'cancel'; }); }
+  function isWork(d) { var w = wday(d); return (w !== 0 && w !== 6) || workMarked(d) || hasPlans(d); }
+  function nextWork(iso) { var d = addDays(iso, 1); for (var k = 0; k < 7 && !isWork(d); k++) d = addDays(d, 1); return d; }
   function dd(iso) { if (!iso) return '-'; var p = String(iso).slice(0, 10).split('-'); return p.length === 3 ? +p[2] + ' ' + MONTHS[+p[1] - 1] + ' ' + String(+p[0] + 543).slice(2) : esc(iso); }
   function dayName(iso) { var p = iso.split('-'); return 'วัน' + DAYS[new Date(+p[0], +p[1] - 1, +p[2]).getDay()]; }
   function list(s) { return String(s || '').split(/[,\n]/).map(function (x) { return x.trim(); }).filter(String); }
@@ -193,12 +198,14 @@
       + '<div class="xmode" role="tablist">' + [['m', '🌅 แผนเช้า', 'ใส่แผนผลิตของวันนี้ แล้วส่งแผนเข้า LINE', mr && mr.sentAt], ['e', '🌙 สรุปเย็น', 'ใส่ผลผลิตจริงของแต่ละกลุ่ม แล้วส่งสรุป', null]].map(function (x) {
         return '<button role="tab" class="xmb' + (q.mode === x[0] ? ' on' : '') + '" data-mode="' + x[0] + '" aria-selected="' + (q.mode === x[0]) + '"><b>' + x[1] + (x[3] ? ' <small class="xok">✓ ส่งแล้ว</small>' : '') + '</b><span>' + x[2] + '</span></button>';
       }).join('') + '</div>'
+      + weekendBox(D.date)
       + (q.mode === 'e' ? '<div class="xtabs xtabs3" role="tablist">' + GROUPS.map(function (g) {
         var r = rep('evening', g[0]);
         return '<button role="tab" class="xtab' + (q.tab === g[0] ? ' on' : '') + '" data-tab="' + g[0] + '" style="--g:' + g[2] + '" aria-selected="' + (q.tab === g[0]) + '"><b>' + g[0] + ' ' + esc(g[1]) + '</b><small>' + cnt(g[0]) + ' รายการ' + (g[0] === 'G1' && hcnt() ? ' · ต่อจาก G2 ' + hcnt() : '') + (ccnt(g[0]) ? ' · ค้าง ' + ccnt(g[0]) : '') + (r && r.sentAt ? ' · ส่งแล้ว ✓' : '') + '</small></button>';
       }).join('') + '</div>' : '') + '<div id="dBody"></div>'
       + '<div class="xsave" id="dSaveBar"' + (D.dirty ? '' : ' hidden') + '><span>มีการแก้ไขที่ยังไม่บันทึก</span><button class="btn btn-line" id="dUndo">ยกเลิก</button><button class="btn btn-primary" id="dSave">' + icon('check', 18) + ' บันทึก</button></div>';
     if (q.mode === 'm') planTab(mr); else groupTab(q.tab, rep('evening', q.tab));
+    if ($('dWork')) $('dWork').addEventListener('click', function () { setWork(D.date, this.getAttribute('data-on') === '1', this); });
     var goDate = function (d) {
       if (!d) return;
       var doIt = function () { H.q.date = d; H.day = null; ensureRange(d).then(dayPage).catch(onServerError); };
@@ -271,6 +278,24 @@
         b.disabled = false; if (!r.ok) return toast(r.error); upsertReport(r.report); sendLine('morning', D.date, '');
       }).catch(function (e) { b.disabled = false; onServerError(e); });
     });
+  }
+  // วันเสาร์ / อาทิตย์: บอกว่าเป็นวันทำงานไหม + ปุ่มเปิด / ปิด (งาน G1 ที่ค้างจะยกมาวันทำงาน)
+  function weekendBox(d) {
+    var w = wday(d); if (w !== 0 && w !== 6) return '';
+    var nm = w === 6 ? 'วันเสาร์' : 'วันอาทิตย์', mk = workMarked(d), hp = hasPlans(d);
+    if (mk || hp) return '<div class="xwk on" role="status"><span>✓ <b>' + nm + 'นี้เป็นวันทำงาน</b> — งาน G1 ที่ค้างยกมาวันนี้' + (hp && !mk ? ' (มีแผนผลิตของวันนี้ จึงนับเป็นวันทำงานให้เอง)' : '') + '</span>'
+      + (mk && !hp ? '<button class="btn btn-line btn-sm" id="dWork" data-on="0">ไม่ทำงานวันนี้</button>' : '') + '</div>';
+    return '<div class="xwk" role="status"><span>📅 <b>' + nm + ' — ปกติไม่ใช่วันทำงาน</b> งาน G1 ที่ค้างจะไปขึ้นวันทำงานถัดไป ถ้า' + nm + 'นี้มีทำงาน กดปุ่มนี้ (หรือใส่แผนผลิตของวันนี้)</span>'
+      + '<button class="btn btn-primary btn-sm" id="dWork" data-on="1">✓ ' + nm + 'นี้มีทำงาน — ยกงานค้างมา</button></div>';
+  }
+  function setWork(d, on, b) {
+    if (H.day && H.day.dirty) return toast('กด "บันทึก" ก่อน แล้วค่อยเปลี่ยน');
+    b.disabled = true;
+    call('prdSetWorkDate', state.token, d, on).then(function (r) {
+      b.disabled = false; if (!r.ok) return toast(r.error);
+      H.data.settings.workDates = r.workDates; H.day = null; dayPage();
+      toast(on ? 'ตั้งเป็นวันทำงานแล้ว — ยกงานค้างมาวันนี้' : 'ยกเลิกวันทำงานแล้ว');
+    }).catch(function (e) { b.disabled = false; onServerError(e); });
   }
   // แถวงาน G1 ค้าง (แสดงอย่างเดียวในแผนเช้า)
   function carryRow(x) {
@@ -1039,6 +1064,7 @@
     '.xtitle em{white-space:nowrap;font-style:normal;font-weight:700;color:var(--ink)}',
     '.xsplan{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:4px 8px;align-items:center;padding:6px 0;border-bottom:1px dashed var(--line)}.xspn b{display:block;font-size:14px}.xspn small{color:var(--muted);font-size:12px}.xspq{font-size:14px;text-align:right}.xspq.muted{font-weight:400}.xspmv{grid-column:2/-1;display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)}.xspmv select{border:1.5px solid var(--line);border-radius:8px;padding:4px 6px;font:inherit;font-size:13px;background:#fff;max-width:100%}',
     '.xhandh{margin:16px 0 8px;font-size:15px;color:#c2410c}.xhandh small{color:var(--muted);font-weight:400;font-size:12.5px}.xg1v{grid-column:1/-1;font-size:13.5px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:8px 10px;color:#1e3a8a}',
+    '.xwk{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;background:#fffbeb;border:1.5px solid #fcd34d;color:#78350f;border-radius:14px;padding:10px 14px;margin:0 0 12px;font-size:14px;line-height:1.5}.xwk span{flex:1 1 260px}.xwk.on{background:#f0fdf4;border-color:#86efac;color:#14532d}.xwk .btn{min-height:40px}',
     '.xcarryp{background:#f5f3ff;border:1.5px dashed #c4b5fd;border-radius:14px;padding:10px 12px;margin:0 0 10px}.xcarryp>b{display:block;color:#5b21b6;font-size:14px;margin-bottom:6px}.xcarryp>small{display:block;color:var(--muted);font-size:12.5px;margin-top:6px}.xcrow{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;padding:7px 0;border-top:1px solid #ede9fe}.xcrow:first-of-type{border-top:0}.xcn{font-weight:700;font-size:14.5px}.xcrow .xchips span{background:#ede9fe;color:#5b21b6}',
     '.xcarryh{margin:16px 0 8px;font-size:15px;color:#6d28d9}.xcarryh small{color:var(--muted);font-weight:400;font-size:12.5px}.xcarryn{background:#f5f3ff;border:1.5px solid #ddd6fe;color:#5b21b6;font-size:14px;margin-bottom:12px}',
     '.xin select.xu{flex:none;width:auto;max-width:42%;border:0;border-left:1.5px solid var(--line);background:#f8fafc;color:#334155;font:inherit;font-size:13px;padding:0 6px;align-self:stretch;cursor:pointer}',
