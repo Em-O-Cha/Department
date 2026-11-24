@@ -48,7 +48,8 @@ function apiFunctions_() {
     rdSaveTrial: rdSaveTrial, rdDeleteTrial: rdDeleteTrial, rdUploadTrialPhoto: rdUploadTrialPhoto, rdRemoveTrialPhoto: rdRemoveTrialPhoto, costLoad: costLoad, costPurPrices: costPurPrices, rdSaveCost: rdSaveCost, rdDeleteCost: rdDeleteCost, rdUploadCostPhoto: rdUploadCostPhoto, rdRemoveCostPhoto: rdRemoveCostPhoto,
     prdLoad: prdLoad, prdSaveProduct: prdSaveProduct, prdSavePlans: prdSavePlans, prdImportYield: prdImportYield, prdDeletePlan: prdDeletePlan, prdSaveBreakdown: prdSaveBreakdown, prdUploadBdPhoto: prdUploadBdPhoto, prdRemoveBdPhoto: prdRemoveBdPhoto,
     prdDeleteBreakdown: prdDeleteBreakdown, prdSaveReport: prdSaveReport, prdUploadPhoto: prdUploadPhoto, prdRemovePhoto: prdRemovePhoto,
-    prdSaveSettings: prdSaveSettings, prdSetWorkDate: prdSetWorkDate, prdLog: prdLog, prdDashboard: prdDashboard, prdSendLine: prdSendLine, prdLinePreview: prdLinePreview, prdLineTest: prdLineTest, prdSetLineToken: prdSetLineToken, prdUseAccBot: prdUseAccBot,
+    prdSaveSettings: prdSaveSettings, prdSetWorkDate: prdSetWorkDate, prdLog: prdLog, prdDashboard: prdDashboard, prdSendLine: prdSendLine, prdLinePreview: prdLinePreview, prdLineTest: prdLineTest, prdSetLineToken: prdSetLineToken,
+    purPoInfo: purPoInfo, purPoSetToken: purPoSetToken, purPoTest: purPoTest, purPoApproverCode: purPoApproverCode, purPoRemoveApprover: purPoRemoveApprover, purPoSaveSig: purPoSaveSig, purPoSigs: purPoSigs, purPoFile: purPoFile, purPoSend: purPoSend, purPoList: purPoList, purPoSeen: purPoSeen, purPoConfirm: purPoConfirm, prdUseAccBot: prdUseAccBot,
     // ผู้บริหาร (Executive.gs)
     execOverview: execOverview, execDashboard: execDashboard, execPart: execPart, execVerify: execVerify
   };
@@ -72,6 +73,8 @@ function doPost(e) {
     if (Array.isArray(req.events)) {
       // LINE ส่งเหตุการณ์ซ้ำ (redelivery) เพราะเว็บแอปตอบกลับเป็น redirect → ข้ามเหตุการณ์ที่เคยทำแล้ว ไม่ให้ตอบ/ทำซ้ำ
       req.events = lineFreshEvents_(req.events);   // Webhook ของ LINE OA: ฝ่ายบัญชี (Acc.gs) แยกด้วย destination ไม่ใช่ = ฝ่ายบุคคล (HrPublic.gs)
+      // ฝ่ายจัดซื้อ (PurPoApprove.gs) ใช้บอทของตัวเอง — ขออนุมัติ PO
+      if (purIsMyBot_(req.destination)) { purLineWebhook_(req.events); return ContentService.createTextOutput('OK'); }
       var isAcc = accIsMyBot_(req.destination), isPrd = prdIsMyBot_(req.destination);
       if (isAcc || isPrd) accSeenGroups_(req.events);   // จำกลุ่มที่บอทเห็นล่าสุด (ใช้หา Group ID ตอนเปลี่ยน OA)
       if (req.events.length) accDiagLog_({ ev: 'webhook', acc: isAcc, prd: isPrd, types: req.events.map(function (x) { return x.type + (x.source ? '/' + x.source.type : ''); }).join(',') });

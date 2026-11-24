@@ -28,6 +28,7 @@
     { id: 'p_stock', label: 'รับเข้า / จ่ายออก', ic: 'box' },
     { id: 'p_mat', label: 'วัตถุดิบ & ราคา', ic: 'tag' },
     { id: 'p_doc', label: 'ใบ PR / PO', ic: 'doc' },
+    { id: 'p_poa', label: 'ขออนุมัติ PO (LINE)', ic: 'line' },
     { id: 'p_rfq', label: 'เปรียบเทียบราคา', ic: 'list' },
     { id: 'p_ven', label: 'ผู้ขาย (Vendor)', ic: 'phone' },
     { id: 'p_rep', label: 'รายงาน / พิมพ์', ic: 'chart' },
@@ -88,6 +89,7 @@
       d.materials.forEach(function (m) { P.idx.mat[m.id] = m; });
       d.vendors.forEach(function (x) { P.idx.ven[x.id] = x; });
       d.docs.forEach(function (x) { P.idx.doc[x.id] = x; });
+      if (window.PURPO) { window.PURPO.setList(d.poApprovals); setTimeout(function () { try { if (state.dept && state.dept.key === 'PUR') renderNav(); } catch (e) {} }, 0); }
       P.loading = null;
       return d;
     }, function (e) { P.loading = null; throw e; });
@@ -98,7 +100,11 @@
     return P.load().then(function () { if (String(state.page).indexOf('p_') === 0) P.render(state.page); }).catch(onServerError);
   }
   P.reset = function () { P.data = null; P.report = null; P.q = {}; avlPage(false); };
-  P.menus = function () { return MENUS; };
+  P.menus = function () {
+    // จำนวน PO ที่อนุมัติใหม่แต่ยังไม่เปิดดู (ผู้ใช้ขอ 24/11/69)
+    var n = window.PURPO && P.data ? (window.PURPO.setList(P.data.poApprovals), window.PURPO.newCount()) : 0;
+    return MENUS.map(function (m) { return m.id === 'p_poa' && n ? Object.assign({}, m, { label: m.label + ' 🔴 ' + n }) : m; });
+  };
 
   P.render = function (page) {
     if (page !== 'p_rep') avlPage(false);
@@ -110,7 +116,7 @@
       });
       return;
     }
-    ({ p_dash: dash, p_stock: stock, p_mat: materials, p_doc: docs, p_rfq: rfqs, p_ven: vendors, p_rep: report, p_log: logPage }[page] || dash)();
+    ({ p_dash: dash, p_stock: stock, p_mat: materials, p_doc: docs, p_poa: function () { window.PURPO.page(); }, p_rfq: rfqs, p_ven: vendors, p_rep: report, p_log: logPage }[page] || dash)();
   };
 
   // ==================== ภาพรวม ====================
@@ -130,6 +136,8 @@
       + '<div class="kpis">' + kpi(active.length, 'วัตถุดิบ', '#0f766e', 'p_mat') + kpi(low.length, 'สินค้าที่ต้องจัดซื้อ (ต่ำกว่า Minimum)', low.length ? '#dc2626' : '#64748b', 'p_stock')
       + kpi(exp.length, 'LOT ใกล้หมดอายุ (30 วัน)', exp.length ? '#d97706' : '#64748b', 'p_stock') + kpi(waiting.length, 'PO รอรับของ', '#2563eb', 'p_doc')
       + kpi(baht(unpaidSum).replace('.00', ''), 'ค้างชำระผู้ขาย (' + unpaid.length + ' ใบ)', unpaid.length ? '#7c3aed' : '#64748b', 'p_doc') + '</div>';
+    var paN = window.PURPO ? (window.PURPO.setList(d.poApprovals), window.PURPO.newCount()) : 0;
+    if (paN) html = html.replace('<div class="kpis">', '<div class="pa-banner" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;border:2px solid #dc2626;background:#fef2f2;border-radius:14px;padding:10px 14px;margin-bottom:12px"><span><b style="color:#b91c1c">🔴 PO อนุมัติใหม่ ' + paN + ' ใบ · ยังไม่เปิดดู</b><br><small>เปิดไฟล์ PO ที่อนุมัติแล้ว และยืนยันวันที่จัดส่งอีกครั้ง</small></span><button class="btn btn-sm btn-primary" style="flex:none" data-go="p_poa">เปิดดู & ยืนยันวันส่ง</button></div><div class="kpis">');
     var box = function (title, rows, empty) { return '<div class="panel pbox"><h4>' + title + '</h4>' + (rows.length ? rows.join('') : '<div class="muted">' + empty + '</div>') + '</div>'; };
     html += '<div class="pgrid">'
       + box(icon('warn', 18) + ' สินค้าที่ต้องจัดซื้อ (ต่ำกว่า Minimum)', low.concat(neg.filter(function (m) { return low.indexOf(m) < 0; })).slice(0, 30).map(function (m) {
@@ -520,7 +528,7 @@
         var over = d.type === 'PO' && d.paymentStatus !== 'paid' && d.dueDate && d.dueDate < t;
         return '<button class="prow click" data-doc="' + d.id + '"><div class="pinfo"><b><span class="dt ' + d.type + '">' + d.type + '</span> ' + esc(d.docNo) + ' · ' + esc(d.vendorName || '-') + '</b>'
           + '<small>สั่ง ' + dd(d.orderDate) + ' · ส่ง ' + dd(d.deliveryDate) + ' · ' + d.items.length + ' รายการ' + (d.files.length ? ' · ' + icon('clip', 12) + d.files.length : '') + '</small>'
-          + '<div><span class="tag st-' + d.status + '">' + (DOC_ST[d.status] || d.status) + '</span>' + matchTag(d) + (d.type === 'PO' ? '<span class="tag ' + (d.paymentStatus === 'paid' ? 'ok' : over ? 'lock' : 'no') + '">' + PAY_ST[d.paymentStatus] + (over ? ' · เลยกำหนด' : '') + '</span>' : '') + '</div></div>'
+          + '<div><span class="tag st-' + d.status + '">' + (DOC_ST[d.status] || d.status) + '</span>' + poaTag(d) + matchTag(d) + (d.type === 'PO' ? '<span class="tag ' + (d.paymentStatus === 'paid' ? 'ok' : over ? 'lock' : 'no') + '">' + PAY_ST[d.paymentStatus] + (over ? ' · เลยกำหนด' : '') + '</span>' : '') + '</div></div>'
           + '<div class="pprice">' + baht(d.total) + '</div></button>';
       }).join('') || '<div class="panel muted">ยังไม่มีเอกสาร</div>';
       on('[data-doc]', 'click', function (el) { docModal(P.idx.doc[el.getAttribute('data-doc')]); }, $('pList'));
@@ -531,6 +539,10 @@
     draw();
   }
 
+  function poaTag(d) {
+    var a = d.type === 'PO' && window.PURPO && window.PURPO.forDoc(d.id); if (!a) return '';
+    return a.status === 'pending' ? '<span class="tag wait" style="background:#fff7ed;color:#c2410c">⏳ รออนุมัติ LINE</span>' : a.status === 'approved' ? (!a.seenAt ? '<span class="tag lock">🔴 อนุมัติใหม่ · ยังไม่เปิดดู</span>' : '<span class="tag ok">✓ อนุมัติทาง LINE</span>') : a.status === 'rejected' ? '<span class="tag lock">✕ ไม่อนุมัติ (LINE)</span>' : '';
+  }
   function docModal(d, newType, from) {
     var edit = !!d, t = todayIso();
     d = d || { type: newType, docNo: '', rfqId: from && from.rfqId || '', refId: from ? from.id || '' : '', vendorId: from ? from.vendorId : '', vendorName: from ? from.vendorName : '', vendorPhone: from ? from.vendorPhone : '',
@@ -555,6 +567,7 @@
         + '<div class="pf full"><label for="dMatchNote">เหตุผลที่ชำระแม้ตรวจ 3 ทางไม่ตรง (ใส่เมื่อจำเป็นเท่านั้น)</label><input id="dMatchNote" type="text" value="' + esc(d.matchNote || '') + '"></div></div></div>'
         + (edit ? '<div class="psec"><div class="psec-h"><b>ตรวจ 3 ทาง: PO ↔ รับของ ↔ ใบแจ้งหนี้</b><button type="button" class="btn btn-sm btn-line" id="dInv">' + icon('plus', 16) + 'เพิ่มใบแจ้งหนี้</button></div><div id="dMatch"></div></div>' : '') : '')
       + '<div class="pform">' + T('dNote', 'หมายเหตุ', d.note) + '</div>'
+      + (edit && isPO && window.PURPO ? poaSec(d) : '')
       + '<div class="psec"><div class="psec-h"><b>' + icon('clip', 16) + ' ไฟล์แนบ</b></div>' + (edit
         ? '<div id="dFiles"></div><div class="pupload">' + S('dFileLabel', 'ประเภทไฟล์', FILE_LABELS.map(function (x) { return [x, x]; }), 'ไฟล์ PR / PO') + '<div class="pf"><label>เลือกรูป / PDF (อัปโหลดทันที)</label><input id="dFile" type="file" accept="image/*,application/pdf" multiple></div></div>'
         : '<div class="note">กดบันทึกก่อน แล้วจึงแนบไฟล์ PR/PO ที่อนุมัติ หรือภาพอนุมัติทาง LINE ได้</div>') + '</div>';
@@ -610,12 +623,18 @@
         if (isPO) $('dPay').addEventListener('change', function () { if (this.value === 'paid' && !v('dPaid')) { $('dPaid').value = items.reduce(function (s, it) { return s + (it.qty !== '' && it.price !== '' ? it.qty * it.price : 0); }, 0).toFixed(2); if (!v('dPaidDate')) $('dPaidDate').value = todayIso(); } });
         if (edit) {
           drawFiles(d.files || []);
+          if ($('dPoa')) $('dPoa').addEventListener('click', function () { window.PURPO.openSign(d); });
+          if ($('dPoaOpen')) $('dPoaOpen').addEventListener('click', function () { closeModal(); P.q.paF = ''; go('p_poa'); });
           $('dFile').addEventListener('change', function () {
             var files = Array.prototype.slice.call(this.files), label = v('dFileLabel'), inp = this;
             if (!files.length) return;
             inp.disabled = true; $('mErr').textContent = 'กำลังอัปโหลด ' + files.length + ' ไฟล์…';
             files.reduce(function (p, f) { return p.then(function () { return upload('doc', d.id, f, label).then(function (r) { d.files = r.files; drawFiles(r.files); }); }); }, Promise.resolve())
-              .then(function () { $('mErr').textContent = ''; toast('แนบไฟล์แล้ว'); reload(); }, function (e) { $('mErr').textContent = 'อัปโหลดไม่สำเร็จ: ' + e.message; })
+              .then(function () {
+                $('mErr').textContent = ''; toast('แนบไฟล์แล้ว'); reload();
+                var pdf = files.filter(function (f) { return /pdf/i.test(f.type) || /\.pdf$/i.test(f.name); })[0], a = window.PURPO && window.PURPO.forDoc(d.id);
+                if (isPO && pdf && window.PURPO && (!a || a.status === 'rejected')) ask({ title: 'ส่ง PO นี้ขออนุมัติทาง LINE เลยไหม?', text: 'จะแสดงตัวอย่างใบ PO พร้อมลายเซ็นผู้ออกเอกสารให้ตรวจก่อนส่ง', ok: 'ดูตัวอย่าง & ส่ง', cancel: 'ไว้ทีหลัง' }).then(function (ok) { if (ok) window.PURPO.openSign(d, { file: pdf }); });
+              }, function (e) { $('mErr').textContent = 'อัปโหลดไม่สำเร็จ: ' + e.message; })
               .then(function () { inp.disabled = false; inp.value = ''; });
           });
           if (isPO) {
@@ -655,6 +674,16 @@
       }
     });
   }
+  // ขออนุมัติทาง LINE (PurPoApprove.gs / poapprove.js)
+  function poaSec(d) {
+    var a = window.PURPO.forDoc(d.id), st = { pending: '⏳ ส่งขออนุมัติแล้ว รอพี่เก้กดอนุมัติ', approved: '✓ อนุมัติแล้ว', rejected: '✕ ไม่อนุมัติ' };
+    var line = a ? '<div class="' + (a.status === 'approved' ? 'pa-ok' : a.status === 'rejected' ? 'pa-no' : '') + '">' + (st[a.status] || '') + (a.decidedBy ? ' · ' + esc(a.decidedBy) : '') + '</div>'
+      + (a.status === 'approved' ? '<small>' + (a.confirmedAt ? 'ยืนยันวันที่จัดส่ง ' + dd(a.deliveryDate) : '<b style="color:#b91c1c">ยังไม่ยืนยันวันที่จัดส่ง</b>') + '</small>' : '') : '<div class="muted">ยังไม่ได้ส่งขออนุมัติ — แนบ PDF ใบสั่งซื้อจาก PEAK แล้วกดปุ่มนี้</div>';
+    return '<div class="psec"><div class="psec-h"><b>' + icon('line', 16) + ' ขออนุมัติทาง LINE</b>'
+      + (a && a.status === 'approved' ? '<button type="button" class="btn btn-sm btn-primary" id="dPoaOpen">เปิด PO ที่อนุมัติ / ยืนยันวันส่ง</button>' : '<button type="button" class="btn btn-sm btn-primary" id="dPoa">' + (a && a.status === 'pending' ? 'ส่งขออนุมัติใหม่' : 'ใส่ลายเซ็น & ส่งขออนุมัติ') + '</button>')
+      + '</div>' + line + '</div>';
+  }
+  P.openDoc = function (d) { docModal(d); };
   function fileLink(f) { return '<a class="flink" href="' + esc(f.url) + '" target="_blank" rel="noopener">' + icon('clip', 14) + esc(f.label ? f.label + ': ' : '') + esc(f.name) + '</a>'; }
 
   // อ่านไฟล์ → base64 (รูปใหญ่ย่อเหลือด้านยาว 2000px) → purUploadFile

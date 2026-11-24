@@ -221,7 +221,7 @@ function purLoad(token) {
   vendors.forEach(function (v) { v.files = purParseFiles_(v.files); v.products = purVendorProducts_(purJson_(v.products)); });
   docs.forEach(function (d) { if (d.type === 'PO') d.match = purMatch_(d, d.items, moves, invoices); });
   var cfg = deptConfig_(dept.key);
-  return { ok: true, vendors: vendors, materials: materials, docs: docs, invoices: invoices, rfqs: rfqs, quotes: quotes, evals: evals,
+  return { ok: true, poApprovals: (function () { try { return purPoList_(ss); } catch (e) { return []; } })(), vendors: vendors, materials: materials, docs: docs, invoices: invoices, rfqs: rfqs, quotes: quotes, evals: evals,
     moveCount: moves.length, today: purToday_(),
     sheetUrl: 'https://docs.google.com/spreadsheets/d/' + cfg.sheetId + '/edit', hasFolder: !!cfg.folderId };
 }
