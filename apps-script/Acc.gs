@@ -166,6 +166,9 @@ function accMap_(ss) {
   products = products.map(accCleanProduct_);
   // ยังไม่เคยตั้งรูป (img ไม่มีค่าเลย) → ใช้รูปตั้งต้นของคอลัมน์นั้น · ตั้งเป็น "none" = ไม่ใช้รูป
   products.forEach(function (p) { if (!p.img && ACC_PRODUCT_IMG_DEFAULT_[p.key]) p.img = accImgUrl_(ACC_PRODUCT_IMG_DEFAULT_[p.key]); if (p.img === 'none') { p.img = ''; p.noImg = true; } });
+  // สินค้าหลัก 17 ตัว (ต้นแบบ) แสดงเสมอ · สินค้าที่เพิ่มเอง (เช่น น้ำพริกเจ) แสดงเฉพาะเมื่อมีออเดอร์ (ผู้ใช้ขอ 24/11/69)
+  var mainKeys = ACC_PRODUCT_DEFAULT_.map(function (p) { return p.key; });
+  products.forEach(function (p) { p.main = mainKeys.indexOf(p.key) >= 0; });
   return { dcs: dcs.map(accCleanDc_), products: products, holidays: accDates_(saved.holidays) };
 }
 function accDates_(a) { return (Array.isArray(a) ? a : []).map(String).filter(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); }).sort().slice(0, 100); }
@@ -379,7 +382,9 @@ function accBuildReportSheet_(dept, map, m, title) {
   file.moveTo(folder);
   var sh = ss.getSheets()[0];
   sh.setName('ออเดอร์ 7-11');
-  // สินค้าแสดงครบทุกตัวแม้ไม่มีออเดอร์ (ผู้ใช้ขอ 24/11/69) · ศูนย์ที่ไม่มีออเดอร์ยังตัดออก
+  // สินค้าหลัก 17 ตัวแสดงเสมอแม้ไม่มีออเดอร์ · สินค้าที่เพิ่มเอง (เช่น เจ) แสดงเมื่อมีออเดอร์ · ศูนย์ที่ไม่มีออเดอร์ตัดออก (ผู้ใช้ขอ 24/11/69)
+  var byP = m.byProduct || {};
+  if (map.products.some(function (p) { return p.main; })) map = Object.assign({}, map, { products: map.products.filter(function (p) { return p.main || (byP[p.key] || 0) > 0; }) });
   var dz = (m.dcs || []).filter(function (d) { return d.cases; });
   if (dz.length) m = Object.assign({}, m, { dcs: dz });
   var P = map.products, nP = P.length, firstCol = 4, lastCol = firstCol + nP - 1, totCol = lastCol + 1;

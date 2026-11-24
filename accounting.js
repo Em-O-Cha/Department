@@ -177,9 +177,15 @@
       + '<tr class="a7grand"><td colspan="2" style="background:' + GRAND_BG + '">รวมทั้งหมด</td><td colspan="' + (P.length + 1) + '" style="background:' + GRAND_BG + '">' + n0(m.cases) + ' ลัง</td></tr></tfoot></table></div>';
     return h;
   };
+  function mainOrOrdered(map, m) {
+    var by = m.byProduct || {};
+    if (!map.products.some(function (p) { return p.main; })) return map;   // ข้อมูลเก่าไม่มีธงสินค้าหลัก → แสดงทั้งหมด
+    return Object.assign({}, map, { products: map.products.filter(function (p) { return p.main || (by[p.key] || 0) > 0; }) });
+  }
   // หัวรายงาน + ตาราง + ช่องเซ็น (ใช้ทั้งหน้าจอและพิมพ์)
   function reportHtml(map, m, sub) {
-    // ตัดศูนย์ที่ไม่มีออเดอร์ออก (ผู้ใช้ขอ 23/11/69) · สินค้าแสดงครบทุกตัวแม้ไม่มีออเดอร์ (ผู้ใช้ขอ 24/11/69)
+    // ตัดศูนย์ที่ไม่มีออเดอร์ออก (ผู้ใช้ขอ 23/11/69) · สินค้าหลัก 17 ตัวแสดงเสมอ · สินค้าที่เพิ่มเอง (เช่น เจ) แสดงเมื่อมีออเดอร์ (ผู้ใช้ขอ 24/11/69)
+    map = mainOrOrdered(map, m);
     var dz = m.dcs.filter(function (d) { return d.cases; });
     if (dz.length) m = Object.assign({}, m, { dcs: dz });
     return '<div class="a7rep"><div class="a7head">' + logoHtml() + '<div class="a7title"><b>แบบฟอร์มบันทึกออเดอร์ 7-Eleven</b><span>บริษัท สปังกี้ ฟู้ด จำกัด</span></div>'
@@ -598,7 +604,7 @@
       // ตัดสินค้าที่ไม่มีออเดอร์ (รวม 0 ลัง) และศูนย์ที่ไม่มีออเดอร์ออกจากภาพ LINE (ผู้ใช้ขอ 23/11/69) — หน้าจอ / PDF / Excel ยังครบทุกคอลัมน์
       // สินค้าแสดงครบทุกตัวแม้ไม่มีออเดอร์ (ผู้ใช้ขอ 24/11/69) · ศูนย์ที่ไม่มีออเดอร์ยังตัดออก
       var dz = m.dcs.filter(function (d) { return d.cases; });
-      var mapL = map, mL = dz.length ? Object.assign({}, m, { dcs: dz }) : m;
+      var mapL = mainOrOrdered(map, m), mL = dz.length ? Object.assign({}, m, { dcs: dz }) : m;
       var box = document.createElement('div'); box.className = 'a7imgbox'; box.innerHTML = '<div class="a7imgrep">' + reportHtml(mapL, mL, n0(m.poCount) + ' ใบสั่งซื้อ') + '</div>'; document.body.appendChild(box);
       var el = box.firstChild;
       return imgsReady(el).then(function () { return window.html2canvas(el, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true }); }).then(function (cv) {
