@@ -646,6 +646,8 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
       // ผู้ใช้ขอ 24/11/69: แสดงจำนวนเดียว — ค่าที่ G1 กรอกเป็นหน่วย batch ก่อน (ช่องผลิตได้จริง batch / ช่องจำนวนที่ผลิตได้จริง) ถ้าไม่มี batch ใช้หน่วยอื่นที่กรอกไว้
       var qs = [{ q: x.actQty, u: unitOf(x) }, { q: x.actQty2, u: x.unit2 || 'batch' }].filter(function (o) { return o.q !== '' && o.q != null; });
       var pick = qs.filter(function (o) { return /^batch$/i.test(String(o.u).trim()); })[0] || qs[0];
+      // ผู้ใช้ขอ 24/11/69: G1 ยังไม่กรอก → ใช้ "ทำจริง" ที่ G2 กรอกไว้เลย ไม่ต้องรอ G1
+      if (!pick && x.actBatch !== '' && x.actBatch != null) pick = { q: x.actBatch, u: x.actBatchUnit || 'batch' };
       right = pick ? prdFmt_(pick.q) + ' ' + pick.u : 'ยังไม่กรอก';
     } else if (grp === 'G1') {
       right = [x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : '', prdQty2_(x)].filter(String).join('\n') || 'ยังไม่กรอก';

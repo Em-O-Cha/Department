@@ -119,6 +119,11 @@
   // ผลที่กรอกของรายการแผน เป็นข้อความสั้น เช่น "20 ถ้วย" / "30 ชิ้น ; 5 ลัง"
   function resText(x) {
     var u = x.unit || (prodOf(x.productId) || {}).unit || 'ชิ้น', q = num(x.actQty), cs = num(x.actCases);
+    if (x.grp === 'G2') {   // เหมือนการ์ด LINE: ค่าที่ G1 กรอก (batch ก่อน) · G1 ยังไม่กรอก → ใช้ "ทำจริง" ของ G2
+      var qs = [{ q: q, u: u }, { q: num(x.actQty2), u: x.unit2 || 'batch' }, { q: num(x.actBatch), u: x.actBatchUnit || 'batch', g2: 1 }].filter(function (o) { return o.q !== ''; });
+      var g1 = qs.filter(function (o) { return !o.g2; }), pk = g1.filter(function (o) { return /^batch$/i.test(String(o.u).trim()); })[0] || g1[0] || qs[0];
+      return pk ? fmt(pk.q) + ' ' + pk.u : '';
+    }
     return [q !== '' ? fmt(q) + ' ' + u : '', x.grp === 'G3' && cs !== '' ? fmt(cs) + ' ลัง' : ''].filter(String).join(' ; ');
   }
   function shrink(file) {
