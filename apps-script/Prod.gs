@@ -619,7 +619,10 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
         // ไม่แสดงบรรทัด ตามช่วง / ควรได้ ใน LINE (ผู้ใช้ขอเอาออก 17/11/69) — ดูได้ในหน้าระบบ
         right = prdFmt_(x.actQty) + ' ' + unitOf(x);
       } else right = 'ยังไม่กรอก';
-      if (prdQty2_(x)) right = (x.actQty !== '' ? right + '\n' : '') + prdQty2_(x);
+      // ผู้ใช้ขอ 24/11/69: แสดงจำนวนเดียว — ค่าที่ G1 กรอกเป็นหน่วย batch ก่อน (ช่องผลิตได้จริง batch / ช่องจำนวนที่ผลิตได้จริง) ถ้าไม่มี batch ใช้หน่วยอื่นที่กรอกไว้
+      var qs = [{ q: x.actQty, u: unitOf(x) }, { q: x.actQty2, u: x.unit2 || 'batch' }].filter(function (o) { return o.q !== '' && o.q != null; });
+      var pick = qs.filter(function (o) { return /^batch$/i.test(String(o.u).trim()); })[0] || qs[0];
+      right = pick ? prdFmt_(pick.q) + ' ' + pick.u : 'ยังไม่กรอก';
     } else if (grp === 'G1') {
       right = [x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : '', prdQty2_(x)].filter(String).join('\n') || 'ยังไม่กรอก';
       if (prdPlanText_(x)) sub[0] = (sub[0] ? sub[0] + ' · ' : '') + prdPlanText_(x);
