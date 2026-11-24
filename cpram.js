@@ -189,17 +189,22 @@
     var groups = [], g = null;
     rows.forEach(function (r) { if (!g || g.date !== r.deliveryDate) { g = { date: r.deliveryDate, rows: [] }; groups.push(g); } g.rows.push(r); });
     var total = 0, body = groups.map(function (gr) {
-      var sum = gr.rows.reduce(function (s, r) { return s + (r.status === 'cancel' ? 0 : Number(r.qty) || 0); }, 0), n = gr.rows.length;
-      total += sum;
-      var sameP = gr.rows.every(function (r) { return r.product === gr.rows[0].product; }), sameL = gr.rows.every(function (r) { return r.place === gr.rows[0].place; });
+      // วันเดียวกันแต่คนละสถานที่ส่ง → แยก Total ตามสถานที่ (ผู้ใช้ขอ 24/11/69): เรียงแถวในวันให้สถานที่เดียวกันติดกัน แล้วรวม Total / สถานที่ส่ง ทีละสถานที่
+      var pl = uniq(gr.rows.map(function (r) { return r.place || '\u0000'; }));
+      gr.rows = gr.rows.map(function (r, i) { return { r: r, i: i }; }).sort(function (a, b) { return pl.indexOf(a.r.place || '\u0000') - pl.indexOf(b.r.place || '\u0000') || a.i - b.i; }).map(function (x) { return x.r; });
+      var subs = [], sg = null;
+      gr.rows.forEach(function (r, i) { if (!sg || sg.place !== (r.place || '')) { sg = { place: r.place || '', start: i, n: 0, sum: 0 }; subs.push(sg); } sg.n++; if (r.status !== 'cancel') sg.sum += Number(r.qty) || 0; });
+      var n = gr.rows.length;
+      total += subs.reduce(function (s, x) { return s + x.sum; }, 0);
+      var sameP = gr.rows.every(function (r) { return r.product === gr.rows[0].product; });
       return gr.rows.map(function (r, i) {
         var first = i === 0, rs = ' rowspan="' + n + '"', cancel = r.status === 'cancel';
+        var sub = subs.filter(function (x) { return x.start === i; })[0], srs = sub ? ' rowspan="' + sub.n + '"' : '';
         return '<tr class="' + (cancel ? 'cpx' : '') + (opt.edit ? ' cped' : '') + '"' + (opt.edit ? ' data-cpl="' + esc(r.id) + '" tabindex="0"' : '') + '>'
           + (first ? '<td' + rs + '>' + dayOf(gr.date) + '</td><td' + rs + '>' + slash(gr.date) + '</td>' : '')
           + (sameP ? (first ? '<td' + rs + ' class="cpp">' + pname(r) + '</td>' : '') : '<td class="cpp">' + pname(r) + '</td>')
           + '<td class="cpo">' + esc(r.poNo) + '</td><td class="cpwh">' + esc(r.wh || (r.place ? '-' : '?')) + '</td><td class="cpq">' + nq(r.qty) + (r.pcs ? '<small class="cppcs">= ' + n0(r.pcs) + ' ' + esc(r.pcsUnit) + '</small>' : '') + '</td><td>' + esc(r.unitTh || r.unit || 'ลัง') + '</td>'
-          + (first ? '<td' + rs + ' class="cpt">' + nq(sum) + '</td>' : '')
-          + (sameL ? (first ? '<td' + rs + '>' + (r.place ? esc(r.place) : '<span class="cpq0">?</span>') + '</td>' : '') : '<td>' + (r.place ? esc(r.place) : '<span class="cpq0">?</span>') + '</td>')
+          + (sub ? '<td' + srs + ' class="cpt">' + nq(sub.sum) + '</td><td' + srs + '>' + (r.place ? esc(r.place) : '<span class="cpq0">?</span>') + '</td>' : '')
           + (opt.noNote ? '' : '<td class="cpn">' + (opt.preview ? stateTag(r) : noteHtml(r)) + '</td>') + '</tr>';
       }).join('');
     }).join('');
@@ -215,9 +220,11 @@
     return '<span class="cptag chg">อัปเดต</span>' + r.diff.map(function (d) { return '<small>' + esc(d.f) + ' ' + esc(fmtV(d.from)) + ' → ' + esc(fmtV(d.to)) + '</small>'; }).join('');
   }
   function fmtV(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? slash(v) : String(v); }
+  // หมายเหตุ "อัพเดท dd/mm/yy" = วันที่เพิ่ม PO เข้าระบบ หรือวันที่ PO เปลี่ยนครั้งล่าสุด (ผู้ใช้ขอ 24/11/69 — เหมือน cpUpd_ ใน AccCpram.gs)
+  function updOf(r) { var m = String(r.history || '').split(' | ').pop().match(/^(\d{4}-\d{2}-\d{2}):/); return m ? m[1] : String(r.createdAt || '').slice(0, 10); }
   function noteHtml(r) {
-    var t = r.status === 'done' ? '<span class="cptag done">*ส่งสินค้าแล้ว</span>' : r.status === 'cancel' ? '<span class="cptag cancel">ยกเลิก</span>' : '';
-    return t + (r.note ? '<small>' + esc(r.note) + '</small>' : '') + (r.history ? '<small class="cph">' + esc(histText(r.history)) + '</small>' : '');
+    var t = r.status === 'done' ? '<span class="cptag done">*ส่งสินค้าแล้ว</span>' : r.status === 'cancel' ? '<span class="cptag cancel">ยกเลิก</span>' : '', u = updOf(r);
+    return t + (/^\d{4}-\d{2}-\d{2}$/.test(u) ? '<small class="cpu">อัพเดท ' + slash(u) + '</small>' : '') + (r.note ? '<small>' + esc(r.note) + '</small>' : '') + (r.history ? '<small class="cph">' + esc(histText(r.history)) + '</small>' : '');
   }
   function roundsTable(rounds) {
     if (!rounds.length) return '';
@@ -464,7 +471,7 @@
       var rows = lines.slice().sort(function (a, b) { return String(a.deliveryDate).localeCompare(String(b.deliveryDate)) || String(a.poNo).localeCompare(String(b.poNo)) || a.lineNo - b.lineNo; });
       var dates = uniq(rows.map(function (r) { return r.deliveryDate; })), pos = uniq(rows.map(function (r) { return r.poNo; }));
       var box = document.createElement('div'); box.className = 'cpimgbox';
-      box.innerHTML = '<div class="cpimg"><div class="cpimh"><b>ตารางส่งสินค้า CP Ram</b><span>ส่ง ' + slash(dates[0]) + (dates.length > 1 ? ' – ' + slash(dates[dates.length - 1]) : '') + ' · ' + pos.length + ' ใบสั่งซื้อ · <b class="cpupd">Update ' + slash(isoToday()) + '</b></span></div>' + schedTable(rows, { noNote: !rows.some(function (r) { return r.status === 'cancel' || r.note || r.history; }) }) + '</div>';
+      box.innerHTML = '<div class="cpimg"><div class="cpimh"><b>ตารางส่งสินค้า CP Ram</b><span>ส่ง ' + slash(dates[0]) + (dates.length > 1 ? ' – ' + slash(dates[dates.length - 1]) : '') + ' · ' + pos.length + ' ใบสั่งซื้อ · <b class="cpupd">Update ' + slash(isoToday()) + '</b></span></div>' + schedTable(rows, { noNote: !rows.some(function (r) { return r.status === 'cancel' || r.note || r.history || r.createdAt; }) }) + '</div>';
       document.body.appendChild(box);
       return window.html2canvas(box.firstChild, { scale: 2, backgroundColor: '#ffffff', logging: false }).then(function (cv) {
         document.body.removeChild(box);
@@ -547,7 +554,7 @@
     '.cptab td{border:1px solid #1f2937;padding:6px;text-align:center;vertical-align:middle}',
     '.cptab tfoot td{border:0;padding-top:10px}.cptab td.cpy{background:#FFFF00;font-weight:700}',
     '.cptab .cpp{white-space:nowrap}.cptab .cpt{font-weight:700;font-size:16px}.cptab .cpq{font-variant-numeric:tabular-nums}.cptab .cpo{font-variant-numeric:tabular-nums;white-space:nowrap}',
-    '.cptab .cpn{text-align:left;min-width:150px}.cptab .cpn small{display:block;color:#64748b;font-size:12.5px;line-height:1.35}.cptab .cpn small.cph{color:#b45309}',
+    '.cptab .cpn{text-align:left;min-width:150px}.cptab .cpn small{display:block;color:#64748b;font-size:12.5px;line-height:1.35}.cptab .cpn small.cph{color:#b45309}.cptab .cpn small.cpu{color:#334155;font-weight:600}',
     '.cptab tr.cpx td{color:#9ca3af}.cptab tr.cpx .cpq{text-decoration:line-through}',
     '.cptab tr.cped{cursor:pointer}.cptab tr.cped:hover td,.cptab tr.cped:focus td{background:#f0fdf4;outline:none}',
     '.cpq0{color:#dc2626;font-weight:700}',

@@ -244,6 +244,8 @@ function cpSave(token, pos, fileName) {
     return { ok: true, importId: impId, added: add.length, changed: chg.length, skipped: r.rows.length - add.length - chg.length, months: Object.keys(months).sort() };
   });
 }
+// วันที่ของหมายเหตุ "อัพเดท" = วันที่ PO เปลี่ยนครั้งล่าสุด (จากประวัติ) หรือวันที่เพิ่ม PO เข้าระบบ (createdAt) — ผู้ใช้ขอ 24/11/69
+function cpUpd_(r) { var m = String(r.history || '').split(' | ').pop().match(/^(\d{4}-\d{2}-\d{2}):/), c = String(r.createdAt || '').replace(/^'/, '').slice(0, 10); return m ? m[1] : /^\d{4}-\d{2}-\d{2}$/.test(c) ? c : ''; }
 function cpHistLast_(h) { var t = String(h).split(' | ').pop().replace(/^[\d-]+: /, ''); return /^เลื่อนส่ง/.test(t) ? t : 'เปลี่ยน: ' + t; }
 function cpHistVal_(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? cpSlash_(v) : String(v); }
 function cpSaveMap(token, json) {
@@ -348,23 +350,31 @@ function cpDraw_(sh, rows, title, withRounds) {
   rows.forEach(function (r) { if (!g || g.date !== r.deliveryDate) { g = { date: r.deliveryDate, rows: [] }; groups.push(g); } g.rows.push(r); });
   var vals = [], merges = [], row = 5, cancelRows = [], total = 0;
   groups.forEach(function (gr) {
-    var n = gr.rows.length, sum = 0;
+    // วันเดียวกันแต่คนละสถานที่ส่ง → แยก Total ตามสถานที่ (ผู้ใช้ขอ 24/11/69): เรียงให้สถานที่เดียวกันติดกัน แล้ว Total / สถานที่ส่ง รวมช่องทีละสถานที่
+    var pl = []; gr.rows.forEach(function (r) { var k = String(r.place || ''); if (pl.indexOf(k) < 0) pl.push(k); });
+    gr.rows = gr.rows.map(function (r, i) { return { r: r, i: i }; }).sort(function (x, y) { return pl.indexOf(String(x.r.place || '')) - pl.indexOf(String(y.r.place || '')) || x.i - y.i; }).map(function (x) { return x.r; });
+    var n = gr.rows.length, subs = [], sg = null;
     gr.rows.forEach(function (r, i) {
-      var cancel = r.status === 'cancel', note = [cpPcsNote_(r), cancel ? 'ยกเลิก' : r.status === 'done' ? '*ส่งสินค้าแล้ว' : '', r.note, r.history ? cpHistLast_(r.history) : ''].filter(String).join(' · ');
-      if (!cancel) sum += Number(r.qty) || 0;
+      var cancel = r.status === 'cancel', upd = cpUpd_(r);
+      var note = [upd ? 'อัพเดท ' + cpSlash_(upd) : '', cpPcsNote_(r), cancel ? 'ยกเลิก' : r.status === 'done' ? '*ส่งสินค้าแล้ว' : '', r.note, r.history ? cpHistLast_(r.history) : ''].filter(String).join(' · ');
+      if (!sg || sg.place !== String(r.place || '')) { sg = { place: String(r.place || ''), start: i, n: 0, sum: 0 }; subs.push(sg); }
+      sg.n++; if (!cancel) sg.sum += Number(r.qty) || 0;
       if (cancel) cancelRows.push(row + i);
       if (/^[=+\-@]/.test(note)) note = "'" + note;   // กันชีตอ่านหมายเหตุเป็นสูตร (#ERROR!)
       vals.push([i ? '' : CP_DAYS_[new Date(gr.date + 'T00:00:00').getDay()], i ? '' : "'" + cpSlash_(gr.date), r.product, "'" + String(r.poNo).replace(/^'/, ''), String(r.wh || '-').replace(/^'/, ''), Number(r.qty) || 0,
         r.unit || 'ลัง', '', r.place, note]);
     });
-    total += sum;
-    vals[vals.length - n][7] = sum;
+    var base = vals.length - n;
+    subs.forEach(function (x) {
+      total += x.sum;
+      vals[base + x.start][7] = x.sum;
+      for (var k = 1; k < x.n; k++) vals[base + x.start + k][8] = '';
+      if (x.n > 1) ['H', 'I'].forEach(function (c) { merges.push(c + (row + x.start) + ':' + c + (row + x.start + x.n - 1)); });
+    });
     if (n > 1) {
-      ['A', 'B', 'H'].forEach(function (c) { merges.push(c + row + ':' + c + (row + n - 1)); });
-      [2, 8].forEach(function (ci) {   // สินค้า / สถานที่ส่ง: รวมช่องเมื่อเหมือนกันทั้งกลุ่ม
-        var same = gr.rows.every(function (r) { return String(ci === 2 ? r.product : r.place) === String(ci === 2 ? gr.rows[0].product : gr.rows[0].place); });
-        if (same) { merges.push(String.fromCharCode(65 + ci) + row + ':' + String.fromCharCode(65 + ci) + (row + n - 1)); for (var k = 1; k < n; k++) vals[vals.length - n + k][ci] = ''; }
-      });
+      ['A', 'B'].forEach(function (c) { merges.push(c + row + ':' + c + (row + n - 1)); });
+      var same = gr.rows.every(function (r) { return String(r.product) === String(gr.rows[0].product); });   // สินค้า: รวมช่องเมื่อเหมือนกันทั้งวัน
+      if (same) { merges.push('C' + row + ':C' + (row + n - 1)); for (var k = 1; k < n; k++) vals[base + k][2] = ''; }
     }
     row += n;
   });
@@ -427,7 +437,9 @@ function cpFlex_(lines, hasImg, files) {
   if (pk.length === 1) { body.push(row('สินค้า', pk[0])); body.push(row('จำนวน', qtyTxt(byP[pk[0]]))); }
   else pk.forEach(function (k) { body.push(row(k, qtyTxt(byP[k]))); });
   if (Object.keys(places).length) body.push(row('สถานที่ส่ง', Object.keys(places).join(', ')));
-  body.push(row('หมายเหตุ', 'Update ' + accDot_(purToday_()), { color: '#C2410C' }));
+  // หมายเหตุ: วันที่เพิ่ม / อัพเดท PO ของรายการที่ส่ง (เหมือนช่องหมายเหตุในตาราง — ผู้ใช้ขอ 24/11/69)
+  var upd = []; lines.forEach(function (x) { var u = cpUpd_(x); if (u && upd.indexOf(u) < 0) upd.push(u); });
+  body.push(row('หมายเหตุ', 'อัพเดท ' + (upd.length ? upd.sort().map(accDot_).join(', ') : accDot_(purToday_())), { color: '#C2410C' }));
   if (nChg || nCancel) body.push(T([nChg ? '⚠ มี PO เปลี่ยนแปลง ' + nChg + ' รายการ' : '', nCancel ? 'ยกเลิก ' + nCancel + ' รายการ' : ''].filter(String).join(' · ') + ' — ดูในภาพตาราง', { size: 'xs', color: '#C2410C', weight: 'bold', margin: 'md' }));
   body.push({ type: 'box', layout: 'vertical', margin: 'xl', backgroundColor: '#ECFDF5', cornerRadius: '16px', paddingAll: '14px', borderColor: '#A7F3D0', borderWidth: '1px', contents: [
     T('สินค้าจำนวนรวม', { size: 'sm', color: '#047857', align: 'center' }), T(total.toLocaleString() + ' ' + cpUnitOf_(live), { size: '3xl', weight: 'bold', color: '#047857', align: 'center' })] });
