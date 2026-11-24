@@ -245,6 +245,7 @@ function purPoMoney_(n) { return n === '' || n == null ? '-' : Number(n).toLocal
 function purPoFlex_(rec, doc, items, kind, by) {
   var head = kind === 'approved' ? ['#16A34A', '✅ อนุมัติใบสั่งซื้อแล้ว'] : kind === 'rejected' ? ['#DC2626', '✕ ไม่อนุมัติใบสั่งซื้อ'] : ['#D97706', '📝 ขออนุมัติใบสั่งซื้อ (PO)'];
   var body = [purPoRow_('ผู้ขาย', rec.vendorName || doc.vendorName, true), purPoRow_('วันที่ออก', purPoDay_(doc.orderDate)), purPoRow_('กำหนดส่ง', purPoDay_(doc.deliveryDate))];
+  if (doc.dueDate) body.push(purPoRow_('ครบกำหนดชำระ', purPoDay_(doc.dueDate), true));
   if (items && items.length) {
     body.push({ type: 'separator', margin: 'md' });
     items.slice(0, 5).forEach(function (it, i) {

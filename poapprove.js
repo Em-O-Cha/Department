@@ -110,6 +110,8 @@
     var st = ST[r.status] || ['', r.status], isNew = r.status === 'approved' && !r.seenAt;
     var sub = 'ส่งขออนุมัติ ' + thT(r.sentAt) + (r.sentBy ? ' · ผู้ออกเอกสาร ' + esc(r.sentBy) : '') + (r.attach ? '<br>📎 แนบท้าย: ' + esc(r.attach) : '');
     if (r.status === 'approved' || r.status === 'rejected') sub += '<br>' + (r.status === 'approved' ? 'อนุมัติโดย ' : 'ไม่อนุมัติโดย ') + esc(r.decidedBy || '-') + ' · ' + thT(r.decidedAt);
+    var dd0 = (P().idx && P().idx.doc[r.docId]) || {};
+    if (dd0.dueDate) sub += '<br>💰 ครบกำหนดชำระ ' + th(dd0.dueDate);
     if (r.confirmedAt) sub += '<br><span class="pa-ok">✓ ยืนยันวันที่จัดส่ง ' + th(r.deliveryDate) + '</span>';
     else if (r.status === 'approved') sub += '<br><span class="pa-no">ยังไม่ยืนยันวันที่จัดส่ง</span>';
     var btns = r.status === 'approved' ? '<button class="btn btn-sm ' + (isNew || !r.confirmedAt ? 'btn-primary' : 'btn-line') + '" data-pa="' + r.id + '" data-act="open">' + (isNew ? 'เปิดดู PO & ยืนยันวันส่ง' : r.confirmedAt ? 'เปิด PO ที่อนุมัติ' : 'ยืนยันวันที่จัดส่ง') + '</button>'
@@ -300,6 +302,8 @@
       if (!o.docNo && /เลขที่เอกสาร/.test(s)) o.docNo = (s.match(/เลขที่เอกสาร\s*:?\s*(\S+)/) || [])[1] || '';
       if (!o.date && /วันที่ออก|วันที่เอกสาร/.test(s)) o.date = isoOf(s);
       if (!o.due && /กำหนดส่ง|วันที่ส่งของ|วันที่จัดส่ง/.test(s)) o.due = isoOf(s);
+      if (!o.payDue && /ครบกำหนด|วันที่ชำระ|กำหนดชำระ/.test(s)) o.payDue = isoOf(s);
+      if (o.credit == null && (m = s.match(/(?:เครดิต|Credit|ชำระภายใน)\s*:?\s*(\d{1,3})\s*(?:วัน|days?)/i))) o.credit = +m[1];
       if (vi < 0 && /^ผู้ขาย\s*:/.test(s)) {
         vi = k;
         var parts = s.replace(/^ผู้ขาย\s*:\s*/, '').split(/\s{2,}/), name = [];
@@ -324,6 +328,16 @@
     o.sum = Math.round(o.items.reduce(function (t, x) { return t + (Number(x.amount) || 0); }, 0) * 100) / 100;
     return o;
   };
+  function plusDays(iso, n) { var x = new Date(iso + 'T00:00:00'); x.setDate(x.getDate() + n); return x.getFullYear() + '-' + pad(x.getMonth() + 1) + '-' + pad(x.getDate()); }
+  // วันที่ชำระเงิน (ครบกำหนด): ในไฟล์ → เครดิตในไฟล์ → เครดิตของผู้ขายในระบบ → ใบเดิม (ผู้ใช้ขอ 24/11/69)
+  function payDueOf(po, vn, old) {
+    var base = po.date || todayIso(), vc = vn && vn.creditDays !== '' && vn.creditDays != null ? Number(vn.creditDays) : null;
+    if (po.payDue) return { date: po.payDue, src: 'จากไฟล์ PO' };
+    if (po.credit != null) return { date: plusDays(base, po.credit), src: 'เครดิต ' + po.credit + ' วัน (จากไฟล์ PO)', credit: po.credit };
+    if (vc != null && !isNaN(vc)) return { date: plusDays(base, vc), src: 'เครดิตผู้ขาย ' + vc + ' วัน นับจากวันที่ออก' };
+    if (old && old.dueDate) return { date: old.dueDate, src: 'จากใบเดิมในระบบ' };
+    return { date: '', src: '' };
+  }
   function vkey(t) { return String(t || '').replace(/\s+/g, '').replace(/^(บริษัท|บจก\.?|ห้างหุ้นส่วนจำกัด|หจก\.?)/, '').replace(/(จำกัด\(มหาชน\)|จำกัด|\(มหาชน\))$/, '').toLowerCase(); }
   function findVendor(po) {
     var vs = P().data.vendors || [], tax = po.vendorTax;
@@ -349,7 +363,7 @@
     inp.click();
   };
   function importPreview(file, bytes, po) {
-    var vn = findVendor(po), old = (P().data.docs || []).filter(function (d) { return d.docNo === po.docNo; })[0] || null;
+    var vn = findVendor(po), old = (P().data.docs || []).filter(function (d) { return d.docNo === po.docNo; })[0] || null, pd = payDueOf(po, vn, old);
     var okSum = po.sub === '' || po.sub == null || Math.abs(po.sum - po.sub) < 0.05;
     var rows = po.items.map(function (it) {
       var m = findMat(it);
@@ -361,17 +375,25 @@
         + '<div class="pas-sum"><div><small>เลขที่ PO</small><b>' + esc(po.docNo) + '</b></div><div><small>วันที่ออก</small><b>' + th(po.date) + '</b></div>'
         + '<div><small>ผู้ขาย</small><b>' + esc(po.vendor || '-') + '</b><small>' + (vn ? '<span class="pa-ok">✓ มีในรายชื่อผู้ขาย</span>' : '<span class="pa-no">ผู้ขายใหม่ — จะเพิ่มเข้ารายชื่อให้</span>') + '</small></div>'
         + '<div><small>จำนวนเงินทั้งสิ้น</small><b>' + money(po.total || po.sum) + '</b></div></div>'
+        + '<div class="pform"><div class="pf hl"><label for="piDue">วันที่ชำระเงิน (ครบกำหนดชำระ)</label><input id="piDue" type="date" value="' + esc(pd.date) + '"><small class="' + (pd.date ? 'muted' : 'pa-no') + '">' + (pd.date ? esc(pd.src) + ' — แก้ได้' : 'ผู้ขายรายนี้ยังไม่มีเครดิตในระบบ — เลือกวันที่เอง หรือเว้นไว้ก่อนได้') + '</small></div>'
+        + '<div class="pf"><label for="piCredit">เครดิต (วัน)</label><input id="piCredit" type="number" min="0" inputmode="numeric" value="' + esc(pd.credit != null ? pd.credit : (vn && vn.creditDays !== '' && vn.creditDays != null ? vn.creditDays : '')) + '" placeholder="เช่น 30"><small class="muted">ใส่แล้ววันที่ชำระคำนวณให้</small></div></div>'
         + '<div class="cpwrap"><table class="ptable"><thead><tr><th>#</th><th>รายการ</th><th class="r">จำนวน</th><th class="r">ราคา</th><th class="r">มูลค่า</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
         + '<div class="muted" style="margin-top:8px">กดบันทึกแล้ว ระบบแนบไฟล์นี้เข้าใบ PO และเปิดหน้าใส่ลายเซ็นเพื่อส่งขออนุมัติต่อ · วันที่ส่งของ ยืนยันอีกครั้งหลังพี่เก้อนุมัติ</div>',
       ok: 'บันทึก & ใส่ลายเซ็นส่งขออนุมัติ',
       foot: '<button type="button" class="link-btn" id="piOnly">บันทึกอย่างเดียว (ยังไม่ส่ง)</button>',
-      onOpen: function () { $('piOnly').addEventListener('click', function () { var b = this; b.disabled = true; saveImport(file, bytes, po, vn, old, false).then(function (e) { if (e) { b.disabled = false; $('mErr').textContent = e; } }); }); },
-      submit: function () { return saveImport(file, bytes, po, vn, old, true); } });
+      onOpen: function () {
+        $('piCredit').addEventListener('input', function () { var n = parseInt(this.value, 10); if (n >= 0) $('piDue').value = plusDays(po.date || todayIso(), n); });
+        $('piOnly').addEventListener('click', function () { var b = this; b.disabled = true; saveImport(file, bytes, po, vn, old, false, $('piDue').value, $('piCredit').value).then(function (e) { if (e) { b.disabled = false; $('mErr').textContent = e; } }); });
+      },
+      submit: function () { return saveImport(file, bytes, po, vn, old, true, $('piDue').value, $('piCredit').value); } });
   }
-  function saveImport(file, bytes, po, vn, old, sign) {
-    var vp = vn ? Promise.resolve(vn) : call('purSaveVendor', state.token, { name: po.vendor || 'ไม่ระบุผู้ขาย', taxId: po.vendorTax || '', address: po.vendorAddr || '', note: 'เพิ่มอัตโนมัติจากไฟล์ PO ' + po.docNo }).then(function (r) { if (!r.ok) throw new Error(r.error); return r.vendor; });
+  function saveImport(file, bytes, po, vn, old, sign, dueIn, creditIn) {
+    var cr = String(creditIn || '').trim() === '' ? '' : parseInt(creditIn, 10);
+    // เครดิตที่ใส่ในหน้านี้ → จำไว้ที่ผู้ขาย (ครั้งหน้าคำนวณวันที่ชำระให้เอง)
+    var vp = vn ? (cr !== '' && !isNaN(cr) && String(vn.creditDays) !== String(cr) ? call('purSaveVendor', state.token, Object.assign({}, vn, { creditDays: cr })).then(function (r) { return r.ok ? r.vendor : vn; }) : Promise.resolve(vn))
+      : call('purSaveVendor', state.token, { name: po.vendor || 'ไม่ระบุผู้ขาย', taxId: po.vendorTax || '', address: po.vendorAddr || '', creditDays: isNaN(cr) ? '' : cr, note: 'เพิ่มอัตโนมัติจากไฟล์ PO ' + po.docNo }).then(function (r) { if (!r.ok) throw new Error(r.error); return r.vendor; });
     return vp.then(function (v) {
-      var d = old || {}, due = d.dueDate || (v.creditDays !== '' && v.creditDays != null && po.date ? (function () { var x = new Date(po.date + 'T00:00:00'); x.setDate(x.getDate() + (Number(v.creditDays) || 0)); return x.getFullYear() + '-' + pad(x.getMonth() + 1) + '-' + pad(x.getDate()); })() : '');
+      var d = old || {}, due = dueIn || '';
       var rec = { id: d.id || '', type: 'PO', docNo: po.docNo, refId: d.refId || '', vendorId: v.id, vendorName: v.name, vendorPhone: d.vendorPhone || v.phone || '', orderDate: po.date || todayIso(), deliveryDate: d.deliveryDate || po.due || '',
         status: d.status || 'draft', approvedBy: d.approvedBy || '', approvedDate: d.approvedDate || '', paymentStatus: d.paymentStatus || 'none', dueDate: due, paidDate: d.paidDate || '', paidAmount: d.paidAmount || '',
         note: d.note || ('นำเข้าจากไฟล์ PEAK ' + file.name), matchNote: d.matchNote || '', rfqId: d.rfqId || '' };
