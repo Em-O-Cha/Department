@@ -355,7 +355,9 @@ function cpDraw_(sh, rows, title, withRounds) {
   sh.getRange(4, 1, 1, 10).setValues([head]).setFontWeight('bold').setBackground(CP_HEAD_BG_);
   var groups = [], g = null;
   rows.forEach(function (r) { if (!g || g.date !== r.deliveryDate) { g = { date: r.deliveryDate, rows: [] }; groups.push(g); } g.rows.push(r); });
-  var vals = [], merges = [], row = 5, cancelRows = [], total = 0;
+  var vals = [], merges = [], row = 5, cancelRows = [], total = 0, redCells = [];
+  // วันที่อัพเดทล่าสุดของตาราง → ข้อความ "อัพเดท …" ของแถวนั้นเป็นสีแดง (ผู้ใช้ขอ 24/11/69)
+  var maxU = rows.reduce(function (m, r) { var u = cpUpd_(r); return u > m ? u : m; }, '');
   groups.forEach(function (gr) {
     // วันเดียวกันแต่คนละสถานที่ส่ง → แยก Total ตามสถานที่ (ผู้ใช้ขอ 24/11/69): เรียงให้สถานที่เดียวกันติดกัน แล้ว Total / สถานที่ส่ง รวมช่องทีละสถานที่
     var pl = []; gr.rows.forEach(function (r) { var k = String(r.place || ''); if (pl.indexOf(k) < 0) pl.push(k); });
@@ -367,6 +369,7 @@ function cpDraw_(sh, rows, title, withRounds) {
       if (!sg || sg.place !== String(r.place || '')) { sg = { place: String(r.place || ''), start: i, n: 0, sum: 0 }; subs.push(sg); }
       sg.n++; if (!cancel) sg.sum += Number(r.qty) || 0;
       if (cancel) cancelRows.push(row + i);
+      if (upd && upd === maxU) redCells.push({ r: row + i, text: note, len: ('อัพเดท ' + cpSlash_(upd)).length });
       if (/^[=+\-@]/.test(note)) note = "'" + note;   // กันชีตอ่านหมายเหตุเป็นสูตร (#ERROR!)
       vals.push([i ? '' : CP_DAYS_[new Date(gr.date + 'T00:00:00').getDay()], i ? '' : "'" + cpSlash_(gr.date), r.product, "'" + String(r.poNo).replace(/^'/, ''), String(r.wh || '-').replace(/^'/, ''), Number(r.qty) || 0,
         r.unit || 'ลัง', '', r.place, note]);
@@ -393,6 +396,8 @@ function cpDraw_(sh, rows, title, withRounds) {
   sh.getRange(4, 1, last - 3, 10).setBorder(true, true, true, true, true, true, '#000000', SpreadsheetApp.BorderStyle.SOLID)
     .setHorizontalAlignment('center').setVerticalAlignment('middle');
   sh.getRange(5, 10, vals.length, 1).setFontSize(11).setWrap(true);
+  var red = SpreadsheetApp.newTextStyle().setForegroundColor('#DC2626').setBold(true).build();
+  redCells.forEach(function (c) { try { sh.getRange(c.r, 10).setRichTextValue(SpreadsheetApp.newRichTextValue().setText(c.text).setTextStyle(0, c.len, red).build()); } catch (e) {} });
   var tr = last + 2;
   sh.getRange(tr, 5, 1, 3).setValues([['Total', total, cpUnitOf_(rows.filter(function (r) { return r.status !== 'cancel'; }))]]).setFontWeight('bold').setBackground(CP_TOTAL_BG_).setHorizontalAlignment('center');
   sh.getRange(tr + 3, 10).setValue('ผู้จัดทำ            __________________');

@@ -186,6 +186,8 @@
   function nq(v) { return Number(v || 0).toLocaleString('th-TH', { maximumFractionDigits: 2 }); }
   function schedTable(rows, opt) {
     rows = caseRows(rows);
+    // วันที่อัพเดทล่าสุดในตาราง → ข้อความ "อัพเดท …" ของแถวนั้นเป็นสีแดง (ผู้ใช้ขอ 24/11/69)
+    var maxU = rows.reduce(function (m, r) { var u = updOf(r, opt && opt.line); return /^\d{4}-\d{2}-\d{2}$/.test(u) && u > m ? u : m; }, '');
     var groups = [], g = null;
     rows.forEach(function (r) { if (!g || g.date !== r.deliveryDate) { g = { date: r.deliveryDate, rows: [] }; groups.push(g); } g.rows.push(r); });
     var total = 0, body = groups.map(function (gr) {
@@ -205,7 +207,7 @@
           + (sameP ? (first ? '<td' + rs + ' class="cpp">' + pname(r) + '</td>' : '') : '<td class="cpp">' + pname(r) + '</td>')
           + '<td class="cpo">' + esc(r.poNo) + '</td><td class="cpwh">' + esc(r.wh || (r.place ? '-' : '?')) + '</td><td class="cpq">' + nq(r.qty) + (r.pcs ? '<small class="cppcs">= ' + n0(r.pcs) + ' ' + esc(r.pcsUnit) + '</small>' : '') + '</td><td>' + esc(r.unitTh || r.unit || 'ลัง') + '</td>'
           + (sub ? '<td' + srs + ' class="cpt">' + nq(sub.sum) + '</td><td' + srs + '>' + (r.place ? esc(r.place) : '<span class="cpq0">?</span>') + '</td>' : '')
-          + (opt.noNote ? '' : '<td class="cpn">' + (opt.preview ? stateTag(r) : noteHtml(r, opt.line)) + '</td>') + '</tr>';
+          + (opt.noNote ? '' : '<td class="cpn">' + (opt.preview ? stateTag(r) : noteHtml(r, opt.line, maxU)) + '</td>') + '</tr>';
       }).join('');
     }).join('');
     return '<div class="cpwrap"><table class="cptab"><thead><tr><th>วัน</th><th>วันที่</th><th>สินค้า</th><th>PO</th><th>คลัง</th><th>จำนวนสินค้า</th><th>หน่วย</th><th>Total</th><th>สถานที่ส่ง</th>' + (opt.noNote ? '' : '<th>' + (opt.preview ? 'สถานะ' : 'หมายเหตุ') + '</th>') + '</tr></thead>'
@@ -223,9 +225,9 @@
   // หมายเหตุ "อัพเดท dd/mm/yy" = วันที่เพิ่ม PO เข้าระบบ หรือวันที่ PO เปลี่ยนครั้งล่าสุด (ผู้ใช้ขอ 24/11/69 — เหมือน cpUpd_ ใน AccCpram.gs)
   // ภาพที่ส่ง LINE: PO ใหม่ไม่มีหมายเหตุ "อัพเดท" (วันที่อยู่บนหัวตารางสีแดง) · หน้าจอ / PDF / Excel ยังแสดงวันที่นำเข้า PO (ผู้ใช้ขอ 24/11/69)
   function updOf(r, line) { var m = String(r.history || '').split(' | ').pop().match(/^(\d{4}-\d{2}-\d{2}):/); return m ? m[1] : line ? '' : String(r.createdAt || '').slice(0, 10); }
-  function noteHtml(r, line) {
+  function noteHtml(r, line, maxU) {
     var t = r.status === 'done' ? '<span class="cptag done">*ส่งสินค้าแล้ว</span>' : r.status === 'cancel' ? '<span class="cptag cancel">ยกเลิก</span>' : '', u = updOf(r, line);
-    return t + (/^\d{4}-\d{2}-\d{2}$/.test(u) ? '<small class="cpu">อัพเดท ' + slash(u) + '</small>' : '') + (r.note ? '<small>' + esc(r.note) + '</small>' : '') + (r.history ? '<small class="cph">' + esc(histText(r.history)) + '</small>' : '');
+    return t + (/^\d{4}-\d{2}-\d{2}$/.test(u) ? '<small class="cpu' + (u === maxU ? ' new' : '') + '">อัพเดท ' + slash(u) + '</small>' : '') + (r.note ? '<small>' + esc(r.note) + '</small>' : '') + (r.history ? '<small class="cph">' + esc(histText(r.history)) + '</small>' : '');
   }
   function roundsTable(rounds) {
     if (!rounds.length) return '';
@@ -601,7 +603,7 @@
     '.cptab td{border:1px solid #1f2937;padding:6px;text-align:center;vertical-align:middle}',
     '.cptab tfoot td{border:0;padding-top:10px}.cptab td.cpy{background:#FFFF00;font-weight:700}',
     '.cptab .cpp{white-space:nowrap}.cptab .cpt{font-weight:700;font-size:16px}.cptab .cpq{font-variant-numeric:tabular-nums}.cptab .cpo{font-variant-numeric:tabular-nums;white-space:nowrap}',
-    '.cptab .cpn{text-align:left;min-width:150px}.cptab .cpn small{display:block;color:#64748b;font-size:12.5px;line-height:1.35}.cptab .cpn small.cph{color:#b45309}.cptab .cpn small.cpu{color:#334155;font-weight:600}',
+    '.cptab .cpn{text-align:left;min-width:150px}.cptab .cpn small{display:block;color:#64748b;font-size:12.5px;line-height:1.35}.cptab .cpn small.cph{color:#b45309}.cptab .cpn small.cpu{color:#334155;font-weight:600}.cptab .cpn small.cpu.new{color:#dc2626;font-weight:700}',
     '.cp2{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:420px){.cp2{grid-template-columns:1fr}}.cpqin{display:flex;align-items:center;gap:6px}.cpqin input{flex:1;min-width:0}.cpqin em{font-style:normal;color:var(--muted);font-size:14px}.cpqp{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}.cpmh div+div{margin-top:4px}',
     '.cptab tr.cphi td{background:#FEF08A}.cptab tr.cpx td{color:#9ca3af}.cptab tr.cpx .cpq{text-decoration:line-through}',
     '.cptab tr.cped{cursor:pointer}.cptab tr.cped:hover td,.cptab tr.cped:focus td{background:#f0fdf4;outline:none}',
