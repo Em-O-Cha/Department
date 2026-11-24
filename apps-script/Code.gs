@@ -37,7 +37,7 @@ var DEPARTMENTS = [
   { key: 'QA',   name: 'ฝ่ายประกันคุณภาพ',   en: 'Quality Assurance',   color: '#7c3aed',
     sheetId: '', ownerEmail: '', appUrl: '',
     menus: ['ตรวจรับวัตถุดิบ', 'ตรวจสินค้าสำเร็จรูป', 'ข้อร้องเรียน / NC', 'เอกสารมาตรฐาน'] },
-  { key: 'RD',   name: 'วิจัยและพัฒนา',       en: 'Research & Development', color: '#db2777',
+  { key: 'RD',   name: 'วิจัยและพัฒนา',       en: 'Research & Development', color: '#111827',
     sheetId: '', ownerEmail: '', appUrl: '',
     menus: ['ผลิตภัณฑ์ใหม่', 'คู่ค้า', 'ต้นทุนสินค้า'] },
   { key: 'PROD', name: 'ฝ่ายผลิต',           en: 'Production',          color: '#0891b2',
