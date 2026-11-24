@@ -46,7 +46,7 @@ var DEPARTMENTS = [
   { key: 'SHE',  name: 'ความปลอดภัยและสิ่งแวดล้อม', en: 'Safety & Environment', color: '#65a30d',
     sheetId: '', ownerEmail: '', appUrl: '',
     menus: ['อุบัติเหตุ / เหตุการณ์เกือบเกิด', 'ตรวจความปลอดภัย', 'อบรมความปลอดภัย', 'ของเสีย / สิ่งแวดล้อม'] },
-  { key: 'LOG',  name: 'ขนส่งและคลัง',       en: 'Logistics & Warehouse', color: '#475569',
+  { key: 'LOG',  name: 'ขนส่งและคลัง',       en: 'Logistics & Warehouse', color: '#db2777',
     sheetId: '', ownerEmail: '', appUrl: '',
     menus: ['รับสินค้าเข้าคลัง', 'จ่ายสินค้า / ส่งของ', 'ตารางรถขนส่ง', 'สินค้าคงคลัง'] },
   // ต้นทุนสินค้า (COST) ย้ายไปรวมในระบบ RD แล้ว (17/11/69) — ไม่มีการ์ดแยก
