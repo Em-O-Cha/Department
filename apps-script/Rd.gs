@@ -2,7 +2,8 @@
 // หน้าเว็บ: Department/rd.js (window.RDM) · ข้อมูลอยู่ใน Google Sheet ของฝ่าย RD (ตั้งลิงก์ในหน้าผู้ดูแล)
 // ผลิตภัณฑ์ใหม่ 1 แถว = 1 โครงการพัฒนา: ชื่อ ประเภท ตลาด (ในประเทศ / ต่างประเทศ) คู่ค้า ช่วงพัฒนา (วันที่เริ่ม → วันที่สิ้นสุด) สถานะ
 // คู่ค้า 1 แถว = 1 เจ้า: ในประเทศ / ต่างประเทศ ประเทศ ช่องทางขาย ผู้ติดต่อ เบอร์โทร สินค้าที่ส่งขาย (บรรทัดละ 1 รายการ)
-// ต้นทุนสินค้า (เดิมการ์ด "ต้นทุนสินค้า" แยก) รวมมาอยู่ที่ RD — รอผู้ใช้กำหนดวิธีคำนวณ
+// ต้นทุนสินค้า (เดิมการ์ด "ต้นทุนสินค้า" แยก) รวมมาอยู่ที่ RD — ตามไฟล์ของผู้ใช้ "ต้นทุนสินค้า … 15 g" (24/11/69):
+// ส่วนผสม (น้ำหนัก × ราคา/กก. รวม VAT) · น้ำหนักสินค้าที่ได้ / สูญเสีย / จำนวนสินค้าที่ได้ · บรรจุภัณฑ์ (ราคา/ชิ้น รวม VAT + หมายเหตุ) · รูปสินค้า
 
 var RD_TABLES_ = {
   rd_products: { tab: 'ผลิตภัณฑ์ใหม่', cols: [
@@ -21,6 +22,12 @@ var RD_TABLES_ = {
     ['prep', 'ขั้นตอนการเตรียมวัตถุดิบ'], ['process', 'ขั้นตอนการทำ'], ['diff', 'ความแตกต่าง R&D กับ 1st Batch'], ['sensory', 'คะแนนประสาทสัมผัส'],
     ['result', 'ผลการประเมิน'], ['comment', 'ผลการประเมิน / ข้อเสนอแนะ'], ['trialBy', 'ผู้ทดลอง'], ['approvedBy', 'ผู้อนุมัติ'], ['photos', 'รูปภาพ'],
     ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
+  // ต้นทุนสินค้า — 1 แถว = 1 สินค้า (ส่วนผสม / บรรจุภัณฑ์ เก็บเป็น JSON)
+  rd_costs: { tab: 'ต้นทุนสินค้า', cols: [
+    ['id', 'รหัส'], ['name', 'ชื่อสินค้า'], ['size', 'ขนาด'], ['brand', 'ตรา'], ['productId', 'รหัสผลิตภัณฑ์ใหม่'], ['costDate', 'วันที่อัพเดท'],
+    ['ingredients', 'ส่วนผสม'], ['yieldQty', 'น้ำหนักสินค้าที่ได้'], ['yieldUnit', 'หน่วยน้ำหนักที่ได้'], ['lossQty', 'น้ำหนักที่สูญเสีย'], ['lossUnit', 'หน่วยน้ำหนักสูญเสีย'],
+    ['outQty', 'จำนวนสินค้าที่ได้'], ['outUnit', 'หน่วยสินค้า'], ['packaging', 'บรรจุภัณฑ์'], ['matCost', 'ราคาวัตถุดิบรวม'], ['photo', 'รูปสินค้า'],
+    ['note', 'หมายเหตุ'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
   rd_settings: { tab: 'ตั้งค่า', cols: [['id', 'รายการ'], ['value', 'ค่า']] }
 };
 var RD_SENSORY_ = [['look', 'ลักษณะปรากฏ'], ['color', 'สี'], ['smell', 'กลิ่น'], ['taste', 'รส'], ['texture', 'เนื้อสัมผัส']];
@@ -39,7 +46,7 @@ function requireRd_(token) {
 }
 function rdRegister_() {
   Object.keys(RD_TABLES_).forEach(function (k) { PUR_TABLES_[k] = RD_TABLES_[k]; });
-  ['startDate', 'endDate', 'doneDate', 'date'].forEach(function (k) { PUR_DATE_KEYS_[k] = 1; });
+  ['startDate', 'endDate', 'doneDate', 'date', 'costDate'].forEach(function (k) { PUR_DATE_KEYS_[k] = 1; });
   PUR_NUM_KEYS_.round = 1;
 }
 function rdBook_(dept) { rdRegister_(); return purBook_(dept); }
@@ -75,7 +82,7 @@ function rdLoad(token) {
   return { ok: true, today: today, sheetUrl: ss.getUrl(), settings: rdSettings_(ss),
     products: purRead_(ss, 'rd_products').map(function (p) { return rdOut_(p, today); }),
     partners: purRead_(ss, 'rd_partners').map(rdPartnerOut_),
-    trials: purRead_(ss, 'rd_trials').map(rdTrialOut_), hasFolder: !!deptConfig_(dept.key).folderId };
+    trials: purRead_(ss, 'rd_trials').map(rdTrialOut_), costs: purRead_(ss, 'rd_costs').map(rdCostOut_), hasFolder: !!deptConfig_(dept.key).folderId };
 }
 function rdJson_(v, def) { try { var o = typeof v === 'string' ? JSON.parse(v || '') : v; return o == null ? def : o; } catch (e) { return def; } }
 function rdTrialOut_(t) {
@@ -299,4 +306,86 @@ function rdDashboard_(dept, from, to) {
     dueList: dev.slice().sort(function (a, b) { return String(a.endDate).localeCompare(String(b.endDate)); }).slice(0, 15).map(brief),
     finishedList: finished.sort(function (a, b) { return String(b.doneDate).localeCompare(String(a.doneDate)); }).slice(0, 10).map(brief),
     topPartners: partners.map(function (x) { return { name: x.name, type: x.type, country: x.country, n: x.products.length }; }).sort(function (a, b) { return b.n - a.n; }).slice(0, 10) };
+}
+
+// ---------- ต้นทุนสินค้า (ผู้ใช้ขอ 24/11/69 — ตามแบบไฟล์ Excel ของ R&D) ----------
+var RD_WUNITS_ = { 'กรัม': 1, 'กก.': 1000 };
+function rdNum_(v) { var n = Number(String(v == null ? '' : v).replace(/,/g, '')); return isFinite(n) ? n : 0; }
+function rdCostOut_(c) {
+  c.ingredients = rdJson_(c.ingredients, []); c.packaging = rdJson_(c.packaging, []);
+  var ph = purParseFiles_(c.photo); c.photo = ph[0] || null;
+  return c;
+}
+// ราคาวัตถุดิบ 1 แถว = (ราคา/กก. ÷ 1000) × น้ำหนัก (กรัม) — เหมือนสูตรในไฟล์ =(L6/1000)*I6
+function rdIngCost_(x) { return Math.round(rdNum_(x.price) * rdNum_(x.qty) * (RD_WUNITS_[x.unit] || 1) / 1000 * 100) / 100; }
+function rdSaveCost(token, c) {
+  var dept = requireRd_(token); c = c || {};
+  var name = rdText_(c.name, 150);
+  if (!name) return { ok: false, error: 'กรอกชื่อสินค้า' };
+  var ing = (Array.isArray(c.ingredients) ? c.ingredients : []).slice(0, 80).map(function (x) {
+    return { name: rdText_(x && x.name, 120), qty: rdNum_(x && x.qty) || '', unit: RD_WUNITS_[x && x.unit] ? x.unit : 'กรัม', price: rdNum_(x && x.price) || '' };
+  }).filter(function (x) { return x.name || x.qty || x.price; });
+  var pack = (Array.isArray(c.packaging) ? c.packaging : []).slice(0, 40).map(function (x) {
+    return { name: rdText_(x && x.name, 120), price: rdNum_(x && x.price) || '', per: rdNum_(x && x.per) || '', note: rdText_(x && x.note, 200) };
+  }).filter(function (x) { return x.name || x.price; });
+  return purLocked_(function () {
+    var ss = rdBook_(dept), now = purNow_();
+    var old = c.id ? purRead_(ss, 'rd_costs').filter(function (x) { return x.id === c.id; })[0] : null;
+    var o = old || { id: purId_('CO'), photo: '[]', createdAt: now };
+    o.name = name; o.size = rdText_(c.size, 40); o.brand = rdText_(c.brand, 60); o.productId = rdText_(c.productId, 40);
+    o.costDate = /^\d{4}-\d{2}-\d{2}$/.test(String(c.costDate)) ? c.costDate : purToday_();
+    o.ingredients = JSON.stringify(ing); o.packaging = JSON.stringify(pack);
+    ['yieldQty', 'lossQty', 'outQty'].forEach(function (k) { o[k] = rdNum_(c[k]) || ''; });
+    o.yieldUnit = rdText_(c.yieldUnit, 20) || 'กรัม'; o.lossUnit = rdText_(c.lossUnit, 20) || 'กรัม'; o.outUnit = rdText_(c.outUnit, 20) || 'ซอง';
+    o.matCost = Math.round(ing.reduce(function (t, x) { return t + rdIngCost_(x); }, 0) * 100) / 100;
+    o.note = rdText_(c.note, 1000); o.updatedAt = now;
+    purWrite_(ss, 'rd_costs', o);
+    purLogWrite_(ss, (old ? 'แก้ไข' : 'เพิ่ม') + 'ต้นทุนสินค้า', 'rd_costs', o.id, name + (o.size ? ' ' + o.size : '') + ' · วัตถุดิบ ' + o.matCost + ' บาท');
+    return { ok: true, cost: rdCostOut_(Object.assign({}, o)) };
+  });
+}
+function rdDeleteCost(token, id) {
+  var dept = requireRd_(token);
+  return purLocked_(function () {
+    var ss = rdBook_(dept), row = purRead_(ss, 'rd_costs').filter(function (x) { return x.id === id; })[0];
+    if (!row) return { ok: false, error: 'ไม่พบรายการ' };
+    purParseFiles_(row.photo).forEach(function (f) { try { DriveApp.getFileById(f.id).setTrashed(true); } catch (e) {} });
+    purSheet_(ss, 'rd_costs').deleteRow(row._row);
+    purLogWrite_(ss, 'ลบต้นทุนสินค้า', 'rd_costs', id, row.name);
+    return { ok: true };
+  });
+}
+// รูปสินค้า 1 รูปต่อรายการ (อัปโหลดใหม่ = แทนรูปเดิม) · โฟลเดอร์ฝ่าย / "รูปต้นทุนสินค้า RD" · แชร์แบบมีลิงก์ดูได้
+function rdUploadCostPhoto(token, costId, fileName, mimeType, base64) {
+  var dept = requireRd_(token);
+  if (!/^image\/(jpeg|png)$/.test(mimeType)) return { ok: false, error: 'แนบได้เฉพาะรูป JPG / PNG' };
+  var bytes = Utilities.base64Decode(String(base64 || ''));
+  if (!bytes.length || bytes.length > 8 * 1024 * 1024) return { ok: false, error: 'รูปว่างหรือใหญ่เกิน 8 MB' };
+  return purLocked_(function () {
+    var ss = rdBook_(dept), o = purRead_(ss, 'rd_costs').filter(function (x) { return x.id === costId; })[0];
+    if (!o) return { ok: false, error: 'บันทึกรายการก่อน แล้วค่อยใส่รูป' };
+    var folderId = deptConfig_(dept.key).folderId;
+    if (!folderId) return { ok: false, error: 'ผู้ดูแลระบบยังไม่ได้ตั้งโฟลเดอร์ของฝ่าย' };
+    var parent = DriveApp.getFolderById(folderId), it = parent.getFoldersByName('รูปต้นทุนสินค้า RD');
+    var folder = it.hasNext() ? it.next() : parent.createFolder('รูปต้นทุนสินค้า RD');
+    var safe = purClean_(fileName, 80).replace(/[\\/:*?"<>|]/g, '_') || 'photo.jpg';
+    var f = folder.createFile(Utilities.newBlob(bytes, mimeType, String(o.name).slice(0, 40) + '_' + safe));
+    try { f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
+    purParseFiles_(o.photo).forEach(function (x) { try { DriveApp.getFileById(x.id).setTrashed(true); } catch (e) {} });
+    var files = [{ id: f.getId(), name: safe, url: 'https://lh3.googleusercontent.com/d/' + f.getId(), at: purNow_() }];
+    o.photo = JSON.stringify(files); o.updatedAt = purNow_();
+    purWrite_(ss, 'rd_costs', o);
+    return { ok: true, photo: files[0] };
+  });
+}
+function rdRemoveCostPhoto(token, costId) {
+  var dept = requireRd_(token);
+  return purLocked_(function () {
+    var ss = rdBook_(dept), o = purRead_(ss, 'rd_costs').filter(function (x) { return x.id === costId; })[0];
+    if (!o) return { ok: false, error: 'ไม่พบรายการ' };
+    purParseFiles_(o.photo).forEach(function (x) { try { DriveApp.getFileById(x.id).setTrashed(true); } catch (e) {} });
+    o.photo = '[]'; o.updatedAt = purNow_();
+    purWrite_(ss, 'rd_costs', o);
+    return { ok: true };
+  });
 }
