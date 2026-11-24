@@ -19,7 +19,7 @@ var PRD_TABLES_ = {
     ['id', 'รหัส'], ['date', 'วันผลิต'], ['grp', 'กลุ่มงาน'], ['productId', 'รหัสสินค้า'], ['product', 'สินค้า'], ['lot', 'LOT / วันที่ผลิต'],
     ['planBatch', 'แผน (batch)'], ['planQty', 'แผน (จำนวน)'], ['planUnit', 'หน่วยแผน'], ['dueDate', 'กำหนดส่ง'],
     ['actBatch', 'ทำจริง (batch)'], ['actBatchUnit', 'หน่วยทำจริง'], ['rawKg', 'น้ำหนักวัตถุดิบ (กก.)'], ['fryKg', 'น้ำหนักหลังผัด (กก.)'], ['coolKg', 'น้ำหนักหลังทำเย็น (กก.)'],
-    ['yieldPct', 'Yield (%)'], ['lossPct', '% Lost'], ['actQty', 'จำนวนที่ได้จริง'], ['unit', 'หน่วย'], ['actCases', 'จำนวนลัง'], ['expMin', 'ควรได้ (ต่ำสุด)'], ['expMax', 'ควรได้ (สูงสุด)'],
+    ['yieldPct', 'Yield (%)'], ['lossPct', '% Lost'], ['actQty', 'จำนวนที่ได้จริง'], ['unit', 'หน่วย'], ['actQty2', 'จำนวนที่ได้จริง (หน่วยที่ 2)'], ['unit2', 'หน่วยที่ 2'], ['actCases', 'จำนวนลัง'], ['expMin', 'ควรได้ (ต่ำสุด)'], ['expMax', 'ควรได้ (สูงสุด)'],
     ['lossKg', 'ของเสีย (กก.)'], ['lossQty', 'ของเสีย (ชิ้น)'], ['rawUnit', 'หน่วยน้ำหนักวัตถุดิบ'], ['fryUnit', 'หน่วยน้ำหนักหลังผัด'], ['coolUnit', 'หน่วยน้ำหนักหลังทำเย็น'], ['lossKgUnit', 'หน่วยของเสีย (น้ำหนัก)'], ['lossQtyUnit', 'หน่วยของเสีย (จำนวน)'], ['lossNote', 'สาเหตุของเสีย'], ['finishDate', 'วันที่เสร็จ'], ['lateCause', 'สาเหตุเสร็จช้ากว่ากำหนด'], ['status', 'สถานะ'], ['note', 'หมายเหตุ'],
     ['by', 'ผู้บันทึก'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
   prd_reports: { tab: 'รายงาน LINE', cols: [
@@ -113,7 +113,7 @@ function requirePrd_(token) {
 function prdRegister_() {
   Object.keys(PRD_TABLES_).forEach(function (k) { PUR_TABLES_[k] = PRD_TABLES_[k]; });
   ['date', 'dueDate', 'finishDate'].forEach(function (k) { PUR_DATE_KEYS_[k] = 1; });
-  ['rawKg', 'qtyMin', 'qtyMax', 'target', 'sort', 'planBatch', 'planQty', 'actBatch', 'fryKg', 'coolKg', 'yieldPct', 'lossPct', 'actQty', 'actCases',
+  ['rawKg', 'qtyMin', 'qtyMax', 'target', 'sort', 'planBatch', 'planQty', 'actBatch', 'fryKg', 'coolKg', 'yieldPct', 'lossPct', 'actQty', 'actQty2', 'actCases',
     'expMin', 'expMax', 'lossKg', 'lossQty', 'minutes'].forEach(function (k) { PUR_NUM_KEYS_[k] = 1; });
 }
 function prdBook_(dept) { prdRegister_(); return purBook_(dept); }
@@ -251,11 +251,24 @@ function prdFinishState_(x, today) {
   if (x.finishDate) return x.finishDate <= dl ? 'ok' : 'late';
   return today > dl ? 'over' : 'wait';
 }
+// วันทำงานถัดไป (ข้ามเสาร์ / อาทิตย์ → วันจันทร์)
+function prdNextWork_(iso) {
+  var p = String(iso).split('-'), t = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + 1));
+  while (t.getUTCDay() === 0 || t.getUTCDay() === 6) t.setUTCDate(t.getUTCDate() + 1);
+  return t.toISOString().slice(0, 10);
+}
 // งานค้างจากวันก่อน (ย้อนไม่เกิน 14 วัน): ยังไม่เสร็จ หรือเพิ่งเสร็จในวันนี้ — แสดงต่อในสรุปเย็นของวันนี้
+// G1: ค้างไปเป็นแผนของวันทำงานถัดไป (ตรงเสาร์ / อาทิตย์ → วันจันทร์; ผู้ใช้ขอ 24/11/69)
 function prdCarried_(all, date) {
   var p = String(date).split('-'), t = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] - 14)), from = t.toISOString().slice(0, 10);
-  return all.filter(function (x) { return x.date < date && x.date >= from && x.status !== 'cancel' && (!x.finishDate || x.finishDate === date); });
+  return all.filter(function (x) { return x.date < date && x.date >= from && x.status !== 'cancel' && (!x.finishDate || x.finishDate === date) && (x.grp !== 'G1' || prdNextWork_(x.date) <= date); });
 }
+// แผนเช้า = แผนของวันนี้ + งาน G1 ที่ยังค้าง (ยังไม่เสร็จ)
+function prdMorningPlans_(all, date) {
+  return all.filter(function (x) { return x.date === date; }).concat(prdCarried_(all, date).filter(function (x) { return x.grp === 'G1' && !x.finishDate; }));
+}
+// จำนวนที่ได้จริง + หน่วยที่ 2 (G1 บรรจุได้ เป็นชิ้น · G2 ผลิตได้จริง เป็น batch)
+function prdQty2_(x) { return x.actQty2 === '' || x.actQty2 == null ? '' : prdFmt_(x.actQty2) + ' ' + (x.unit2 || (x.grp === 'G2' ? 'batch' : 'ชิ้น')); }
 function prdTh_(iso) { var p = String(iso || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + String(+p[0] + 543).slice(2) : String(iso || ''); }
 function prdCleanPlan_(p, s) {
   var grp = PRD_GROUPS_[p.grp] ? p.grp : 'G2';
@@ -264,7 +277,7 @@ function prdCleanPlan_(p, s) {
     actBatch: prdNum_(p.actBatch, 1e7), actBatchUnit: /^(batch|กก\.|กรัม)$/.test(p.actBatchUnit) ? p.actBatchUnit : '',
     rawUnit: prdWUnit_(p.rawUnit), fryUnit: prdWUnit_(p.fryUnit), coolUnit: prdWUnit_(p.coolUnit), lossKgUnit: prdWUnit_(p.lossKgUnit), lossQtyUnit: purClean_(p.lossQtyUnit, 20),
     rawKg: prdNum_(prdToKg_(purNum_(p.rawKg), p.rawUnit), 1e6), fryKg: prdNum_(prdToKg_(purNum_(p.fryKg), p.fryUnit), 1e6), coolKg: prdNum_(prdToKg_(purNum_(p.coolKg), p.coolUnit), 1e6),
-    actQty: prdNum_(p.actQty, 1e7), unit: purClean_(p.unit, 20), actCases: prdNum_(p.actCases, 1e6), lossKg: prdNum_(prdToKg_(purNum_(p.lossKg), p.lossKgUnit), 1e6), lossQty: prdNum_(p.lossQty, 1e7),
+    actQty: prdNum_(p.actQty, 1e7), unit: purClean_(p.unit, 20), actQty2: prdNum_(p.actQty2, 1e7), unit2: purClean_(p.unit2, 20), actCases: prdNum_(p.actCases, 1e6), lossKg: prdNum_(prdToKg_(purNum_(p.lossKg), p.lossKgUnit), 1e6), lossQty: prdNum_(p.lossQty, 1e7),
     lossNote: prdText_(p.lossNote, 300), finishDate: purDate_(p.finishDate), lateCause: prdText_(p.lateCause, 300), status: PRD_STATUS_[p.status] ? p.status : 'plan', note: prdText_(p.note, 500), by: purClean_(p.by, 60) };
   return o;
 }
@@ -576,7 +589,7 @@ function prdMorningFlex_(date, plans, note, by) {
       { backgroundColor: PRD_GCOLOR_[g], cornerRadius: '10px', paddingAll: '10px' })];
     list.forEach(function (x, i) {
       var amt = prdPlanText_(x);
-      rows.push(prdRow_(i + 1, x.product, [x.lot ? 'LOT ' + prdLotText_(x.lot) : '', x.note], amt, PRD_GCOLOR_[g]));
+      rows.push(prdRow_(i + 1, x.product, [x.date < date ? { t: '⏳ ค้างจากวันที่ ' + prdTh_(x.date), c: '#7C3AED' } : '', x.lot ? 'LOT ' + prdLotText_(x.lot) : '', x.note], amt, PRD_GCOLOR_[g]));
       n++;
     });
     body.push(prdBox_(rows, { margin: 'lg', backgroundColor: PRD_GTINT_[g], cornerRadius: '14px', paddingAll: '8px', paddingBottom: '12px', borderColor: PRD_GCOLOR_[g], borderWidth: '1px' }));
@@ -606,8 +619,9 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
         // ไม่แสดงบรรทัด ตามช่วง / ควรได้ ใน LINE (ผู้ใช้ขอเอาออก 17/11/69) — ดูได้ในหน้าระบบ
         right = prdFmt_(x.actQty) + ' ' + unitOf(x);
       } else right = 'ยังไม่กรอก';
+      if (prdQty2_(x)) right = (x.actQty !== '' ? right + '\n' : '') + prdQty2_(x);
     } else if (grp === 'G1') {
-      right = x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : 'ยังไม่กรอก';
+      right = [x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : '', prdQty2_(x)].filter(String).join('\n') || 'ยังไม่กรอก';
       if (prdPlanText_(x)) sub[0] = (sub[0] ? sub[0] + ' · ' : '') + prdPlanText_(x);
     } else {
       right = [x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : '', x.actCases !== '' ? prdFmt_(x.actCases) + ' ลัง' : ''].filter(String).join(' ; ') || 'ยังไม่กรอก';
@@ -662,6 +676,7 @@ function prdSendLine(token, kind, date, grp, by) {
     var prods = {}; purRead_(ss, 'prd_products').forEach(function (p) { prods[p.id] = p; });
     var rep = prdReport_(ss, date, kind, kind === 'evening' ? grp : ''), msgs;
     if (kind === 'morning') {
+      plans = prdMorningPlans_(allPlans, date);
       if (!plans.length) return { ok: false, error: 'ยังไม่มีแผนผลิตของวันนี้' };
       msgs = [prdMorningFlex_(date, plans, rep && rep.note ? rep.note : s.morningNote, by || (rep && rep.by))];
     } else {
@@ -691,7 +706,7 @@ function prdLinePreview(token, kind, date, grp) {
       photos: rep ? purParseFiles_(rep.files).length : 0 };
   }
   var mr = prdReport_(ss, date, 'morning', '');
-  return { ok: true, flex: prdMorningFlex_(date, plans, mr && mr.note ? mr.note : s.morningNote, mr && mr.by), photos: 0 };
+  return { ok: true, flex: prdMorningFlex_(date, prdMorningPlans_(allPlans, date), mr && mr.note ? mr.note : s.morningNote, mr && mr.by), photos: 0 };
 }
 // ใส่ Channel access token จากหน้าตั้งค่าของฝ่ายผลิต (ไม่ต้องเข้า Apps Script) — ตรวจกับ LINE ก่อนว่า token ใช้ได้ แล้วเก็บใน Script Property PROD_LINE_TOKEN
 // ไม่ส่งค่า token กลับไปหน้าเว็บ · ไม่บันทึกลงชีต/ประวัติ

@@ -29,6 +29,8 @@
   // ---------- ตัวช่วย ----------
   function pad(n) { return ('0' + n).slice(-2); }
   function addDays(iso, n) { var p = iso.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2] + n); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  // วันทำงานถัดไป (ข้ามเสาร์ / อาทิตย์ → วันจันทร์) — ตรงกับ prdNextWork_ ใน Prod.gs
+  function nextWork(iso) { var d = addDays(iso, 1), w = function (x) { var p = x.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]).getDay(); }; while (w(d) === 0 || w(d) === 6) d = addDays(d, 1); return d; }
   function dd(iso) { if (!iso) return '-'; var p = String(iso).slice(0, 10).split('-'); return p.length === 3 ? +p[2] + ' ' + MONTHS[+p[1] - 1] + ' ' + String(+p[0] + 543).slice(2) : esc(iso); }
   function dayName(iso) { var p = iso.split('-'); return 'วัน' + DAYS[new Date(+p[0], +p[1] - 1, +p[2]).getDay()]; }
   function list(s) { return String(s || '').split(/[,\n]/).map(function (x) { return x.trim(); }).filter(String); }
@@ -159,7 +161,8 @@
   // รายการของวัน + งานค้างจากวันก่อน (ย้อน 14 วัน, ยังไม่เสร็จหรือเสร็จวันนี้ — ตรงกับ prdCarried_ ใน Prod.gs) ติดธง _carry
   function dayItems(date) {
     var from = addDays(date, -14);
-    return H.data.plans.filter(function (x) { return x.date === date || (x.date < date && x.date >= from && x.status !== 'cancel' && (!x.finishDate || x.finishDate === date)); })
+    // G1 ค้าง → ไปเป็นแผนของวันทำงานถัดไป (เสาร์ / อาทิตย์ → วันจันทร์; ผู้ใช้ขอ 24/11/69)
+    return H.data.plans.filter(function (x) { return x.date === date || (x.date < date && x.date >= from && x.status !== 'cancel' && (!x.finishDate || x.finishDate === date) && (x.grp !== 'G1' || nextWork(x.date) <= date)); })
       .sort(function (a, b) { return (a.date === date ? 0 : 1) - (b.date === date ? 0 : 1); })
       .map(function (x) {
         var y = JSON.parse(JSON.stringify(x)); y.lot = lotIso(y.lot) || (y.grp === 'G2' ? y.date : ''); if (x.date !== date) y._carry = true;
@@ -243,9 +246,10 @@
   function planTab(mr) {
     var D = H.day, s = S_(), html = '<datalist id="xPlanU"><option value="batch"><option value="กก."><option value="ลัง">' + list(s.units).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>';
     GROUPS.forEach(function (g) {
-      var its = []; D.items.forEach(function (x, i) { if (x.grp === g[0] && !x._carry) its.push(i); });
+      var its = [], cits = []; D.items.forEach(function (x, i) { if (x.grp === g[0]) { if (!x._carry) its.push(i); else if (g[0] === 'G1' && !x.finishDate) cits.push(i); } });
       var gl = g[0] === 'G2' ? 'งานเตรียมวัตถุดิบ/ทอด/ผัด/อบ' : g[1];
-      html += '<section class="xgsec" style="--g:' + g[2] + '"><h4 class="xgh"><span>' + g[0] + '</span>' + esc(gl) + ' <small>' + its.length + ' รายการ</small></h4>'
+      html += '<section class="xgsec" style="--g:' + g[2] + '"><h4 class="xgh"><span>' + g[0] + '</span>' + esc(gl) + ' <small>' + its.length + ' รายการ' + (cits.length ? ' + ค้าง ' + cits.length : '') + '</small></h4>'
+        + (cits.length ? '<div class="xcarryp"><b>⏳ งานค้างจากวันก่อน — ยกมาเป็นแผนวันนี้ ' + cits.length + ' รายการ</b>' + cits.map(function (i) { return carryRow(D.items[i]); }).join('') + '<small>ส่งไปกับแผนผลิตใน LINE ด้วย · กรอกผลได้ใน "🌙 สรุปเย็น" · แก้แผนได้ที่วันเดิม</small></div>' : '')
         + (g[0] === 'G2' ? '<p class="xhint">หน่วยแผน: batch · กก. / กรัม (= น้ำหนักวัตถุดิบ ระบบแปลงเป็น batch ตามมาตรฐานให้) · หรือหน่วยสินค้า เช่น ชิ้น (= จำนวนที่ควรได้)</p>' : '')
         + its.map(function (i, n) { return itemCard(D.items[i], i, n, 'm'); }).join('')
         + '<button class="btn btn-line xadd" data-add="' + g[0] + '" style="--g:' + g[2] + '">' + icon('plus', 18) + ' เพิ่มแผน ' + g[0] + ' · ' + esc(gl) + '</button></section>';
@@ -253,7 +257,7 @@
     html += '<div class="panel pbox xeve" style="--g:#0E7490"><h4>' + icon('send', 18) + ' ส่งแผนผลิตเข้า LINE</h4><p class="muted" style="margin:0 0 10px;font-size:13px">ส่งแผนของทุกกลุ่ม (G2 / G1 / G3) รวมเป็นการ์ดเดียว · กด "บันทึก" ก่อนส่ง</p>'
       + '<label class="xf full"><span>ข้อความท้ายการ์ด</span><span class="xin"><input id="mNote" value="' + esc(mr && mr.note ? mr.note : s.morningNote) + '" maxlength="200"></span></label>'
       + '<div class="xsend"><button class="btn btn-primary" id="mSend" style="--c:#06c755">' + icon('send', 18) + ' ดูตัวอย่าง & ส่งแผนผลิต</button>' + (mr && mr.sentAt ? '<span class="xok">✓ ส่งแล้ว ' + esc(mr.sentAt.slice(11, 16)) + ' น.</span>' : '') + '</div></div>';
-    var nc = D.items.filter(function (x) { return x._carry; }).length;
+    var nc = D.items.filter(function (x) { return x._carry && x.grp !== 'G1'; }).length;
     if (nc) html = '<div class="panel xcarryn">⏳ มีงานค้างจากวันก่อน ' + nc + ' รายการ — ดู / กรอกผลได้ใน "🌙 สรุปเย็น"</div>' + html;
     $('dBody').innerHTML = html;
     bindCards();
@@ -261,12 +265,16 @@
     $('mSend').addEventListener('click', function () {
       if (needMe()) return;
       if (H.day.dirty) return toast('กด "บันทึก" ก่อน แล้วค่อยส่ง');
-      if (!D.items.filter(function (x) { return !x._carry; }).length) return toast('ยังไม่มีแผนของวันนี้');
+      if (!D.items.filter(function (x) { return !x._carry || (x.grp === 'G1' && !x.finishDate); }).length) return toast('ยังไม่มีแผนของวันนี้');
       var b = this; b.disabled = true;
       call('prdSaveReport', state.token, { date: D.date, kind: 'morning', note: $('mNote').value, by: me() }).then(function (r) {
         b.disabled = false; if (!r.ok) return toast(r.error); upsertReport(r.report); sendLine('morning', D.date, '');
       }).catch(function (e) { b.disabled = false; onServerError(e); });
     });
+  }
+  // แถวงาน G1 ค้าง (แสดงอย่างเดียวในแผนเช้า)
+  function carryRow(x) {
+    return '<div class="xcrow"><span class="xcn">' + esc(x.product || '-') + '</span><span class="xchips">' + ['ค้างจาก ' + dd(x.date), x.lot ? 'LOT ' + lotText(x.lot) : '', planText(x) ? 'แผน ' + planText(x) : ''].filter(String).map(function (t) { return '<span>' + esc(t) + '</span>'; }).join('') + '</span></div>';
   }
   function addItem(g) {
     collect();
@@ -283,7 +291,7 @@
     D.items.forEach(function (x, i) { if (x.grp === g) (x._carry ? cits : its).push(i); });
     var hand = []; if (g === 'G1') D.items.forEach(function (x, i) { if (x.grp === 'G2' && x.status !== 'cancel' && x.productId) hand.push(i); });
     var causes = list(s.lossCauses);
-    var html = '<datalist id="xUnits">' + list(s.units).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist><datalist id="xCauses">' + causes.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>'
+    var html = '<datalist id="xUnits">' + list(s.units).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist><datalist id="xUnits2"><option value="batch"><option value="ชิ้น"><option value="กก.">' + list(s.units).filter(function (c) { return ['batch', 'ชิ้น', 'กก.'].indexOf(c) < 0; }).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist><datalist id="xCauses">' + causes.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>'
       + (its.length ? '<p class="muted" style="margin:0 0 10px;font-size:13px">รายการดึงมาจากแผนเช้า — กรอกผลลัพธ์ของแต่ละรายการ (ต้องการเพิ่ม / แก้แผน ให้ไปที่ "🌅 แผนเช้า")</p>'
         : '<div class="panel" style="font-size:14px">ยังไม่มีแผนของ ' + g + ' วันนี้ <button class="btn btn-line btn-sm" id="gToPlan" style="margin-left:8px">ไปใส่แผนที่ 🌅 แผนเช้า</button></div>')
       + its.map(function (i, n) { return itemCard(D.items[i], i, n, 'e'); }).join('')
@@ -399,7 +407,9 @@
         + g1Done(x)
         + '<div class="xcalc" data-calc="' + i + '">' + calcHtml(x, c) + '</div>'
       : fi(i, 'actQty', g === 'G1' ? 'จำนวนที่บรรจุได้' : 'จำนวนที่บรรจุลงลัง', x.actQty, ' inputmode="numeric"')
-        + fi(i, 'unit', 'หน่วย', x.unit, ' list="xUnits" maxlength="20" placeholder="' + esc(c.punit) + '"') + (g === 'G3' ? fi(i, 'actCases', 'จำนวนลัง', x.actCases, ' inputmode="numeric"', 'ลัง') : '');
+        + fi(i, 'unit', 'หน่วย', x.unit, ' list="xUnits" maxlength="20" placeholder="' + esc(c.punit) + '"') + (g === 'G3' ? fi(i, 'actCases', 'จำนวนลัง', x.actCases, ' inputmode="numeric"', 'ลัง') : '')
+        // G1: บรรจุได้อีกหน่วย (เป็นชิ้น) — ผู้ใช้ขอ 24/11/69
+        + (g === 'G1' ? fi(i, 'actQty2', 'จำนวนที่บรรจุได้ (เป็นชิ้น)', x.actQty2, ' inputmode="numeric"') + fi(i, 'unit2', 'หน่วย (แก้ได้)', x.unit2, ' list="xUnits2" maxlength="20" placeholder="ชิ้น"') : '');
     // G2: น้ำหนักหลังทำเย็น / จำนวนที่ผลิตได้จริง / ของเสีย ย้ายไปให้ G1 กรอก (ผู้ใช้ขอ 23/11/69) — การ์ด G2 เหลือแค่วันที่เสร็จ
     res += (g === 'G2' ? '' : lossFields(i, x)) + fi(i, 'finishDate', 'วันที่เสร็จ', x.finishDate, ' type="date" min="' + esc(x.date || '') + '"')
       + '<div class="xfinw" data-fin="' + i + '">' + finHtml(i, x) + '</div>';
@@ -418,7 +428,7 @@
   // การ์ด G2 (แท็บ G2): ค่าที่ G1 กรอกให้ แสดงอย่างเดียว
   function g1Done(x) {
     var u = function (v, k) { return v === '' || v == null ? '' : fmt(+v) + ' ' + k; };
-    var a = [x.coolKg !== '' && x.coolKg != null ? 'หลังทำเย็น ' + u(x.coolKg, wUnit(x.coolUnit)) : '', x.actQty !== '' && x.actQty != null ? 'ได้จริง ' + u(x.actQty, x.unit || calc(x).punit || '') : '',
+    var a = [x.coolKg !== '' && x.coolKg != null ? 'หลังทำเย็น ' + u(x.coolKg, wUnit(x.coolUnit)) : '', x.actQty !== '' && x.actQty != null ? 'ได้จริง ' + u(x.actQty, x.unit || calc(x).punit || '') : '', x.actQty2 !== '' && x.actQty2 != null ? u(x.actQty2, x.unit2 || 'batch') : '',
       x.lossKg || x.lossQty ? 'ของเสีย ' + [u(x.lossKg, wUnit(x.lossKgUnit)), u(x.lossQty, x.lossQtyUnit || 'ชิ้น')].filter(String).join(' / ') : ''].filter(String);
     return '<div class="xg1v full"><b>G1 กรอก:</b> ' + (a.length ? esc(a.join(' · ')) : '<span class="muted">ยังไม่ได้กรอก (น้ำหนักหลังทำเย็น / จำนวนที่ผลิตได้จริง / ของเสีย)</span>') + '</div>';
   }
@@ -432,6 +442,8 @@
       + '<div class="xcalc" data-calc="' + i + '">' + calcHtml(x, c) + '</div>'
       + fi(i, 'actQty', 'จำนวนที่ผลิตได้จริง', x.actQty, ' inputmode="numeric"').replace('class="xin"', 'class="xin' + (c.qtyState ? ' q-' + c.qtyState : '') + '"')
       + fi(i, 'unit', 'หน่วย', x.unit, ' list="xUnits" maxlength="20" placeholder="' + esc(c.punit) + '"')
+      // ผลิตได้จริงอีกหน่วย (ค่าเริ่มต้น batch แก้ได้) — ผู้ใช้ขอ 24/11/69
+      + fi(i, 'actQty2', 'จำนวนที่ผลิตได้จริง (batch)', x.actQty2, ' inputmode="decimal"') + fi(i, 'unit2', 'หน่วย (แก้ได้)', x.unit2, ' list="xUnits2" maxlength="20" placeholder="batch"')
       + lossFields(i, x) + '</div></article>';
   }
   function calcHtml(x, c) {
@@ -1027,6 +1039,7 @@
     '.xtitle em{white-space:nowrap;font-style:normal;font-weight:700;color:var(--ink)}',
     '.xsplan{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:4px 8px;align-items:center;padding:6px 0;border-bottom:1px dashed var(--line)}.xspn b{display:block;font-size:14px}.xspn small{color:var(--muted);font-size:12px}.xspq{font-size:14px;text-align:right}.xspq.muted{font-weight:400}.xspmv{grid-column:2/-1;display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)}.xspmv select{border:1.5px solid var(--line);border-radius:8px;padding:4px 6px;font:inherit;font-size:13px;background:#fff;max-width:100%}',
     '.xhandh{margin:16px 0 8px;font-size:15px;color:#c2410c}.xhandh small{color:var(--muted);font-weight:400;font-size:12.5px}.xg1v{grid-column:1/-1;font-size:13.5px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:8px 10px;color:#1e3a8a}',
+    '.xcarryp{background:#f5f3ff;border:1.5px dashed #c4b5fd;border-radius:14px;padding:10px 12px;margin:0 0 10px}.xcarryp>b{display:block;color:#5b21b6;font-size:14px;margin-bottom:6px}.xcarryp>small{display:block;color:var(--muted);font-size:12.5px;margin-top:6px}.xcrow{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;padding:7px 0;border-top:1px solid #ede9fe}.xcrow:first-of-type{border-top:0}.xcn{font-weight:700;font-size:14.5px}.xcrow .xchips span{background:#ede9fe;color:#5b21b6}',
     '.xcarryh{margin:16px 0 8px;font-size:15px;color:#6d28d9}.xcarryh small{color:var(--muted);font-weight:400;font-size:12.5px}.xcarryn{background:#f5f3ff;border:1.5px solid #ddd6fe;color:#5b21b6;font-size:14px;margin-bottom:12px}',
     '.xin select.xu{flex:none;width:auto;max-width:42%;border:0;border-left:1.5px solid var(--line);background:#f8fafc;color:#334155;font:inherit;font-size:13px;padding:0 6px;align-self:stretch;cursor:pointer}',
     '.xhint{font-size:12.5px;color:#9a3412;margin:-4px 2px 8px}',
