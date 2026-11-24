@@ -321,13 +321,15 @@ function rdCostOut_(c) {
   return c;
 }
 // ราคาวัตถุดิบ 1 แถว = (ราคา/กก. ÷ 1000) × น้ำหนัก (กรัม) — เหมือนสูตรในไฟล์ =(L6/1000)*I6
-function rdIngCost_(x) { return Math.round(rdNum_(x.price) * rdNum_(x.qty) * (RD_WUNITS_[x.unit] || 1) / 1000 * 100) / 100; }
+// หน่วยส่วนผสม (ผู้ใช้ขอ 24/11/69): กรัม / กก. → ราคาต่อ กก. · มล. / ลิตร → ราคาต่อลิตร · หน่วยอื่นที่พิมพ์เอง → ราคาต่อหน่วยนั้น
+var RD_UNIT_F_ = { 'กรัม': 0.001, 'กก.': 1, 'มล.': 0.001, 'ลิตร': 1 };
+function rdIngCost_(x) { var f = RD_UNIT_F_[x.unit]; return Math.round(rdNum_(x.price) * rdNum_(x.qty) * (f == null ? 1 : f) * 100) / 100; }
 function rdSaveCost(token, c) {
   var dept = costDept_(token); c = c || {};
   var name = rdText_(c.name, 150);
   if (!name) return { ok: false, error: 'กรอกชื่อสินค้า' };
   var ing = (Array.isArray(c.ingredients) ? c.ingredients : []).slice(0, 80).map(function (x) {
-    return { name: rdText_(x && x.name, 120), qty: rdNum_(x && x.qty) || '', unit: RD_WUNITS_[x && x.unit] ? x.unit : 'กรัม', price: rdNum_(x && x.price) || '', vendor: rdText_(x && x.vendor, 120), pnote: rdText_(x && x.pnote, 80) };
+    return { name: rdText_(x && x.name, 120), qty: rdNum_(x && x.qty) || '', unit: rdText_(x && x.unit, 20) || 'กรัม', price: rdNum_(x && x.price) || '', vendor: rdText_(x && x.vendor, 120), pnote: rdText_(x && x.pnote, 80) };
   }).filter(function (x) { return x.name || x.qty || x.price; });
   var pack = (Array.isArray(c.packaging) ? c.packaging : []).slice(0, 40).map(function (x) {
     return { name: rdText_(x && x.name, 120), price: rdNum_(x && x.price) || '', per: rdNum_(x && x.per) || '', note: rdText_(x && x.note, 200), vendor: rdText_(x && x.vendor, 120), pnote: rdText_(x && x.pnote, 80) };

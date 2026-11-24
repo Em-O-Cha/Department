@@ -397,10 +397,29 @@
   // ส่วนผสม: ราคารวม = (ราคา/กก. รวม VAT ÷ 1000) × น้ำหนัก (กรัม) · บรรจุภัณฑ์: ราคา/ชิ้น รวม VAT + หมายเหตุ
   // ช่อง "ใช้ได้กี่ (หน่วยสินค้า)" ของบรรจุภัณฑ์ไม่บังคับ — ใส่แล้วระบบคิดต้นทุนบรรจุภัณฑ์ต่อหน่วยให้ในกล่องสรุป
   var WU = { 'กรัม': 1, 'กก.': 1000 };
+  // หน่วยส่วนผสม (ผู้ใช้ขอ 24/11/69: พิมพ์หน่วยอื่นเองได้): น้ำหนัก กรัม / กก. → ราคาต่อ กก. · ปริมาตร มล. / ลิตร → ราคาต่อลิตร · หน่วยอื่น (ฟอง ขวด ชิ้น …) → ราคาต่อหน่วยนั้น
+  var UNIT_OPTS = ['กรัม', 'กก.', 'มล.', 'ลิตร', 'ชิ้น', 'ฟอง', 'ขวด', 'ซอง', 'ถุง', 'แพ็ค', 'กระป๋อง', 'ลูก'];
+  function normUnit(u) {
+    var t = String(u || '').trim(), k = t.toLowerCase().replace(/\.$/, '');
+    if (!t) return 'กรัม';
+    if (/^(กรัม|ก|g|gm|gram|grams)$/.test(k)) return 'กรัม';
+    if (/^(กก|กิโล|กิโลกรัม|kg|kgs)$/.test(k)) return 'กก.';
+    if (/^(มล|มิลลิลิตร|ml|cc|ซีซี)$/.test(k)) return 'มล.';
+    if (/^(ลิตร|l|lt|ltr|liter|litre)$/.test(k)) return 'ลิตร';
+    return t.slice(0, 20);
+  }
+  function uinfo(u) {
+    u = normUnit(u);
+    if (u === 'กรัม' || u === 'กก.') return { kind: 'w', f: u === 'กก.' ? 1000 : 1, per: 'กก.' };
+    if (u === 'มล.' || u === 'ลิตร') return { kind: 'v', f: u === 'ลิตร' ? 1000 : 1, per: 'ลิตร' };
+    return { kind: 'o', f: 1, per: u };
+  }
+  function usedUnits() { var o = []; ((H.data && H.data.costs) || []).forEach(function (c) { (c.ingredients || []).forEach(function (x) { var u = normUnit(x.unit); if (u && o.indexOf(u) < 0) o.push(u); }); }); return o; }
   function costRows(c) {
     var ing = (c.ingredients || []).map(function (x) {
-      var g = (Number(x.qty) || 0) * (WU[x.unit] || 1), price = Number(x.price) || 0;
-      return { name: x.name, qty: x.qty, unit: x.unit || 'กรัม', price: x.price, vendor: x.vendor || '', grams: g, cost: Math.round(price * g / 1000 * 100) / 100, noPrice: !!x.name && (x.price === '' || x.price == null) };
+      var ui = uinfo(x.unit), qn = Number(x.qty) || 0, price = Number(x.price) || 0;
+      var cost = ui.kind === 'o' ? price * qn : price * qn * ui.f / 1000;
+      return { name: x.name, qty: x.qty, unit: normUnit(x.unit), per: ui.per, kind: ui.kind, price: x.price, vendor: x.vendor || '', grams: ui.kind === 'w' ? qn * ui.f : 0, cost: Math.round(cost * 100) / 100, noPrice: !!x.name && (x.price === '' || x.price == null) };
     });
     var mat = Math.round(ing.reduce(function (t, x) { return t + x.cost; }, 0) * 100) / 100, grams = ing.reduce(function (t, x) { return t + x.grams; }, 0);
     var out = Number(c.outQty) || 0;
@@ -475,7 +494,7 @@
         if (/น้ำหนักสินค้า|yield|บรรจุภัณฑ์/i.test(nm + ' ' + txt(r, R.s.c + 1) + ' ' + txt(r, R.s.c + 2))) break;
         if (!nm) { if (find(/น้ำหนักสินค้า|yield/i, r, r)) break; continue; }
         var qty = null, unit = 'กรัม';
-        for (var c2 = cW < 0 ? hi.c + 1 : cW; c2 < (cP < 0 ? R.e.c : cP); c2++) { var q = num(cell(r, c2)); if (q != null) { qty = q; var un = txt(r, c2 + 1); if (/^(กก\.?|kg)$/i.test(un)) unit = 'กก.'; break; } }
+        for (var c2 = cW < 0 ? hi.c + 1 : cW; c2 < (cP < 0 ? R.e.c : cP); c2++) { var q = num(cell(r, c2)); if (q != null) { qty = q; var un = txt(r, c2 + 1); if (un && un.length <= 20 && !/^[\d.,]+$/.test(un)) unit = normUnit(un); break; } }
         var price = cP >= 0 ? num(cell(r, cP)) : null;
         out.ingredients.push({ name: nm, qty: qty == null ? '' : qty, unit: unit, price: price == null ? '' : price });
       }
@@ -592,7 +611,7 @@
       + '<div class="rcpi">' + (c.photo ? '<img src="' + esc(c.photo.url) + '=w600" alt="รูปสินค้า" crossorigin="anonymous">' : '<span>ภาพสินค้า</span>') + '</div></div>'
       + '<div class="rcpsec">ส่วนผสม</div>'
       + '<table class="rcpt1"><thead><tr><th class="n">No.</th><th>ชื่อส่วนผสม</th><th colspan="2">น้ำหนัก</th><th>ราคา/กก. รวม Vat</th><th>ราคารวม</th></tr></thead><tbody>'
-      + r.ing.map(function (x, i) { return '<tr><td class="n">' + (i + 1) + '</td><td>' + esc(x.name) + '</td><td class="q">' + baht(x.qty, 0) + '</td><td class="u">' + esc(x.unit) + '</td><td class="m">' + baht(x.price) + '</td><td class="m">' + baht(x.cost) + '</td></tr>'; }).join('')
+      + r.ing.map(function (x, i) { return '<tr><td class="n">' + (i + 1) + '</td><td>' + esc(x.name) + '</td><td class="q">' + baht(x.qty, 0) + '</td><td class="u">' + esc(x.unit) + '</td><td class="m">' + baht(x.price) + (x.per !== 'กก.' && x.price !== '' && x.price != null ? '<small class="rcper"> /' + esc(x.per) + '</small>' : '') + '</td><td class="m">' + baht(x.cost) + '</td></tr>'; }).join('')
       + minRows(Math.max(0, 1 - r.ing.length), 6)
       + '<tr class="rcptot"><td></td><td></td><td class="q m">' + baht(r.grams, 0) + '</td><td class="u">กรัม</td><td></td><td class="m">' + baht(r.mat) + '</td></tr></tbody></table>'
       + '<table class="rcpy"><tr><td>น้ำหนักสินค้าที่ได้ Yield</td><td class="q">' + baht(c.yieldQty, 0) + '</td><td>' + esc(c.yieldUnit || 'กรัม') + '</td></tr>'
@@ -652,7 +671,7 @@
       + '<label class="btn btn-line btn-sm">' + icon('camera', 15) + ' ถ่ายรูป<input type="file" accept="image/*" capture="environment" id="cCam" hidden></label>'
       + '<label class="btn btn-line btn-sm">' + icon('image', 15) + ' เลือกรูป<input type="file" accept="image/*" id="cGal" hidden></label>'
       + '<button type="button" class="btn btn-line btn-sm" id="cPhDel">' + icon('trash', 15) + ' ลบรูป</button></div></div></div></div>'
-      + '<h4 class="rch">ส่วนผสม <small>ราคารวม = ราคา/กก. ÷ 1,000 × น้ำหนัก (กรัม)</small></h4><div id="cIng"></div>'
+      + '<h4 class="rch">ส่วนผสม <small>กรัม / กก. ใช้ราคาต่อ กก. · มล. / ลิตร ใช้ราคาต่อลิตร · หน่วยอื่นพิมพ์เองได้ (เช่น ฟอง) ใช้ราคาต่อหน่วยนั้น</small></h4><datalist id="cUnits">' + UNIT_OPTS.concat(usedUnits()).filter(function (u, i, a) { return a.indexOf(u) === i; }).map(function (u) { return '<option value="' + esc(u) + '">'; }).join('') + '</datalist><div id="cIng"></div>'
       + '<button type="button" class="btn btn-line btn-sm" id="cAddI">' + icon('plus', 15) + ' เพิ่มส่วนผสม</button>'
       + '<div class="pform rcyl"><div class="pf"><label for="cY">น้ำหนักสินค้าที่ได้ (Yield)</label><div class="rcu">' + N('cY', c.yieldQty) + '<input id="cYu" value="' + esc(c.yieldUnit || 'กรัม') + '" maxlength="20" aria-label="หน่วย"></div></div>'
       + '<div class="pf"><label for="cL">น้ำหนักที่สูญเสีย (Loss)</label><div class="rcu">' + N('cL', c.lossQty) + '<input id="cLu" value="' + esc(c.lossUnit || 'กรัม') + '" maxlength="20" aria-label="หน่วย"></div></div>'
@@ -665,11 +684,20 @@
     // ราคาจากฝ่ายจัดซื้อ & สต๊อก: พิมพ์ชื่อส่วนผสม → ผู้ขายทุกรายที่ขายของชื่อใกล้เคียง → เลือก = ใส่ราคา/กก. ให้ (ผู้ใช้ขอ 24/11/69)
     var PUR_ITEMS = (H.data.pur && H.data.pur.items) || [], SUG = [];
     var nrm = function (t) { return String(t || '').replace(/[\sัิ-ฺ็-๎().,\-]/g, '').toLowerCase(); };
-    var perKg = function (x) {
-      var u = String(x.unit || '').trim().toLowerCase().replace(/\.$/, '');
-      if (/^(กก|กิโล|กิโลกรัม|kg|kgs)$/.test(u)) return { price: x.price, note: '' };
-      if (/^(กรัม|ก|g|gm|gram)$/.test(u)) return { price: Math.round(x.price * 1000 * 100) / 100, note: 'แปลงจาก ' + baht(x.price) + ' บาท/กรัม' };
-      return { price: x.price, note: 'ราคาต่อ ' + (x.unit || 'หน่วย') + ' — ตรวจว่าเป็นราคา/กก.' };
+    // ราคาจากผู้ขาย → ราคาตามหน่วยของแถว (ต่อ กก. / ต่อลิตร / ต่อหน่วยเดียวกัน)
+    var perKg = function (x, rowUnit) {
+      var vu = normUnit(x.unit), want = uinfo(rowUnit || 'กรัม');
+      if (want.kind === 'w') {
+        if (vu === 'กก.') return { price: x.price, note: '' };
+        if (vu === 'กรัม') return { price: Math.round(x.price * 1000 * 100) / 100, note: 'แปลงจาก ' + baht(x.price) + ' บาท/กรัม' };
+        return { price: x.price, note: 'ราคาต่อ ' + (x.unit || 'หน่วย') + ' — ตรวจว่าเป็นราคา/กก.' };
+      }
+      if (want.kind === 'v') {
+        if (vu === 'ลิตร') return { price: x.price, note: '' };
+        if (vu === 'มล.') return { price: Math.round(x.price * 1000 * 100) / 100, note: 'แปลงจาก ' + baht(x.price) + ' บาท/มล.' };
+        return { price: x.price, note: 'ราคาต่อ ' + (x.unit || 'หน่วย') + ' — ตรวจว่าเป็นราคา/ลิตร' };
+      }
+      return vu === want.per ? { price: x.price, note: '' } : { price: x.price, note: 'ราคาต่อ ' + (x.unit || 'หน่วย') + ' — ตรวจว่าเป็นราคา/' + want.per };
     };
     // บรรจุภัณฑ์ (ผู้ใช้ 24/11/69): ราคาต่อหน่วยของผู้ขาย (ม้วน / ใบ / ชิ้น) ใช้ตามนั้น · หน่วยน้ำหนักให้ตรวจ
     var perPc = function (x) {
@@ -681,6 +709,7 @@
     // k = 'i' ส่วนผสม / 'p' บรรจุภัณฑ์ · คีย์แถว = 'i:3' / 'p:0'
     var KD = { i: { rows: function () { return ing; }, attr: 'data-ci', conv: perKg, draw: function () { drawIng(); } },
       p: { rows: function () { return pack; }, attr: 'data-cp', conv: perPc, draw: function () { drawPk(); } } };
+    function priceHint(u, plain) { var p = uinfo(u).per; return plain ? 'ราคาต่อ ' + p : (PUR_ITEMS.length ? 'แตะเลือกผู้ขาย' : 'ราคา/' + p); }
     var vendLine = function (x, key) {
       return x.vendor || x.pnote ? '<div class="rcvend">' + (x.vendor ? 'ผู้ขาย <b>' + esc(x.vendor) + '</b>' : '') + (x.pnote ? ' <span class="' + (/ตรวจ/.test(x.pnote) ? 'warn' : '') + '">· ' + esc(x.pnote) + '</span>' : '') + ' <button type="button" class="rcx sm" data-vclr="' + key + '" >✕ ล้างผู้ขาย</button></div>' : '';
     };
@@ -688,7 +717,7 @@
     var sugHide = function (key) { var b = document.querySelector('[data-sug="' + key + '"]'); if (b) b.hidden = true; };
     var sugList = function (key, text) {
       var box = document.querySelector('[data-sug="' + key + '"]'), L = box && box.querySelector('.rcsl'); if (!L) return;
-      var conv = KD[key.charAt(0)].conv;
+      var row0 = KD[key.charAt(0)].rows()[+key.slice(2)] || {}, conv0 = KD[key.charAt(0)].conv, conv = function (x) { return conv0(x, row0.unit); };
       var n = nrm(text), words = String(text || '').split(/\s+/).map(nrm).filter(function (w) { return w.length > 1; });
       var hits = !n ? [] : PUR_ITEMS.map(function (x) {
         var m = nrm(x.name); var sc = m === n ? 0 : m.indexOf(n) === 0 ? 1 : m.indexOf(n) >= 0 ? 2 : n.indexOf(m) >= 0 && m.length > 1 ? 3 : words.some(function (w) { return m.indexOf(w) >= 0; }) ? 4 : 9; return { x: x, sc: sc };
@@ -698,9 +727,9 @@
       if (!hits.length) { L.innerHTML = '<div class="rcsn">ไม่พบ "' + esc(text) + '" ในฝ่ายจัดซื้อ — ลองคำอื่นในช่องค้นหา หรือพิมพ์ราคาเองในช่องราคา</div>'; return; }
       // ถูกสุด = เทียบเฉพาะหน่วยเดียวกัน (ส่วนผสมแปลงเป็นต่อ กก. แล้ว)
       var low = {};
-      SUG.forEach(function (x) { var u = key.charAt(0) === 'i' && !/ตรวจ/.test(conv(x).note) ? 'kg' : String(x.unit || ''); var v = conv(x).price; if (low[u] == null || v < low[u].v) low[u] = { v: v, n: (low[u] ? low[u].n : 0) + 1 }; else low[u].n++; });
+      SUG.forEach(function (x) { var u = key.charAt(0) === 'i' && !/ตรวจ/.test(conv(x).note) ? 'row' : String(x.unit || ''); var v = conv(x).price; if (low[u] == null || v < low[u].v) low[u] = { v: v, n: (low[u] ? low[u].n : 0) + 1 }; else low[u].n++; });
       L.innerHTML = '<div class="rcsh2">พบ ' + hits.length + ' รายการ — แตะเพื่อใส่ราคา</div>' + SUG.map(function (x, k) {
-        var u = key.charAt(0) === 'i' && !/ตรวจ/.test(conv(x).note) ? 'kg' : String(x.unit || ''), lw = low[u];
+        var u = key.charAt(0) === 'i' && !/ตรวจ/.test(conv(x).note) ? 'row' : String(x.unit || ''), lw = low[u];
         return '<button type="button" class="rcsi" data-pick="' + key + ':' + k + '"><span><b>' + esc(x.vendor || 'ไม่ระบุผู้ขาย') + '</b><small>' + esc(x.name) + (x.date ? ' · ราคาวันที่ ' + slashTh(x.date) : '') + '</small></span>'
           + '<em>' + baht(x.price) + ' / ' + esc(x.unit || 'หน่วย') + (lw && lw.n > 1 && conv(x).price === lw.v ? ' <i>ถูกสุด</i>' : '') + '</em></button>';
       }).join('');
@@ -717,7 +746,7 @@
       box.hidden = false;
     };
     var applyPick = function (key, x) {
-      if (!x) return; var K = KD[key.charAt(0)], r = K.rows()[+key.slice(2)], pk = K.conv(x), diff;
+      if (!x) return; var K = KD[key.charAt(0)], r = K.rows()[+key.slice(2)], pk = K.conv(x, r && r.unit), diff;
       if (!r) return;
       if (!String(r.name || '').trim()) r.name = x.name;
       diff = nrm(x.name) !== nrm(r.name);
@@ -726,12 +755,12 @@
       K.draw(); toast('ใส่ราคาจาก ' + (x.vendor || 'ฝ่ายจัดซื้อ') + ' แล้ว');
     };
     var drawIng = function () {
-      $('cIng').innerHTML = '<div class="rci rcih"><span>#</span><span>ชื่อส่วนผสม</span><span>น้ำหนัก</span><span>หน่วย</span><span>ราคา/กก. รวม VAT</span><span>ราคารวม</span><span></span></div>'
+      $('cIng').innerHTML = '<div class="rci rcih"><span>#</span><span>ชื่อส่วนผสม</span><span>ปริมาณ</span><span>หน่วย</span><span>ราคา รวม VAT</span><span>ราคารวม</span><span></span></div>'
         + ing.map(function (x, i) {
           return '<div class="rcirow"><div class="rci"><span class="n">' + (i + 1) + '</span><input data-ci="' + i + ':name" value="' + esc(x.name || '') + '" placeholder="ชื่อส่วนผสม" aria-label="ชื่อส่วนผสม ' + (i + 1) + '">'
-            + '<input data-ci="' + i + ':qty" inputmode="decimal" value="' + esc(x.qty == null ? '' : x.qty) + '" placeholder="น้ำหนัก" aria-label="น้ำหนัก">'
-            + '<select data-ci="' + i + ':unit" aria-label="หน่วย">' + Object.keys(WU).map(function (u) { return '<option' + ((x.unit || 'กรัม') === u ? ' selected' : '') + '>' + u + '</option>'; }).join('') + '</select>'
-            + '<input data-ci="' + i + ':price" inputmode="decimal" value="' + esc(x.price == null ? '' : x.price) + '" placeholder="' + (PUR_ITEMS.length ? 'แตะเลือกผู้ขาย' : 'ราคา/กก.') + '" autocomplete="off" aria-label="ราคาต่อกิโลกรัม รวม VAT (แตะเพื่อเลือกผู้ขาย)">'
+            + '<input data-ci="' + i + ':qty" inputmode="decimal" value="' + esc(x.qty == null ? '' : x.qty) + '" placeholder="ปริมาณ" aria-label="ปริมาณ">'
+            + '<input data-ci="' + i + ':unit" list="cUnits" value="' + esc(x.unit || 'กรัม') + '" autocomplete="off" aria-label="หน่วย (เลือกหรือพิมพ์เอง)" class="rcunit">'
+            + '<input data-ci="' + i + ':price" inputmode="decimal" value="' + esc(x.price == null ? '' : x.price) + '" placeholder="' + priceHint(x.unit) + '" autocomplete="off" aria-label="' + esc(priceHint(x.unit, true)) + ' รวม VAT (แตะเพื่อเลือกผู้ขาย)">'
             + '<span class="m" data-cc="' + i + '" aria-label="ราคารวม"></span><button type="button" class="rcx" data-cdel="' + i + '" aria-label="ลบแถว">✕</button></div>'
             + '<div class="rcsug" data-sug="i:' + i + '" hidden></div>' + vendLine(x, 'i:' + i) + '</div>';
         }).join('') + '<div class="rci rcit"><span></span><span>รวม</span><span id="cTg"></span><span>กรัม</span><span></span><span class="m" id="cTm"></span><span></span></div>';
@@ -779,6 +808,7 @@
           var a = (e.target.getAttribute('data-ci') || '').split(':'); if (a.length < 2) return;
           ing[+a[0]][a[1]] = a[1] === 'name' || a[1] === 'unit' ? e.target.value : e.target.value.replace(/,/g, '').trim();
           if (a[1] === 'price') { ing[+a[0]].pnote = ''; sugHide('i:' + a[0]); }
+          if (a[1] === 'unit') { var pr = document.querySelector('[data-ci="' + a[0] + ':price"]'); if (pr) { pr.placeholder = priceHint(e.target.value); pr.setAttribute('aria-label', priceHint(e.target.value, true) + ' รวม VAT (แตะเพื่อเลือกผู้ขาย)'); } }
           recalc();
         });
         $('cPk').addEventListener('input', function (e) {
@@ -805,7 +835,7 @@
             if (vx) { var vk = vx.getAttribute('data-vclr'), K = KD[vk.charAt(0)], r = K.rows()[+vk.slice(2)]; if (r) { r.vendor = ''; r.pnote = ''; } K.draw(); return; }
           });
         });
-        $('cIng').addEventListener('change', function (e) { var a = (e.target.getAttribute('data-ci') || '').split(':'); if (a[1] === 'unit') { ing[+a[0]].unit = e.target.value; recalc(); } });
+        $('cIng').addEventListener('change', function (e) { var a = (e.target.getAttribute('data-ci') || '').split(':'); if (a[1] === 'unit') { var nu = normUnit(e.target.value); ing[+a[0]].unit = nu; e.target.value = nu; recalc(); } });
         $('cIng').addEventListener('click', function (e) { var b = e.target.closest('[data-cdel]'); if (!b) return; ing.splice(+b.getAttribute('data-cdel'), 1); if (!ing.length) ing.push({ name: '', qty: '', unit: 'กรัม', price: '' }); drawIng(); });
         $('cPk').addEventListener('click', function (e) { var b = e.target.closest('[data-pdel]'); if (!b) return; pack.splice(+b.getAttribute('data-pdel'), 1); if (!pack.length) pack.push({ name: '', price: '', per: '', note: '' }); drawPk(); });
         $('cAddI').addEventListener('click', function () { ing.push({ name: '', qty: '', unit: 'กรัม', price: '' }); drawIng(); var a = document.querySelectorAll('[data-ci$=":name"]'); a[a.length - 1].focus(); });
@@ -884,11 +914,11 @@
         put('C' + row, i + 1, { al: { horizontal: 'center' } }); ws.mergeCells('D' + row + ':G' + row); put('D' + row, x.name);
         put('I' + row, x.qty === '' || x.qty == null ? null : Number(x.qty), { al: { horizontal: 'right' } }); put('J' + row, x.unit);
         put('L' + row, x.price === '' || x.price == null ? null : Number(x.price), { font: RED, fmt: '#,##0.00', al: { horizontal: 'center' } });
-        put('M' + row, { formula: '(L' + row + '/1000)*I' + row + (x.unit === 'กก.' ? '*1000' : ''), result: x.cost }, { font: RED, fmt: '_(* #,##0.00_);_(* \\(#,##0.00\\);_(* "-"??_);_(@_)', al: { horizontal: 'center' } });
+        put('M' + row, { formula: x.kind === 'o' ? 'L' + row + '*I' + row : '(L' + row + '/1000)*I' + row + (x.unit === 'กก.' || x.unit === 'ลิตร' ? '*1000' : ''), result: x.cost }, { font: RED, fmt: '_(* #,##0.00_);_(* \\(#,##0.00\\);_(* "-"??_);_(@_)', al: { horizontal: 'center' } });
         row++;
       });
       var last = row - 1; row++;
-      put('I' + row, { formula: 'SUMPRODUCT(I' + first + ':I' + last + ',(J' + first + ':J' + last + '="กก.")*999+1)', result: r.grams }, { font: RED, al: { horizontal: 'center' }, fmt: '#,##0' }); put('J' + row, 'กรัม');
+      put('I' + row, { formula: 'SUMPRODUCT(I' + first + ':I' + last + ',(J' + first + ':J' + last + '="กก.")*1000+(J' + first + ':J' + last + '="กรัม"))', result: r.grams }, { font: RED, al: { horizontal: 'center' }, fmt: '#,##0' }); put('J' + row, 'กรัม');
       put('M' + row, { formula: 'SUM(M' + first + ':M' + last + ')', result: r.mat }, { font: RED, fmt: '#,##0.00', al: { horizontal: 'center' } });
       for (var rr = 5; rr <= row; rr++) ['C', 'D', 'H', 'L', 'M'].forEach(function (col) { var cl = ws.getCell(col + rr); cl.border = Object.assign({}, cl.border || {}, { left: G }); });
       for (var rr2 = 5; rr2 <= row; rr2++) { var cr = ws.getCell('M' + rr2); cr.border = Object.assign({}, cr.border || {}, { right: G }); }
@@ -1070,6 +1100,7 @@
     '.rci input,.rci select,.rcp2 input{min-width:0;width:100%;height:38px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px;background:#fff;color:inherit}.rci input:focus,.rci select:focus,.rcp2 input:focus{outline:2px solid #9ca3af;border-color:#111827}.rci input[inputmode],.rcp2 input[inputmode]{text-align:right}.rcih{font-size:12px;color:var(--muted);font-weight:700;border-bottom:2px solid var(--line)}.rci .n,.rcp2 .n{color:var(--muted);font-size:12px;text-align:center}.rci .m{text-align:right;color:#b91c1c;font-weight:600}.rcit{background:#f8fafc;font-weight:700}.rcit span:nth-child(3){text-align:right}.rcx{border:0;background:none;color:#94a3b8;font-size:16px;cursor:pointer;min-height:36px}.rcx:hover{color:#b91c1c}',
     '.rcyl{margin-top:12px}.rcu{display:flex;gap:6px}.rcu input:first-child{flex:1;min-width:0}.rcu input:last-child{width:74px;flex:none}.rcph2{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.rcphv{width:110px;height:110px;border:1px dashed var(--line);border-radius:10px;display:grid;place-items:center;overflow:hidden;color:var(--muted);font-size:12px;background:#f8fafc}.rcphv img{width:100%;height:100%;object-fit:contain;background:#fff}.rcphb{display:flex;gap:6px;flex-wrap:wrap}.rcphb .btn{width:auto}',
     '.rctool{gap:8px;flex-wrap:wrap}.rctool label.btn{cursor:pointer}.rctool .busy{opacity:.6;pointer-events:none}.rcfrom{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13.5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}.rcimpl{display:grid;gap:8px}.rcdup{display:grid;gap:8px}.rcdup .btn{width:100%;justify-content:center;min-height:46px}.rcimp{display:grid;gap:2px;text-align:left;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#fff;cursor:pointer;font:inherit}.rcimp:hover{border-color:#111827}.rcimp small{color:var(--muted)}.rcimp span{color:#b91c1c;font-weight:700;font-size:13px}',
+    '.rcunit{min-width:0}.rcper{color:#64748b;font-size:11px;font-weight:400}',
     '.rcirow{position:relative;border-bottom:1px solid var(--line)}.rcirow .rci,.rcirow .rcp2{border-bottom:0}.rcsug{margin:2px 0 8px 30px;border:1px solid #c7d2fe;border-radius:12px;background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.12);max-height:280px;overflow:auto}.rcsh{font-size:12.5px;color:#334155;font-weight:700;padding:6px 8px 6px 10px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#f8fafc;display:flex;align-items:center;gap:8px;z-index:1}.rcsh input{flex:1;min-width:0;min-height:38px;font-weight:400}.rcsh .rcx.sm{margin-left:0}.rcsh2{font-size:12px;color:var(--muted);padding:6px 10px}.rcsn{font-size:13px;color:var(--muted);padding:8px 10px}',
     '.rcsi{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;border:0;border-bottom:1px solid #f1f5f9;background:#fff;padding:8px 10px;font:inherit;cursor:pointer;min-height:44px;align-items:center}.rcsi:hover,.rcsi:focus{background:#eef2ff;outline:0}.rcsi span{display:flex;flex-direction:column;min-width:0}.rcsi small{color:var(--muted);font-size:12px}.rcsi em{font-style:normal;font-weight:700;white-space:nowrap;color:#1e293b}.rcsi em i{font-style:normal;font-size:11px;background:#dcfce7;color:#15803d;border-radius:99px;padding:1px 6px;margin-left:4px}',
     '.rcvend{font-size:12.5px;color:#475569;margin:-2px 0 6px 30px;display:flex;align-items:center;gap:4px;flex-wrap:wrap}.rcvend .warn{color:#b45309}.rcx.sm{min-height:34px;font-size:12.5px;padding:4px 10px;border:1px solid #e2e8f0;border-radius:99px;background:#fff;color:#475569;margin-left:auto}.rcwait{display:inline-block;margin-top:4px;font-size:12px;font-weight:700;color:#b45309;background:#fef3c7;border-radius:99px;padding:2px 8px;width:max-content}.rcsum .w{color:#b45309;font-size:13px}.rcpu{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}.rcpc{color:#334155;font-size:14px;font-weight:700}',
