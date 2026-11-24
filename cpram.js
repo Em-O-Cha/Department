@@ -187,7 +187,7 @@
   function schedTable(rows, opt) {
     rows = caseRows(rows);
     // สีแดง = อัพเดทวันนี้เท่านั้น (ผู้ใช้ขอ 24/11/69)
-    var maxU = (C.data && C.data.today) || new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+    var maxU = opt.redDate || (C.data && C.data.today) || new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
     var groups = [], g = null;
     rows.forEach(function (r) { if (!g || g.date !== r.deliveryDate) { g = { date: r.deliveryDate, rows: [] }; groups.push(g); } g.rows.push(r); });
     var total = 0, body = groups.map(function (gr) {
@@ -442,29 +442,42 @@
     }).catch(onServerError);
   }
   // ส่ง LINE: สร้างภาพตารางก่อน แล้วให้ดูตัวอย่างในหน้าต่าง ค่อยกดส่ง (ผู้ใช้ขอ 23/11/69)
+  // ส่ง LINE ของการนำเข้า: การ์ดสรุป + ภาพตาราง "ทั้งเดือน" ทุกเดือนที่ PO ชุดนี้มีวันส่ง (ผู้ใช้ขอ 24/11/69)
+  // หมายเหตุ "อัพเดท <วันที่นำเข้า>" เป็นสีแดงในแถวที่อัพเดทวันเดียวกับการนำเข้านี้ · ดูภาพทุกเดือนก่อนกดส่ง
   function sendLine(id, afterSave) {
     var x = C.data.imports.filter(function (i) { return i.id === id; })[0]; if (!x) return;
     var lines = C.data.lines.filter(function (l) { return l.importId === id; });
     var live = caseRows(lines).filter(function (l) { return l.status !== 'cancel'; });
     var tot = live.reduce(function (s2, l) { return s2 + (Number(l.qty) || 0); }, 0), pos = uniq(live.map(function (l) { return l.poNo; }));
     var dts = uniq(live.map(function (l) { return l.deliveryDate; })).sort();
-    var img = null;
+    var months = uniq(lines.map(function (l) { return String(l.deliveryDate).slice(0, 7); })).filter(function (m) { return /^\d{4}-\d{2}$/.test(m); }).sort();
+    var impDay = String(x.createdAt || '').slice(0, 10), imgs = [];
     openModal({ color: state.dept.color, icon: 'send', wide: true, title: afterSave ? 'บันทึกแล้ว · ส่งออเดอร์เข้ากลุ่ม LINE เลยไหม?' : 'ส่งออเดอร์ CP Ram เข้ากลุ่ม LINE?',
       sub: pos.length + ' ใบสั่งซื้อ · ' + nq(tot) + ' ' + unitOf(live) + (dts.length ? ' · ส่ง ' + slash(dts[0]) + (dts.length > 1 ? ' – ' + slash(dts[dts.length - 1]) : '') : '') + ' (ไม่มียอดเงิน)',
       body: (x.sentAt ? '<div class="a7chk warn"><i>!</i><span>เคยส่งแล้วเมื่อ ' + esc(slash(String(x.sentAt).slice(0, 10)) + ' ' + String(x.sentAt).slice(11, 16) + ' น.') + ' — กดส่งอีกครั้งจะส่งซ้ำเข้ากลุ่ม</span></div>' : '')
-        + '<p class="cpsendh">จะส่ง 2 ข้อความ: <b>การ์ดสรุปจำนวน</b> (ไม่แยก PO) และ <b>ภาพตารางด้านล่าง</b></p>'
+        + '<p class="cpsendh">จะส่ง ' + (1 + months.length) + ' ข้อความ: <b>การ์ดสรุปจำนวน</b> (ไม่แยก PO) และ <b>ภาพตารางทั้งเดือน ' + months.length + ' เดือน</b> (' + months.map(monthTh).join(', ') + ')'
+        + (/^\d{4}-\d{2}-\d{2}$/.test(impDay) ? ' · แถวที่นำเข้าวันนี้มี <b style="color:#b91c1c">อัพเดท ' + slash(impDay) + '</b> สีแดง' : '') + '</p>'
         + '<div id="cpPrev" class="cpprev"><span class="spinner dark"></span> กำลังสร้างภาพตัวอย่าง…</div>',
       ok: 'ส่ง LINE', cancel: afterSave ? 'ไว้ทีหลัง' : 'ยกเลิก',
       onOpen: function () {
         var okb = $('mOk'); okb.disabled = true;
-        lineImage(lines).catch(function () { return null; }).then(function (r) {
-          img = r; var box = $('cpPrev'); if (!box) return;
-          box.innerHTML = r ? '<img src="data:image/png;base64,' + r.png + '" alt="ภาพตารางส่งสินค้าที่จะส่งเข้า LINE">' : '<div class="a7chk warn"><i>!</i><span>สร้างภาพตารางไม่ได้ — จะส่งเฉพาะการ์ดสรุป</span></div>';
+        // ทำทีละเดือน (html2canvas ใช้ DOM ร่วมกัน)
+        months.reduce(function (p, m) {
+          return p.then(function () {
+            var ml = C.data.lines.filter(function (l) { return String(l.deliveryDate).slice(0, 7) === m; });
+            return lineImage(ml, { title: 'ตารางส่งสินค้า CP Ram · ' + monthTh(m), showUpd: true, redDate: impDay }).catch(function () { return null; }).then(function (r) { imgs.push({ ym: m, r: r }); });
+          });
+        }, Promise.resolve()).then(function () {
+          var box = $('cpPrev'); if (!box) return;
+          box.innerHTML = imgs.map(function (it) {
+            return '<div class="cpprevm"><h5>' + esc(monthTh(it.ym)) + '</h5>' + (it.r ? '<img src="data:image/png;base64,' + it.r.png + '" alt="ภาพตารางส่งสินค้า ' + esc(monthTh(it.ym)) + '">' : '<div class="a7chk warn"><i>!</i><span>สร้างภาพเดือนนี้ไม่ได้ — จะไม่ส่งภาพเดือนนี้</span></div>') + '</div>';
+          }).join('') || '<div class="a7chk warn"><i>!</i><span>ไม่มีวันส่งในรายการ — จะส่งเฉพาะการ์ดสรุป</span></div>';
           okb.disabled = false; okb.focus();
         });
       },
       submit: function () {
-        return call('cpSendLine', state.token, id, img ? img.png : '', img ? img.ratio : '').then(function (r) {
+        var list = imgs.filter(function (it) { return it.r; }).map(function (it) { return { png: it.r.png, ratio: it.r.ratio, ym: it.ym }; });
+        return call('cpSendLine', state.token, id, list, '').then(function (r) {
           if (!r.ok) return r.error || 'ส่งไม่สำเร็จ';
           closeModal(); x.sentAt = r.sentAt; if (r.pdfUrl) { x.pdfUrl = r.pdfUrl; x.xlsxUrl = r.xlsxUrl; } toast('ส่ง LINE แล้ว'); C.listPage();
         });
@@ -481,7 +494,7 @@
       var dates = uniq(rows.map(function (r) { return r.deliveryDate; })), pos = uniq(rows.map(function (r) { return r.poNo; }));
       var box = document.createElement('div'); box.className = 'cpimgbox';
       box.innerHTML = '<div class="cpimg"><div class="cpimh"><b>' + esc(o.title || 'ตารางส่งสินค้า CP Ram') + '</b><span>' + (o.sub ? esc(o.sub) : 'ส่ง ' + slash(dates[0]) + (dates.length > 1 ? ' – ' + slash(dates[dates.length - 1]) : '')) + ' · ' + pos.length + ' ใบสั่งซื้อ · <b class="cpupd">Update ' + slash(isoToday()) + '</b></span></div>'
-        + schedTable(rows, { hi: o.hi, line: true, noNote: !rows.some(function (r) { return r.status === 'cancel' || r.note || r.history; }) }) + '</div>';
+        + schedTable(rows, o.showUpd ? { hi: o.hi, redDate: o.redDate } : { hi: o.hi, line: true, noNote: !rows.some(function (r) { return r.status === 'cancel' || r.note || r.history; }) }) + '</div>';
       document.body.appendChild(box);
       return window.html2canvas(box.firstChild, { scale: 2, backgroundColor: '#ffffff', logging: false }).then(function (cv) {
         document.body.removeChild(box);
@@ -628,6 +641,7 @@
     '#cpMapSave{margin-top:10px}.cpchips{margin:4px 0 12px}',
     '.cppcs{display:block;font-size:12px;color:var(--muted);font-weight:400;white-space:nowrap}.cptab .cpwh{white-space:nowrap}.a7fixrow .cppc{flex:0 1 190px}',
     '.cpimh span .cpupd{font-size:inherit;color:#C2410C}.cpimg .cppcs{font-size:14px;color:#475569}',
+    '.cpprevm{margin:0 0 10px}.cpprevm h5{margin:4px 0 6px;text-align:left;font-size:14px;color:var(--ink)}.cpprevm img{display:block;margin:0 auto}',
     '.cpsendh{margin:4px 0 10px;font-size:14px}.cpprev{max-height:60vh;overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff;padding:6px;text-align:center;min-height:80px}.cpprev img{width:100%;height:auto;display:block}',
     '.cphow{margin:0 0 10px;font-size:13.5px;color:var(--muted);line-height:1.55}.cphow b{color:var(--ink,#0f172a)}.cphow a{color:var(--c);font-weight:600}.cpbad{color:#dc2626;font-style:normal}.cpnote{font-size:13px;margin:12px 2px 0}',
     '@media (max-width:640px){.cpset{min-width:0!important}.cpset thead{display:none}.cpset tr{display:grid;grid-template-columns:1fr 1fr 44px;gap:6px 8px;padding:10px 0;border-bottom:1px solid var(--line)}.cpset td{display:block;padding:0!important;border:0!important}.cpset td[data-l]::before{content:attr(data-l);display:block;font-size:12.5px;color:var(--muted);margin-bottom:3px}.cpset td:first-child{grid-column:1/3}.cpset td:last-child{grid-column:3;grid-row:1;align-self:end;width:auto}.cpset tr>td:nth-child(3):not(:last-child){grid-column:2/4}.cpset td[colspan]{grid-column:1/-1}.cpset td[data-l="ชื่อสินค้า"],.cpset td[data-l="ชิ้นต่อ 1 ลัง"]{grid-column:1/3}.cpset .icon-btn{width:44px;height:44px}}',

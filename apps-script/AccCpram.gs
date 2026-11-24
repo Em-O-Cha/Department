@@ -565,15 +565,14 @@ function cpAllFiles(token) {
     return { ok: true, pdfUrl: f.pdfUrl, xlsxUrl: f.xlsxUrl, xlsxDownload: f.xlsxDownload, months: f.months };
   });
 }
-function cpSaveImage_(dept, imp, png) {
+function cpSaveImage_(dept, imp, png, tag) {
   if (!png || typeof png !== 'string' || png.length > 6000000 || !/^[A-Za-z0-9+\/=]+$/.test(png)) return '';
   var folderId = deptConfig_(dept.key).folderId; if (!folderId) return '';
-  var old = String(imp.imgUrl || '').match(/[-\w]{25,}/);
-  if (old) try { DriveApp.getFileById(old[0]).setTrashed(true); } catch (e) {}
-  var f = cpFolder_(dept).createFile(Utilities.newBlob(Utilities.base64Decode(png), 'image/png', 'ตารางส่งสินค้า CP Ram ' + imp.id + '.png'));
+  var f = cpFolder_(dept).createFile(Utilities.newBlob(Utilities.base64Decode(png), 'image/png', 'ตารางส่งสินค้า CP Ram ' + imp.id + (tag ? ' ' + tag : '') + '.png'));
   f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   return 'https://lh3.googleusercontent.com/d/' + f.getId();
 }
+// png = ภาพเดียว (หน้าเว็บรุ่นเก่า) หรือรายการ [{png, ratio, ym}] = ภาพตารางทั้งเดือน ทีละเดือน (ผู้ใช้ขอ 24/11/69)
 function cpSendLine(token, importId, png, ratio) {
   var dept = requireAcc_(token); cpRegister_();
   return purLocked_(function () {
@@ -583,19 +582,25 @@ function cpSendLine(token, importId, png, ratio) {
     if (!imp) return { ok: false, error: 'ไม่พบการนำเข้านี้' };
     var lines = cpImportLines_(ss, imp);
     if (!lines.length) return { ok: false, error: 'การนำเข้านี้ไม่มีรายการ (อาจถูกนำเข้าซ้ำภายหลังแล้ว — ส่งจากการนำเข้าครั้งล่าสุดแทน)' };
-    var img = '';
-    try { img = cpSaveImage_(dept, imp, png); } catch (e) { img = ''; }
-    if (img) imp.imgUrl = img;
+    var list = Array.isArray(png) ? png.slice(0, 12) : png ? [{ png: png, ratio: ratio }] : [];
+    // ภาพเก่าของการนำเข้านี้ทิ้ง แล้วบันทึกชุดใหม่
+    (String(imp.imgUrl || '').match(/[-\w]{25,}/g) || []).forEach(function (fid) { try { DriveApp.getFileById(fid).setTrashed(true); } catch (e) {} });
+    var imgs = [];
+    list.forEach(function (it) {
+      var url = ''; try { url = cpSaveImage_(dept, imp, it && it.png, it && it.ym ? String(it.ym).replace(/[^\d-]/g, '') : ''); } catch (e) { url = ''; }
+      if (url) imgs.push({ url: url, ratio: /^\d{2,5}:\d{2,5}$/.test(String(it.ratio)) ? String(it.ratio) : '20:9' });
+    });
+    imp.imgUrl = imgs.map(function (x) { return x.url; }).join(' ');
     var files = null;
     try { files = cpImportFiles_(dept, ss, imp, lines); } catch (e) { files = null; }
-    var msgs = [cpFlex_(lines, !!img, files)];
-    if (img) msgs.push({ type: 'flex', altText: 'ตารางส่งสินค้า CP Ram', contents: { type: 'bubble', size: 'giga', hero: { type: 'image', url: img, size: 'full',
-      aspectRatio: /^\d{2,5}:\d{2,5}$/.test(String(ratio)) ? String(ratio) : '20:9', aspectMode: 'fit', backgroundColor: '#FFFFFF', action: { type: 'uri', uri: img } } } });
-    var r = accLinePush_(msgs);
-    if (!r.ok) return r;
+    var msgs = [cpFlex_(lines, imgs.length > 0, files)].concat(imgs.map(function (x) {
+      return { type: 'flex', altText: 'ตารางส่งสินค้า CP Ram', contents: { type: 'bubble', size: 'giga', hero: { type: 'image', url: x.url, size: 'full', aspectRatio: x.ratio, aspectMode: 'fit', backgroundColor: '#FFFFFF', action: { type: 'uri', uri: x.url } } } };
+    }));
+    // LINE ส่งได้ครั้งละไม่เกิน 5 ข้อความ → แบ่งส่ง
+    for (var k = 0; k < msgs.length; k += 5) { var r = accLinePush_(msgs.slice(k, k + 5)); if (!r.ok) return k ? { ok: false, error: 'ส่งได้บางส่วน: ' + r.error } : r; }
     imp.sentAt = purNow_();
     purWrite_(ss, 'cp_imports', imp);
-    purLogWrite_(main, 'ส่ง LINE ออเดอร์ CP Ram', 'cp_imports', importId, lines.length + ' รายการ');
+    purLogWrite_(main, 'ส่ง LINE ออเดอร์ CP Ram', 'cp_imports', importId, lines.length + ' รายการ · ภาพตาราง ' + imgs.length + ' เดือน');
     return { ok: true, sentAt: imp.sentAt, pdfUrl: imp.pdfUrl, xlsxUrl: imp.xlsxUrl };
   });
 }
@@ -650,6 +655,7 @@ function cpSendMoveLine(token, moveId, png, ratio) {
     Object.keys(mv).forEach(function (k) { if (typeof mv[k] === 'string') mv[k] = mv[k].replace(/^'/, ''); });
     // ภาพตารางทั้งเดือนที่เลื่อนไป (ผู้ใช้ขอ 24/11/69) — สร้างในหน้าเว็บ เก็บเป็น PNG สาธารณะในโฟลเดอร์ "รายงาน CP Ram"
     var img = '';
+    (String(mv.imgUrl || '').match(/[-\w]{25,}/g) || []).forEach(function (fid) { try { DriveApp.getFileById(fid).setTrashed(true); } catch (e) {} });
     try { img = cpSaveImage_(dept, { id: 'เลื่อนส่ง ' + moveId, imgUrl: mv.imgUrl }, png); } catch (e) { img = ''; }
     if (img) mv.imgUrl = img;
     var msgs = [cpMoveFlex_(mv, !!img)];
