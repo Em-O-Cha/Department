@@ -474,6 +474,7 @@ function accXlsxPrintTitles_(xml, titles) {
   list = list.filter(function (t) { return t && t.rows; });
   if (!list.length || /_xlnm\.Print_Titles/.test(xml)) return xml;
   var dn = list.map(function (t) { return '<definedName name="_xlnm.Print_Titles" localSheetId="' + (t.idx || 0) + '">\'' + String(t.sheet).replace(/'/g, "''").replace(/&/g, '&amp;').replace(/</g, '&lt;') + '\'!$1:$' + t.rows + '</definedName>'; }).join('');
+  xml = xml.replace(/<definedNames\s*\/>/g, '');   // Google ใส่ <definedNames/> ว่างไว้ → ห้ามมี 2 ชุด (Excel แจ้งไฟล์เสีย, 24/11/69)
   if (/<definedNames>/.test(xml)) return xml.replace('<definedNames>', '<definedNames>' + dn);
   return xml.replace('</sheets>', '</sheets><definedNames>' + dn + '</definedNames>');
 }
