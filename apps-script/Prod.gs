@@ -603,8 +603,8 @@ function prdRow_(no, name, sub, right, rightColor) {
   var left = [prdT_(name, { size: 'sm', weight: 'bold', color: '#0F172A' })];
   (sub || []).forEach(function (s) { if (s) left.push(prdT_(s.t || s, { size: 'xs', color: s.c || '#64748B', margin: 'xs' })); });
   var c = [prdT_(no + '.', { size: 'sm', color: '#94A3B8', flex: 0 }), prdBox_(left, { flex: 6, margin: 'sm' })];
-  // ผู้ใช้ขอ 26/11/69: จำนวน 2 หน่วย (เช่น 8,064 กระปุก ; 336 ลัง) ยาวเกินช่องขวา → ขึ้นบรรทัดเดียวเต็มแถวใต้ชื่อ ชิดขวา ไม่ตัดบรรทัด
-  var wide = right && / ; /.test(right);
+  // ผู้ใช้ขอ 26/11/69: จำนวน 2 หน่วย (เช่น 8,064 กระปุก / 336 ลัง) ยาวเกินช่องขวา → ขึ้นบรรทัดเดียวเต็มแถวใต้ชื่อ ชิดขวา ไม่ตัดบรรทัด
+  var wide = right && / \/ /.test(right);
   if (right && !wide) c.push(prdT_(right, { size: 'sm', weight: 'bold', color: rightColor || '#0F172A', align: 'end', flex: 3 }));
   var rowBox = { type: 'box', layout: 'horizontal', margin: 'md', contents: c };
   if (!wide) return rowBox;
@@ -660,10 +660,10 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
       if (!pick && x.actBatch !== '' && x.actBatch != null) pick = { q: x.actBatch, u: x.actBatchUnit || 'batch' };
       right = pick ? prdFmt_(pick.q) + ' ' + pick.u : 'ยังไม่กรอก';
     } else if (grp === 'G1') {
-      right = [x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : '', prdQty2_(x)].filter(String).join(' ; ') || 'ยังไม่กรอก';
+      right = [x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : '', prdQty2_(x)].filter(String).join(' / ') || 'ยังไม่กรอก';
       if (prdPlanText_(x)) sub[0] = (sub[0] ? sub[0] + ' · ' : '') + prdPlanText_(x);
     } else {
-      right = [x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : '', x.actCases !== '' ? prdFmt_(x.actCases) + ' ลัง' : ''].filter(String).join(' ; ') || 'ยังไม่กรอก';
+      right = [x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : '', x.actCases !== '' ? prdFmt_(x.actCases) + ' ลัง' : ''].filter(String).join(' / ') || 'ยังไม่กรอก';
     }
     // ของเสียไม่แสดงใน LINE (ผู้ใช้ขอเอาออก 17/11/69) — ดูได้ในหน้าระบบ / Dashboard
     var fs = prdFinishState_(x, purToday_()), dl = prdDeadline_(x);
