@@ -172,7 +172,7 @@
   .moremenu .danger, .moremenu .danger svg.ic { color: #b91c1c; }
   .navback { display: none; }
   .main { padding: 28px; max-width: 1000px; width: 100%; min-width: 0; }
-  .main.wide { max-width: none; }   /* หน้ารายงานกว้าง (รายงานจ่ายตามรอบ) ใช้ความกว้างเต็มจอ — ผู้ใช้ขอ 23/11/69 */
+  .main.wide { max-width: none; }   /* ทุกหน้าในแผนกใช้ความกว้างเต็มจอ (ผู้ใช้ขอ 26/11/69) */
   .main h3 { margin: 0 0 4px; font-size: 22px; }
   .main .lead { color: var(--muted); margin: 0 0 22px; }
   .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
@@ -720,7 +720,7 @@
   function renderPage() {
     xpShow();
     $('main').classList.toggle('dash', !state.admin && /(^|_)dash(_|$)/.test(String(state.page)));   // หน้า Dashboard ทุกฝ่ายใช้การ์ดแบบใหม่
-    $('main').classList.toggle('wide', !state.admin && state.page === 'a_ap');   // รายงานจ่ายตามรอบ: เต็มความกว้างจอ
+    $('main').classList.toggle('wide', !state.admin && !!state.dept);   // ทุกหน้าของทุกฝ่ายใช้ความกว้างเต็มจอคอม (ผู้ใช้ขอ 26/11/69: ข้อมูลเยอะ) — เดิมเฉพาะรายงานจ่ายตามรอบ
     if (state.admin) { renderAdminPage(); return; }
     var d = state.dept, html;
     if (state.page === 'pw') { renderChangePw(); return; }
