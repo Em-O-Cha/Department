@@ -347,6 +347,7 @@ function hrDecideLeave(token, id, approve) {
   return r;
 }
 function hrDecideLeave_(dept, id, approve, who) {
+  rcTouchDept_('HR');
   return purLocked_(function () {
     var ss = hrBook_(dept), row = hrById_(purRead_(ss, 'hr_leaves'), id);
     if (!row) return { ok: false, error: 'ไม่พบคำขอลา' };

@@ -238,6 +238,7 @@ function hrFormSubmit(key, r) {
     return { ok: true, id: rec.id, rec: rec, emp: e, bal: hrBalance_(ss, e, f.slice(0, 4))[r.type] };
   });
   if (!res.ok) return res;
+  rcTouchDept_('HR');   // ใบลาใหม่จากแบบฟอร์ม → หน้าฝ่ายบุคคลเห็นทันที
   var notified = false;
   try { notified = hrLinePush_([hrLeaveFlex_(res.rec, res.emp, res.bal, false)]).ok; } catch (err) {}
   return { ok: true, id: res.id, sig: hrSign_('up|' + res.id), days: res.rec.days, hours: res.rec.hours, notified: notified };
@@ -246,6 +247,7 @@ function hrFormSubmit(key, r) {
 // แนบใบรับรองแพทย์ / เอกสารได้ทั้งตอนส่งคำขอ และภายหลังจาก "คำขอล่าสุดของฉัน" (ผู้ใช้ขอ 23/11/69) · ไม่เกิน 5 ไฟล์ต่อใบลา
 var HR_FORM_MAX_FILES_ = 5;
 function hrFormUpload(key, leaveId, sig, fileName, mimeType, base64) {
+  rcTouchDept_('HR');
   var dept = hrFormCheck_(key);
   if (!sig || sig !== hrSign_('up|' + leaveId)) return { ok: false, error: 'แนบไฟล์ไม่ได้' };
   if (!/^image\/(jpeg|png|webp|heic)$|^application\/pdf$/.test(mimeType)) return { ok: false, error: 'แนบได้เฉพาะรูปภาพหรือ PDF' };

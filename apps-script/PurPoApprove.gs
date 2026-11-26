@@ -283,6 +283,7 @@ function purPoFlex_(rec, doc, items, kind, by) {
 
 // ---------- Webhook (doPost ส่งมาเมื่อ destination = บอทฝ่ายจัดซื้อ) ----------
 function purLineWebhook_(events) {
+  rcTouchDept_('PUR');
   (events || []).forEach(function (ev) {
     try {
       var src = ev.source || {}, gid = src.groupId || '', bound = props_().getProperty('PUR_LINE_GROUP') || '';

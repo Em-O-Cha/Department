@@ -90,7 +90,9 @@ function doPost(e) {
     if (!Object.prototype.hasOwnProperty.call(fns, fn)) throw new Error('ไม่รองรับคำสั่งนี้');
     var args = Array.isArray(req.args) ? req.args.slice(0, 8) : [];
     try { deptDbNoteCall_(fn); } catch (e0) {}   // คำสั่งที่แก้ข้อมูลฝ่ายบัญชี → Dashboard คัดลอกข้อมูลใหม่ (DeptDb.gs)
-    out = { ok: true, val: rcCall_(fn, fns[fn], args) };   // หน้าอ่านอย่างเดียวฝ่ายบัญชี: ใช้ผลที่เก็บไว้ (DeptDb.gs)
+    try { rcTouch_(fn, args); } catch (e2) {}   // คำสั่งแก้ข้อมูล → ผลที่เก็บไว้ของแผนกนั้นหมดอายุ (RespCache.gs)
+    out = { ok: true, val: respCall_(fn, fns[fn], args) };   // คำสั่งอ่าน: ใช้ผลที่เก็บไว้ถ้ามี
+    try { rcTouch_(fn, args); } catch (e3) {}
     try { deptDbNoteCall_(fn); } catch (e1) {}
   } catch (err) {
     out = { ok: false, err: String(err && err.message || err) };
