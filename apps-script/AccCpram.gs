@@ -501,7 +501,12 @@ function cpMakeFiles_(dept, rows, title, name, withRounds, redDate) {
   });
   var onePage = !multi && rows.length <= 28;
   SpreadsheetApp.flush();
-  var pdf = accExportPdf_(ss, folder, name, onePage, multi), xlsx = accExportXlsx_(ss, folder, name, 4, multi);
+  // PDF ไม่มีตารางรอบเงินเข้า (คอลัมน์ K:R) — ผู้ใช้ขอ 26/11/69 · Excel ยังมีครบ
+  var hideR = function (on) { ss.getSheets().forEach(function (sh) { if (sh.getMaxColumns() >= 18) { if (on) sh.hideColumns(11, 8); else sh.showColumns(11, 8); } }); SpreadsheetApp.flush(); };
+  if (withRounds) hideR(true);
+  var pdf = accExportPdf_(ss, folder, name, onePage, multi);
+  if (withRounds) hideR(false);
+  var xlsx = accExportXlsx_(ss, folder, name, 4, multi);
   return { pdfUrl: pdf.getUrl(), xlsxUrl: xlsx.getUrl(), xlsxDownload: accXlsxDownload_(xlsx.getUrl()), sheetUrl: ss.getUrl(), months: yms.length };
 }
 function cpTrash_(urls) { urls.forEach(function (u) { var id = String(u || '').match(/[-\w]{25,}/); if (id) try { DriveApp.getFileById(id[0]).setTrashed(true); } catch (e) {} }); }
