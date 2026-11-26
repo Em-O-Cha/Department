@@ -13,7 +13,8 @@ var EXEC_BASE_ = { PUR: function (dept, from, to) { return purDashboard_(dept, f
   QA: function (dept, from, to) { return qaDashboard_(dept, from, to); },
   ACC: function (dept, from, to) { return accDashboard_(dept, from, to, 'po', ''); },
   PROD: function (dept, from, to) { return prdDashboard_(dept, from, to); },
-  RD: function (dept, from, to) { return rdDashboard_(dept, from, to); } };
+  RD: function (dept, from, to) { return rdDashboard_(dept, from, to); },
+  COST: function () { return costDashData_(); } };
 // ลำดับ = ลำดับที่แสดงในหน้า (บนลงล่าง)
 var EXEC_PARTS_ = {
   PUR: [['rises', function (dept, from, to) { return purPriceReport_(purBook_(dept), from, to); }],
@@ -56,11 +57,14 @@ var EXEC_SALES_ = { key: 'SALES', name: 'ฝ่ายขาย', en: 'Sales (Mee
 var EXEC_MARKETING_ = { key: 'MKT', name: 'ฝ่ายการตลาด', en: 'Marketing Command Center', color: '#f97316', ready: true,
   embed: 'https://script.google.com/macros/s/AKfycbwD2aku-huwQA87WJlW3fIWUH4ghcQ2veJYTNmjuOcPS6BI-MkhyMlOdzadfS0EYOV46w/exec?embed=exec' };
 
+// ต้นทุนสินค้า (COST) ใช้ชีตของ RD จนกว่าจะผูกชีตของตัวเอง
+function execCfgKey_(key) { return key === 'COST' ? costHome_().key : key; }
+
 // รายชื่อฝ่าย + ฝ่ายไหนมี Dashboard แล้ว
 function execOverview(token) {
   requireExec_(token);
   return { ok: true, depts: [EXEC_SALES_, EXEC_MARKETING_].concat(activeDepartments_().filter(function (d) { return !d.exec; }).map(function (d) {
-    return { key: d.key, name: d.name, en: d.en, color: d.color, ready: !!EXEC_DASHBOARDS_[d.key] && !!deptConfig_(d.key).sheetId };
+    return { key: d.key, name: d.name, en: d.en, color: d.color, ready: !!EXEC_DASHBOARDS_[d.key] && !!deptConfig_(execCfgKey_(d.key)).sheetId };
   })) };
 }
 
@@ -78,7 +82,7 @@ function execDashboard(token, deptKey, from, to, lite) {
   if (!dept || dept.exec) return { ok: false, error: 'ไม่พบฝ่าย' };
   var fn = lite ? EXEC_BASE_[dept.key] : EXEC_DASHBOARDS_[dept.key];
   if (!fn) return { ok: true, ready: false, message: 'ฝ่ายนี้ยังไม่มีระบบเก็บข้อมูล — Dashboard จะขึ้นเมื่อทำระบบของฝ่ายนี้แล้ว' };
-  if (!deptConfig_(dept.key).sheetId) return { ok: true, ready: false, message: 'ฝ่ายนี้ยังไม่ได้เชื่อม Google Sheet' };
+  if (!deptConfig_(execCfgKey_(dept.key)).sheetId) return { ok: true, ready: false, message: 'ฝ่ายนี้ยังไม่ได้เชื่อม Google Sheet' };
   var data = fn(dept, r.from, r.to);
   data.ok = true; data.ready = true; data.from = r.from; data.to = r.to;
   if (lite) data.parts = (EXEC_PARTS_[dept.key] || []).map(function (p) { return p[0]; });

@@ -430,6 +430,21 @@
   }
   function baht(v, d) { return v == null || v === '' || isNaN(v) ? '-' : Number(v).toLocaleString('th-TH', { minimumFractionDigits: d == null ? 2 : d, maximumFractionDigits: d == null ? 2 : d }); }
   function slashTh(iso) { var p = String(iso || '').slice(0, 10).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + String(+p[0] + 543).slice(-2) : '-'; }
+  // ราคาจากผู้ขาย → ราคาตามหน่วยของแถว (ต่อ กก. / ต่อลิตร / ต่อหน่วยเดียวกัน) — ใช้ทั้งฟอร์มและ Dashboard
+  function perKgOf(x, rowUnit) {
+    var vu = normUnit(x.unit), want = uinfo(rowUnit || 'กรัม');
+    if (want.kind === 'w') {
+      if (vu === 'กก.') return { price: x.price, note: '' };
+      if (vu === 'กรัม') return { price: Math.round(x.price * 1000 * 100) / 100, note: 'แปลงจาก ' + baht(x.price) + ' บาท/กรัม' };
+      return { price: x.price, note: 'ราคาต่อ ' + (x.unit || 'หน่วย') + ' — ตรวจว่าเป็นราคา/กก.' };
+    }
+    if (want.kind === 'v') {
+      if (vu === 'ลิตร') return { price: x.price, note: '' };
+      if (vu === 'มล.') return { price: Math.round(x.price * 1000 * 100) / 100, note: 'แปลงจาก ' + baht(x.price) + ' บาท/มล.' };
+      return { price: x.price, note: 'ราคาต่อ ' + (x.unit || 'หน่วย') + ' — ตรวจว่าเป็นราคา/ลิตร' };
+    }
+    return vu === want.per ? { price: x.price, note: '' } : { price: x.price, note: 'ราคาต่อ ' + (x.unit || 'หน่วย') + ' — ตรวจว่าเป็นราคา/' + want.per };
+  }
   function costTitle(c) { return esc(c.name) + (c.size ? ' ' + esc(c.size) : ''); }
 
   function costPage() {
@@ -685,20 +700,7 @@
     var PUR_ITEMS = (H.data.pur && H.data.pur.items) || [], SUG = [];
     var nrm = function (t) { return String(t || '').replace(/[\sัิ-ฺ็-๎().,\-]/g, '').toLowerCase(); };
     // ราคาจากผู้ขาย → ราคาตามหน่วยของแถว (ต่อ กก. / ต่อลิตร / ต่อหน่วยเดียวกัน)
-    var perKg = function (x, rowUnit) {
-      var vu = normUnit(x.unit), want = uinfo(rowUnit || 'กรัม');
-      if (want.kind === 'w') {
-        if (vu === 'กก.') return { price: x.price, note: '' };
-        if (vu === 'กรัม') return { price: Math.round(x.price * 1000 * 100) / 100, note: 'แปลงจาก ' + baht(x.price) + ' บาท/กรัม' };
-        return { price: x.price, note: 'ราคาต่อ ' + (x.unit || 'หน่วย') + ' — ตรวจว่าเป็นราคา/กก.' };
-      }
-      if (want.kind === 'v') {
-        if (vu === 'ลิตร') return { price: x.price, note: '' };
-        if (vu === 'มล.') return { price: Math.round(x.price * 1000 * 100) / 100, note: 'แปลงจาก ' + baht(x.price) + ' บาท/มล.' };
-        return { price: x.price, note: 'ราคาต่อ ' + (x.unit || 'หน่วย') + ' — ตรวจว่าเป็นราคา/ลิตร' };
-      }
-      return vu === want.per ? { price: x.price, note: '' } : { price: x.price, note: 'ราคาต่อ ' + (x.unit || 'หน่วย') + ' — ตรวจว่าเป็นราคา/' + want.per };
-    };
+    var perKg = perKgOf;
     // บรรจุภัณฑ์ (ผู้ใช้ 24/11/69): ราคาต่อหน่วยของผู้ขาย (ม้วน / ใบ / ชิ้น) ใช้ตามนั้น · หน่วยน้ำหนักให้ตรวจ
     var perPc = function (x) {
       var u = String(x.unit || '').trim().toLowerCase().replace(/\.$/, '');
@@ -967,16 +969,16 @@
 
   // ==================== การ์ด "ต้นทุนสินค้า" (COST) — รหัสผ่านของตัวเอง · ข้อมูลต้นทุนของ RD + ราคาจากฝ่ายจัดซื้อ (ผู้ใช้ขอ 24/11/69) ====================
   var CM = window.COSTM = {};
-  CM.menus = function () { return [{ id: 'c_cost', label: 'ต้นทุนสินค้า', ic: 'coin' }]; };
+  CM.menus = function () { return [{ id: 'c_dash', label: 'Dashboard ต้นทุนสินค้า', ic: 'chart' }, { id: 'c_cost', label: 'ต้นทุนสินค้า', ic: 'coin' }]; };
   CM.reset = function () { H.reset(); };
   CM.exportFile = function (page, kind) { return H.exportFile(page, kind); };
   CM.render = function (page) {
     if (!H.data || !H.data._cost) {
-      $('main').innerHTML = '<h3>ต้นทุนสินค้า</h3><div class="panel"><span class="spinner dark"></span> กำลังโหลดข้อมูลต้นทุน และราคาจากฝ่ายจัดซื้อ…</div>';
+      $('main').innerHTML = '<h3>' + (page === 'c_dash' ? 'Dashboard ต้นทุนสินค้า' : 'ต้นทุนสินค้า') + '</h3><div class="panel"><span class="spinner dark"></span> กำลังโหลดข้อมูลต้นทุน และราคาจากฝ่ายจัดซื้อ…</div>';
       call('costLoad', state.token).then(function (d) {
         if (!d || !d.ok) throw new Error(d && d.error || 'โหลดไม่สำเร็จ');
         d._cost = true; d.partners = d.partners || []; d.trials = d.trials || []; H.data = d;
-        if (state.page === page) costPage();
+        if (state.page === page) (page === 'c_dash' ? costDash : costPage)();
       }).catch(function (e) {
         if (String(e.message).indexOf('SESSION_EXPIRED') >= 0) return onServerError(e);
         $('main').innerHTML = '<h3>ต้นทุนสินค้า</h3><div class="panel status off"><div class="dot">' + icon('warn', 20) + '</div><div><b>เปิดข้อมูลไม่ได้</b><span>' + esc(e.message || e) + ' — ให้ผู้ดูแลระบบตั้งลิงก์ชีต / โฟลเดอร์ของการ์ด "ต้นทุนสินค้า" ในหน้าผู้ดูแลก่อน</span></div></div>';
@@ -984,8 +986,96 @@
       return;
     }
     if (H.data.pur && H.data.pur.error && !H.q.purWarned) { H.q.purWarned = 1; toast(H.data.pur.error); }
+    if (page === 'c_dash') return costDash();
     costPage();
   };
+
+  // ==================== Dashboard ต้นทุนสินค้า (ผู้ใช้ขอ 26/11/69) — ใช้ทั้งหน้าการ์ด COST และหน้าผู้บริหาร ====================
+  // ข้อมูลปัจจุบัน (ไม่ขึ้นกับช่วงวันที่): ต้นทุน/หน่วยแยกสินค้า · วัตถุดิบที่ต้นทุนสูงสุด · ราคาจัดซื้อล่าสุดเทียบราคาที่ใช้คิด · รายการที่ต้องอัปเดต
+  function cdDays(a, b) { var p = function (d) { d = String(d || '').slice(0, 10); return Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)); }; return Math.round((p(b) - p(a)) / 864e5); }
+  function cdModel(r) {
+    var costs = r.costs || [], items = (r.pur && r.pur.items) || [], today = r.today;
+    var nrm = function (t) { return String(t || '').replace(/[\sัิ-ฺ็-๎().,\-]/g, '').toLowerCase(); };
+    var byV = {}; items.forEach(function (x) { if (!x.vendor) return; (byV[x.vendor] = byV[x.vendor] || []).push(x); });
+    var find = function (row) {
+      var list = byV[row.vendor]; if (!list) return null;
+      var m = String(row.pnote || '').match(/สินค้า:\s*([^·]+)/), want = nrm(m ? m[1] : row.name), best = null;
+      list.forEach(function (x) { if (nrm(x.name) === want && (!best || String(x.date) > String(best.date))) best = x; });
+      return best;
+    };
+    var prods = [], ingAgg = {}, changes = [], todo = [];
+    costs.forEach(function (c) {
+      var k = costRows(c), age = c.costDate ? cdDays(c.costDate, today) : 9999;
+      prods.push({ id: c.id, name: c.name + (c.size ? ' ' + c.size : ''), unit: k.unit, total: k.total, matUnit: k.matUnit, packUnit: k.packUnit, mat: k.mat, date: c.costDate, upd: c.updatedAt || c.costDate, photo: c.photo });
+      k.ing.forEach(function (x) { if (!x.name || !x.cost) return; var key = nrm(x.name); var a = ingAgg[key] = ingAgg[key] || { name: x.name, n: 0, cost: 0, prods: 0 }; a.cost += x.cost; a.prods++; });
+      var chk = function (row, isPack) {
+        if (!row.vendor || row.price === '' || row.price == null) return;
+        var it = find(row); if (!it) return;
+        var now = isPack ? { price: Number(it.price) } : perKgOf(it, row.unit), used = Number(row.price) || 0, cur = Number(now.price) || 0;
+        if (!used || Math.abs(cur - used) < 0.005) return;
+        changes.push({ id: c.id, prod: c.name + (c.size ? ' ' + c.size : ''), item: row.name, vendor: row.vendor, used: used, cur: cur, pct: (cur - used) / used * 100, date: it.date, per: isPack ? 'ชิ้น' : uinfo(row.unit).per, costDate: c.costDate });
+      };
+      (c.ingredients || []).forEach(function (x) { chk(x, false); });
+      (c.packaging || []).forEach(function (x) { chk(x, true); });
+      var why = [];
+      if (k.noPrice) why.push({ t: 'รอใส่ราคา ' + k.noPrice + ' รายการ', bad: 1 });
+      if (k.total == null) why.push({ t: 'ยังไม่ใส่จำนวนสินค้าที่ได้', bad: 1 });
+      if (age > 180) why.push({ t: 'ไม่ได้อัปเดต ' + (age >= 9999 ? 'นาน' : Math.floor(age / 30) + ' เดือน') });
+      if (why.length) todo.push({ id: c.id, name: c.name + (c.size ? ' ' + c.size : ''), date: c.costDate, why: why });
+    });
+    var chgProds = {}; changes.forEach(function (x) { chgProds[x.id] = 1; });
+    changes.sort(function (a, b) { return Math.abs(b.pct) - Math.abs(a.pct); });
+    var withTotal = prods.filter(function (p) { return p.total != null; }).sort(function (a, b) { return b.total - a.total; });
+    var ing = Object.keys(ingAgg).map(function (k) { return ingAgg[k]; }).sort(function (a, b) { return b.cost - a.cost; });
+    return { prods: prods, withTotal: withTotal, ing: ing, changes: changes, chgProds: Object.keys(chgProds).length, todo: todo,
+      noPrice: costs.filter(function (c) { return costRows(c).noPrice; }).length,
+      stale: prods.filter(function (p) { return !p.date || cdDays(p.date, today) > 180; }).length,
+      recent: prods.filter(function (p) { return p.date && cdDays(p.date, today) <= 30; }).length,
+      latest: prods.slice().sort(function (a, b) { return String(b.upd).localeCompare(String(a.upd)); }).slice(0, 8) };
+  }
+  // o.click = true → แตะรายการแล้วเปิดต้นทุนสินค้านั้น (เฉพาะหน้าฝ่าย)
+  CM.dashHtml = function (r, o) {
+    o = o || {}; var M = cdModel(r);
+    if (!M.prods.length) return '<div class="panel empty">ยังไม่มีข้อมูลต้นทุนสินค้า — เพิ่มที่เมนู "ต้นทุนสินค้า"</div>';
+    var tile = function (v, label, color, sub) { return '<div class="kpi" style="--k:' + color + '"><b>' + v + '</b><span>' + label + '</span>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>'; };
+    var att = function (id) { return o.click ? ' data-cdo="' + esc(id) + '" role="button" tabindex="0"' : ''; };
+    var mx = Math.max.apply(null, M.withTotal.map(function (p) { return p.total; }).concat([0.01]));
+    var bars = M.withTotal.length ? '<div class="cdleg"><span><i style="background:#dc2626"></i>วัตถุดิบ</span><span><i style="background:#94a3b8"></i>บรรจุภัณฑ์</span></div>' + M.withTotal.map(function (p) {
+      return '<div class="cdbar' + (o.click ? ' tap' : '') + '"' + att(p.id) + '><span class="cdn">' + esc(p.name) + '</span><i><em style="width:' + (p.matUnit / mx * 100).toFixed(1) + '%;background:#dc2626"></em><em style="width:' + (p.packUnit / mx * 100).toFixed(1) + '%;background:#94a3b8"></em></i>'
+        + '<b>' + baht(p.total) + '<small>บาท/' + esc(p.unit) + '</small></b><small class="cds">วัตถุดิบ ' + baht(p.matUnit) + ' · บรรจุภัณฑ์ ' + baht(p.packUnit) + '</small></div>';
+    }).join('') : '<div class="muted">ยังไม่มีสินค้าที่ใส่ "จำนวนสินค้าที่ได้" จึงคิดต้นทุนต่อหน่วยไม่ได้</div>';
+    var chg = M.changes.length ? M.changes.slice(0, 12).map(function (x) {
+      var up = x.cur > x.used;
+      return '<div class="li cdli' + (o.click ? ' tap' : '') + '"' + att(x.id) + '><span>' + esc(x.item) + '<small>' + esc(x.prod) + ' · ' + esc(x.vendor) + (x.date ? ' · ราคา ' + slashTh(x.date) : '') + '</small></span>'
+        + '<b class="' + (up ? 'neg' : 'pos') + '">' + (up ? '▲ ' : '▼ ') + Math.abs(x.pct).toFixed(1) + '%<small>' + baht(x.used) + ' → ' + baht(x.cur) + ' /' + esc(x.per) + '</small></b></div>';
+    }).join('') + (M.changes.length > 12 ? '<div class="muted" style="margin-top:6px">และอีก ' + (M.changes.length - 12) + ' รายการ</div>' : '')
+      : '<div class="cdok">✓ ราคาที่ใช้คิดต้นทุนตรงกับราคาล่าสุดในระบบจัดซื้อ</div><div class="muted" style="font-size:12.5px">เทียบเฉพาะรายการที่เลือกผู้ขายจากระบบจัดซื้อไว้</div>';
+    var todo = M.todo.length ? M.todo.slice(0, 12).map(function (x) {
+      return '<div class="li cdli' + (o.click ? ' tap' : '') + '"' + att(x.id) + '><span>' + esc(x.name) + '<small>อัพเดท ' + slashTh(x.date) + '</small></span><b class="cdtags">' + x.why.map(function (w) { return '<em class="' + (w.bad ? 'bad' : '') + '">' + esc(w.t) + '</em>'; }).join('') + '</b></div>';
+    }).join('') : '<div class="cdok">✓ ข้อมูลต้นทุนครบทุกรายการ</div>';
+    var latest = M.latest.map(function (p) {
+      return '<div class="li cdli' + (o.click ? ' tap' : '') + '"' + att(p.id) + '><span>' + esc(p.name) + '<small>อัพเดท ' + slashTh(p.date) + '</small></span><b>' + (p.total != null ? baht(p.total) + '<small>บาท/' + esc(p.unit) + '</small>' : baht(p.mat) + '<small>วัตถุดิบทั้งสูตร</small>') + '</b></div>';
+    }).join('');
+    var dn = window.DCH && M.ing.length ? window.DCH.donut(M.ing.map(function (x) { return { name: x.name, n: Math.round(x.cost * 100) / 100 }; }), { sub: 'บาท', unit: ' บาท', title: 'ต้นทุนวัตถุดิบ', max: 7, fmt: function (v) { return baht(v, 0); } }) : '<div class="muted">ไม่มีข้อมูล</div>';
+    return '<div class="kpis">'
+      + tile(M.prods.length, 'สินค้าที่คิดต้นทุน', '#dc2626', 'คิดต่อหน่วยได้ ' + M.withTotal.length + ' รายการ')
+      + tile(M.changes.length, 'ราคาจัดซื้อเปลี่ยน', M.changes.length ? '#ea580c' : '#16a34a', M.changes.length ? 'ใน ' + M.chgProds + ' สินค้า · ควรอัปเดตต้นทุน' : 'ตรงกับราคาล่าสุด')
+      + tile(M.noPrice, 'สินค้าที่รอใส่ราคา', M.noPrice ? '#dc2626' : '#16a34a', 'มีวัตถุดิบยังไม่มีราคา')
+      + tile(M.prods.length - M.withTotal.length, 'ยังไม่ใส่จำนวนที่ได้', M.prods.length - M.withTotal.length ? '#b45309' : '#16a34a', 'คิดต้นทุน/หน่วยไม่ได้')
+      + tile(M.stale, 'ไม่ได้อัปเดตเกิน 6 เดือน', M.stale ? '#b45309' : '#16a34a', '')
+      + tile(M.recent, 'อัปเดตใน 30 วัน', '#0891b2', '')
+      + '</div>'
+      + '<div class="panel pbox cdfull"><h4>' + icon('coin', 18) + ' ต้นทุนต่อหน่วย แยกสินค้า <small class="muted">(สูง → ต่ำ)</small></h4>' + bars + '</div>'
+      + '<div class="pgrid"><div class="panel pbox"><h4>' + icon('chart', 18) + ' ราคาจัดซื้อล่าสุด เทียบราคาที่ใช้คิดต้นทุน</h4>' + chg + '</div>'
+      + '<div class="panel pbox"><h4>' + icon('warn', 18) + ' ต้องอัปเดตข้อมูล (' + M.todo.length + ')</h4>' + todo + '</div>'
+      + '<div class="panel pbox"><h4>' + icon('chart', 18) + ' วัตถุดิบที่ต้นทุนสูงสุด <small class="muted">(รวมทุกสูตร)</small></h4>' + dn + '</div>'
+      + '<div class="panel pbox"><h4>' + icon('clock', 18) + ' อัปเดตล่าสุด</h4>' + latest + '</div></div>';
+  };
+  function costDash() {
+    $('main').innerHTML = '<h3>Dashboard ต้นทุนสินค้า</h3><div class="cdnote">ข้อมูลปัจจุบัน · ราคาล่าสุดจากฝ่ายจัดซื้อ · แตะรายการเพื่อเปิดต้นทุนสินค้านั้น</div>' + CM.dashHtml(H.data, { click: true });
+    on('[data-cdo]', 'click', function (el) { H.q.costId = el.getAttribute('data-cdo'); go('c_cost'); }, $('main'));
+    on('[data-cdo]', 'keydown', function (el, e) { if (e && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); H.q.costId = el.getAttribute('data-cdo'); go('c_cost'); } }, $('main'));
+  }
 
   // ==================== Dashboard ====================
   function dash() {
@@ -1093,6 +1183,12 @@
     '.rfres{display:flex;gap:16px;align-items:center;margin:6px 0}.rfnote{color:#555;font-size:11px}.rfphotos{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.rfphotos img{height:110px;border:1px solid #ccc}.rfsign{display:flex;justify-content:space-around;margin-top:28px;text-align:center;line-height:1.9}',
     '@media print{.rform{padding:0;font-size:10pt}.rft th,.rft td{font-size:9pt}.rfimg{height:150px}}',
     '@media (max-width:760px){.rcards{grid-template-columns:minmax(0,1fr)}.rir{grid-template-columns:20px minmax(0,1fr) 64px 40px 30px;row-gap:4px}.rir > :nth-child(5),.rir > :nth-child(6){grid-row:2}.rir > :nth-child(5){grid-column:3}.rir > :nth-child(6){grid-column:4}.rfgrid{grid-template-columns:minmax(0,1fr)}.rfh{grid-template-columns:1fr}.rfc,.rfr{text-align:left}}',
+    // ---- Dashboard ต้นทุนสินค้า (26/11/69)
+    '.cdnote{font-size:13px;color:var(--muted);margin:-4px 0 12px}.cdfull{margin:14px 0}.cdleg{display:flex;gap:14px;font-size:12.5px;color:var(--muted);margin:0 0 8px}.cdleg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}',
+    '.cdbar{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,2fr) 104px;gap:4px 10px;align-items:center;padding:7px 4px;border-bottom:1px solid var(--line);border-radius:8px}.cdbar .cdn{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cdbar i{display:flex;height:14px;background:#f1f5f9;border-radius:99px;overflow:hidden}.cdbar em{display:block;height:100%}.cdbar>b{text-align:right;font-size:15px}.cdbar>b small{display:block;font-size:11.5px;font-weight:400;color:var(--muted)}.cdbar .cds{grid-column:2/4;font-size:12px;color:var(--muted);margin-top:-4px}',
+    '.tap{cursor:pointer}.tap:hover{background:#fef2f2}.tap:focus-visible{outline:2px solid #dc2626;outline-offset:1px}.cdli{border-radius:8px;padding-left:4px;padding-right:4px}.cdtags{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;align-items:center;align-self:center;max-width:60%}.cdtags em{line-height:1.5}.cdtags em{font-style:normal;font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;background:#fffbeb;color:#b45309;white-space:nowrap}.cdtags em.bad{background:#fef2f2;color:#b91c1c}',
+    '.cdok{color:#15803d;font-weight:700;font-size:14px;padding:6px 0}',
+    '@media (max-width:640px){.cdbar{grid-template-columns:minmax(0,1fr) 92px}.cdbar .cdn{grid-column:1/-1;white-space:normal}.cdbar i{grid-column:1}.cdbar .cds{grid-column:1/-1;margin-top:0}}',
     // ---- ต้นทุนสินค้า (24/11/69)
     '.rccards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}.rccard{display:flex;gap:12px;align-items:center;text-align:left;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px;cursor:pointer;font:inherit;color:inherit;width:100%}.rccard:hover{border-color:var(--c,#7c3aed);box-shadow:0 2px 10px rgba(0,0,0,.06)}.rccard:focus-visible{outline:3px solid #a78bfa;outline-offset:2px}',
     '.rcth{width:64px;height:64px;flex:none;border-radius:10px;background:#f1f5f9;display:grid;place-items:center;overflow:hidden;color:#94a3b8}.rcth img{width:100%;height:100%;object-fit:cover}.rcti{display:flex;flex-direction:column;gap:2px;min-width:0}.rcti b{font-size:15px}.rcti small{color:var(--muted);font-size:12.5px}.rcnum{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;margin-top:2px}.rcnum b{color:#b91c1c}',

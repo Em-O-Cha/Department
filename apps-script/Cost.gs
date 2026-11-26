@@ -65,3 +65,12 @@ function costLoad(token) {
 }
 // ราคาจากจัดซื้อ (ใช้ทั้งการ์ด COST และ RD)
 function costPurPrices(token) { costDept_(token); return Object.assign({ ok: true }, costPurItems_()); }
+
+// Dashboard ต้นทุนสินค้า สำหรับหน้าผู้บริหาร (ผู้ใช้ขอ 26/11/69) — ข้อมูลเดียวกับหน้าการ์ด COST (COSTM.dashHtml คิดในหน้าเว็บ)
+// ราคาจัดซื้อส่งเฉพาะผู้ขายที่ใช้ในสูตรต้นทุน (ข้อมูลไม่ใหญ่เกิน)
+function costDashData_() {
+  var home = costHome_(), ss = rdBook_(home), costs = purRead_(ss, 'rd_costs').map(rdCostOut_), used = {};
+  costs.forEach(function (c) { (c.ingredients || []).concat(c.packaging || []).forEach(function (x) { if (x && x.vendor) used[x.vendor] = 1; }); });
+  var pur = costPurItems_();
+  return { kind: 'cost', today: purToday_(), costs: costs, pur: { items: (pur.items || []).filter(function (x) { return used[x.vendor]; }), error: pur.error } };
+}
