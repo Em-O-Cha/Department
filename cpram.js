@@ -236,6 +236,30 @@
       + rounds.map(function (x) { return '<tr><td>' + slash(x.dueDate) + '</td><td>' + nq(x.qty) + '</td><td>' + (x.price === '' ? '-' : n2(x.price)) + '</td><td>' + n2(x.amount) + '</td><td>' + n2(x.vat) + '</td><td><b>' + n2(x.total) + '</b></td></tr>'; }).join('')
       + '</tbody><tfoot><tr><td colspan="4"></td><td class="cpy">รวม</td><td class="cpy">' + n2(sum) + '</td></tr></tfoot></table></div>';
   }
+  // แจ้งเตือนหัวหน้า (ผู้ใช้ขอ 26/11/69): คลัง + วันที่ส่ง (ตั้งแต่วันนี้) ที่รวม PO ยังไม่ถึง 120 ลัง
+  // คำนวณสดจากข้อมูลทุกครั้ง — PO มาเพิ่มจนเกิน 120 ลัง รายการนั้นหายไปจากแถบเอง · ไม่นับแถวที่ยกเลิก
+  var CP_MIN_CASES = 120;
+  function lowPanel(lines, today) {
+    var g = {}, order = [];
+    caseRows(lines).forEach(function (r) {
+      if (r.status === 'cancel' || !r.deliveryDate || String(r.deliveryDate) < today) return;
+      var wh = r.wh && r.wh !== '-' ? r.wh : '', k = r.deliveryDate + '|' + wh + '|' + (r.place || '');
+      if (!g[k]) { g[k] = { date: r.deliveryDate, wh: wh, place: r.place || '', sum: 0, pos: {}, units: {} }; order.push(k); }
+      g[k].sum += Number(r.qty) || 0; g[k].pos[r.poNo] = 1; g[k].units[r.unitTh || r.unit || 'ลัง'] = 1;
+    });
+    var low = order.map(function (k) { return g[k]; }).filter(function (x) { return x.sum < CP_MIN_CASES; })
+      .sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
+    if (!low.length) return '';
+    return '<div class="panel pbox cplow" role="alert"><h4 class="cplowh">⚠️ ยอดส่งยังไม่ถึง ' + CP_MIN_CASES + ' ลัง · ' + low.length + ' รายการ</h4>'
+      + '<p class="cplown">รวม PO ทุกใบที่ส่งคลังเดียวกันในวันเดียวกัน (ไม่นับที่ยกเลิก) — เมื่อมี PO เพิ่มจนครบ ' + CP_MIN_CASES + ' ลัง รายการจะหายไปเอง</p><div class="cplowl">'
+      + low.map(function (x) {
+        var u = Object.keys(x.units), odd = u.length !== 1 || !isCase(u[0]);
+        return '<button type="button" class="cplowi" data-cplow="' + esc(String(x.date).slice(0, 7)) + '" title="ไปที่เดือนนั้น">'
+          + '<span class="cplowd">📅 ' + esc(slash(x.date)) + '</span>'
+          + '<span class="cplowp">' + esc([x.wh, x.place].filter(Boolean).join(' · ') || 'ยังไม่ระบุคลัง') + ' <small>· ' + Object.keys(x.pos).length + ' PO</small></span>'
+          + '<span class="cplowq"><b>' + nq(x.sum) + '</b> / ' + CP_MIN_CASES + ' ' + (odd ? esc(u.join(', ')) : 'ลัง') + ' · ขาดอีก <b>' + nq(Math.round((CP_MIN_CASES - x.sum) * 100) / 100) + '</b></span></button>';
+      }).join('') + '</div></div>';
+  }
   function kpis(list) {
     list = caseRows(list);
     var a = list.filter(function (r) { return r.status !== 'cancel'; }), amt = a.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
@@ -392,7 +416,7 @@
     var rows = all ? lines.filter(function (x) { return months.indexOf(String(x.deliveryDate).slice(0, 7)) >= 0; }) : lines.filter(function (x) { return String(x.deliveryDate).slice(0, 7) === C.month; });
     var rounds = roundsOf(rows);
     $('main').innerHTML = '<h3>ตารางส่งสินค้า CP Ram</h3><p class="lead">แตะแถวเพื่อบันทึกว่าส่งสินค้าแล้ว / ยกเลิก / หมายเหตุ · ข้อมูลอยู่ใน <a href="' + esc(d.sheetUrl) + '" target="_blank" rel="noopener">' + esc(d.sheetName) + '</a> (แท็บรายเดือนสร้างให้อัตโนมัติ)</p>'
-      + linePanel(d) + movesPanel(d)
+      + lowPanel(d.lines, d.today) + linePanel(d) + movesPanel(d)
       + '<div class="pchips cpchips">' + (months.length > 1 ? '<button class="chip' + (all ? ' on' : '') + '" data-cpm="all">ทั้งหมด (' + months.length + ' เดือน)</button>' : '') + (months.length ? months.map(function (m) { return '<button class="chip' + (m === C.month ? ' on' : '') + '" data-cpm="' + m + '">' + monthTh(m) + '</button>'; }).join('') : '<span class="muted">ยังไม่มีข้อมูล — นำเข้า PO ก่อน</span>') + '</div>'
       + (rows.length ? kpis(rows)
         + (all ? '<div class="panel pbox cpallbar"><h4 class="cph4">' + icon('table', 18) + ' ตารางส่งสินค้า CP Ram ทุกเดือน · ' + months.length + ' เดือน<button class="btn btn-sm btn-line" id="cpMonthFiles">' + icon('pdf', 15) + ' PDF / Excel ทุกเดือน</button></h4><p class="muted cpallnote">ไฟล์ Excel แยกชีตตามเดือน · PDF แต่ละเดือนขึ้นหน้าใหม่</p></div>'
@@ -400,6 +424,7 @@
           : '<div class="panel pbox"><h4 class="cph4">' + icon('table', 18) + ' ตารางส่งสินค้า CP Ram ' + monthTh(C.month) + '<button class="btn btn-sm btn-line" id="cpMonthFiles">' + icon('pdf', 15) + ' PDF / Excel ทั้งเดือน</button></h4>' + schedTable(rows, { edit: true }) + '</div>')
         + '<div class="panel pbox"><h4>' + icon('clock', 18) + ' รอบเงินเข้า</h4>' + roundsTable(rounds) + '</div>' : '');
     on('[data-cpm]', 'click', function (el) { C.month = el.getAttribute('data-cpm'); C.listPage(); });
+    on('[data-cplow]', 'click', function (el) { C.month = el.getAttribute('data-cplow'); C.listPage(); });
     on('[data-cpsend]', 'click', function (el) { sendLine(el.getAttribute('data-cpsend')); });
     on('[data-cpmv]', 'click', function (el) { sendMove(el.getAttribute('data-cpmv')); });
     on('[data-cpfiles]', 'click', function (el) { makeFiles(el); });
@@ -634,6 +659,7 @@
     '.cpnl{display:block;font-weight:600}.cpnl textarea{display:block;width:100%;margin-top:5px;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-weight:400}.kpis.xk{grid-template-columns:repeat(4,1fr)}@media (max-width:860px){.kpis.xk{grid-template-columns:repeat(2,1fr)}}',
     '.cpline h4{flex-wrap:wrap}.cpline h4 small{font-weight:400;font-size:12.5px;flex-basis:100%;margin-left:24px}.cpimp{align-items:center;flex-wrap:wrap}.cpimp>span:first-child{flex:1 1 220px;min-width:0}.cpimp .btn{flex:none;width:auto;white-space:nowrap}.cpimp .cptag{flex:none}.cpimp small{display:block}',
     '.cpimgbox{position:fixed;left:-3000px;top:0}.cpimg{display:inline-block;width:auto;min-width:640px;padding:20px;background:#fff;font-family:inherit}.cpimh{gap:24px}.cpimg .cpwrap{overflow:visible;margin:0;padding:0}.cpimg .cptab{font-size:18px;min-width:0}.cpimg .cptab th,.cpimg .cptab td{padding:8px 6px}.cpimg .cptab .cpt{font-size:20px}.cpimh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}.cpimh b{font-size:22px}.cpimh span{color:#475569;font-size:15px}',
+'.cplow{border:2px solid #f59e0b;background:#fffbeb}.cplowh{margin:0 0 4px;color:#92400e;font-size:16px}.cplown{margin:0 0 10px;color:#78350f;font-size:13px}.cplowl{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}.cplowi{display:flex;flex-direction:column;gap:2px;text-align:left;background:#fff;border:1.5px solid #fcd34d;border-radius:12px;padding:10px 12px;cursor:pointer;font:inherit;min-height:44px}.cplowi:hover{border-color:#f59e0b}.cplowd{font-weight:700;color:#92400e}.cplowp{font-weight:600;color:#1f2937}.cplowp small{color:#6b7280;font-weight:400}.cplowq{font-size:13.5px;color:#b91c1c}',
     '.cpfl{display:inline-flex;gap:6px;flex:none}.cpfl .btn{width:auto;text-decoration:none}.cph4{flex-wrap:wrap}.cph4 .btn,.cph4 .cpfl{margin-left:auto;width:auto}',
     '.cpnl input{display:block;width:100%;margin-top:5px;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-weight:400}.cpnl{margin-bottom:12px}.cpnl .req{color:#dc2626}',
     '.cpmove{border:1.5px solid #fdba74;background:#fff7ed;border-radius:12px;padding:12px;margin-bottom:12px}.cpmh{color:#9a3412;margin-bottom:8px}.cpchk{display:flex;gap:8px;align-items:center;font-weight:600;color:#9a3412}.cpchk input{width:18px;height:18px}',
