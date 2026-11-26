@@ -219,6 +219,10 @@
   .form-panel { max-width: 440px; }
 
   /* ---------- กล่องยืนยัน (แทน confirm ของเบราว์เซอร์) ---------- */
+  .busyov { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(15, 23, 42, .28); animation: askfade .15s ease-out; }
+  .busybox { display: flex; gap: 14px; align-items: center; background: #fff; border-radius: 18px; padding: 18px 22px; box-shadow: 0 12px 40px rgba(15, 23, 42, .25); max-width: 360px; width: 100%; }
+  .busybox b { display: block; font-size: 16px; color: #0f172a; } .busybox small { color: #64748b; font-size: 13px; }
+  .busysp { width: 30px; height: 30px; flex: 0 0 auto; border-radius: 50%; border: 3px solid #e2e8f0; border-top-color: var(--c, #2563eb); animation: spin .8s linear infinite; }
   .askov { position: fixed; inset: 0; background: rgba(15, 23, 42, .5); display: grid; place-items: center; padding: 16px; z-index: 40; backdrop-filter: blur(3px); animation: askfade .15s ease-out; }
   .askbox { width: 100%; max-width: 380px; background: #fff; border-radius: 20px; padding: 26px 22px 20px; text-align: center; box-shadow: 0 24px 64px rgba(15, 23, 42, .3); animation: askpop .18s ease-out; }
   .askbox .askic { width: 56px; height: 56px; border-radius: 50%; margin: 0 auto 14px; display: grid; place-items: center; background: color-mix(in srgb, var(--k) 14%, white); color: var(--k); }
@@ -490,9 +494,49 @@
   var API_URL = 'https://script.google.com/macros/s/AKfycbyWj0ra2zC_T-qOE6kAr0cHHzIV944lk_5n4Nk54md9WkHcslA_Pwx7UBNF5Uc0LXTc/exec';
   function call(fn) {
     var args = Array.prototype.slice.call(arguments, 1);
-    return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args }) })
+    var mine = Date.now() - busyAct < 1500 && !call.quiet;   // เรียกจากการกดของผู้ใช้ → แสดงหน้าต่าง "กำลังดำเนินการ" (งานเบื้องหลัง / poll ไม่แสดง)
+    if (mine) busyStart(fn);
+    var p = fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args }) })
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (res) { if (!res.ok) throw new Error(res.err || 'เกิดข้อผิดพลาด'); return res.val; });
+    if (mine) p.then(busyEnd, busyEnd);
+    return p;
+  }
+  // ---------- หน้าต่าง "กำลังดำเนินการ…" ทุกแผนก (ผู้ใช้ขอ 26/11/69: อย่าปล่อยให้เงียบ ทุกครั้งต้องรู้ว่ายังทำงานอยู่) ----------
+  // ขึ้นเองเมื่อคำสั่งที่ผู้ใช้กดใช้เวลาเกิน 0.4 วินาที · ไม่ขึ้นซ้อนเมื่อหน้าต่างของโมดูลกำลังแสดงสถานะอยู่แล้ว (.pwait / ปุ่มตกลงที่หมุนอยู่)
+  var busyAct = 0, busyN = 0, busyT = null, busyT2 = null, busyAt = 0, busyEl = null;
+  ['pointerdown', 'click', 'submit', 'change'].forEach(function (ev) { document.addEventListener(ev, function () { busyAct = Date.now(); }, true); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Enter') busyAct = Date.now(); }, true);
+  function busyLabel(fn) {
+    fn = String(fn || '');
+    return /Delete|Remove|Trash/i.test(fn) ? 'กำลังลบ…' : /Upload|Photo|Image/i.test(fn) ? 'กำลังอัปโหลดไฟล์…' : /Send|Push|Line|Test/i.test(fn) ? 'กำลังส่ง…'
+      : /Save|Set|Update|Import|Decide|Confirm|Add|Ack|Close|Receive|Switch|Rename|Merge|Make|Files|Pdf|Xlsx/i.test(fn) ? 'กำลังบันทึก…'
+      : /Login|Verify|Auth|Setup|Password/i.test(fn) ? 'กำลังตรวจสอบ…' : 'กำลังโหลดข้อมูล…';
+  }
+  function busyOwnShown() {
+    if (document.querySelector('.pwait')) return true;
+    var mo = $('modalOverlay'); return !!(mo && !mo.classList.contains('hidden') && $('mOk') && $('mOk').disabled && !$('mOk').classList.contains('hidden'));
+  }
+  function busyStart(fn) {
+    busyN++;
+    var label = busyLabel(fn);
+    if (busyEl) { busyEl.querySelector('b').textContent = label; return; }
+    clearTimeout(busyT);
+    busyT = setTimeout(function () {
+      if (!busyN || busyEl || busyOwnShown()) return;
+      busyEl = document.createElement('div'); busyEl.className = 'busyov'; busyEl.setAttribute('role', 'status'); busyEl.setAttribute('aria-live', 'polite');
+      busyEl.innerHTML = '<div class="busybox"><span class="busysp"></span><div><b>' + esc(label) + '</b><small>กรุณารอสักครู่ ไม่ต้องกดซ้ำ</small></div></div>';
+      document.body.appendChild(busyEl); busyAt = Date.now();
+      busyT2 = setTimeout(function () { if (busyEl) busyEl.querySelector('small').textContent = 'ยังทำงานอยู่ ใช้เวลานานกว่าปกติ — กรุณารอ'; }, 8000);
+    }, 400);
+  }
+  function busyEnd() {
+    busyN = Math.max(0, busyN - 1);
+    if (busyN) return;
+    clearTimeout(busyT); clearTimeout(busyT2);
+    var el = busyEl; if (!el) return;
+    busyEl = null;
+    setTimeout(function () { el.remove(); }, Math.max(0, 300 - (Date.now() - busyAt)));
   }
   // ask('ลบไฟล์นี้?') หรือ ask({ title, text, ok, cancel, tone: 'danger' | 'warn' | 'info' }) → Promise<true/false>
   // ใช้แทน confirm() ทุกที่ (กล่องของเบราว์เซอร์ดูไม่สวยและมีชื่อเว็บโผล่) · ซ้อนบนหน้าต่างอื่นได้ · Esc / แตะพื้นหลัง = ยกเลิก

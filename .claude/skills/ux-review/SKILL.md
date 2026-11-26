@@ -55,6 +55,10 @@ The user asked (23/11/69): every time a system is built or changed, evaluate the
    - Nothing overflows its box at 390 px; watch for iOS date inputs.
    - Long Thai or Burmese names wrap rather than being cut off.
 5. **Feedback.**
+   - **Never leave the user waiting in silence (user asked 26/11/69, applies to every department).** Any action that talks to the server or takes more than a moment must show a popup that says what is happening ("กำลังโหลดข้อมูล…", "กำลังค้นหาผู้ขาย…", "กำลังบันทึก…") with a spinner and "กรุณารอสักครู่ ไม่ต้องกดซ้ำ", until the next screen is ready. A dialog must never just close and leave a blank gap while the next step loads.
+     - Department site: the global `call()` in `index.html` already shows this popup (`.busyov`, after 0.4 s) for every request started by a click / submit / change / Enter; background polls stay quiet. Check that new code goes through `call()`, and for multi-step flows (save → reload → open the next dialog) show a named step popup (e.g. purchasing.js `waitBox` / `reloadTo`) instead of `closeModal()` followed by a silent reload.
+     - `leave.html` has the same popup in its own `call()` (Thai / Burmese).
+     - Other systems (Members, Order, Dashboard-Meeting, BoothCRM, admin pages): add the same kind of popup when touching that code.
    - Every action shows what happened: a spinner or disabled button while saving, then a toast or result.
    - Errors are shown in plain Thai with what to do next, never a bare "เชื่อมต่อไม่ได้".
    - Empty states say why it is empty and what to do.
