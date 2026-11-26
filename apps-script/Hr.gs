@@ -278,6 +278,7 @@ function hrSaveRow_(token, table, x, build, label) {
     if (err) return { ok: false, error: err };
     rec.updatedAt = now;
     purWrite_(ss, table, rec);
+    if (table === 'hr_leaves') hrLiffCacheDrop_(rec.id);
     var emp = rec.empId ? hrById_(emps, rec.empId) : null;
     purLogWrite_(ss, (row ? 'แก้' : 'บันทึก') + label, table, rec.id, (emp ? emp.fullName + ' · ' : '') + JSON.stringify(x).slice(0, 300));
     var out = hrById_(purRead_(ss, table), rec.id);
@@ -356,6 +357,7 @@ function hrDecideLeave_(dept, id, approve, who) {
     }
     row.status = approve ? 'อนุมัติ' : 'ไม่อนุมัติ'; row.approver = hrText_(who, 80); row.decidedAt = purNow_(); row.updatedAt = purNow_();
     purWrite_(ss, 'hr_leaves', row);
+    hrLiffCacheStatus_(row);   // หน้า LIFF เห็นผลทันที
     var emp = hrById_(hrPeople_(ss), row.empId);
     purLogWrite_(ss, row.status + 'คำขอลา', 'hr_leaves', id, (emp ? emp.fullName : '') + ' · ' + (HR_LEAVE_TYPES_[row.type] || row.type) + ' ' + row.dateFrom + ' · โดย ' + row.approver);
     return { ok: true, status: row.status, leave: hrLeaveOut_(row, hrSettings_(ss)), emp: emp ? { fullName: emp.fullName, nickname: emp.nickname } : null };
@@ -371,6 +373,7 @@ function hrDeleteRow(token, kind, id) {
     if (!row) return { ok: false, error: 'ไม่พบรายการ' };
     purParseFiles_(row.files).forEach(function (f) { try { DriveApp.getFileById(f.id).setTrashed(true); } catch (e) {} });
     purSheet_(ss, table).deleteRow(row._row);
+    if (table === 'hr_leaves') hrLiffCacheDrop_(id);
     purLogWrite_(ss, 'ลบ', table, id, JSON.stringify(row).slice(0, 400));
     return { ok: true };
   });

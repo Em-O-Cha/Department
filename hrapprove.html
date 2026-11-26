@@ -80,19 +80,21 @@
     });
   }
   function render() {
-    var r = S.data, l = r.leave, pend = l.status === 'รออนุมัติ';
-    var hc = pend ? '' : l.status === 'อนุมัติ' ? 'ok' : 'no';
-    var h = '<div class="head ' + hc + '"><b>' + (pend ? '📝 คำขอลา · รออนุมัติ' : l.status === 'อนุมัติ' ? '✅ อนุมัติแล้ว' : '❌ ไม่อนุมัติ') + '</b><small>ผู้เปิด: ' + esc(r.me || 'LINE') + '</small></div>';
-    if (S.saved) h += '<div class="note saved" role="status">✓ บันทึกแล้ว<small>' + (l.status === 'อนุมัติ' ? 'อนุมัติ' : 'ไม่อนุมัติ') + 'ใบลานี้ในระบบฝ่ายบุคคลแล้ว</small></div>';
+    var r = S.data, l = r.leave, pend = l.status === 'รออนุมัติ', act = S.acting;
+    var st = act ? (act === 'ok' ? 'อนุมัติ' : 'ไม่อนุมัติ') : l.status;
+    var hc = st === 'รออนุมัติ' ? '' : st === 'อนุมัติ' ? 'ok' : 'no';
+    var h = '<div class="head ' + hc + '"><b>' + (st === 'รออนุมัติ' ? '📝 คำขอลา · รออนุมัติ' : st === 'อนุมัติ' ? '✅ อนุมัติแล้ว' : '❌ ไม่อนุมัติ') + '</b><small>ผู้เปิด: ' + esc(S.me || 'LINE') + '</small></div>';
+    if (act) h += '<div class="note saved" role="status">' + (act === 'ok' ? '✓ อนุมัติ' : '✕ ไม่อนุมัติ') + 'แล้ว<small>⏳ กำลังบันทึกเข้าระบบ…</small></div>';
+    else if (S.saved) h += '<div class="note saved" role="status">✓ บันทึกแล้ว<small>' + (l.status === 'อนุมัติ' ? 'อนุมัติ' : 'ไม่อนุมัติ') + 'ใบลานี้ในระบบฝ่ายบุคคลแล้ว</small></div>';
     else if (!pend) h += '<div class="note done">' + (l.status === 'อนุมัติ' ? '✓ อนุมัติไปแล้ว' : '✕ ไม่อนุมัติไปแล้ว') + (l.approver ? ' โดย ' + esc(l.approver) : '') + '<small>' + (l.decidedAt ? 'เมื่อ ' + esc(l.decidedAt) + ' · ' : '') + 'กดซ้ำไม่ได้</small></div>';
-    else if (!r.can) h += '<div class="note deny">⛔ คุณไม่มีสิทธิ์อนุมัติการลา<small>ดูรายละเอียดได้อย่างเดียว · ฝ่ายบุคคลเพิ่มสิทธิ์ได้ในหน้าตั้งค่า</small></div>';
+    else if (S.can === false) h += '<div class="note deny">⛔ คุณไม่มีสิทธิ์อนุมัติการลา<small>ดูรายละเอียดได้อย่างเดียว · ฝ่ายบุคคลเพิ่มสิทธิ์ได้ในหน้าตั้งค่า</small></div>';
     var row = function (a, b, c) { return '<div class="row"><span>' + a + '</span><b' + (c ? ' class="' + c + '"' : '') + '>' + b + '</b></div>'; };
     h += '<div class="card"><div class="nm">' + esc(l.name) + '</div><div class="sub">' + esc(l.sub || ' ') + '</div></div><div class="card">'
       + row('ประเภท', esc(l.type)) + row('วันที่', esc(l.dates)) + row('จำนวน', esc(l.amount))
       + (l.by ? row('ผู้กรอกใบลา', esc(l.by)) : '') + (l.reason ? row('เหตุผล', esc(l.reason)) : '')
       + (l.files ? row('เอกสารแนบ', '📎 ' + l.files + ' ไฟล์ (ดูในระบบฝ่ายบุคคล)') : '')
-      + (l.bal && pend ? row('สิทธิ์คงเหลือ', esc(l.bal.left) + '<br>หลังอนุมัติ ' + esc(l.bal.after), l.bal.neg ? 'red' : 'green') : '') + '</div>';
-    var dis = !pend || !r.can;
+      + (l.bal && pend && !act ? row('สิทธิ์คงเหลือ', esc(l.bal.left) + '<br>หลังอนุมัติ ' + esc(l.bal.after), l.bal.neg ? 'red' : 'green') : '') + '</div>';
+    var dis = !pend || S.can === false || !!act;
     h += '<div class="bar"><div class="in"><button class="bno" id="bNo"' + (dis ? ' disabled' : '') + '>✕ ไม่อนุมัติ</button><button class="bok" id="bOk"' + (dis ? ' disabled' : '') + '>✓ อนุมัติ</button></div></div>';
     document.getElementById('app').innerHTML = h;
     if (!dis) {
@@ -100,35 +102,48 @@
       document.getElementById('bNo').onclick = function () { decide('no'); };
     }
   }
+  // กดแล้วทำทันที ไม่ถามยืนยัน (ผู้ใช้ขอ 26/11/69) · หน้าเปลี่ยนสีทันที แล้วบันทึกเบื้องหลัง
   function decide(act) {
-    var l = S.data.leave, ok = act === 'ok';
-    ask({ title: ok ? 'อนุมัติใบลานี้?' : 'ไม่อนุมัติใบลานี้?', text: l.name + ' · ' + l.type + ' · ' + l.dates, ok: ok ? '✓ อนุมัติ' : '✕ ไม่อนุมัติ', color: ok ? '#16a34a' : '#dc2626', danger: !ok }).then(function (y) {
-      if (!y) return;
-      busy(true, 'กำลังบันทึก…');
-      call('hrLiffDecide', S.tok, S.id, S.sig, act).then(function (r) {
-        busy(false);
-        if (!r.ok) { alertBox(r.error); return; }
-        S.data = r; S.saved = r.decided; render();
-      }).catch(function (e) { busy(false); alertBox('เชื่อมต่อไม่ได้ ลองใหม่อีกครั้ง'); });
-    });
+    if (S.acting) return;
+    S.acting = act; render();
+    S.ready.then(function () {
+      return call('hrLiffDecide', S.tok, S.id, S.sig, act);
+    }).then(function (r) {
+      S.acting = null;
+      if (!r.ok) { if (/สิทธิ์/.test(r.error || '')) S.can = false; render(); alertBox(r.error); return; }
+      S.data = { leave: r.leave }; S.saved = r.decided; render();
+    }).catch(function (e) { S.acting = null; render(); alertBox(e && e.message && !/fetch/i.test(e.message) ? e.message : 'เชื่อมต่อไม่ได้ ยังไม่ได้บันทึก — กดใหม่อีกครั้ง'); });
   }
   function alertBox(t) { ask({ title: 'ทำรายการไม่ได้', text: t, ok: 'ตกลง', color: '#2563eb' }); }
+  function sha(t) {
+    if (!window.crypto || !crypto.subtle) return Promise.resolve('');
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)).then(function (b) { return Array.prototype.map.call(new Uint8Array(b), function (x) { return ('0' + x.toString(16)).slice(-2); }).join('').slice(0, 24); });
+  }
+  function checkCan() {   // เปิด / ปิดปุ่มจากรายชื่อผู้อนุมัติ (ตรวจจริงอีกครั้งที่เซิร์ฟเวอร์ตอนกด)
+    if (!S.data || !S.sub || !S.ah) return;
+    if (!S.ah.length) { S.can = true; render(); return; }
+    sha(S.sub).then(function (h) { if (h) { S.can = S.ah.indexOf(h) >= 0; render(); } });
+  }
   params();
   if (!S.id || !S.sig) { fail('ลิงก์ไม่ครบ — เปิดจากปุ่มในการ์ด LINE'); return; }
   busy(true, 'กำลังโหลดข้อมูล…');
-  (S.liff ? Promise.resolve({ liffId: S.liff }) : call('hrLiffInfo')).then(function (i) {   // การ์ดใหม่มี LIFF ID ในลิงก์แล้ว ไม่ต้องถามเซิร์ฟเวอร์
+  // ① ข้อมูลใบลา กับ ② เปิด LINE (ยืนยันตัวตน) ทำพร้อมกัน
+  call('hrLiffView', S.id, S.sig).then(function (r) {
+    busy(false);
+    if (!r.ok) { fail(r.error); return; }
+    S.data = { leave: r.leave }; S.ah = r.ah || []; render(); checkCan();
+  }).catch(function (e) { busy(false); fail(e && e.message && !/fetch/i.test(e.message) ? e.message : 'เชื่อมต่อไม่ได้ ลองปิดแล้วเปิดใหม่'); });
+  S.ready = (S.liff ? Promise.resolve({ liffId: S.liff }) : call('hrLiffInfo')).then(function (i) {
     if (!i.liffId) throw new Error('ฝ่ายบุคคลยังไม่ได้ตั้งค่า LIFF');
     return liff.init({ liffId: i.liffId });
   }).then(function () {
-    if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return null; }
+    if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return new Promise(function () {}); }
     S.tok = liff.getIDToken();
-    return call('hrLiffLoad', S.tok, S.id, S.sig);
-  }).then(function (r) {
-    busy(false);
-    if (!r) return;
-    if (!r.ok) { fail(r.error); return; }
-    S.data = r; render();
-  }).catch(function (e) { busy(false); fail(e && e.message && !/fetch/i.test(e.message) ? e.message : 'เชื่อมต่อไม่ได้ ลองปิดแล้วเปิดใหม่'); });
+    var d = liff.getDecodedIDToken() || {};
+    S.sub = d.sub || ''; S.me = d.name || '';
+    if (S.data) { render(); checkCan(); }
+  });
+  S.ready.catch(function () {});
 })();
 </script>
 </body>

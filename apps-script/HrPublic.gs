@@ -450,3 +450,19 @@ function hrLiffDecide(idToken, id, sig, act) {
 }
 function hrLiffInfo() { return { ok: true, liffId: hrLiffId_() }; }   // หน้า LIFF ต้องรู้ LIFF ID ก่อน liff.init (ไม่ใช่ความลับ)
 function hrLiffBook_(dept) { hrRegister_(); return purBook_(dept); }   // ไม่ต้องตรวจตั้งค่า / สร้างแท็บแบบ hrBook_ (เร็วกว่า)
+
+// ---- โหลดเร็ว (ผู้ใช้ขอ 26/11/69): หน้า LIFF ขอข้อมูลใบลาพร้อมกับเปิด LINE (ไม่ต้องรอยืนยันตัวตน) ----
+// cache hrlv_<id> เก็บทั้งรายละเอียด + สถานะ · ทุกจุดที่แก้ / ลบ / ตัดสินใบลาจะอัปเดตหรือลบ cache นี้
+function hrLiffCacheDrop_(id) { try { CacheService.getScriptCache().remove('hrlv_' + id); } catch (x) {} }
+function hrLiffCacheStatus_(l) { var c = hrLiffCacheGet_(l.id); if (!c) return; c.status = l.status; c.approver = l.approver || ''; c.decidedAt = String(l.decidedAt || '').slice(0, 16); hrLiffCachePut_(c); }
+// ผู้มีสิทธิ์แบบ hash (ให้หน้าเว็บเปิด / ปิดปุ่มเองได้ทันที — ตอนกดจริงเซิร์ฟเวอร์ตรวจ ID token อีกครั้ง)
+function hrLiffApprHash_() {
+  return hrApprovers_().map(function (a) { return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(a.userId)).map(function (b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('').slice(0, 24); });
+}
+function hrLiffView(id, sig) {
+  if (!id || sig !== hrSign_('view|' + id)) return { ok: false, error: 'ลิงก์ไม่ถูกต้อง' };
+  hrRate_('liffv', 300, 600);
+  var v = hrLiffCacheGet_(id);
+  if (!v) { v = hrLiffFresh_(hrLiffBook_(findDept_('HR')), id); if (!v) return { ok: false, error: 'ไม่พบใบลานี้ (อาจถูกลบแล้ว)' }; }
+  return { ok: true, leave: v, ah: hrLiffApprHash_() };
+}
