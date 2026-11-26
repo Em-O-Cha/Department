@@ -177,6 +177,8 @@
       + '<tr class="a7grand"><td colspan="2" style="background:' + GRAND_BG + '">รวมทั้งหมด</td><td colspan="' + (P.length + 1) + '" style="background:' + GRAND_BG + '">' + n0(m.cases) + ' ลัง</td></tr></tfoot></table></div>';
     return h;
   };
+  // ตัดศูนย์ที่ไม่มีออเดอร์ (ใช้กับตารางสรุปใน Dashboard ด้วย · ผู้ใช้ย้ำ 26/11/69)
+  function dzOnly(m) { var dz = (m.dcs || []).filter(function (d) { return d.cases; }); return dz.length ? Object.assign({}, m, { dcs: dz }) : m; }
   function mainOrOrdered(map, m) {
     var by = m.byProduct || {};
     if (!map.products.some(function (p) { return p.main; })) return map;   // ข้อมูลเก่าไม่มีธงสินค้าหลัก → แสดงทั้งหมด
@@ -883,7 +885,7 @@
           + (d.base && d.base !== d.date ? '<br><em>เลื่อนจาก ' + thDate(d.base) + (d.why ? ' (' + esc(d.why) + ')' : '') + '</em>' : '') + '</small></div><b>' + baht(d.amount) + '</b></div>';
       }).join('') + '<small class="muted">ส่งวันที่ 1–15 รับเงินวันที่ 10 เดือนถัดไป · ส่งวันที่ 16–31 รับเงินวันที่ 25 เดือนถัดไป · ตรงวันเสาร์-อาทิตย์หรือวันหยุดราชการ เลื่อนไปวันทำการถัดไป · รวม VAT</small>' : '<div class="muted">ไม่มียอดที่รอรับเงิน</div>') + '</div>'
       + '</div>';
-    html += '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('table', 18) + ' ตารางสรุปแบบต้นแบบรับออเดอร์ <small class="muted">' + thDate(r.from) + ' – ' + thDate(r.to) + '</small></h4>' + H.tplHtml(map, m, { full: false }) + '</div>';
+    html += '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('table', 18) + ' ตารางสรุปแบบต้นแบบรับออเดอร์ <small class="muted">' + thDate(r.from) + ' – ' + thDate(r.to) + '</small></h4>' + H.tplHtml(mainOrOrdered(map, m), dzOnly(m), { full: false }) + '</div>';
     return html;
   };
 
