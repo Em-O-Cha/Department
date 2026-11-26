@@ -603,8 +603,13 @@ function prdRow_(no, name, sub, right, rightColor) {
   var left = [prdT_(name, { size: 'sm', weight: 'bold', color: '#0F172A' })];
   (sub || []).forEach(function (s) { if (s) left.push(prdT_(s.t || s, { size: 'xs', color: s.c || '#64748B', margin: 'xs' })); });
   var c = [prdT_(no + '.', { size: 'sm', color: '#94A3B8', flex: 0 }), prdBox_(left, { flex: 6, margin: 'sm' })];
-  if (right) c.push(prdT_(right, { size: 'sm', weight: 'bold', color: rightColor || '#0F172A', align: 'end', flex: 3 }));
-  return { type: 'box', layout: 'horizontal', margin: 'md', contents: c };
+  // ผู้ใช้ขอ 26/11/69: จำนวน 2 หน่วย (เช่น 8,064 กระปุก ; 336 ลัง) ยาวเกินช่องขวา → ขึ้นบรรทัดเดียวเต็มแถวใต้ชื่อ ชิดขวา ไม่ตัดบรรทัด
+  var wide = right && / ; /.test(right);
+  if (right && !wide) c.push(prdT_(right, { size: 'sm', weight: 'bold', color: rightColor || '#0F172A', align: 'end', flex: 3 }));
+  var rowBox = { type: 'box', layout: 'horizontal', margin: 'md', contents: c };
+  if (!wide) return rowBox;
+  rowBox.margin = 'none';
+  return { type: 'box', layout: 'vertical', margin: 'md', contents: [rowBox, prdT_(right, { size: 'sm', weight: 'bold', color: rightColor || '#0F172A', align: 'end', wrap: false, margin: 'xs' })] };
 }
 var PRD_GCOLOR_ = { G2: '#EA580C', G1: '#2563EB', G3: '#16A34A' };
 var PRD_GTINT_ = { G2: '#FFEDD5', G1: '#DBEAFE', G3: '#DCFCE7' };
@@ -655,7 +660,7 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
       if (!pick && x.actBatch !== '' && x.actBatch != null) pick = { q: x.actBatch, u: x.actBatchUnit || 'batch' };
       right = pick ? prdFmt_(pick.q) + ' ' + pick.u : 'ยังไม่กรอก';
     } else if (grp === 'G1') {
-      right = [x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : '', prdQty2_(x)].filter(String).join('\n') || 'ยังไม่กรอก';
+      right = [x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : '', prdQty2_(x)].filter(String).join(' ; ') || 'ยังไม่กรอก';
       if (prdPlanText_(x)) sub[0] = (sub[0] ? sub[0] + ' · ' : '') + prdPlanText_(x);
     } else {
       right = [x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : '', x.actCases !== '' ? prdFmt_(x.actCases) + ' ลัง' : ''].filter(String).join(' ; ') || 'ยังไม่กรอก';
