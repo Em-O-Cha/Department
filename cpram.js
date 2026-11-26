@@ -202,7 +202,7 @@
       return gr.rows.map(function (r, i) {
         var first = i === 0, rs = ' rowspan="' + n + '"', cancel = r.status === 'cancel';
         var sub = subs.filter(function (x) { return x.start === i; })[0], srs = sub ? ' rowspan="' + sub.n + '"' : '';
-        return '<tr class="' + (cancel ? 'cpx' : '') + (opt.edit ? ' cped' : '') + (opt.hi && opt.hi === r.id ? ' cphi' : '') + '"' + (opt.edit ? ' data-cpl="' + esc(r.id) + '" tabindex="0"' : '') + '>'
+        return '<tr class="' + (cancel ? 'cpx' : '') + (opt.edit ? ' cped' : '') + (opt.hi && opt.hi === r.id ? ' cphi' : '') + (opt.edit && lowHit(r) ? ' cplowhi' : '') + '"' + (opt.edit ? ' data-cpl="' + esc(r.id) + '" tabindex="0"' : '') + '>'
           + (first ? '<td' + rs + '>' + dayOf(gr.date) + '</td><td' + rs + '>' + slash(gr.date) + '</td>' : '')
           + (sameP ? (first ? '<td' + rs + ' class="cpp">' + pname(r) + '</td>' : '') : '<td class="cpp">' + pname(r) + '</td>')
           + '<td class="cpo">' + esc(r.poNo) + '</td><td class="cpwh">' + esc(r.wh || (r.place ? '-' : '?')) + '</td><td class="cpq">' + nq(r.qty) + (r.pcs ? '<small class="cppcs">= ' + n0(r.pcs) + ' ' + esc(r.pcsUnit) + '</small>' : '') + '</td><td>' + esc(r.unitTh || r.unit || 'ลัง') + '</td>'
@@ -239,6 +239,8 @@
   // แจ้งเตือนหัวหน้า (ผู้ใช้ขอ 26/11/69): คลัง + วันที่ส่ง (ตั้งแต่วันนี้) ที่รวม PO ยังไม่ถึง 120 ลัง
   // คำนวณสดจากข้อมูลทุกครั้ง — PO มาเพิ่มจนเกิน 120 ลัง รายการนั้นหายไปจากแถบเอง · ไม่นับแถวที่ยกเลิก
   var CP_MIN_CASES = 120;
+  function lowKey(date, wh, place) { return date + '|' + (wh && wh !== '-' ? wh : '') + '|' + (place || ''); }
+  function lowHit(r) { return !!C.hiLow && r.status !== 'cancel' && lowKey(r.deliveryDate, r.wh, r.place) === C.hiLow; }
   function lowPanel(lines, today) {
     var g = {}, order = [];
     caseRows(lines).forEach(function (r) {
@@ -254,7 +256,8 @@
       + '<p class="cplown">รวม PO ทุกใบที่ส่งคลังเดียวกันในวันเดียวกัน (ไม่นับที่ยกเลิก) — เมื่อมี PO เพิ่มจนครบ ' + CP_MIN_CASES + ' ลัง รายการจะหายไปเอง</p><div class="cplowl">'
       + low.map(function (x) {
         var u = Object.keys(x.units), odd = u.length !== 1 || !isCase(u[0]);
-        return '<button type="button" class="cplowi" data-cplow="' + esc(String(x.date).slice(0, 7)) + '" title="ไปที่เดือนนั้น">'
+        var key = lowKey(x.date, x.wh, x.place), on = C.hiLow === key;
+        return '<button type="button" class="cplowi' + (on ? ' on' : '') + '" data-cplow="' + esc(String(x.date).slice(0, 7)) + '" data-cplowk="' + esc(key) + '" aria-pressed="' + on + '" title="' + (on ? 'เลิกไฮไลต์' : 'ไฮไลต์แถวในตาราง') + '">'
           + '<span class="cplowd">📅 ' + esc(slash(x.date)) + '</span>'
           + '<span class="cplowp">' + esc([x.wh, x.place].filter(Boolean).join(' · ') || 'ยังไม่ระบุคลัง') + ' <small>· ' + Object.keys(x.pos).length + ' PO</small></span>'
           + '<span class="cplowq"><b>' + nq(x.sum) + '</b> / ' + CP_MIN_CASES + ' ' + (odd ? esc(u.join(', ')) : 'ลัง') + ' · ขาดอีก <b>' + nq(Math.round((CP_MIN_CASES - x.sum) * 100) / 100) + '</b></span></button>';
@@ -424,7 +427,15 @@
           : '<div class="panel pbox"><h4 class="cph4">' + icon('table', 18) + ' ตารางส่งสินค้า CP Ram ' + monthTh(C.month) + '<button class="btn btn-sm btn-line" id="cpMonthFiles">' + icon('pdf', 15) + ' PDF / Excel ทั้งเดือน</button></h4>' + schedTable(rows, { edit: true }) + '</div>')
         + '<div class="panel pbox"><h4>' + icon('clock', 18) + ' รอบเงินเข้า</h4>' + roundsTable(rounds) + '</div>' : '');
     on('[data-cpm]', 'click', function (el) { C.month = el.getAttribute('data-cpm'); C.listPage(); });
-    on('[data-cplow]', 'click', function (el) { C.month = el.getAttribute('data-cplow'); C.listPage(); });
+    // กดรายการในแถบ = เปิดเดือนนั้น + ไฮไลต์แถวของคลัง / วันที่นั้นในตาราง แล้วเลื่อนไปหา (กดซ้ำ = เลิกไฮไลต์) — ผู้ใช้ขอ 26/11/69
+    on('[data-cplow]', 'click', function (el) {
+      var k = el.getAttribute('data-cplowk');
+      C.hiLow = C.hiLow === k ? null : k;
+      if (C.hiLow && C.month !== 'all') C.month = el.getAttribute('data-cplow');
+      C.listPage();
+      var f = $('main').querySelector('tr.cplowhi');
+      if (f) f.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
     on('[data-cpsend]', 'click', function (el) { sendLine(el.getAttribute('data-cpsend')); });
     on('[data-cpmv]', 'click', function (el) { sendMove(el.getAttribute('data-cpmv')); });
     on('[data-cpfiles]', 'click', function (el) { makeFiles(el); });
@@ -659,7 +670,7 @@
     '.cpnl{display:block;font-weight:600}.cpnl textarea{display:block;width:100%;margin-top:5px;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-weight:400}.kpis.xk{grid-template-columns:repeat(4,1fr)}@media (max-width:860px){.kpis.xk{grid-template-columns:repeat(2,1fr)}}',
     '.cpline h4{flex-wrap:wrap}.cpline h4 small{font-weight:400;font-size:12.5px;flex-basis:100%;margin-left:24px}.cpimp{align-items:center;flex-wrap:wrap}.cpimp>span:first-child{flex:1 1 220px;min-width:0}.cpimp .btn{flex:none;width:auto;white-space:nowrap}.cpimp .cptag{flex:none}.cpimp small{display:block}',
     '.cpimgbox{position:fixed;left:-3000px;top:0}.cpimg{display:inline-block;width:auto;min-width:640px;padding:20px;background:#fff;font-family:inherit}.cpimh{gap:24px}.cpimg .cpwrap{overflow:visible;margin:0;padding:0}.cpimg .cptab{font-size:18px;min-width:0}.cpimg .cptab th,.cpimg .cptab td{padding:8px 6px}.cpimg .cptab .cpt{font-size:20px}.cpimh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}.cpimh b{font-size:22px}.cpimh span{color:#475569;font-size:15px}',
-'.cplow{border:2px solid #f59e0b;background:#fffbeb}.cplowh{margin:0 0 4px;color:#92400e;font-size:16px}.cplown{margin:0 0 10px;color:#78350f;font-size:13px}.cplowl{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}.cplowi{display:flex;flex-direction:column;gap:2px;text-align:left;background:#fff;border:1.5px solid #fcd34d;border-radius:12px;padding:10px 12px;cursor:pointer;font:inherit;min-height:44px}.cplowi:hover{border-color:#f59e0b}.cplowd{font-weight:700;color:#92400e}.cplowp{font-weight:600;color:#1f2937}.cplowp small{color:#6b7280;font-weight:400}.cplowq{font-size:13.5px;color:#b91c1c}',
+'.cplow{border:2px solid #f59e0b;background:#fffbeb}.cplowh{margin:0 0 4px;color:#92400e;font-size:16px}.cplown{margin:0 0 10px;color:#78350f;font-size:13px}.cplowl{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}.cplowi{display:flex;flex-direction:column;gap:2px;text-align:left;background:#fff;border:1.5px solid #fcd34d;border-radius:12px;padding:10px 12px;cursor:pointer;font:inherit;min-height:44px}.cplowi:hover{border-color:#f59e0b}.cplowi.on{border-color:#dc2626;background:#fef2f2;box-shadow:0 0 0 2px #fecaca}.cptab tr.cplowhi td{background:#fee2e2!important}.cptab tr.cplowhi td:first-child{box-shadow:inset 4px 0 0 #dc2626}.cplowd{font-weight:700;color:#92400e}.cplowp{font-weight:600;color:#1f2937}.cplowp small{color:#6b7280;font-weight:400}.cplowq{font-size:13.5px;color:#b91c1c}',
     '.cpfl{display:inline-flex;gap:6px;flex:none}.cpfl .btn{width:auto;text-decoration:none}.cph4{flex-wrap:wrap}.cph4 .btn,.cph4 .cpfl{margin-left:auto;width:auto}',
     '.cpnl input{display:block;width:100%;margin-top:5px;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-weight:400}.cpnl{margin-bottom:12px}.cpnl .req{color:#dc2626}',
     '.cpmove{border:1.5px solid #fdba74;background:#fff7ed;border-radius:12px;padding:12px;margin-bottom:12px}.cpmh{color:#9a3412;margin-bottom:8px}.cpchk{display:flex;gap:8px;align-items:center;font-weight:600;color:#9a3412}.cpchk input{width:18px;height:18px}',
