@@ -1,10 +1,17 @@
-// ==================== ฐานข้อมูลสำเนา (Supabase) ของระบบงานองค์กร (ผู้ใช้ขอ 26/11/69) ====================
-// Google Sheet ยังเป็นข้อมูลหลัก · ฐานข้อมูลนี้เก็บสำเนาไว้ให้ Dashboard อ่านเร็ว (เริ่มที่ฝ่ายบัญชี)
-// ที่อยู่ + กุญแจเก็บใน Script Properties (SUPABASE_URL / SUPABASE_SECRET_KEY) ใส่จากหน้าผู้ดูแลระบบ — ไม่อยู่ในโค้ด ไม่ส่งกลับไปหน้าเว็บ
-function deptDbCfg_() {
-  var p = props_(), u = String(p.getProperty('SUPABASE_URL') || '').trim().replace(/\/+$/, ''), k = String(p.getProperty('SUPABASE_SECRET_KEY') || '').trim();
-  return u && k ? { url: u, key: k } : null;
+// ==================== ฐานข้อมูลสำเนา (Supabase) แยกตามฝ่าย (ผู้ใช้ขอ 26/11/69) ====================
+// Google Sheet ยังเป็นข้อมูลหลัก · ฐานข้อมูลเก็บสำเนาไว้ให้ Dashboard อ่านเร็ว (เริ่มที่ฝ่ายบัญชี แล้วค่อยเพิ่มฝ่ายอื่น)
+// แต่ละฝ่ายตั้งที่อยู่ + กุญแจของตัวเองได้ (คนละโปรเจกต์ หรือใช้โปรเจกต์เดียวกันก็ได้ — ตารางมีคอลัมน์ dept แยกไว้)
+// เก็บรวมใน Script Property เดียว DEPT_DB = { ACC: { url, key, at } } (หน้าตั้งค่า Script Properties ครบ 50 ช่องแล้ว) · ไม่ส่งกุญแจกลับไปหน้าเว็บ
+function deptDbAll_() {
+  var p = props_(), m = {};
+  try { m = JSON.parse(p.getProperty('DEPT_DB') || '{}') || {}; } catch (e) { m = {}; }
+  // ค่าที่เคยใส่แบบเดิม (SUPABASE_URL / SUPABASE_SECRET_KEY) = ของฝ่ายบัญชี
+  var u = String(p.getProperty('SUPABASE_URL') || '').trim(), k = String(p.getProperty('SUPABASE_SECRET_KEY') || '').trim();
+  if (u && k && !m.ACC) { m.ACC = { url: u.replace(/\/+$/, ''), key: k, at: purNow_() }; p.setProperty('DEPT_DB', JSON.stringify(m)); }
+  if (u || k) { p.deleteProperty('SUPABASE_URL'); p.deleteProperty('SUPABASE_SECRET_KEY'); }
+  return m;
 }
+function deptDbCfg_(deptKey) { var c = deptDbAll_()[deptKey]; return c && c.url && c.key ? c : null; }
 function deptDbHeaders_(k) { var h = { apikey: k }; if (k.indexOf('eyJ') === 0) h.Authorization = 'Bearer ' + k; return h; }
 function deptDbCheck_(cfg) {
   try {
@@ -15,24 +22,33 @@ function deptDbCheck_(cfg) {
     return { ok: false, error: 'เชื่อมต่อไม่ได้ (รหัส ' + c + ')' };
   } catch (e) { return { ok: false, error: 'เชื่อมต่อไม่ได้ — ตรวจลิงก์ API URL (' + String(e.message || e).slice(0, 80) + ')' }; }
 }
+function deptDbOut_(d, c) {
+  var o = { key: d.key, name: d.name, color: d.color, set: !!c };
+  if (c) { var chk = deptDbCheck_(c); o.host = c.url.replace(/^https?:\/\//, ''); o.conn = chk.ok; o.error = chk.error || ''; o.at = c.at || ''; }
+  return o;
+}
+// รายชื่อฝ่าย + สถานะการเชื่อมต่อของแต่ละฝ่าย
 function adminDbStatus(token) {
   requireAdmin_(token);
-  var c = deptDbCfg_();
-  if (!c) return { ok: true, set: false };
-  var chk = deptDbCheck_(c);
-  return { ok: true, set: true, host: c.url.replace(/^https?:\/\//, ''), conn: chk.ok, error: chk.error || '' };
+  var all = deptDbAll_();
+  return { ok: true, depts: activeDepartments_().filter(function (d) { return !d.exec && findDept_(d.key); }).map(function (d) {
+    var c = all[d.key]; return deptDbOut_(d, c && c.url && c.key ? c : null);
+  }) };
 }
-// url + key (key ว่าง = ใช้กุญแจเดิม) · ทั้งสองว่าง = ลบการเชื่อมต่อ
-function adminSetDb(token, url, key) {
+// ตั้งค่าของฝ่าย deptKey · key ว่าง = ใช้กุญแจเดิมของฝ่ายนี้ · url + key ว่างทั้งคู่ = ยกเลิกการเชื่อมต่อของฝ่ายนี้
+function adminSetDb(token, deptKey, url, key) {
   requireAdmin_(token);
-  var p = props_();
+  var dept = findDept_(deptKey);
+  if (!dept || dept.exec) return { ok: false, error: 'ไม่พบฝ่าย' };
+  var all = deptDbAll_(), p = props_();
   url = String(url || '').trim().replace(/\/+$/, ''); key = String(key || '').trim();
-  if (!url && !key) { p.deleteProperty('SUPABASE_URL'); p.deleteProperty('SUPABASE_SECRET_KEY'); return { ok: true, set: false }; }
+  if (!url && !key) { delete all[dept.key]; p.setProperty('DEPT_DB', JSON.stringify(all)); return { ok: true, dept: deptDbOut_(dept, null) }; }
   if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url)) return { ok: false, error: 'ลิงก์ต้องเป็นแบบ https://xxxx.supabase.co (คัดลอกจาก Data API → API URL)' };
-  if (!key) { var old = deptDbCfg_(); if (!old) return { ok: false, error: 'ใส่กุญแจ Secret (sb_secret_…)' }; key = old.key; }
+  if (!key) { var old = all[dept.key]; if (!old || !old.key) return { ok: false, error: 'ใส่กุญแจ Secret (sb_secret_…)' }; key = old.key; }
   if (!/^(sb_secret_|eyJ)/.test(key)) return { ok: false, error: 'กุญแจต้องขึ้นต้นด้วย sb_secret_ (อย่าใช้กุญแจ Publishable)' };
   var chk = deptDbCheck_({ url: url, key: key });
   if (!chk.ok) return chk;
-  p.setProperty('SUPABASE_URL', url); p.setProperty('SUPABASE_SECRET_KEY', key);
-  return adminDbStatus(token);
+  all[dept.key] = { url: url, key: key, at: purNow_() };
+  p.setProperty('DEPT_DB', JSON.stringify(all));
+  return { ok: true, dept: deptDbOut_(dept, all[dept.key]) };
 }

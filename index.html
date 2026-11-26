@@ -1187,30 +1187,43 @@
   }
   function fmtDate(ms) { var d = new Date(ms); return d.getDate() + '/' + (d.getMonth() + 1) + '/' + (d.getFullYear() + 543) + ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
   function renderAdminPage() {
-    // ฐานข้อมูลสำเนา (Supabase) — ใส่ที่อยู่ + กุญแจจากหน้านี้ แทน Script Properties ที่ครบ 50 ช่องแล้ว (ผู้ใช้ขอ 26/11/69)
+    // ฐานข้อมูลสำเนา (Supabase) แยกตามฝ่าย — ใส่ที่อยู่ + กุญแจจากหน้านี้ แทน Script Properties ที่ครบ 50 ช่องแล้ว (ผู้ใช้ขอ 26/11/69)
     if (state.page === 'admdb') {
       $('main').innerHTML = '<h3>ฐานข้อมูลสำเนา (Supabase)</h3>'
-        + '<div class="panel" id="dbStat"><span class="spinner dark"></span> กำลังตรวจการเชื่อมต่อ…</div>'
-        + '<form class="panel form-panel" id="dbForm" autocomplete="off"><div class="note">ฐานข้อมูลนี้เก็บสำเนาไว้ให้ Dashboard อ่านเร็ว · ข้อมูลจริงยังอยู่ใน Google Sheet</div>'
-        + field('dbUrl', 'API URL (Project Settings → Data API)', 'text', 'https://xxxx.supabase.co')
-        + field('dbKey', 'กุญแจ Secret (Project Settings → API Keys → Secret keys)', 'password', 'sb_secret_…')
-        + '<div class="note" id="dbKeyHint" style="display:none">เว้นช่องกุญแจว่าง = ใช้กุญแจเดิม</div>'
-        + '<div class="err" id="dbErr"></div><div class="actions"><button type="submit" class="btn btn-primary" id="dbBtn">บันทึกและตรวจสอบ</button></div></form>';
-      var showStat = function (r) {
-        if (!r.set) { $('dbStat').innerHTML = '<span class="tag no">ยังไม่ได้เชื่อมต่อ</span>'; return; }
-        $('dbStat').innerHTML = (r.conn ? '<span class="tag ok">✓ เชื่อมต่อได้</span>' : '<span class="tag lock">✕ ' + esc(r.error) + '</span>') + ' <span class="muted">' + esc(r.host) + '</span>';
-        if (!val('dbUrl')) $('dbUrl').value = 'https://' + r.host;
-        $('dbKeyHint').style.display = '';
+        + '<div class="panel"><div class="note" style="margin:0">ฐานข้อมูลเก็บสำเนาไว้ให้ Dashboard ของแต่ละฝ่ายอ่านเร็ว · ข้อมูลจริงยังอยู่ใน Google Sheet · ตั้งค่าแยกทีละฝ่าย</div></div>'
+        + '<div class="panel" id="dbList"><span class="spinner dark"></span> กำลังตรวจการเชื่อมต่อ…</div>';
+      var draw = function (list) {
+        state.dbList = list;
+        $('dbList').innerHTML = list.map(function (d, i) {
+          var tag = !d.set ? '<span class="tag no">ยังไม่ได้เชื่อมต่อ</span>'
+            : d.conn ? '<span class="tag ok">✓ เชื่อมต่อได้</span> <span class="muted" style="font-size:12.5px">' + esc(d.host) + '</span>'
+            : '<span class="tag lock">✕ ' + esc(d.error) + '</span>';
+          return '<div class="arow" style="--dc:' + d.color + '"><div class="icon">' + icon(d.key) + '</div><div class="info"><b>' + esc(d.name) + '</b>' + tag + '</div>'
+            + '<div class="btns"><button type="button" class="btn btn-sm ' + (d.set ? 'btn-line' : 'btn-dark') + '" data-dbi="' + i + '">' + (d.set ? 'แก้ไข' : 'เชื่อมต่อฐานข้อมูล') + '</button></div></div>';
+        }).join('') || '<div class="muted">ยังไม่มีฝ่าย</div>';
+        Array.prototype.forEach.call($('dbList').querySelectorAll('[data-dbi]'), function (b) { b.addEventListener('click', function () { openDbDept(state.dbList[+b.getAttribute('data-dbi')]); }); });
       };
-      call('adminDbStatus', state.token).then(showStat).catch(onServerError);
-      $('dbForm').addEventListener('submit', function (e) {
-        e.preventDefault();
-        var btn = $('dbBtn'); btn.disabled = true; $('dbErr').textContent = '';
-        call('adminSetDb', state.token, val('dbUrl'), val('dbKey')).then(function (r) {
-          if (!r.ok) { $('dbErr').textContent = r.error; return; }
-          $('dbKey').value = ''; showStat(r); toast(r.set ? 'เชื่อมต่อฐานข้อมูลแล้ว' : 'ยกเลิกการเชื่อมต่อแล้ว');
-        }).catch(onServerError).then(function () { if ($('dbBtn')) btn.disabled = false; });
-      });
+      var openDbDept = function (d) {
+        openModal({
+          color: d.color, icon: d.key, title: 'ฐานข้อมูลสำเนา · ' + d.name, sub: 'คัดลอกจากโปรเจกต์ Supabase ของ' + d.name,
+          body: field('dbUrl', 'API URL (Project Settings → Data API)', 'text', 'https://xxxx.supabase.co')
+            + field('dbKey', 'กุญแจ Secret (Project Settings → API Keys → Secret keys)', 'password', d.set ? 'เว้นว่าง = ใช้กุญแจเดิม' : 'sb_secret_…')
+            + (d.set ? '<div class="note">ต้องการยกเลิกการเชื่อมต่อ: ลบลิงก์ให้ว่างแล้วกดบันทึก</div>' : ''),
+          ok: 'บันทึกและตรวจสอบ',
+          onOpen: function () { if (d.host) $('dbUrl').value = 'https://' + d.host; },
+          submit: function () {
+            var u = val('dbUrl').trim(), k = val('dbKey').trim();
+            if (!u && !d.set) return Promise.resolve('ใส่ API URL');
+            var go2 = !u ? ask({ title: 'ยกเลิกการเชื่อมต่อของ' + d.name + '?', text: 'Dashboard ของฝ่ายนี้จะกลับไปอ่านจาก Google Sheet (ช้ากว่า) · ข้อมูลในชีตไม่หาย', ok: 'ยกเลิกการเชื่อมต่อ', cancel: 'ไม่ใช่', tone: 'danger' }) : Promise.resolve(true);
+            return go2.then(function (yes) { if (!yes) return 'ยังเชื่อมต่ออยู่ — ใส่ลิงก์กลับ หรือกดยกเลิกเพื่อปิดหน้าต่าง'; return call('adminSetDb', state.token, d.key, u, u ? k : '').then(function (r) {
+              if (!r.ok) return r.error;
+              state.dbList = state.dbList.map(function (x) { return x.key === d.key ? r.dept : x; });
+              closeModal(); draw(state.dbList); toast(r.dept.set ? 'เชื่อมต่อฐานข้อมูลของ' + d.name + 'แล้ว' : 'ยกเลิกการเชื่อมต่อของ' + d.name + 'แล้ว');
+            }); });
+          }
+        });
+      };
+      call('adminDbStatus', state.token).then(function (r) { if (state.page === 'admdb') draw(r.depts || []); }).catch(onServerError);
       return;
     }
     if (state.page === 'admpw') {
