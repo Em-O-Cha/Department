@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>อนุมัติใบลา</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #0f172a; --mut: #64748b; --line: #e2e8f0; --blue: #2563eb; --ok: #16a34a; --no: #dc2626; --grey: #cbd5e1; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Sarabun, system-ui, sans-serif; color: var(--ink); background: #f1f5f9; font-size: 16px; }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 0 0 110px; }
+  .head { padding: 16px; color: #fff; background: var(--blue); }
+  .head.ok { background: var(--ok); } .head.no { background: var(--no); }
+  .head b { display: block; font-size: 18px; } .head small { opacity: .9; }
+  .card { background: #fff; margin: 12px; border-radius: 14px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(15,23,42,.08); }
+  .nm { font-size: 20px; font-weight: 700; } .sub { color: var(--mut); font-size: 14px; margin-top: 2px; }
+  .row { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .row:first-of-type { border-top: 0; }
+  .row span { flex: 0 0 105px; color: var(--mut); font-size: 15px; } .row b { flex: 1; font-weight: 600; word-break: break-word; }
+  .green { color: #15803d; } .red { color: var(--no); }
+  .note { margin: 12px; padding: 12px 14px; border-radius: 12px; font-weight: 600; }
+  .note.done { background: #f1f5f9; border: 1.5px solid var(--grey); color: #334155; }
+  .note.deny { background: #fef2f2; border: 1.5px solid #fecaca; color: #991b1b; }
+  .note.saved { background: #dcfce7; border: 1.5px solid #86efac; color: #166534; }
+  .note small { display: block; font-weight: 400; margin-top: 2px; }
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--line); padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); }
+  .bar .in { max-width: 520px; margin: 0 auto; display: flex; gap: 10px; }
+  .bar button { flex: 1; min-height: 52px; border: 0; border-radius: 12px; font: 700 17px Sarabun, sans-serif; color: #fff; cursor: pointer; }
+  .bno { background: var(--no); } .bok { background: var(--ok); flex: 1.4 !important; }
+  .bar button:disabled { background: var(--grey) !important; color: #64748b; cursor: not-allowed; }
+  .bar button:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
+  .msg { text-align: center; padding: 60px 24px; color: var(--mut); }
+  .busyov { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(15,23,42,.28); }
+  .busybox { display: flex; gap: 12px; align-items: center; background: #fff; border-radius: 14px; padding: 16px 20px; box-shadow: 0 10px 30px rgba(0,0,0,.2); }
+  .busybox small { display: block; color: var(--mut); }
+  .busysp { width: 26px; height: 26px; border: 3px solid #bfdbfe; border-top-color: var(--blue); border-radius: 50%; animation: sp 1s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .dlg { position: fixed; inset: 0; z-index: 70; display: grid; place-items: end center; background: rgba(15,23,42,.4); }
+  .dlg .box { width: 100%; max-width: 520px; background: #fff; border-radius: 18px 18px 0 0; padding: 18px 16px calc(16px + env(safe-area-inset-bottom)); }
+  .dlg h3 { margin: 0 0 6px; } .dlg p { margin: 0 0 14px; color: #334155; }
+  .dlg .btns { display: flex; gap: 10px; } .dlg button { flex: 1; min-height: 48px; border-radius: 12px; font: 700 16px Sarabun, sans-serif; cursor: pointer; }
+  .dlg .cn { background: #fff; border: 1.5px solid var(--line); color: var(--ink); } .dlg .go { border: 0; color: #fff; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="msg">กำลังเปิดใบลา…</div></div>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script>
+(function () {
+  var API = 'https://script.google.com/macros/s/AKfycbyWj0ra2zC_T-qOE6kAr0cHHzIV944lk_5n4Nk54md9WkHcslA_Pwx7UBNF5Uc0LXTc/exec';
+  var S = { id: '', sig: '', tok: '', data: null, saved: false };
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  var bEl = null;
+  function busy(on, text) {
+    if (on && !bEl) { bEl = document.createElement('div'); bEl.className = 'busyov'; bEl.setAttribute('role', 'status'); bEl.innerHTML = '<div class="busybox"><span class="busysp"></span><div><b>' + esc(text) + '</b><small>กรุณารอสักครู่ ไม่ต้องกดซ้ำ</small></div></div>'; document.body.appendChild(bEl); }
+    if (!on && bEl) { bEl.remove(); bEl = null; }
+  }
+  function call(fn) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args }) })
+      .then(function (r) { return r.json(); }).then(function (r) { if (!r.ok) throw new Error(r.err || 'error'); return r.val; });
+  }
+  function fail(t) { document.getElementById('app').innerHTML = '<div class="msg">⚠️ ' + esc(t) + '</div>'; }
+  function params() {
+    var q = new URLSearchParams(location.search), st = q.get('liff.state');
+    if (st) { var q2 = new URLSearchParams(st.replace(/^[^?]*\?/, '')); q2.forEach(function (v, k) { if (!q.get(k)) q.set(k, v); }); }
+    S.id = q.get('id') || ''; S.sig = q.get('s') || '';
+  }
+  function ask(o) {
+    return new Promise(function (res) {
+      var d = document.createElement('div'); d.className = 'dlg';
+      d.innerHTML = '<div class="box" role="dialog" aria-modal="true"><h3>' + esc(o.title) + '</h3><p>' + esc(o.text) + '</p><div class="btns"><button class="cn">ยกเลิก</button><button class="go" style="background:' + o.color + '">' + esc(o.ok) + '</button></div></div>';
+      function done(v) { d.remove(); document.removeEventListener('keydown', key); res(v); }
+      function key(e) { if (e.key === 'Escape') done(false); }
+      d.addEventListener('click', function (e) { if (e.target === d) done(false); });
+      d.querySelector('.cn').onclick = function () { done(false); }; d.querySelector('.go').onclick = function () { done(true); };
+      document.addEventListener('keydown', key); document.body.appendChild(d); d.querySelector(o.danger ? '.cn' : '.go').focus();
+    });
+  }
+  function render() {
+    var r = S.data, l = r.leave, pend = l.status === 'รออนุมัติ';
+    var hc = pend ? '' : l.status === 'อนุมัติ' ? 'ok' : 'no';
+    var h = '<div class="head ' + hc + '"><b>' + (pend ? '📝 คำขอลา · รออนุมัติ' : l.status === 'อนุมัติ' ? '✅ อนุมัติแล้ว' : '❌ ไม่อนุมัติ') + '</b><small>ผู้เปิด: ' + esc(r.me || 'LINE') + '</small></div>';
+    if (S.saved) h += '<div class="note saved" role="status">✓ บันทึกแล้ว<small>' + (S.notified ? 'แจ้งผลในกลุ่ม LINE ให้แล้ว' : 'บันทึกในระบบแล้ว (ส่งแจ้งในกลุ่มไม่สำเร็จ)') + '</small></div>';
+    else if (!pend) h += '<div class="note done">' + (l.status === 'อนุมัติ' ? '✓ อนุมัติไปแล้ว' : '✕ ไม่อนุมัติไปแล้ว') + (l.approver ? ' โดย ' + esc(l.approver) : '') + '<small>' + (l.decidedAt ? 'เมื่อ ' + esc(l.decidedAt) + ' · ' : '') + 'กดซ้ำไม่ได้</small></div>';
+    else if (!r.can) h += '<div class="note deny">⛔ คุณไม่มีสิทธิ์อนุมัติการลา<small>ดูรายละเอียดได้อย่างเดียว · ฝ่ายบุคคลเพิ่มสิทธิ์ได้ในหน้าตั้งค่า</small></div>';
+    var row = function (a, b, c) { return '<div class="row"><span>' + a + '</span><b' + (c ? ' class="' + c + '"' : '') + '>' + b + '</b></div>'; };
+    h += '<div class="card"><div class="nm">' + esc(l.name) + '</div><div class="sub">' + esc(l.sub || ' ') + '</div></div><div class="card">'
+      + row('ประเภท', esc(l.type)) + row('วันที่', esc(l.dates)) + row('จำนวน', esc(l.amount))
+      + (l.by ? row('ผู้กรอกใบลา', esc(l.by)) : '') + (l.reason ? row('เหตุผล', esc(l.reason)) : '')
+      + (l.files ? row('เอกสารแนบ', '📎 ' + l.files + ' ไฟล์ (ดูในระบบฝ่ายบุคคล)') : '')
+      + (l.bal && pend ? row('สิทธิ์คงเหลือ', esc(l.bal.left) + '<br>หลังอนุมัติ ' + esc(l.bal.after), l.bal.neg ? 'red' : 'green') : '') + '</div>';
+    var dis = !pend || !r.can;
+    h += '<div class="bar"><div class="in"><button class="bno" id="bNo"' + (dis ? ' disabled' : '') + '>✕ ไม่อนุมัติ</button><button class="bok" id="bOk"' + (dis ? ' disabled' : '') + '>✓ อนุมัติ</button></div></div>';
+    document.getElementById('app').innerHTML = h;
+    if (!dis) {
+      document.getElementById('bOk').onclick = function () { decide('ok'); };
+      document.getElementById('bNo').onclick = function () { decide('no'); };
+    }
+  }
+  function decide(act) {
+    var l = S.data.leave, ok = act === 'ok';
+    ask({ title: ok ? 'อนุมัติใบลานี้?' : 'ไม่อนุมัติใบลานี้?', text: l.name + ' · ' + l.type + ' · ' + l.dates, ok: ok ? '✓ อนุมัติ' : '✕ ไม่อนุมัติ', color: ok ? '#16a34a' : '#dc2626', danger: !ok }).then(function (y) {
+      if (!y) return;
+      busy(true, 'กำลังบันทึก…');
+      call('hrLiffDecide', S.tok, S.id, S.sig, act).then(function (r) {
+        busy(false);
+        if (!r.ok) { alertBox(r.error); return; }
+        S.data = r; S.saved = r.decided; S.notified = r.notified; render();
+      }).catch(function (e) { busy(false); alertBox('เชื่อมต่อไม่ได้ ลองใหม่อีกครั้ง'); });
+    });
+  }
+  function alertBox(t) { ask({ title: 'ทำรายการไม่ได้', text: t, ok: 'ตกลง', color: '#2563eb' }); }
+  params();
+  if (!S.id || !S.sig) { fail('ลิงก์ไม่ครบ — เปิดจากปุ่มในการ์ด LINE'); return; }
+  busy(true, 'กำลังโหลดข้อมูล…');
+  call('hrLiffInfo').then(function (i) {
+    if (!i.liffId) throw new Error('ฝ่ายบุคคลยังไม่ได้ตั้งค่า LIFF');
+    return liff.init({ liffId: i.liffId });
+  }).then(function () {
+    if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return null; }
+    S.tok = liff.getIDToken();
+    return call('hrLiffLoad', S.tok, S.id, S.sig);
+  }).then(function (r) {
+    busy(false);
+    if (!r) return;
+    if (!r.ok) { fail(r.error); return; }
+    S.data = r; render();
+  }).catch(function (e) { busy(false); fail(e && e.message && !/fetch/i.test(e.message) ? e.message : 'เชื่อมต่อไม่ได้ ลองปิดแล้วเปิดใหม่'); });
+})();
+</script>
+</body>
+</html>

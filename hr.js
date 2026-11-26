@@ -1088,7 +1088,12 @@
         + '<div class="' + (L.group ? 'ok' : '') + '">3. ผูกกลุ่ม LINE ที่รับแจ้งการลา ' + (L.group ? '✅ ผูกแล้ว — คำขอลาจะส่งเข้ากลุ่มนี้' : '⏳ ยังไม่ได้ผูก') + '</div>'
         + (L.token ? '<div class="pfoot">' + (L.group ? '<button class="btn btn-sm btn-line" id="fTest">' + icon('send', 15) + ' ส่งข้อความทดสอบเข้ากลุ่ม</button>' : '')
           + '<button class="btn btn-sm ' + (L.group ? 'btn-line' : 'btn-primary') + '" id="fGroup">' + icon('gear', 15) + ' ' + (L.group ? 'เปลี่ยนกลุ่มที่รับแจ้งการลา' : 'ผูกกลุ่ม LINE') + '</button></div>' : '')
-        + (L.group ? '<div class="ok">4. ผู้มีสิทธิ์กดอนุมัติ / ไม่อนุมัติใน LINE</div><div id="apprBox">' + apprHtml(L.approvers || []) + '</div>' : '') + '</div>';
+        + (L.group ? '<div class="ok">4. ผู้มีสิทธิ์กดอนุมัติ / ไม่อนุมัติใน LINE</div><div id="apprBox">' + apprHtml(L.approvers || []) + '</div>' : '')
+        + '<div class="' + (L.liffId ? 'ok' : '') + '">5. หน้าอนุมัติใบลาใน LINE (LIFF) ' + (L.liffId ? '✅ เปิดใช้แล้ว — การ์ดมีปุ่ม "ดู / อนุมัติใบลา" กดแล้วปุ่มเป็นสีเทา' : '⏳ ยังไม่ได้ตั้ง (ตอนนี้ใช้ปุ่มอนุมัติในการ์ดแบบเดิม)') + '</div>'
+        + '<div class="pf"><label>Endpoint URL (คัดลอกไปใส่ตอนสร้าง LIFF app)</label><input id="fLiffUrl" readonly value="' + esc(L.liffPage || '') + '"></div>'
+        + '<div class="pfoot"><input id="fLiff" autocomplete="off" inputmode="text" aria-label="LIFF ID" placeholder="LIFF ID เช่น 1234567890-AbCdEfGh" value="' + esc(L.liffId || '') + '" style="flex:1;min-width:200px;padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit">'
+        + '<button class="btn btn-sm btn-primary" id="fLiffSave">บันทึก LIFF ID</button><button class="btn btn-sm btn-line" id="fLiffCopy">' + icon('copy', 16) + ' คัดลอก Endpoint URL</button></div>'
+        + '<small class="muted">ลบ LIFF ID แล้วบันทึก = กลับไปใช้ปุ่มอนุมัติในการ์ดแบบเดิม</small></div>';
       loadQr(function () { if (window.QRCode) new window.QRCode($('qrBox'), { text: r.url, width: 160, height: 160, correctLevel: window.QRCode.CorrectLevel.M }); });
       $('fCopy').addEventListener('click', function () { var i = $('fUrl'); i.select(); try { navigator.clipboard.writeText(r.url); } catch (e) { document.execCommand('copy'); } toast('คัดลอกลิงก์แล้ว'); });
       $('fNew').addEventListener('click', function () { ask({ title: 'เปลี่ยนลิงก์ใหม่?', text: 'QR ที่ติดไว้เดิมจะใช้ไม่ได้ ต้องพิมพ์ป้ายใหม่', ok: 'เปลี่ยนลิงก์' }).then(function (ok) { if (!ok) return; call('hrFormNewKey', state.token).then(function () { formSettings(); toast('เปลี่ยนลิงก์แล้ว'); }).catch(onServerError); }); });
@@ -1105,6 +1110,15 @@
       });
       if ($('fTest')) $('fTest').addEventListener('click', function () { call('hrLineTest', state.token).then(function (x) { toast(x.ok ? 'ส่งข้อความทดสอบแล้ว' : x.error); }).catch(onServerError); });
       if ($('fGroup')) $('fGroup').addEventListener('click', lineGroupDialog);
+      $('fLiffCopy').addEventListener('click', function () { var i = $('fLiffUrl'); i.select(); try { navigator.clipboard.writeText(L.liffPage); } catch (e) { document.execCommand('copy'); } toast('คัดลอก Endpoint URL แล้ว'); });
+      $('fLiffSave').addEventListener('click', function () {
+        var b = this; b.disabled = true;
+        call('hrSetLiff', state.token, $('fLiff').value.trim()).then(function (x) {
+          b.disabled = false;
+          if (!x.ok) { toast(x.error); return; }
+          toast(x.liffId ? 'บันทึก LIFF ID แล้ว — คำขอลาใหม่จะใช้หน้าอนุมัติ LIFF' : 'ลบ LIFF ID แล้ว — ใช้ปุ่มในการ์ดแบบเดิม'); formSettings();
+        }).catch(function (e) { b.disabled = false; onServerError(e); });
+      });
       apprBind();
     }).catch(onServerError);
   }
