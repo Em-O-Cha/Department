@@ -27,7 +27,7 @@
     { id: 'p_dash', label: 'ภาพรวม', ic: 'home' },
     { id: 'p_stock', label: 'รับเข้า / จ่ายออก', ic: 'box' },
     { id: 'p_mat', label: 'วัตถุดิบ & ราคา', ic: 'tag' },
-    { id: 'p_poa', label: 'ขออนุมัติ PO (LINE)', ic: 'line' },
+    { id: 'p_poa', label: 'เอกสาร PO (อนุมัติแล้ว)', ic: 'doc' },
     { id: 'p_rfq', label: 'เปรียบเทียบราคา', ic: 'list' },
     { id: 'p_ven', label: 'ผู้ขาย (Vendor)', ic: 'phone' },
     { id: 'p_rep', label: 'รายงาน / พิมพ์', ic: 'chart' },
@@ -507,7 +507,7 @@
   function docs() {
     var f = P.q.docType || '';
     $('main').innerHTML = '<h3>ใบ PR / PO</h3><p class="lead">ลง PR / PO: ใส่เลขที่ + แนบไฟล์ + รายการ · ใช้รับของตาม PO และตรวจ 3 ทางกับใบแจ้งหนี้ · ใบขอซื้อ (PR) และใบสั่งซื้อ (PO) หลายรายการต่อใบ · แนบไฟล์ใบที่อนุมัติ / ภาพอนุมัติทาง LINE · ติดตามการชำระเงิน</p>'
-      + searchBar('doc', 'ค้นหาเลขที่ / ผู้ขาย / วัตถุดิบ', (window.PURPO ? '<button class="btn btn-sm btn-primary" id="pImpPo">' + icon('clip', 16) + 'แนบ PO (PDF จาก PEAK)</button>' : '') + '<button class="btn btn-sm btn-primary" data-new="PR">' + icon('plus', 16) + 'PR</button><button class="btn btn-sm btn-primary" data-new="PO">' + icon('plus', 16) + 'PO</button>')
+      + searchBar('doc', 'ค้นหาเลขที่ / ผู้ขาย / วัตถุดิบ', (window.PURPO ? '<button class="btn btn-sm btn-primary" id="pImpPo">' + icon('clip', 16) + 'อัปโหลด PO ที่อนุมัติแล้ว (PDF)</button>' : '') + '<button class="btn btn-sm btn-primary" data-new="PR">' + icon('plus', 16) + 'PR</button><button class="btn btn-sm btn-primary" data-new="PO">' + icon('plus', 16) + 'PO</button>')
       + '<div class="pchips">' + [['', 'ทั้งหมด'], ['PR', 'PR'], ['PO', 'PO'], ['open', 'PO รอรับของ'], ['unpaid', 'ค้างชำระ']].map(function (c) { return '<button class="chip' + (f === c[0] ? ' on' : '') + '" data-f="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>'
       + '<div id="pList" class="plist"></div>';
     var draw = function () {
@@ -562,7 +562,7 @@
         + '<div class="pf full"><label for="dMatchNote">เหตุผลที่ชำระแม้ตรวจ 3 ทางไม่ตรง (ใส่เมื่อจำเป็นเท่านั้น)</label><input id="dMatchNote" type="text" value="' + esc(d.matchNote || '') + '"></div></div></div>'
         + (edit ? '<div class="psec"><div class="psec-h"><b>ตรวจ 3 ทาง: PO ↔ รับของ ↔ ใบแจ้งหนี้</b><button type="button" class="btn btn-sm btn-line" id="dInv">' + icon('plus', 16) + 'เพิ่มใบแจ้งหนี้</button></div><div id="dMatch"></div></div>' : '') : '')
       + '<div class="pform">' + T('dNote', 'หมายเหตุ', d.note) + '</div>'
-      + (edit && isPO && window.PURPO ? poaSec(d) : '')
+      + (edit && isPO && window.PURPO && window.PURPO.lineOn ? poaSec(d) : '')
       + '<div class="psec"><div class="psec-h"><b>' + icon('clip', 16) + ' ไฟล์แนบ</b></div>' + (edit
         ? '<div id="dFiles"></div><div class="pupload">' + S('dFileLabel', 'ประเภทไฟล์', FILE_LABELS.map(function (x) { return [x, x]; }), 'ไฟล์ PR / PO') + '<div class="pf"><label>เลือกรูป / PDF (อัปโหลดทันที)</label><input id="dFile" type="file" accept="image/*,application/pdf" multiple></div></div>'
         : '<div class="note">กดบันทึกก่อน แล้วจึงแนบไฟล์ PR/PO ที่อนุมัติ หรือภาพอนุมัติทาง LINE ได้</div>') + '</div>';
@@ -628,7 +628,7 @@
               .then(function () {
                 $('mErr').textContent = ''; toast('แนบไฟล์แล้ว'); reload();
                 var pdf = files.filter(function (f) { return /pdf/i.test(f.type) || /\.pdf$/i.test(f.name); })[0], a = window.PURPO && window.PURPO.forDoc(d.id);
-                if (isPO && pdf && window.PURPO && (!a || a.status === 'rejected')) ask({ title: 'ส่ง PO นี้ขออนุมัติทาง LINE เลยไหม?', text: 'จะแสดงตัวอย่างใบ PO พร้อมลายเซ็นผู้ออกเอกสารให้ตรวจก่อนส่ง', ok: 'ดูตัวอย่าง & ส่ง', cancel: 'ไว้ทีหลัง' }).then(function (ok) { if (ok) window.PURPO.openSign(d, { file: pdf }); });
+                if (isPO && pdf && window.PURPO && window.PURPO.lineOn && (!a || a.status === 'rejected')) ask({ title: 'ส่ง PO นี้ขออนุมัติทาง LINE เลยไหม?', text: 'จะแสดงตัวอย่างใบ PO พร้อมลายเซ็นผู้ออกเอกสารให้ตรวจก่อนส่ง', ok: 'ดูตัวอย่าง & ส่ง', cancel: 'ไว้ทีหลัง' }).then(function (ok) { if (ok) window.PURPO.openSign(d, { file: pdf }); });
               }, function (e) { $('mErr').textContent = 'อัปโหลดไม่สำเร็จ: ' + e.message; })
               .then(function () { inp.disabled = false; inp.value = ''; });
           });

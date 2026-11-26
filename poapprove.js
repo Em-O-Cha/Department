@@ -25,8 +25,10 @@
   function bytesToB64(u) { var s = '', ch = 0x8000; for (var i = 0; i < u.length; i += ch) s += String.fromCharCode.apply(null, u.subarray(i, i + ch)); return btoa(s); }
   function nameOf(label) { return String(label || '').replace(/^ลายเซ็น\s*/, '') || label || ''; }
   function newCount() { return (A.list || []).filter(function (r) { return r.status === 'approved' && !r.seenAt; }).length; }
-  A.newCount = newCount;
-  A.forDoc = function (docId) { return (A.list || []).filter(function (r) { return r.docId === docId && r.status !== 'replaced'; })[0] || null; };
+  // ผู้ใช้ขอ 26/11/69: เลิกใส่ลายเซ็น / ส่ง LINE ขออนุมัติ → หน้านี้เป็น "อัปโหลด PO ที่อนุมัติแล้ว" อ่านข้อมูลเก็บในระบบอย่างเดียว
+  A.lineOn = false;
+  A.newCount = function () { return A.lineOn ? newCount() : 0; };
+  A.forDoc = function (docId) { if (!A.lineOn) return null; return (A.list || []).filter(function (r) { return r.docId === docId && r.status !== 'replaced'; })[0] || null; };
   A.setList = function (list) { A.list = list || []; css(); };
   function css() {
     if ($('purpoCss')) return;
@@ -38,7 +40,7 @@
       + '.pas-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px}.pas-sum div{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:8px 10px}.pas-sum small{display:block;color:var(--muted);font-size:12px}.pas-sum b{font-size:15px}'
       + '.pas-hint{font-size:13px;color:#334155;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:8px 12px;margin-bottom:10px}.pas-hint.warn{background:#fff7ed;border-color:#fed7aa;color:#9a3412}'
       + '.pas-att{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#fafafa}.pas-atth{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px}.pas-ai{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0;border-bottom:1px dashed var(--line);cursor:pointer}.pas-ai input{width:20px;height:20px}.pas-ai span{font-size:11px;font-weight:700;background:#e2e8f0;border-radius:6px;padding:1px 6px}.pas-ai b{font-weight:600;overflow-wrap:anywhere}.pas-ai small{color:var(--muted)}.pas-ai .link-btn{margin-left:auto}'
-      + '.pas-files{display:grid;gap:8px}.pas-files button{text-align:left}'
+      + '.pa-up{display:flex;gap:8px 14px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.pa-up .btn{flex:0 0 auto;width:auto;white-space:nowrap}.pa-up small{flex:1 1 240px;font-size:13px}.pa-card .pa-t small{font-weight:400;font-size:12px}@media (max-width:560px){.pa-up .btn{width:100%;justify-content:center}}.pas-files{display:grid;gap:8px}.pas-files button{text-align:left}'
       + '.pa-card{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:#fff;margin-bottom:10px}.pa-card.new{border:2px solid #dc2626;background:#fef2f2}.pa-card .pa-i{flex:1;min-width:0}.pa-card .pa-i b{display:block;font-size:15px}.pa-card small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}'
       + '.pa-card .pa-a{display:flex;flex-direction:column;gap:6px;align-items:flex-end}.pa-card .pa-t{font-weight:800;white-space:nowrap}.pa-new{display:inline-block;background:#dc2626;color:#fff;font-size:12px;font-weight:700;border-radius:99px;padding:2px 9px;animation:paPulse 1.6s infinite}@keyframes paPulse{50%{opacity:.55}}'
       + '.tag.wait{background:#fff7ed;color:#c2410c}.pa-set{margin-bottom:14px}.pa-step{border-top:1px solid var(--line);padding:12px 0}.pa-step:first-of-type{border-top:0}.pa-step h5{margin:0 0 6px;font-size:14px}.pa-ok{color:#15803d;font-weight:700}.pa-no{color:#b91c1c;font-weight:700}'
@@ -64,12 +66,54 @@
   };
   var timer = null;
   A.startPoll = function () {
-    if (timer) return;
+    if (timer || !A.lineOn) return;
     timer = setInterval(function () { if (document.hidden || !state.token || !state.dept || state.dept.key !== 'PUR') return; A.refresh(); }, 60000);
   };
 
-  // ---------- หน้า "ขออนุมัติ PO (LINE)" ----------
+  // ---------- หน้า "เอกสาร PO (อนุมัติแล้ว)" (ผู้ใช้ขอ 26/11/69) ----------
   A.page = function () {
+    css();
+    var q = P().q, docs = (P().data.docs || []).filter(function (d) { return d.type === 'PO' && d.status !== 'cancelled'; })
+      .sort(function (a, b) { return String(b.orderDate).localeCompare(String(a.orderDate)) || String(b.docNo).localeCompare(String(a.docNo)); });
+    $('main').innerHTML = '<h3>เอกสาร PO (อนุมัติแล้ว)</h3>'
+      + '<div class="pa-up"><button class="btn btn-primary" id="paImp">' + icon('upload', 18) + 'อัปโหลด PO ที่อนุมัติแล้ว (PDF)</button><small class="muted">ระบบอ่านเลขที่ ผู้ขาย วันที่ รายการสินค้า และยอดเงินจากไฟล์ แล้วเก็บไว้ในระบบพร้อมไฟล์</small></div>'
+      + '<div class="pform" style="margin-bottom:10px"><div class="pf full"><label for="paQ">ค้นหาเลขที่ PO / ผู้ขาย / สินค้า</label><input id="paQ" type="search" value="' + esc(q.paQ || '') + '" placeholder="เช่น PO-2026 หรือชื่อผู้ขาย"></div></div>'
+      + '<div id="paList"></div>';
+    var draw = function () {
+      var t = String(q.paQ || '').trim().toLowerCase();
+      var list = docs.filter(function (d) { return !t || (d.docNo + ' ' + d.vendorName + ' ' + (d.items || []).map(function (i) { return i.materialName; }).join(' ')).toLowerCase().indexOf(t) >= 0; });
+      $('paList').innerHTML = '<div class="muted" style="margin-bottom:8px">' + (t ? 'พบ ' + list.length + ' จาก ' : 'ทั้งหมด ') + docs.length + ' ใบ</div>'
+        + (list.map(poCard).join('') || '<div class="panel muted">' + (docs.length ? 'ไม่พบ PO ที่ค้นหา' : 'ยังไม่มีเอกสาร PO — กด "อัปโหลด PO ที่อนุมัติแล้ว (PDF)" ด้านบนเพื่อเริ่ม') + '</div>');
+    };
+    draw();
+    $('paQ').addEventListener('input', function () { q.paQ = this.value; draw(); });
+    $('paImp').addEventListener('click', A.importPdf);
+    $('paList').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-po]'); if (!b) return;
+      var d = P().idx.doc[b.getAttribute('data-po')]; if (!d) return;
+      if (b.getAttribute('data-act') === 'del') {
+        ask({ title: 'ลบ ' + d.docNo + ' ออกจากระบบ?', text: (d.vendorName ? d.vendorName + ' · ' : '') + 'ข้อมูลใบ PO รายการสินค้า และไฟล์ที่แนบจะถูกลบ · ลบแล้วกู้คืนไม่ได้', ok: 'ลบ PO นี้', tone: 'danger' }).then(function (ok) {
+          if (!ok) return; b.disabled = true;
+          call('purDeleteDoc', state.token, d.id).then(function (x) {
+            if (!x.ok) { b.disabled = false; return toast(x.error); }
+            toast('ลบ ' + d.docNo + ' แล้ว'); P().load().then(function () { A.page(); });
+          }).catch(onServerError);
+        });
+      } else P().openDoc(d);
+    });
+  };
+  function poCard(d) {
+    var items = d.items || [], total = items.reduce(function (s, i) { return s + (Number(i.qty) || 0) * (Number(i.price) || 0); }, 0);
+    var pdf = (d.files || []).filter(isPdf)[0];
+    var names = items.slice(0, 3).map(function (i) { return esc(i.materialName); }).join(', ') + (items.length > 3 ? ' และอีก ' + (items.length - 3) + ' รายการ' : '');
+    return '<div class="pa-card"><div class="pa-i"><b>' + esc(d.docNo) + ' · ' + esc(d.vendorName || '-') + '</b>'
+      + '<small>วันที่สั่ง ' + th(d.orderDate) + (d.dueDate ? ' · 💰 ครบกำหนดชำระ ' + th(d.dueDate) : '') + (d.deliveryDate ? ' · ส่งของ ' + th(d.deliveryDate) : '') + '<br>' + items.length + ' รายการ: ' + (names || '-') + '</small></div>'
+      + '<div class="pa-a"><span class="pa-t">' + money(total) + ' <small class="muted">(ก่อน VAT)</small></span>'
+      + (pdf ? '<a class="btn btn-sm btn-line" href="' + esc(pdf.url) + '" target="_blank" rel="noopener">' + icon('doc', 16) + 'เปิดไฟล์ PO</a>' : '<small class="pa-no">ยังไม่มีไฟล์</small>')
+      + '<button class="link-btn" data-po="' + d.id + '" data-act="open">ดูรายละเอียด / แก้ไข</button><button class="link-btn danger" data-po="' + d.id + '" data-act="del">' + icon('trash', 14) + 'ลบ</button></div></div>';
+  }
+  // หน้าเดิม (ขออนุมัติทาง LINE) — เก็บไว้ ไม่ได้ใช้แล้ว
+  A.pageLine = function () {
     css(); A.startPoll();
     if (!A.list) A.list = (P().data && P().data.poApprovals) || [];
     var f = P().q.paF || (newCount() ? 'new' : '');
@@ -378,14 +422,12 @@
         + '<div class="pform"><div class="pf hl"><label for="piDue">วันที่ชำระเงิน (ครบกำหนดชำระ)</label><input id="piDue" type="date" value="' + esc(pd.date) + '"><small class="' + (pd.date ? 'muted' : 'pa-no') + '">' + (pd.date ? esc(pd.src) + ' — แก้ได้' : 'ผู้ขายรายนี้ยังไม่มีเครดิตในระบบ — เลือกวันที่เอง หรือเว้นไว้ก่อนได้') + '</small></div>'
         + '<div class="pf"><label for="piCredit">เครดิต (วัน)</label><input id="piCredit" type="number" min="0" inputmode="numeric" value="' + esc(pd.credit != null ? pd.credit : (vn && vn.creditDays !== '' && vn.creditDays != null ? vn.creditDays : '')) + '" placeholder="เช่น 30"><small class="muted">ใส่แล้ววันที่ชำระคำนวณให้</small></div></div>'
         + '<div class="cpwrap"><table class="ptable"><thead><tr><th>#</th><th>รายการ</th><th class="r">จำนวน</th><th class="r">ราคา</th><th class="r">มูลค่า</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
-        + '<div class="muted" style="margin-top:8px">กดบันทึกแล้ว ระบบแนบไฟล์นี้เข้าใบ PO และเปิดหน้าใส่ลายเซ็นเพื่อส่งขออนุมัติต่อ · วันที่ส่งของ ยืนยันอีกครั้งหลังพี่เก้อนุมัติ</div>',
-      ok: 'บันทึก & ใส่ลายเซ็นส่งขออนุมัติ',
-      foot: '<button type="button" class="link-btn" id="piOnly">บันทึกอย่างเดียว (ยังไม่ส่ง)</button>',
+        + '<div class="muted" style="margin-top:8px">กดบันทึกแล้ว ระบบเก็บข้อมูลนี้เป็น PO ที่อนุมัติแล้ว พร้อมแนบไฟล์ PDF ไว้ในใบ PO</div>',
+      ok: 'บันทึกเข้าระบบ',
       onOpen: function () {
         $('piCredit').addEventListener('input', function () { var n = parseInt(this.value, 10); if (n >= 0) $('piDue').value = plusDays(po.date || todayIso(), n); });
-        $('piOnly').addEventListener('click', function () { var b = this; b.disabled = true; saveImport(file, bytes, po, vn, old, false, $('piDue').value, $('piCredit').value).then(function (e) { if (e) { b.disabled = false; $('mErr').textContent = e; } }); });
       },
-      submit: function () { return saveImport(file, bytes, po, vn, old, true, $('piDue').value, $('piCredit').value); } });
+      submit: function () { return saveImport(file, bytes, po, vn, old, false, $('piDue').value, $('piCredit').value); } });
   }
   function saveImport(file, bytes, po, vn, old, sign, dueIn, creditIn) {
     var cr = String(creditIn || '').trim() === '' ? '' : parseInt(creditIn, 10);
@@ -395,7 +437,7 @@
     return vp.then(function (v) {
       var d = old || {}, due = dueIn || '';
       var rec = { id: d.id || '', type: 'PO', docNo: po.docNo, refId: d.refId || '', vendorId: v.id, vendorName: v.name, vendorPhone: d.vendorPhone || v.phone || '', orderDate: po.date || todayIso(), deliveryDate: d.deliveryDate || po.due || '',
-        status: d.status || 'draft', approvedBy: d.approvedBy || '', approvedDate: d.approvedDate || '', paymentStatus: d.paymentStatus || 'none', dueDate: due, paidDate: d.paidDate || '', paidAmount: d.paidAmount || '',
+        status: d.status && d.status !== 'draft' ? d.status : 'approved', approvedBy: d.approvedBy || '', approvedDate: d.approvedDate || todayIso(), paymentStatus: d.paymentStatus || 'none', dueDate: due, paidDate: d.paidDate || '', paidAmount: d.paidAmount || '',
         note: d.note || ('นำเข้าจากไฟล์ PEAK ' + file.name), matchNote: d.matchNote || '', rfqId: d.rfqId || '' };
       var items = po.items.map(function (it) { var m = findMat(it); return { materialId: m ? m.id : '', materialName: m ? m.name : it.name + (it.code ? ' (' + it.code + ')' : ''), qty: it.qty, unit: m ? m.unit : '', price: it.price }; });
       return call('purSaveDoc', state.token, rec, items);
