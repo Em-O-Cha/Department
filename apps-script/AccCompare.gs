@@ -9,7 +9,7 @@
 // ข้อมูลรายการสั่งซื้อของทุกบริษัท (ใช้ร่วมกัน: เปรียบเทียบใน Dashboard + รายงานสรุปรายเดือน)
 function accSources_(dept) {
   accRegister_();
-  var ss = purBook_(dept), map = accMap_(ss), out = [];
+  var ss = accReadBook_(dept), map = accMap_(ss), out = [];
   var pn = {}, pc = {};
   map.products.forEach(function (p) { pn[p.key] = (p.l1 || '') + (p.l2 ? ' ' + p.l2 : ''); pc[p.key] = p.color || ''; });
   var l711 = purRead_(ss, 'acc_711').map(function (l) {

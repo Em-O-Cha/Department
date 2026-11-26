@@ -78,6 +78,7 @@ function cpPcsNote_(r) { return r.pcs ? r.pcs.toLocaleString() + ' ' + r.pcsUnit
 function cpCleanShip_(s) { return { key: accClean_(s && s.key, 60), wh: accClean_(s && s.wh, 30) || '-', place: accClean_(s && s.place, 40) }; }
 function cpSheetId_(ss) { var r = cpSettingRow_(ss, 'cpramSheet'); return r ? String(r.value || '') : ''; }
 function cpBook_(main) {
+  if (main && main.__db) return cpSheetId_(main) ? dbSubBook_(main, 'cp') : null;
   var id = cpSheetId_(main);
   if (!id) return null;
   var ss = SpreadsheetApp.openById(id);

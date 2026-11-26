@@ -831,7 +831,8 @@ function accDashboard(token, q) {
   return accDashboard_(dept, q && q.from, q && q.to, q && q.basis, q && q.dc);
 }
 function accDashboard_(dept, from, to, basis, dc) {
-  var ss = accBook_(dept), map = accMap_(ss);
+  accRegister_();
+  var ss = accReadBook_(dept), map = accMap_(ss);
   basis = basis === 'po' ? 'po' : 'delivery';
   var all = purRead_(ss, 'acc_711');
   var key = basis === 'po' ? 'poDate' : 'deliveryDate';

@@ -104,6 +104,7 @@ function purId_(prefix) { return prefix + Date.now().toString(36).toUpperCase() 
 
 // อ่านทั้งแท็บ → [{key: value}] (+ _row = เลขแถวในชีต)
 function purRead_(ss, name) {
+  if (ss && ss.__db) return dbBookRead_(ss, name);   // สมุดเสมือนจากฐานข้อมูลสำเนา (DeptDb.gs)
   var sh = purSheet_(ss, name), t = PUR_TABLES_[name];
   var last = sh.getLastRow(), width = sh.getLastColumn();
   if (last < 2) return [];

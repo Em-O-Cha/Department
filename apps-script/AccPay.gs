@@ -58,6 +58,7 @@ function apSettings_(main) {
 }
 function apSheetId_(main) { var r = apSettingRow_(main, 'apSheet'); return r ? String(r.value || '') : ''; }
 function apBook_(main) {
+  if (main && main.__db) return apSheetId_(main) ? dbSubBook_(main, 'ap') : null;
   var id = apSheetId_(main);
   if (!id) return null;
   var ss = SpreadsheetApp.openById(id);
@@ -120,7 +121,8 @@ function apLoad(token) {
 // Dashboard การจ่าย (ผู้ใช้ขอ 21/11/69): ข้อมูลเบา ๆ ของทุกบรรทัดบิล + รอบจ่าย — ใช้ในหน้าผู้บริหาร (หน้าฝ่ายใช้ apLoad)
 function apDashData_(dept) {
   apRegister_();
-  var main = purBook_(dept), st = apSettings_(main), ss = apBook_(main);
+  accRegister_();
+  var main = accReadBook_(dept), st = apSettings_(main), ss = apBook_(main);
   if (!ss) return { linked: false };
   var hol = accHolidaySet_(accMap_(main)), used = {};
   var lines = purRead_(ss, 'ap_lines').filter(function (l) { return String(l.kind || '') !== AP_PO_DONE_; }).map(function (l) {

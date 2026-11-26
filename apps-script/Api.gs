@@ -89,7 +89,9 @@ function doPost(e) {
     var fns = apiFunctions_(), fn = String(req.fn || '');
     if (!Object.prototype.hasOwnProperty.call(fns, fn)) throw new Error('ไม่รองรับคำสั่งนี้');
     var args = Array.isArray(req.args) ? req.args.slice(0, 8) : [];
+    try { deptDbNoteCall_(fn); } catch (e0) {}   // คำสั่งที่แก้ข้อมูลฝ่ายบัญชี → Dashboard คัดลอกข้อมูลใหม่ (DeptDb.gs)
     out = { ok: true, val: fns[fn].apply(null, args) };
+    try { deptDbNoteCall_(fn); } catch (e1) {}
   } catch (err) {
     out = { ok: false, err: String(err && err.message || err) };
   }
