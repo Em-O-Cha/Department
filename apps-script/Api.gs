@@ -14,7 +14,7 @@ function apiFunctions_() {
     getAdminStatus: getAdminStatus, adminSendEmailCode: adminSendEmailCode, adminSetPasswordWithEmailCode: adminSetPasswordWithEmailCode,
     adminLogin: adminLogin, adminChangePassword: adminChangePassword, adminOverview: adminOverview,
     adminIssueDeptCode: adminIssueDeptCode, adminCancelDeptCode: adminCancelDeptCode, adminUnlockDept: adminUnlockDept,
-    adminSetDeptLinks: adminSetDeptLinks,
+    adminSetDeptLinks: adminSetDeptLinks, adminDbStatus: adminDbStatus, adminSetDb: adminSetDb,
     // จัดซื้อ & สต๊อก (Purchasing.gs)
     purLoad: purLoad, purMoves: purMoves, purReport: purReport, purStockReport: purStockReport, purPriceReport: purPriceReport,
     purSaveVendor: purSaveVendor, purImportVendors: purImportVendors, purSaveMaterial: purSaveMaterial, purSavePrice: purSavePrice, purDeletePrice: purDeletePrice, purPriceHistory: purPriceHistory,

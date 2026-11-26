@@ -658,7 +658,7 @@
 
   function renderNav() {
     var items = state.admin
-      ? [{ id: 'adm', label: 'แผนก / รหัสตั้งค่า', ic: 'home' }, { id: 'admpw', label: 'เปลี่ยนรหัสผู้ดูแล', ic: 'key' }]
+      ? [{ id: 'adm', label: 'แผนก / รหัสตั้งค่า', ic: 'home' }, { id: 'admpw', label: 'เปลี่ยนรหัสผู้ดูแล', ic: 'key' }, { id: 'admdb', label: 'ฐานข้อมูลสำเนา', ic: 'key' }]
       : (deptModule() ? deptModule().menus() : [{ id: 'home', label: 'หน้าหลัก', ic: 'home' }].concat(state.dept.menus.map(function (m, i) {
           return { id: 'm' + i, label: m, ic: 'form' };
         }))).concat([{ id: 'pw', label: 'เปลี่ยนรหัสผ่าน', ic: 'key' }]);
@@ -1187,6 +1187,32 @@
   }
   function fmtDate(ms) { var d = new Date(ms); return d.getDate() + '/' + (d.getMonth() + 1) + '/' + (d.getFullYear() + 543) + ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
   function renderAdminPage() {
+    // ฐานข้อมูลสำเนา (Supabase) — ใส่ที่อยู่ + กุญแจจากหน้านี้ แทน Script Properties ที่ครบ 50 ช่องแล้ว (ผู้ใช้ขอ 26/11/69)
+    if (state.page === 'admdb') {
+      $('main').innerHTML = '<h3>ฐานข้อมูลสำเนา (Supabase)</h3>'
+        + '<div class="panel" id="dbStat"><span class="spinner dark"></span> กำลังตรวจการเชื่อมต่อ…</div>'
+        + '<form class="panel form-panel" id="dbForm" autocomplete="off"><div class="note">ฐานข้อมูลนี้เก็บสำเนาไว้ให้ Dashboard อ่านเร็ว · ข้อมูลจริงยังอยู่ใน Google Sheet</div>'
+        + field('dbUrl', 'API URL (Project Settings → Data API)', 'text', 'https://xxxx.supabase.co')
+        + field('dbKey', 'กุญแจ Secret (Project Settings → API Keys → Secret keys)', 'password', 'sb_secret_…')
+        + '<div class="note" id="dbKeyHint" style="display:none">เว้นช่องกุญแจว่าง = ใช้กุญแจเดิม</div>'
+        + '<div class="err" id="dbErr"></div><div class="actions"><button type="submit" class="btn btn-primary" id="dbBtn">บันทึกและตรวจสอบ</button></div></form>';
+      var showStat = function (r) {
+        if (!r.set) { $('dbStat').innerHTML = '<span class="tag no">ยังไม่ได้เชื่อมต่อ</span>'; return; }
+        $('dbStat').innerHTML = (r.conn ? '<span class="tag ok">✓ เชื่อมต่อได้</span>' : '<span class="tag lock">✕ ' + esc(r.error) + '</span>') + ' <span class="muted">' + esc(r.host) + '</span>';
+        if (!val('dbUrl')) $('dbUrl').value = 'https://' + r.host;
+        $('dbKeyHint').style.display = '';
+      };
+      call('adminDbStatus', state.token).then(showStat).catch(onServerError);
+      $('dbForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var btn = $('dbBtn'); btn.disabled = true; $('dbErr').textContent = '';
+        call('adminSetDb', state.token, val('dbUrl'), val('dbKey')).then(function (r) {
+          if (!r.ok) { $('dbErr').textContent = r.error; return; }
+          $('dbKey').value = ''; showStat(r); toast(r.set ? 'เชื่อมต่อฐานข้อมูลแล้ว' : 'ยกเลิกการเชื่อมต่อแล้ว');
+        }).catch(onServerError).then(function () { if ($('dbBtn')) btn.disabled = false; });
+      });
+      return;
+    }
     if (state.page === 'admpw') {
       $('main').innerHTML = '<h3>เปลี่ยนรหัสผู้ดูแลระบบ</h3><p class="lead">ลืมรหัส: หน้าแรก → ผู้ดูแลระบบ → ส่งรหัสยืนยันทางอีเมล</p>'
         + '<form class="panel form-panel" id="apForm" autocomplete="off">' + field('apOld', 'รหัสปัจจุบัน') + field('apNew1', 'รหัสใหม่ (อย่างน้อย 6 ตัวอักษร)') + field('apNew2', 'พิมพ์รหัสใหม่อีกครั้ง')
