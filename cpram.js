@@ -239,27 +239,29 @@
   // แจ้งเตือนหัวหน้า (ผู้ใช้ขอ 26/11/69): คลัง + วันที่ส่ง (ตั้งแต่วันนี้) ที่รวม PO ยังไม่ถึง 120 ลัง
   // คำนวณสดจากข้อมูลทุกครั้ง — PO มาเพิ่มจนเกิน 120 ลัง รายการนั้นหายไปจากแถบเอง · ไม่นับแถวที่ยกเลิก
   var CP_MIN_CASES = 120;
-  function lowKey(date, wh, place) { return date + '|' + (wh && wh !== '-' ? wh : '') + '|' + (place || ''); }
-  function lowHit(r) { return !!C.hiLow && r.status !== 'cancel' && lowKey(r.deliveryDate, r.wh, r.place) === C.hiLow; }
+  // รวมตามวันที่ส่ง + สถานที่ส่ง = ช่อง Total ของตาราง (ผู้ใช้ชี้ 26/11/69: คลังย่อยหลายแห่งส่งที่เดียวกัน ต้องรวมกันทั้งหมด)
+  function lowKey(date, place) { return date + '|' + (place || ''); }
+  function lowHit(r) { return !!C.hiLow && r.status !== 'cancel' && lowKey(r.deliveryDate, r.place) === C.hiLow; }
   function lowPanel(lines, today) {
     var g = {}, order = [];
     caseRows(lines).forEach(function (r) {
       if (r.status === 'cancel' || !r.deliveryDate || String(r.deliveryDate) < today) return;
-      var wh = r.wh && r.wh !== '-' ? r.wh : '', k = r.deliveryDate + '|' + wh + '|' + (r.place || '');
-      if (!g[k]) { g[k] = { date: r.deliveryDate, wh: wh, place: r.place || '', sum: 0, pos: {}, units: {} }; order.push(k); }
+      var k = lowKey(r.deliveryDate, r.place);
+      if (!g[k]) { g[k] = { date: r.deliveryDate, place: r.place || '', whs: {}, sum: 0, pos: {}, units: {} }; order.push(k); }
       g[k].sum += Number(r.qty) || 0; g[k].pos[r.poNo] = 1; g[k].units[r.unitTh || r.unit || 'ลัง'] = 1;
+      if (r.wh && r.wh !== '-') g[k].whs[r.wh] = 1;
     });
     var low = order.map(function (k) { return g[k]; }).filter(function (x) { return x.sum < CP_MIN_CASES; })
       .sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
     if (!low.length) return '';
     return '<div class="panel pbox cplow" role="alert"><h4 class="cplowh">⚠️ ยอดส่งยังไม่ถึง ' + CP_MIN_CASES + ' ลัง · ' + low.length + ' รายการ</h4>'
-      + '<p class="cplown">รวม PO ทุกใบที่ส่งคลังเดียวกันในวันเดียวกัน (ไม่นับที่ยกเลิก) — เมื่อมี PO เพิ่มจนครบ ' + CP_MIN_CASES + ' ลัง รายการจะหายไปเอง</p><div class="cplowl">'
+      + '<p class="cplown">ยอดรวมตามช่อง Total = PO ทุกใบที่ส่งสถานที่เดียวกันในวันเดียวกัน (ไม่นับที่ยกเลิก) — เมื่อมี PO เพิ่มจนครบ ' + CP_MIN_CASES + ' ลัง รายการจะหายไปเอง</p><div class="cplowl">'
       + low.map(function (x) {
         var u = Object.keys(x.units), odd = u.length !== 1 || !isCase(u[0]);
-        var key = lowKey(x.date, x.wh, x.place), on = C.hiLow === key;
+        var key = lowKey(x.date, x.place), on = C.hiLow === key, whs = Object.keys(x.whs);
         return '<button type="button" class="cplowi' + (on ? ' on' : '') + '" data-cplow="' + esc(String(x.date).slice(0, 7)) + '" data-cplowk="' + esc(key) + '" aria-pressed="' + on + '" title="' + (on ? 'เลิกไฮไลต์' : 'ไฮไลต์แถวในตาราง') + '">'
           + '<span class="cplowd">📅 ' + esc(slash(x.date)) + '</span>'
-          + '<span class="cplowp">' + esc([x.wh, x.place].filter(Boolean).join(' · ') || 'ยังไม่ระบุคลัง') + ' <small>· ' + Object.keys(x.pos).length + ' PO</small></span>'
+          + '<span class="cplowp">' + esc(x.place || 'ยังไม่ระบุสถานที่ส่ง') + ' <small>· ' + Object.keys(x.pos).length + ' PO' + (whs.length ? ' · ' + esc(whs.join(', ')) : '') + '</small></span>'
           + '<span class="cplowq"><b>' + nq(x.sum) + '</b> / ' + CP_MIN_CASES + ' ' + (odd ? esc(u.join(', ')) : 'ลัง') + ' · ขาดอีก <b>' + nq(Math.round((CP_MIN_CASES - x.sum) * 100) / 100) + '</b></span></button>';
       }).join('') + '</div></div>';
   }
