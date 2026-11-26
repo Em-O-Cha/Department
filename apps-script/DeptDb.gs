@@ -41,7 +41,8 @@ function adminSetDb(token, deptKey, url, key) {
   var dept = findDept_(deptKey);
   if (!dept || dept.exec) return { ok: false, error: 'ไม่พบฝ่าย' };
   var all = deptDbAll_(), p = props_();
-  url = String(url || '').trim().replace(/\/+$/, ''); key = String(key || '').trim();
+  // หน้า Data API ของ Supabase ให้ลิงก์ที่ต่อท้ายด้วย /rest/v1/ — ตัดส่วนท้ายออกเอง (ผู้ใช้วางมาแบบนั้น 26/11/69)
+  url = String(url || '').trim().replace(/^(https:\/\/[a-z0-9-]+\.supabase\.co)(\/.*)?$/i, '$1').toLowerCase(); key = String(key || '').trim();
   if (!url && !key) { delete all[dept.key]; p.setProperty('DEPT_DB', JSON.stringify(all)); return { ok: true, dept: deptDbOut_(dept, null) }; }
   if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url)) return { ok: false, error: 'ลิงก์ต้องเป็นแบบ https://xxxx.supabase.co (คัดลอกจาก Data API → API URL)' };
   if (!key) { var old = all[dept.key]; if (!old || !old.key) return { ok: false, error: 'ใส่กุญแจ Secret (sb_secret_…)' }; key = old.key; }
