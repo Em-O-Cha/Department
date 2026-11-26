@@ -98,6 +98,14 @@
     if (msg) toast(msg);
     return P.load().then(function () { if (String(state.page).indexOf('p_') === 0) P.render(state.page); }).catch(onServerError);
   }
+  // หน้าต่าง "กำลังดำเนินการ" ระหว่างโหลด / ค้นหา (ผู้ใช้ขอ 26/11/69: กดแล้วหน้าต่างหายไปเฉย ๆ งง)
+  function waitBox(title, text) {
+    wide({ icon: 'search', title: title, body: '<div class="pwait" role="status" aria-live="polite"><span class="spinner dark"></span><div><b>' + esc(text) + '</b><small>กรุณารอสักครู่ ไม่ต้องกดซ้ำ</small></div></div>', noOk: true, noCancel: true, sticky: true });
+  }
+  function reloadTo(msg, waitTitle, waitText, fn) {
+    waitBox(waitTitle, waitText);
+    return P.load().then(function () { if (String(state.page).indexOf('p_') === 0) P.render(state.page); if (msg) toast(msg); fn(); }).catch(function (e) { closeModal(); onServerError(e); });
+  }
   P.reset = function () { P.data = null; P.report = null; P.q = {}; avlPage(false); };
   P.menus = function () {
     // จำนวน PO ที่อนุมัติใหม่แต่ยังไม่เปิดดู (ผู้ใช้ขอ 24/11/69)
@@ -979,7 +987,7 @@
       submit: function () {
         var keep = items.filter(function (it) { return it.materialName.trim() && it.qty !== ''; }).map(function (it, i) { return Object.assign({}, it, { key: it.key || ('L' + Date.now().toString(36) + i) }); });
         return call('purSaveRfq', state.token, { id: edit ? r.id : '', title: v('rqTitle'), prId: v('rqPr'), note: v('rqNote'), items: keep }).then(function (res) {
-          if (!res.ok) return res.error; closeModal(); reload('บันทึกแล้ว').then(function () { if (edit) rfqDetail(res.id); else vendorPick(res.id); });
+          if (!res.ok) return res.error; reloadTo('บันทึกแล้ว', edit ? 'กำลังบันทึก…' : 'กำลังค้นหาผู้ขาย…', edit ? 'กำลังโหลดข้อมูลล่าสุด' : 'กำลังค้นหาผู้ขายในระบบที่มีราคาสินค้านี้', function () { if (edit) rfqDetail(res.id); else vendorPick(res.id); });
         });
       } });
   }
@@ -1020,7 +1028,7 @@
         $('rqEdit').addEventListener('click', function () { rfqModal(r); });
         on('[data-qe]', 'click', function (el) { quoteModal(r, qs.filter(function (q) { return q.id === el.getAttribute('data-qe'); })[0]); }, $('mBody'));
         on('[data-qw]', 'click', function (el) { decideModal(r, qs.filter(function (q) { return q.id === el.getAttribute('data-qw'); })[0], minTotal); }, $('mBody'));
-        if ($('rqUndo')) $('rqUndo').addEventListener('click', function () { call('purDecideRfq', state.token, r.id, '', '').then(function () { closeModal(); reload('ยกเลิกการเลือกแล้ว').then(function () { rfqDetail(r.id); }); }).catch(onServerError); });
+        if ($('rqUndo')) $('rqUndo').addEventListener('click', function () { call('purDecideRfq', state.token, r.id, '', '').then(function () { reloadTo('ยกเลิกการเลือกแล้ว', 'กำลังบันทึก…', 'กำลังยกเลิกการเลือกผู้ขาย', function () { rfqDetail(r.id); }); }).catch(onServerError); });
         if ($('rqPo')) $('rqPo').addEventListener('click', function () {
           var vn = ven(win.vendorId);
           docModal(null, 'PO', { id: r.prId || '', rfqId: r.id, docNo: r.title, vendorId: win.vendorId, vendorName: win.vendorName, vendorPhone: vn ? (vn.phone || vn.phone2 || '') : '', deliveryDate: win.leadDays !== '' ? addDays(todayIso(), Number(win.leadDays)) : '',
@@ -1032,7 +1040,8 @@
   // ราคาจาก priceSources (ผู้ขายแจ้ง / ราคาวัตถุดิบ / ใบเสนอราคาเดิม / PO ล่าสุด) ต่อรายการ → บันทึกเป็น "ใบเสนอราคา" ที่มีหมายเหตุ [ราคาในระบบ]
   var SYSQ = '[ราคาในระบบ]';
   function sysQ(q) { return String(q && q.note || '').indexOf(SYSQ) === 0; }
-  function vendorPick(id) {
+  function vendorPick(id, ready) {
+    if (!ready) { waitBox('กำลังค้นหาผู้ขาย…', 'กำลังค้นหาผู้ขายในระบบที่มีราคาสินค้านี้'); return setTimeout(function () { vendorPick(id, true); }, 60); }
     var r = P.data.rfqs.filter(function (x) { return x.id === id; })[0]; if (!r) return;
     var have = {}; P.data.quotes.filter(function (q) { return q.rfqId === id; }).forEach(function (q) { have[q.vendorId || q.vendorName] = 1; });
     var src = priceSources().filter(function (x) { return !(x.src === 'ใบเสนอราคา' && P.data.quotes.some(function (q) { return q.rfqId === id && q.vendorName === x.vendor; })); });
@@ -1065,16 +1074,18 @@
       check: function () { return list.length && !$('mBody').querySelector('[data-vk]:checked') ? 'ติ๊กผู้ขายอย่างน้อย 1 เจ้า (หรือกด "ข้ามไปก่อน")' : ''; },
       submit: function () {
         if (!list.length) { closeModal(); quoteModal(r, null); return Promise.resolve(); }
-        var pick = Array.prototype.map.call($('mBody').querySelectorAll('[data-vk]:checked'), function (el) { return byV[el.getAttribute('data-vk')]; });
+        var pick = Array.prototype.map.call($('mBody').querySelectorAll('[data-vk]:checked'), function (el) { return byV[el.getAttribute('data-vk')]; }), done = 0;
+        waitBox('กำลังเพิ่มผู้ขาย…', 'กำลังเพิ่มผู้ขาย 0/' + pick.length + ' เจ้าเข้าการเทียบ');
         return pick.reduce(function (pr, o) {
           return pr.then(function () {
+            var w = document.querySelector('.pwait b'); if (w) w.textContent = 'กำลังเพิ่ม ' + o.name + ' (' + (++done) + '/' + pick.length + ')';
             var dates = Object.keys(o.p).map(function (k) { return String(o.p[k].date || '').slice(0, 10); }).filter(String).sort();
             var srcs = {}; Object.keys(o.p).forEach(function (k) { srcs[o.p[k].src] = 1; });
             return call('purSaveQuote', state.token, { id: '', rfqId: id, vendorId: o.vid || '', vendorName: o.name, quoteNo: '', quoteDate: dates[0] || '', validUntil: '', leadDays: '', creditDays: o.credit == null ? '' : o.credit, paymentTerms: '', spec: '',
               note: SYSQ + ' ' + Object.keys(srcs).join(' / ') + (dates.length ? ' ณ ' + dd(dates[0]) + (dates[dates.length - 1] !== dates[0] ? ' – ' + dd(dates[dates.length - 1]) : '') : ''),
               items: r.items.map(function (it) { var p = o.p[it.key]; return { key: it.key, price: p ? p.price : '' }; }) }).then(function (res) { if (!res.ok) throw new Error(res.error); });
           });
-        }, Promise.resolve()).then(function () { closeModal(); return reload('เพิ่มผู้ขาย ' + pick.length + ' เจ้าเข้าการเทียบแล้ว').then(function () { rfqDetail(id); }); }, function (e) { return String(e.message || e); });
+        }, Promise.resolve()).then(function () { return reloadTo('เพิ่มผู้ขาย ' + pick.length + ' เจ้าเข้าการเทียบแล้ว', 'กำลังเปรียบเทียบราคา…', 'กำลังเทียบราคาและหาผู้ขายที่แนะนำ', function () { rfqDetail(id); }); }, function (e) { closeModal(); toast('เพิ่มผู้ขายไม่สำเร็จ: ' + (e.message || e)); rfqDetail(id); });
       } });
   }
   // คำแนะนำการเลือกผู้ขาย: ให้คะแนนรวม ราคา 50 · ส่งของ 20 · เครดิต 15 · ผลประเมินผู้ขาย 15 แล้วอธิบายเหตุผลเป็นภาษาคน
@@ -1131,7 +1142,7 @@
         + '<div class="pform">' + T('dcReason', 'เหตุผลที่เลือก', '') + '</div>',
       ok: 'ยืนยันเลือกเจ้านี้', onCancel: function () { rfqDetail(r.id); },
       check: function () { return q.total > minTotal && !v('dcReason') ? 'เจ้านี้ไม่ใช่ราคาต่ำสุด กรุณาใส่เหตุผล' : ''; },
-      submit: function () { return call('purDecideRfq', state.token, r.id, q.id, v('dcReason')).then(function (res) { if (!res.ok) return res.error; closeModal(); reload('เลือกผู้ขายแล้ว').then(function () { rfqDetail(r.id); }); }); } });
+      submit: function () { return call('purDecideRfq', state.token, r.id, q.id, v('dcReason')).then(function (res) { if (!res.ok) return res.error; reloadTo('เลือกผู้ขายแล้ว', 'กำลังบันทึก…', 'กำลังบันทึกผู้ขายที่เลือก', function () { rfqDetail(r.id); }); }); } });
   }
   function quoteModal(r, q) {
     var edit = !!q, prices = {};
@@ -1161,7 +1172,7 @@
         return call('purSaveQuote', state.token, { id: edit ? q.id : '', rfqId: r.id, vendorId: v('qtVen'), vendorName: v('qtVName'), quoteNo: v('qtNo'), quoteDate: v('qtDate'), validUntil: v('qtValid'),
           leadDays: v('qtLead'), creditDays: v('qtCredit'), paymentTerms: v('qtTerms'), spec: v('qtSpec'), note: v('qtNote'), items: items }).then(function (res) {
           if (!res.ok) return res.error;
-          var done = function () { closeModal(); reload('บันทึกใบเสนอราคาแล้ว').then(function () { rfqDetail(r.id); }); };
+          var done = function () { reloadTo('บันทึกใบเสนอราคาแล้ว', 'กำลังเปรียบเทียบราคา…', 'กำลังเทียบราคาและหาผู้ขายที่แนะนำ', function () { rfqDetail(r.id); }); };
           if (!file) return done();
           return upload('quote', res.id, file, 'ใบเสนอราคา').then(done, function (e) { closeModal(); reload('บันทึกแล้ว แต่แนบไฟล์ไม่สำเร็จ: ' + e.message).then(function () { rfqDetail(r.id); }); });
         });
@@ -1679,7 +1690,7 @@
     '.mstat{display:inline-block;font-weight:700;border-radius:8px;padding:4px 10px;margin-bottom:8px;background:#f1f5f9;color:#475569}.mstat.ok{background:#dcfce7;color:#15803d}.mstat.diff{background:#fee2e2;color:#b91c1c}.mstat.noinv{background:#fef3c7;color:#b45309}',
     '.minv{margin-top:6px}.minv .pfile b{font-size:13px}.ptable input{width:100%;min-width:70px;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;font:inherit;font-size:14px;text-align:right}',
     '.ptable.cmp th.qh{min-width:120px}.ptable.cmp th.win{background:#dcfce7}.ptable.cmp td.best{background:#f0fdf4;color:#15803d;font-weight:700}.ptable.cmp tr.sub td{background:#f8fafc}.ptable.cmp td .btn{margin:2px 0}',
-    '.pvp-list{display:grid;gap:10px}.pvp{display:flex;gap:12px;align-items:flex-start;border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;background:#fff;cursor:pointer}.pvp:has(input:checked){border-color:#2563eb;background:#eff6ff}.pvp.done{opacity:.7;cursor:default}.pvp input{width:22px;height:22px;margin-top:2px;flex:0 0 auto}.pvp-b{flex:1;min-width:0}.pvp-h{display:flex;gap:6px 10px;align-items:baseline;flex-wrap:wrap}.pvp-t{margin-left:auto;font-weight:800;white-space:nowrap}.pvp ul{margin:6px 0 0;padding-left:18px;font-size:14px}.pvp li{margin:2px 0;overflow-wrap:anywhere}' +
+    '.pwait{display:flex;gap:14px;align-items:center;padding:18px 4px}.pwait .spinner{width:28px;height:28px;flex:0 0 auto}.pwait b{display:block;font-size:16px}.pwait small{color:#64748b}.pvp-list{display:grid;gap:10px}.pvp{display:flex;gap:12px;align-items:flex-start;border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;background:#fff;cursor:pointer}.pvp:has(input:checked){border-color:#2563eb;background:#eff6ff}.pvp.done{opacity:.7;cursor:default}.pvp input{width:22px;height:22px;margin-top:2px;flex:0 0 auto}.pvp-b{flex:1;min-width:0}.pvp-h{display:flex;gap:6px 10px;align-items:baseline;flex-wrap:wrap}.pvp-t{margin-left:auto;font-weight:800;white-space:nowrap}.pvp ul{margin:6px 0 0;padding-left:18px;font-size:14px}.pvp li{margin:2px 0;overflow-wrap:anywhere}' +
     '.advice{border:1.5px solid #fde68a;background:#fffbeb;border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:14px}.adv-h{font-weight:700;color:#b45309;margin-bottom:4px}.adv-main{font-size:15px}.advice ul{margin:6px 0 6px 18px;padding:0}.advice li{margin:2px 0}',
     '.adv-alt{border-top:1px dashed #fcd34d;padding-top:6px;margin-top:4px}.adv-warn{color:#b45309;font-size:13px;margin-top:6px}.adv-score{color:var(--muted);font-size:11.5px;margin-top:8px}',
     '.stars{color:#f59e0b;letter-spacing:1px}.stars i{color:#e2e8f0;font-style:normal}.pitem.rq{grid-template-columns:2.2fr 1fr 1fr auto}',
