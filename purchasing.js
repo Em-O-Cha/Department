@@ -149,12 +149,7 @@
         var late = x.deliveryDate && x.deliveryDate < t;
         return '<div class="li click" data-doc="' + x.id + '"><span>' + esc(x.docNo) + ' · ' + esc(x.vendorName) + '</span><b class="' + (late ? 'neg' : '') + '">ส่ง ' + dd(x.deliveryDate) + '</b><small>' + DOC_ST[x.status] + '</small></div>';
       }), 'ไม่มี PO ค้างรับ')
-      + box(icon('warn', 18) + ' PO ตรวจ 3 ทางไม่ตรง', d.docs.filter(function (x) { return x.type === 'PO' && x.status !== 'cancelled' && x.match && x.match.status === 'diff'; }).map(function (x) {
-        return '<div class="li click" data-doc="' + x.id + '"><span>' + esc(x.docNo) + ' · ' + esc(x.vendorName) + '</span><b class="neg">ไม่ตรง</b><small>' + esc((x.match.lines.filter(function (l) { return !l.ok; })[0] || { issues: [''] }).issues[0]) + '</small></div>';
-      }), 'ไม่มี — PO ที่มีใบแจ้งหนี้ตรงกันทั้งหมด')
-      + box(icon('doc', 18) + ' สัญญาผู้ขายใกล้หมด / หมดแล้ว (60 วัน)', d.vendors.filter(function (x) { var c = contractInfo(x); return c && c.left <= 60 && x.active !== 'ปิด'; }).map(function (x) {
-        var c = contractInfo(x); return '<div class="li"><span>' + esc(x.name) + '</span><b class="' + (c.left < 0 ? 'neg' : 'warn') + '">' + (c.left < 0 ? 'หมดแล้ว' : 'อีก ' + c.left + ' วัน') + '</b><small>สิ้นสุด ' + dd(x.contractEnd) + '</small></div>';
-      }), 'ไม่มีสัญญาที่ใกล้หมดอายุ')
+      // ผู้ใช้ขอ 26/11/69: เอากล่อง "PO ตรวจ 3 ทางไม่ตรง" และ "สัญญาผู้ขายใกล้หมด" ออก (ไม่ได้ใช้ในฝ่ายจัดซื้อ)
       + box(icon('tag', 18) + ' ค้างชำระผู้ขาย', unpaid.sort(function (a, b) { return String(a.dueDate || '9').localeCompare(String(b.dueDate || '9')); }).map(function (x) {
         var over = x.dueDate && x.dueDate < t;
         return '<div class="li click" data-doc="' + x.id + '"><span>' + esc(x.docNo) + ' · ' + esc(x.vendorName) + '</span><b class="' + (over ? 'neg' : '') + '">' + baht((Number(x.total) || 0) - (Number(x.paidAmount) || 0)) + '</b><small>ครบกำหนด ' + dd(x.dueDate) + (over ? ' (เลยกำหนด)' : '') + '</small></div>';
