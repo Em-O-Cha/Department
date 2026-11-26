@@ -72,7 +72,8 @@ function exOrders_(ss) {
 // ---------- API ----------
 function exLoad(token) {
   var dept = requireAcc_(token); exRegister_();
-  var ss = purBook_(dept), lp = props_();
+  accRegister_();
+  var ss = accReadBook_(dept), lp = props_();
   return { ok: true, today: purToday_(), line: !!(lp.getProperty('ACC_LINE_TOKEN') && lp.getProperty('ACC_LINE_GROUP')), orders: exOrders_(ss) };
 }
 // ตรวจก่อนบันทึก: มี Invoice เลขนี้แล้วหรือยัง

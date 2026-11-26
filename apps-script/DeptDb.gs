@@ -56,19 +56,18 @@ function adminSetDb(token, deptKey, url, key) {
   return { ok: true, dept: deptDbOut_(dept, all[dept.key]) };
 }
 
-// ==================== ฝ่ายบัญชี: Dashboard อ่านจากฐานข้อมูลสำเนา (ผู้ใช้ขอ 26/11/69) ====================
-// ไม่ใช้ตัวตั้งเวลา (ต้องขอสิทธิ์เพิ่ม) — ใช้กติกา:
-//  · บันทึก / แก้ / ลบ ในระบบฝ่ายบัญชี → ตั้งธง "มีของใหม่" → ครั้งถัดไปที่เปิด Dashboard อ่านจากชีตแล้วคัดลอกขึ้นฐานข้อมูลทันที
-//  · ไม่มีของใหม่ และคัดลอกล่าสุดไม่เกิน 30 นาที → อ่านจากฐานข้อมูล (เร็ว)
-//  · เกิน 30 นาที (เผื่อมีคนแก้ในชีตโดยตรง) → อ่านจากชีตแล้วคัดลอกใหม่
+// ==================== ฝ่ายบัญชี: ทุกหน้าอ่านจากฐานข้อมูลสำเนา (ผู้ใช้ขอ 26/11/69) ====================
+// อ่านทีละแท็บ ไม่ใช้ตัวตั้งเวลา (ต้องขอสิทธิ์เพิ่ม):
+//  · แท็บที่คัดลอกขึ้นฐานข้อมูลหลังการแก้ไขครั้งล่าสุด และไม่เกิน 30 นาที → อ่านจากฐานข้อมูล (เร็ว)
+//  · มีการบันทึก / แก้ / ลบ ในระบบฝ่ายบัญชีหลังจากนั้น หรือเกิน 30 นาที (เผื่อแก้ในชีตโดยตรง) → อ่านแท็บนั้นจากชีต แล้วคัดลอกขึ้นฐานข้อมูล
 //  · ฐานข้อมูลมีปัญหา → อ่านจากชีตเหมือนเดิม
+// การบันทึกทั้งหมดยังเขียนลง Google Sheet (ข้อมูลหลัก) เหมือนเดิม
 var DB_STALE_MS_ = 30 * 60 * 1000;
-var DB_ACC_TABS_ = { main: ['acc_settings', 'acc_711', 'acc_imports', 'ex_orders', 'ex_lines'], cp: ['cp_lines'], ap: ['ap_lines'] };
-var DB_ACC_READS_ = /^(accLoad|accDashboard|accCompare|accMonthly|apLoad|cpLoad|exLoad|exCheck|cpPreview|apIncome|apAiStatus|apAiRead|accLineDiag|accLineOaInfo|accLineTest)$/;
+var DB_ACC_READS_ = /^(accLoad|accDashboard|accCompare|accMonthly|acc711Report|acc711Preview|apLoad|cpLoad|exLoad|exCheck|cpPreview|apIncome|apAiStatus|apAiRead|accLineDiag|accLineOaInfo|accLineTest)$/;
 
-// เรียกจาก doPost ทุกคำสั่ง: คำสั่งที่แก้ข้อมูลฝ่ายบัญชี → ตั้งธง
+// เรียกจาก doPost ทุกคำสั่ง (ก่อนและหลังทำงาน): คำสั่งที่แก้ข้อมูลฝ่ายบัญชี → จดเวลาที่แก้
 function deptDbNoteCall_(fn) {
-  if (/^(acc|cp|ex|ap)[A-Z]/.test(fn) && !DB_ACC_READS_.test(fn)) CacheService.getScriptCache().put('DBD_ACC', String(Date.now()), 21600);
+  if (/^(acc|cp|ex|ap)[A-Z0-9]/.test(fn) && !DB_ACC_READS_.test(fn)) CacheService.getScriptCache().put('DBD_ACC', String(Date.now()), 21600);
 }
 function dbFetch_(cfg, path, opt) {
   opt = opt || {};
@@ -91,46 +90,37 @@ function dbReadTab_(cfg, dept, book, tab) {
 function dbReplaceTab_(cfg, dept, book, tab, rows) {
   dbFetch_(cfg, '/rest/v1/rpc/replace_tab', { method: 'post', body: { p_dept: dept, p_book: book, p_tab: tab, p_rows: rows } });
 }
-// สมุดเสมือน: purRead_ อ่านจากฐานข้อมูลแทนชีต (pre = แถวที่อ่านมาแล้วในคำขอนี้)
-function dbBook_(deptKey, book, cfg, pre) {
-  return { __db: { dept: deptKey, book: book, cfg: cfg, cache: pre || {} }, getId: function () { return 'db:' + deptKey + ':' + book; },
-    getUrl: function () { return ''; }, getName: function () { return book; } };
+// สมุดเสมือน: purRead_ อ่านจากฐานข้อมูลแทนชีต · opener() = เปิดชีตจริง (เมื่อจำเป็นเท่านั้น)
+function dbBook_(deptKey, book, cfg, opener, sheetId) {
+  var d = { dept: deptKey, book: book, cfg: cfg, cache: {}, opener: opener, real: null };
+  var real = function () { if (!d.real) { d.real = opener(); try { CacheService.getScriptCache().put('DBN_' + deptKey + '_' + book, d.real.getName(), 21600); } catch (e) {} } return d.real; };
+  d.realFn = real;
+  return { __db: d, getId: function () { return sheetId || real().getId(); },
+    getUrl: function () { return sheetId ? 'https://docs.google.com/spreadsheets/d/' + sheetId + '/edit' : real().getUrl(); },
+    getName: function () { return CacheService.getScriptCache().get('DBN_' + deptKey + '_' + book) || real().getName(); } };
 }
 function dbBookRead_(ss, name) {
   var d = ss.__db;
-  if (!d.cache[name]) d.cache[name] = dbReadTab_(d.cfg, d.dept, d.book, name);
+  if (!d.cache[name]) {
+    var c = CacheService.getScriptCache(), k = 'DBT_' + d.dept + '_' + d.book + '_' + name;
+    var ts = Number(c.get(k) || 0), dirty = Number(c.get('DBD_' + d.dept) || 0), now = Date.now(), rows = null;
+    if (ts && ts > dirty && now - ts < DB_STALE_MS_) { try { rows = dbReadTab_(d.cfg, d.dept, d.book, name); } catch (e) { rows = null; } }
+    if (!rows) {
+      rows = purRead_(d.realFn(), name);   // ชีตจริง (ไม่มี __db)
+      try { dbReplaceTab_(d.cfg, d.dept, d.book, name, rows); c.put(k, String(now), 21600); } catch (e) {}
+    }
+    d.cache[name] = rows;
+  }
   return JSON.parse(JSON.stringify(d.cache[name]));
 }
-// สมุดย่อย (CP Ram / ค่าใช้จ่าย) ของสมุดเสมือน
-function dbSubBook_(main, book) {
+// สมุดย่อย CP Ram / ค่าใช้จ่าย ของสมุดเสมือน
+function dbSubBook_(main, book, id, prep) {
   var d = main.__db;
-  if (d.pre && d.pre[book] === null) return null;
-  return dbBook_(d.dept, book, d.cfg, d.pre && d.pre[book]);
+  return dbBook_(d.dept, book, d.cfg, function () { var ss = SpreadsheetApp.openById(id); try { if (ss.getSpreadsheetTimeZone() !== PUR_TZ_) ss.setSpreadsheetTimeZone(PUR_TZ_); } catch (e) {} if (prep) prep(ss); return ss; }, id);
 }
-// สมุดหลักฝ่ายบัญชีสำหรับ Dashboard: ฐานข้อมูล (ถ้าใช้ได้) หรือชีต
+// สมุดหลักฝ่ายบัญชีสำหรับหน้าที่อ่านอย่างเดียว: ฐานข้อมูล (ถ้าเชื่อมต่อไว้) หรือชีต
 function accReadBook_(dept) {
   var cfg = deptDbCfg_(dept.key);
   if (!cfg) return purBook_(dept);
-  var c = CacheService.getScriptCache(), dirty = c.get('DBD_ACC'), last = Number(c.get('DBS_ACC') || 0);
-  if (!dirty && last && Date.now() - last < DB_STALE_MS_) return dbBook_(dept.key, 'main', cfg);
-  var ss = purBook_(dept);
-  try {
-    c.remove('DBD_ACC');
-    var pre = accDbSyncAll_(dept, ss, cfg);
-    c.put('DBS_ACC', String(Date.now()), 21600);
-    var b = dbBook_(dept.key, 'main', cfg, pre.main); b.__db.pre = pre;
-    return b;
-  } catch (e) { if (dirty) c.put('DBD_ACC', dirty, 21600); return ss; }
-}
-// อ่านทุกแท็บที่ Dashboard ใช้จากชีต แล้วคัดลอกขึ้นฐานข้อมูล
-function accDbSyncAll_(dept, ss, cfg) {
-  accRegister_(); try { exRegister_(); } catch (e) {} try { cpRegister_(); } catch (e) {} try { apRegister_(); } catch (e) {}
-  var pre = { main: {}, cp: null, ap: null };
-  var put = function (bk, book, tab, into) { var rows = purRead_(bk, tab); dbReplaceTab_(cfg, dept.key, book, tab, rows); into[tab] = rows; };
-  DB_ACC_TABS_.main.forEach(function (t) { put(ss, 'main', t, pre.main); });
-  var cs = null; try { cs = cpBook_(ss); } catch (e) { cs = null; }
-  if (cs) { pre.cp = {}; DB_ACC_TABS_.cp.forEach(function (t) { put(cs, 'cp', t, pre.cp); }); }
-  var as = null; try { as = apBook_(ss); } catch (e) { as = null; }
-  if (as) { pre.ap = {}; DB_ACC_TABS_.ap.forEach(function (t) { put(as, 'ap', t, pre.ap); }); }
-  return pre;
+  return dbBook_(dept.key, 'main', cfg, function () { return purBook_(dept); }, deptConfig_(dept.key).sheetId);
 }

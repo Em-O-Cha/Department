@@ -252,7 +252,8 @@ function accMatrix_(map, lines) {
 
 // ---------- API: โหลดหน้า ----------
 function accLoad(token) {
-  var dept = requireAcc_(token), ss = accBook_(dept);
+  var dept = requireAcc_(token); accRegister_();
+  var ss = accReadBook_(dept);
   var imports = purRead_(ss, 'acc_imports').sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); });
   var p = props_();
   return { ok: true, today: purToday_(), map: accMap_(ss), imports: imports.slice(0, 200),
@@ -264,7 +265,8 @@ function accLoad(token) {
 
 // ---------- API: ตรวจไฟล์ก่อนบันทึก ----------
 function acc711Preview(token, lines, fileName) {
-  var dept = requireAcc_(token), ss = accBook_(dept), map = accMap_(ss);
+  var dept = requireAcc_(token); accRegister_();
+  var ss = accReadBook_(dept), map = accMap_(ss);
   var rows = accCleanLines_(lines);
   var saved = {};
   purRead_(ss, 'acc_711').forEach(function (x) { saved[accKey_(x)] = x.importId; });
@@ -349,7 +351,8 @@ function accReportLines_(ss, q) {
   });
 }
 function acc711Report(token, q) {
-  var dept = requireAcc_(token), ss = accBook_(dept), map = accMap_(ss);
+  var dept = requireAcc_(token); accRegister_();
+  var ss = accReadBook_(dept), map = accMap_(ss);
   q = q || {};
   var lines = accReportLines_(ss, q), m = accMatrix_(map, lines);
   var imp = q.importId ? purRead_(ss, 'acc_imports').filter(function (x) { return x.id === q.importId; })[0] : null;

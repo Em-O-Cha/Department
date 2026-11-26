@@ -78,7 +78,7 @@ function cpPcsNote_(r) { return r.pcs ? r.pcs.toLocaleString() + ' ' + r.pcsUnit
 function cpCleanShip_(s) { return { key: accClean_(s && s.key, 60), wh: accClean_(s && s.wh, 30) || '-', place: accClean_(s && s.place, 40) }; }
 function cpSheetId_(ss) { var r = cpSettingRow_(ss, 'cpramSheet'); return r ? String(r.value || '') : ''; }
 function cpBook_(main) {
-  if (main && main.__db) return cpSheetId_(main) ? dbSubBook_(main, 'cp') : null;
+  if (main && main.__db) { var vid = cpSheetId_(main); return vid ? dbSubBook_(main, 'cp', vid) : null; }
   var id = cpSheetId_(main);
   if (!id) return null;
   var ss = SpreadsheetApp.openById(id);
@@ -168,7 +168,8 @@ function cpRounds_(rows) {
 // ---------- API ----------
 function cpLoad(token) {
   var dept = requireAcc_(token); cpRegister_();
-  var main = purBook_(dept), map = cpMap_(main), ss = null, err = ''; cpHolInit_(main);
+  accRegister_();
+  var main = accReadBook_(dept), map = cpMap_(main), ss = null, err = ''; cpHolInit_(main);
   try { ss = cpBook_(main); } catch (e) { err = 'เปิดชีต CP Ram ไม่ได้ — ตรวจว่าแชร์ให้บัญชีระบบเป็นผู้แก้ไขแล้ว'; }
   var lines = [], imports = [], moves = [];
   if (ss) {

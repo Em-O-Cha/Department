@@ -58,7 +58,7 @@ function apSettings_(main) {
 }
 function apSheetId_(main) { var r = apSettingRow_(main, 'apSheet'); return r ? String(r.value || '') : ''; }
 function apBook_(main) {
-  if (main && main.__db) return apSheetId_(main) ? dbSubBook_(main, 'ap') : null;
+  if (main && main.__db) { var vid = apSheetId_(main); return vid ? dbSubBook_(main, 'ap', vid, apHeadV2_) : null; }
   var id = apSheetId_(main);
   if (!id) return null;
   var ss = SpreadsheetApp.openById(id);
@@ -108,7 +108,8 @@ function apRounds_(st, hol, extra) {
 
 function apLoad(token) {
   var dept = requireAcc_(token); apRegister_();
-  var main = purBook_(dept), st = apSettings_(main), ss = null, err = '';
+  accRegister_();
+  var main = accReadBook_(dept), st = apSettings_(main), ss = null, err = '';
   try { ss = apBook_(main); } catch (e) { err = 'เปิดชีตค่าใช้จ่ายไม่ได้ — ตรวจว่าแชร์ให้บัญชีระบบเป็นผู้แก้ไขแล้ว'; }
   var hol = accHolidaySet_(accMap_(main));
   var all = ss ? purRead_(ss, 'ap_lines').map(apOut_) : [];
@@ -496,7 +497,8 @@ function apIncome(token, payRound) {
   var dept = requireAcc_(token); apRegister_();
   var ym = String(accDate_(payRound) || '').slice(0, 7);
   if (!ym) return { ok: false, error: 'เลือกรอบจ่าย' };
-  var main = purBook_(dept), map = accMap_(main), hol = accHolidaySet_(map);
+  accRegister_();
+  var main = accReadBook_(dept), map = accMap_(main), hol = accHolidaySet_(map);
   var mk = function () { return [{ half: 1, date: '', amount: 0, count: 0 }, { half: 2, date: '', amount: 0, count: 0 }]; };
   var add = function (arr, deliveryIso, amt) {
     var due = accDueDate_(deliveryIso, hol);
