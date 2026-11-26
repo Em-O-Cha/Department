@@ -27,7 +27,7 @@ var PRD_TABLES_ = {
     ['files', 'รูป'], ['sentAt', 'ส่ง LINE เมื่อ'], ['by', 'ผู้ส่ง'], ['updatedAt', 'แก้ไขล่าสุด']] },
   prd_breakdowns: { tab: 'Breakdown เครื่องจักร', cols: [
     ['id', 'รหัส'], ['date', 'วันที่'], ['grp', 'กลุ่มงาน'], ['machine', 'เครื่องจักร / อุปกรณ์'], ['start', 'เวลาเริ่ม'], ['end', 'เวลาจบ'], ['minutes', 'เวลาที่เสีย (นาที)'],
-    ['problem', 'ปัญหา'], ['fix', 'การแก้ไข'], ['by', 'ผู้บันทึก'], ['files', 'รูปถ่าย'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
+    ['problem', 'ปัญหา'], ['cause', 'สาเหตุ'], ['fix', 'การแก้ไข'], ['by', 'ผู้บันทึก'], ['files', 'รูปถ่าย'], ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
   prd_settings: { tab: 'ตั้งค่า', cols: [['id', 'รายการ'], ['value', 'ค่า']] }
 };
 var PRD_GROUPS_ = { G2: 'งานผัด', G1: 'งานบรรจุลงซอง/ถ้วย', G3: 'งานบรรจุลงลัง' };
@@ -365,7 +365,7 @@ function prdSaveBreakdown(token, b) {
     if (b.id && !old) return { ok: false, error: 'ไม่พบรายการนี้' };
     var now = purNow_(), o = old || { id: purId_('BD'), files: '[]', createdAt: now };
     o.date = date; o.grp = PRD_GROUPS_[b.grp] ? b.grp : ''; o.machine = machine; o.start = start; o.end = end; o.minutes = mins;
-    o.problem = prdText_(b.problem, 800); o.fix = prdText_(b.fix, 800); o.by = purClean_(b.by, 60); o.updatedAt = now;
+    o.problem = prdText_(b.problem, 800); o.cause = prdText_(b.cause, 800); o.fix = prdText_(b.fix, 800); o.by = purClean_(b.by, 60); o.updatedAt = now;
     purWrite_(ss, 'prd_breakdowns', o);
     purLogWrite_(ss, old ? 'แก้ Breakdown' : 'บันทึก Breakdown', 'prd_breakdowns', o.id, date + ' · ' + machine + ' · ' + start + '–' + (end || '?'));
     return { ok: true, breakdown: prdBdOut_(purRead_(ss, 'prd_breakdowns').filter(function (x) { return x.id === o.id; })[0]) };
@@ -553,6 +553,11 @@ function prdDashboard_(dept, from, to) {
     products: prodList.slice(0, 40),
     lateList: late.slice(0, 15).map(function (x) { return { date: x.date, grp: x.grp, product: x.product, deadline: prdDeadline_(x), finishDate: x.finishDate, cause: x.lateCause, state: x._fs }; }),
     lateCauses: Object.keys(byCause).map(function (k) { return { name: k, n: byCause[k] }; }).sort(function (a, b) { return b.n - a.n; }),
+    // รายการ Breakdown ล่าสุด พร้อมปัญหา / สาเหตุ / การแก้ไข / รูป (ผู้ใช้ขอ 26/11/69 — แสดงทั้งหน้าฝ่ายผลิตและผู้บริหาร)
+    bdList: bds.slice().sort(function (a, b) { return String(b.date + b.start).localeCompare(String(a.date + a.start)); }).slice(0, 30).map(function (b) {
+      return { date: b.date, grp: b.grp, machine: b.machine, start: b.start, end: b.end, minutes: b.minutes, problem: b.problem, cause: b.cause || '', fix: b.fix, by: b.by,
+        files: purParseFiles_(b.files).slice(0, 6).map(function (f) { return { url: f.url }; }) };
+    }),
     machines: Object.keys(byMachine).map(function (k) { return byMachine[k]; }).sort(function (a, b) { return b.minutes - a.minutes; }),
     days: Object.keys(days).sort().map(function (k) { var o = days[k]; return { date: k, yieldPct: o.raw ? Math.round(o.out / o.raw * 1000) / 10 : null }; }) };
 }

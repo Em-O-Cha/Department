@@ -678,6 +678,17 @@
         return '<div class="li"><span>' + esc(m.name) + '</span><b>' + fmt(m.minutes, 0) + ' นาที</b><small>' + m.n + ' ครั้ง</small></div>';
       }).join('') : '<div class="muted">ไม่มี</div>')
       + '<h4 style="margin-top:16px">' + icon('box', 18) + ' งานบรรจุ</h4><div class="li"><span>บรรจุลงซอง/ถ้วย (G1)</span><b>' + fmt(k.packed, 0) + ' ชิ้น</b></div><div class="li"><span>บรรจุลงลัง (G3)</span><b>' + fmt(k.cases, 0) + ' ลัง</b></div></div></div>';
+    // Breakdown: ปัญหา / สาเหตุ / การแก้ไข + รูป (ผู้ใช้ขอ 26/11/69 — ทั้งหน้าฝ่ายผลิตและผู้บริหาร)
+    var bl = r.bdList || [];
+    html += '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('gear2', 18) + ' Breakdown เครื่องจักร — ปัญหา · สาเหตุ · รูป <small class="muted">(' + (bl.length ? 'ล่าสุด ' + bl.length + ' ครั้ง' : 'ไม่มีในช่วงนี้') + ')</small></h4>'
+      + (bl.length ? '<div class="xbdl">' + bl.map(function (b) {
+        var f = b.files || [];
+        return '<div class="xbdc"><div class="xbdh"><b>' + esc(b.machine) + '</b><span class="xbdm">' + (b.minutes === '' || b.minutes == null ? 'ยังไม่จบ' : fmt(b.minutes, 0) + ' นาที') + '</span></div>'
+          + '<small class="muted">' + dd(b.date) + ' · ' + esc(b.start) + (b.end ? '–' + esc(b.end) : '') + (b.grp ? ' · ' + esc(b.grp) : '') + (b.by ? ' · ' + esc(b.by) : '') + '</small>'
+          + '<dl><dt>ปัญหา</dt><dd>' + esc(b.problem || '-') + '</dd><dt>สาเหตุ</dt><dd' + (b.cause ? '' : ' class="muted"') + '>' + esc(b.cause || 'ยังไม่ระบุ') + '</dd>' + (b.fix ? '<dt>การแก้ไข</dt><dd>' + esc(b.fix) + '</dd>' : '') + '</dl>'
+          + (f.length ? '<div class="xbdimgs">' + f.map(function (x) { return '<a href="' + esc(x.url) + '" target="_blank" rel="noopener" aria-label="ดูรูป ' + esc(b.machine) + '"><img src="' + esc(x.url) + '=w300" alt="" loading="lazy"></a>'; }).join('') + '</div>' : '<small class="muted">ไม่มีรูป</small>')
+          + '</div>';
+      }).join('') + '</div>' : '<div class="muted">ไม่มี Breakdown ในช่วงนี้ 👍</div>') + '</div>';
     if (r.days.length > 1) {
       html += '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('chart', 18) + ' Yield รายวัน</h4>' + (window.DCH ? (function () {   // กราฟเส้น + เส้นเป้า (21/11/69)
         var D2 = r.days, ys = D2.map(function (d) { return d.yieldPct; }).filter(function (v) { return v != null; });
@@ -696,13 +707,13 @@
   function bdPage() {
     var q = H.q, all = H.data.breakdowns.slice().sort(function (a, b) { return (b.date + b.start).localeCompare(a.date + a.start); });
     var mins = all.reduce(function (s, b) { return s + (Number(b.minutes) || 0); }, 0);
-    $('main').innerHTML = '<h3>Breakdown เครื่องจักร</h3><p class="lead">เวลาที่เครื่องจักร / อุปกรณ์เสีย · ปัญหา · การแก้ไข (ข้อมูล ' + dd(H.data.from) + ' – ' + dd(H.data.to) + ')</p>'
+    $('main').innerHTML = '<h3>Breakdown เครื่องจักร</h3><p class="lead">เวลาที่เครื่องจักร / อุปกรณ์เสีย · ปัญหา · สาเหตุ · การแก้ไข (ข้อมูล ' + dd(H.data.from) + ' – ' + dd(H.data.to) + ')</p>'
       + '<div class="qtop"><button class="btn btn-primary" id="bAdd">' + icon('plus', 18) + ' บันทึก Breakdown</button><span class="muted">รวม ' + all.length + ' ครั้ง · ' + fmt(mins, 0) + ' นาที</span></div>'
-      + '<div class="ptable-wrap"><table class="ptable"><thead><tr><th>วันที่</th><th>เครื่องจักร</th><th>เวลา</th><th>นาที</th><th>ปัญหา</th><th>การแก้ไข</th><th></th></tr></thead><tbody>'
+      + '<div class="ptable-wrap"><table class="ptable"><thead><tr><th>วันที่</th><th>เครื่องจักร</th><th>เวลา</th><th>นาที</th><th>ปัญหา</th><th>สาเหตุ</th><th>การแก้ไข</th><th></th></tr></thead><tbody>'
       + (all.map(function (b) {
         return '<tr><td class="nw">' + dd(b.date) + (b.grp ? '<br><small>' + esc(b.grp) + '</small>' : '') + '</td><td><b>' + esc(b.machine) + '</b>' + ((b.files || []).length ? '<br><a href="' + esc(b.files[0].url) + '" target="_blank" rel="noopener" class="xbdph"><img src="' + esc(b.files[0].url) + '=w120" alt="" loading="lazy">' + (b.files.length > 1 ? '<em>+' + (b.files.length - 1) + '</em>' : '') + '</a>' : '') + '</td><td class="nw">' + esc(b.start) + (b.end ? '–' + esc(b.end) : '<br><small class="neg">ยังไม่จบ</small>') + '</td><td class="r">' + (b.minutes === '' ? '-' : b.minutes) + '</td>'
-          + '<td>' + esc(b.problem) + '</td><td>' + esc(b.fix || '-') + '</td><td><button class="btn btn-line btn-sm" data-bd="' + esc(b.id) + '">แก้ไข</button></td></tr>';
-      }).join('') || '<tr><td colspan="7" class="muted">ยังไม่มีรายการ</td></tr>') + '</tbody></table></div>';
+          + '<td>' + esc(b.problem) + '</td><td>' + esc(b.cause || '-') + '</td><td>' + esc(b.fix || '-') + '</td><td><button class="btn btn-line btn-sm" data-bd="' + esc(b.id) + '">แก้ไข</button></td></tr>';
+      }).join('') || '<tr><td colspan="8" class="muted">ยังไม่มีรายการ</td></tr>') + '</tbody></table></div>';
     $('bAdd').addEventListener('click', function () { bdForm({ date: H.data.today }, bdPage); });
     on('[data-bd]', 'click', function (el) { bdForm(H.data.breakdowns.filter(function (b) { return b.id === el.getAttribute('data-bd'); })[0], bdPage); }, $('main'));
   }
@@ -717,6 +728,7 @@
         + '<div class="pf"><label for="bStart">เวลาเริ่ม *</label><input id="bStart" type="time" value="' + esc(b.start || hhmm) + '"></div>'
         + '<div class="pf"><label for="bEnd">เวลาจบ <small class="muted">(ยังไม่จบ เว้นว่าง)</small></label><input id="bEnd" type="time" value="' + esc(b.end || '') + '"></div>'
         + '<div class="pf full"><label for="bProb">ปัญหา *</label><textarea id="bProb" rows="2" placeholder="อาการที่เกิด">' + esc(b.problem || '') + '</textarea></div>'
+        + '<div class="pf full"><label for="bCause">สาเหตุ</label><textarea id="bCause" rows="2" placeholder="เกิดจากอะไร เช่น สายพานขาด / ใบมีดสึก">' + esc(b.cause || '') + '</textarea></div>'
         + '<div class="pf full"><label for="bFix">การแก้ไข</label><textarea id="bFix" rows="2" placeholder="ทำอะไรไป / ใครแก้">' + esc(b.fix || '') + '</textarea></div>'
         + '<div class="pf full"><label>รูปถ่าย</label>' + (H.data.hasFolder ? '<div class="xphotos" id="bPh"></div><div class="xbdbtn"><label class="btn btn-line btn-sm">' + icon('camera', 16) + ' ถ่ายรูป<input type="file" accept="image/*" capture="environment" id="bCam" hidden></label>'
           + '<label class="btn btn-line btn-sm">' + icon('box', 16) + ' เลือกจากคลังรูป<input type="file" accept="image/*" multiple id="bLib" hidden></label></div>' : '<span class="muted">ให้ผู้ดูแลระบบตั้งโฟลเดอร์ของฝ่ายก่อน จึงจะแนบรูปได้</span>') + '</div></div>'
@@ -753,7 +765,7 @@
         });
       },
       submit: function () {
-        var o = { id: b.id, date: $('bDate').value, grp: $('bGrp').value, machine: $('bMac').value.trim(), start: $('bStart').value, end: $('bEnd').value, problem: $('bProb').value.trim(), fix: $('bFix').value.trim(), by: me() };
+        var o = { id: b.id, date: $('bDate').value, grp: $('bGrp').value, machine: $('bMac').value.trim(), start: $('bStart').value, end: $('bEnd').value, problem: $('bProb').value.trim(), cause: $('bCause').value.trim(), fix: $('bFix').value.trim(), by: me() };
         if (!o.machine) return Promise.resolve('ใส่ชื่อเครื่องจักร / อุปกรณ์');
         if (!o.start) return Promise.resolve('ใส่เวลาเริ่ม');
         if (!o.problem) return Promise.resolve('เขียนปัญหาที่เกิด');
@@ -1074,7 +1086,8 @@
     '.xcarryh{margin:16px 0 8px;font-size:15px;color:#6d28d9}.xcarryh small{color:var(--muted);font-weight:400;font-size:12.5px}.xcarryn{background:#f5f3ff;border:1.5px solid #ddd6fe;color:#5b21b6;font-size:14px;margin-bottom:12px}',
     '.xin select.xu{flex:none;width:auto;max-width:42%;border:0;border-left:1.5px solid var(--line);background:#f8fafc;color:#334155;font:inherit;font-size:13px;padding:0 6px;align-self:stretch;cursor:pointer}',
     '.xhint{font-size:12.5px;color:#9a3412;margin:-4px 2px 8px}',
-    '.xbdbtn{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}.xbdbtn .btn{cursor:pointer}.xnew{position:absolute;left:4px;bottom:4px;font-size:10px;font-style:normal;background:#16a34a;color:#fff;border-radius:6px;padding:1px 5px}.xbdph{position:relative;display:inline-block;margin-top:4px}.xbdph img{width:54px;height:54px;object-fit:cover;border-radius:8px;display:block}.xbdph em{position:absolute;right:2px;bottom:2px;font-size:10px;font-style:normal;background:#000a;color:#fff;border-radius:6px;padding:0 4px}',
+    '.xbdl{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}.xbdc{border:1px solid #e2e8f0;border-left:5px solid #dc2626;border-radius:14px;padding:12px;background:#fff;break-inside:avoid}.xbdh{display:flex;justify-content:space-between;gap:8px;align-items:baseline}.xbdm{color:#dc2626;font-weight:700;white-space:nowrap}.xbdc dl{margin:8px 0;display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:14px}.xbdc dt{color:#64748b;font-weight:600}.xbdc dd{margin:0;white-space:pre-wrap;word-break:break-word}.xbdimgs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.xbdimgs img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;display:block;background:#f1f5f9}'
+    + '.xbdbtn{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}.xbdbtn .btn{cursor:pointer}.xnew{position:absolute;left:4px;bottom:4px;font-size:10px;font-style:normal;background:#16a34a;color:#fff;border-radius:6px;padding:1px 5px}.xbdph{position:relative;display:inline-block;margin-top:4px}.xbdph img{width:54px;height:54px;object-fit:cover;border-radius:8px;display:block}.xbdph em{position:absolute;right:2px;bottom:2px;font-size:10px;font-style:normal;background:#000a;color:#fff;border-radius:6px;padding:0 4px}',
     '.xchk.xall{font-weight:700;border-right:1.5px solid var(--line);padding-right:12px;margin-right:2px}.xeve{border-top:4px solid var(--g)}.xbd{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13.5px}.xbd small{grid-column:1/-1;color:var(--muted)}',
     '.xsrw{display:grid;grid-template-columns:22px minmax(0,2fr) minmax(0,1.2fr) minmax(0,.8fr) minmax(0,.8fr) 34px;gap:6px;align-items:end;margin-bottom:6px}.xsn{font-weight:700;color:var(--muted);padding-bottom:10px}.xsrw .icon-btn{margin-bottom:6px}',
     '@media (max-width:760px){.xsrw{grid-template-columns:22px minmax(0,1fr) minmax(0,1fr) 34px;border-bottom:1px dashed var(--line);padding-bottom:8px}.xsrw .xsn{grid-row:1;grid-column:1}.xsrw .xsp{grid-row:1;grid-column:2/4}.xsrw .icon-btn{grid-row:1;grid-column:4}.xsrw .xsl{grid-row:2;grid-column:2/4}.xsrw .xsq{grid-row:3;grid-column:2}.xsrw .xsu{grid-row:3;grid-column:3}}',
