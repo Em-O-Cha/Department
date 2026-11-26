@@ -308,6 +308,7 @@ function hrLeaveFlex_(l, e, bal, decided, again) {
       T((l.status === 'อนุมัติ' ? '✓ อนุมัติไปแล้ว' : '✕ ไม่อนุมัติไปแล้ว') + ' · กดซ้ำไม่ได้', { size: 'sm', weight: 'bold', color: '#6b7280', align: 'center' })] }]
     .concat(again ? [T('มีการกดปุ่มในการ์ดเดิมอีกครั้ง — คำขอนี้จัดการไปแล้ว' + (l.decidedAt ? ' เมื่อ ' + String(l.decidedAt).slice(0, 16) : ''), { size: 'xxs', color: '#94a3b8', align: 'center' })] : []) };
   var liff = !decided && hrLiffUrl_(l.id);
+  if (liff) hrLiffCachePut_(hrLiffViewOf_(l, e, bal, l.std));
   if (liff) bubble.footer = { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '10px', contents: [
     { type: 'button', style: 'primary', color: '#2563eb', height: 'sm', action: { type: 'uri', label: '📋 ดู / อนุมัติใบลา', uri: liff } },
     { type: 'button', style: 'link', height: 'sm', action: { type: 'uri', label: 'เปิดในระบบฝ่ายบุคคล', uri: HR_APP_URL_ } }] };
@@ -379,7 +380,7 @@ function hrLineWebhook_(events) {
 // Script Property HR_LIFF_ID (ตั้งในหน้าตั้งค่าฝ่ายบุคคล) · ไม่มี = การ์ดใช้ปุ่มอนุมัติ / ไม่อนุมัติแบบเดิม
 var HR_LIFF_PAGE_ = 'https://em-o-cha.github.io/Department/hrapprove.html';
 function hrLiffId_() { return props_().getProperty('HR_LIFF_ID') || ''; }
-function hrLiffUrl_(id) { var L = hrLiffId_(); return L ? 'https://liff.line.me/' + L + '?id=' + encodeURIComponent(id) + '&s=' + hrSign_('view|' + id) : ''; }
+function hrLiffUrl_(id) { var L = hrLiffId_(); return L ? 'https://liff.line.me/' + L + '?id=' + encodeURIComponent(id) + '&s=' + hrSign_('view|' + id) + '&l=' + L : ''; }
 function hrSetLiff(token, liffId) {
   requireHr_(token);
   var v = String(liffId || '').trim();
@@ -405,10 +406,9 @@ function hrLiffCan_(u) {
   var nm = gid ? hrLineName_(gid, u.id) : 'LINE';
   return { can: nm !== 'LINE', name: nm !== 'LINE' ? nm : u.name };
 }
-function hrLiffView_(ss, l, e, st) {
-  var bal = null;
-  try { if (e && l.status === 'รออนุมัติ') bal = hrBalance_(ss, e, String(l.dateFrom).slice(0, 4))[l.type] || null; } catch (x) {}
-  var o = { stdHours: st.stdHours || 10 };
+// ข้อมูลที่หน้า LIFF แสดง (ไม่ต้องอ่านชีตพนักงาน) — เก็บไว้ใน cache ตอนส่งการ์ด เพื่อให้หน้าเปิดเร็ว
+function hrLiffViewOf_(l, e, bal, std) {
+  var o = { stdHours: std || 10 };
   return { id: l.id, status: l.status, approver: l.approver || '', decidedAt: String(l.decidedAt || '').slice(0, 16),
     name: e ? (e.fullName || '') + (e.nickname ? ' (' + e.nickname + ')' : '') : '', sub: e ? [e.position, e.group, e.building].filter(String).join(' · ') : '',
     type: HR_LEAVE_TYPES_[l.type] || l.type, dates: hrThDate_(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + hrThDate_(l.dateTo) : ''),
@@ -416,26 +416,37 @@ function hrLiffView_(ss, l, e, st) {
     files: purParseFiles_(l.files).length,
     bal: bal && bal.quota != null ? { left: hrFmtH_(bal.left, o), after: hrFmtH_(Math.round((bal.left - (Number(l.hours) || 0)) * 100) / 100, o), neg: bal.left - (Number(l.hours) || 0) < 0 } : null };
 }
+function hrLiffCachePut_(v) { try { CacheService.getScriptCache().put('hrlv_' + v.id, JSON.stringify(v), 21600); } catch (x) {} }
+function hrLiffCacheGet_(id) { try { var t = CacheService.getScriptCache().get('hrlv_' + id); return t ? JSON.parse(t) : null; } catch (x) { return null; } }
+// ข้อมูลล่าสุดของใบลา: อ่านแค่แท็บใบลา (สถานะ / ผู้อนุมัติ) + ข้อมูลคนจาก cache · ไม่มี cache = อ่านเต็ม
+function hrLiffFresh_(ss, id, row) {
+  var l = row || hrById_(purRead_(ss, 'hr_leaves'), id);
+  if (!l) return null;
+  var c = hrLiffCacheGet_(id);
+  if (c) { c.status = l.status; c.approver = l.approver || ''; c.decidedAt = String(l.decidedAt || '').slice(0, 16); c.files = purParseFiles_(l.files).length; return c; }
+  var st = hrSettings_(ss); l = hrLeaveOut_(l, st);
+  var e = hrById_(hrPeople_(ss), l.empId), bal = null;
+  try { if (e && l.status === 'รออนุมัติ') bal = hrBalance_(ss, e, String(l.dateFrom).slice(0, 4))[l.type] || null; } catch (x) {}
+  var v = hrLiffViewOf_(l, e, bal, st.stdHours); hrLiffCachePut_(v); return v;
+}
 function hrLiffLoad(idToken, id, sig) {
   if (!id || sig !== hrSign_('view|' + id)) return { ok: false, error: 'ลิงก์ไม่ถูกต้อง' };
   hrRate_('liff', 200, 600);
   var u = hrLiffUser_(idToken), c = hrLiffCan_(u);
-  var dept = findDept_('HR'), ss = hrBook_(dept), st = hrSettings_(ss), l = hrById_(purRead_(ss, 'hr_leaves'), id);
-  if (!l) return { ok: false, error: 'ไม่พบใบลานี้ (อาจถูกลบแล้ว)' };
-  l = hrLeaveOut_(l, st);
-  return { ok: true, can: c.can, me: c.name, leave: hrLiffView_(ss, l, hrById_(hrPeople_(ss), l.empId), st) };
+  var v = hrLiffFresh_(hrLiffBook_(findDept_('HR')), id);
+  if (!v) return { ok: false, error: 'ไม่พบใบลานี้ (อาจถูกลบแล้ว)' };
+  return { ok: true, can: c.can, me: c.name, leave: v };
 }
+// อนุมัติจากหน้า LIFF: ไม่ส่งการ์ดผลเข้ากลุ่มซ้ำ (ผู้ใช้ขอ 26/11/69 — ซ้ำซ้อน)
 function hrLiffDecide(idToken, id, sig, act) {
   if (!id || sig !== hrSign_('view|' + id) || (act !== 'ok' && act !== 'no')) return { ok: false, error: 'ลิงก์ไม่ถูกต้อง' };
   hrRate_('liffd', 60, 600);
   var u = hrLiffUser_(idToken), c = hrLiffCan_(u);
   if (!c.can) return { ok: false, error: 'คุณไม่มีสิทธิ์อนุมัติการลา' };
   var dept = findDept_('HR'), r = hrDecideLeave_(dept, id, act === 'ok', c.name + ' (LINE)');
-  var ss = hrBook_(dept), st = hrSettings_(ss), l = hrById_(purRead_(ss, 'hr_leaves'), id);
-  if (!l) return { ok: false, error: 'ไม่พบใบลานี้' };
-  l = hrLeaveOut_(l, st);
-  var emp = hrById_(hrPeople_(ss), l.empId), notified = false;
-  if (r.ok) { try { notified = hrLinePush_([hrLeaveFlex_(l, r.emp || {}, null, true)]).ok; } catch (x) {} }
-  return { ok: true, decided: !!r.ok, already: !!r.already, notified: notified, can: true, me: c.name, leave: hrLiffView_(ss, l, emp, st) };
+  if (!r.leave) return { ok: false, error: r.error || 'ไม่พบใบลานี้' };
+  var v = hrLiffFresh_(hrLiffBook_(dept), id, r.leave);
+  return { ok: true, decided: !!r.ok, already: !!r.already, can: true, me: c.name, leave: v };
 }
 function hrLiffInfo() { return { ok: true, liffId: hrLiffId_() }; }   // หน้า LIFF ต้องรู้ LIFF ID ก่อน liff.init (ไม่ใช่ความลับ)
+function hrLiffBook_(dept) { hrRegister_(); return purBook_(dept); }   // ไม่ต้องตรวจตั้งค่า / สร้างแท็บแบบ hrBook_ (เร็วกว่า)
