@@ -664,33 +664,22 @@
       + tile(fmt(k.bdMinutes, 0) + ' นาที', 'Breakdown เครื่องจักร', k.bdCount ? '#dc2626' : '#16a34a', k.bdCount + ' ครั้ง')
       + '</div>';
     var mx = 100;
-    html += '<div class="pgrid"><div class="panel pbox"><h4>' + icon('chart', 18) + ' Yield แยกสินค้า <small class="muted">(เส้นประ = เป้า ' + tg + '%)</small></h4>' + (r.products.length ? r.products.map(function (p) {
+    var pack = '<div class="panel pbox"><h4>' + icon('box', 18) + ' งานบรรจุ</h4><div class="li"><span>บรรจุลงซอง/ถ้วย (G1)</span><b>' + fmt(k.packed, 0) + ' ชิ้น</b></div><div class="li"><span>บรรจุลงลัง (G3)</span><b>' + fmt(k.cases, 0) + ' ลัง</b></div></div>';
+    // จัดหน้า (ผู้ใช้ขอ 26/11/69): ซ้าย = Yield แยกสินค้า · ขวา = งานบรรจุ + เสร็จช้ากว่ากำหนด
+    html += '<div class="xdg"><div class="xdcol"><div class="panel pbox"><h4>' + icon('chart', 18) + ' Yield แยกสินค้า <small class="muted">(เส้นประ = เป้า ' + tg + '%)</small></h4>' + (r.products.length ? r.products.map(function (p) {
       var y = p.yieldPct, ok = y != null && y >= p.target;
       return '<div class="xyr"><span title="' + esc(p.name) + '">' + esc(p.name) + '<small>' + p.runs + ' ครั้ง · Lost ' + (y == null ? '–' : fmt(100 - y, 1) + '%') + (p.expMin ? ' · ได้ ' + fmt(p.qty, 0) + ' (ควร ' + fmt(p.expMin, 0) + '–' + fmt(p.expMax, 0) + ')' : '') + (p.lossKg ? ' · เสีย ' + fmt(p.lossKg) + ' กก.' : '') + '</small></span>'
         + '<i><em style="width:' + Math.max(2, Math.min(100, (y || 0) / mx * 100)) + '%;background:' + (ok ? '#16a34a' : '#dc2626') + '"></em><u style="left:' + p.target + '%"></u></i><b class="' + (ok ? 'pos' : 'neg') + '">' + (y == null ? '–' : fmt(y, 1) + '%') + '</b></div>';
-    }).join('') : '<div class="muted">ยังไม่มีผลงานผัดในช่วงนี้</div>') + '</div>'
-      + '<div class="panel pbox"><h4>' + icon('warn', 18) + ' เสร็จช้ากว่ากำหนด</h4>' + ((r.lateList || []).length ? (r.lateCauses || []).map(function (c) {
+    }).join('') : '<div class="muted">ยังไม่มีผลงานผัดในช่วงนี้</div>') + '</div></div>'
+      + '<div class="xdcol">' + pack + '<div class="panel pbox"><h4>' + icon('warn', 18) + ' เสร็จช้ากว่ากำหนด</h4>' + ((r.lateList || []).length ? (r.lateCauses || []).map(function (c) {
         return '<div class="li"><span>' + esc(c.name) + '</span><b class="neg">' + c.n + ' รายการ</b></div>';
       }).join('') + '<div style="margin-top:8px">' + r.lateList.map(function (x) {
         return '<div class="li"><span>' + esc(x.grp) + ' · ' + esc(x.product) + '</span><b class="neg">' + (x.finishDate ? 'เสร็จ ' + dd(x.finishDate) : 'ยังไม่เสร็จ') + '</b><small>ผลิต ' + dd(x.date) + ' · กำหนด ' + dd(x.deadline) + (x.cause ? ' · ' + esc(x.cause) : '') + '</small></div>';
       }).join('') + '</div>' : '<div class="muted">เสร็จตามกำหนดทุกรายการ 👍</div>')
-      + '<h4 style="margin-top:16px">' + icon('gear2', 18) + ' Breakdown แยกเครื่อง</h4>' + (r.machines.length ? r.machines.map(function (m) {
-        return '<div class="li"><span>' + esc(m.name) + '</span><b>' + fmt(m.minutes, 0) + ' นาที</b><small>' + m.n + ' ครั้ง</small></div>';
-      }).join('') : '<div class="muted">ไม่มี</div>')
-      + '<h4 style="margin-top:16px">' + icon('box', 18) + ' งานบรรจุ</h4><div class="li"><span>บรรจุลงซอง/ถ้วย (G1)</span><b>' + fmt(k.packed, 0) + ' ชิ้น</b></div><div class="li"><span>บรรจุลงลัง (G3)</span><b>' + fmt(k.cases, 0) + ' ลัง</b></div></div></div>';
-    // Breakdown: ปัญหา / สาเหตุ / การแก้ไข + รูป (ผู้ใช้ขอ 26/11/69 — ทั้งหน้าฝ่ายผลิตและผู้บริหาร)
-    var bl = r.bdList || [];
-    html += '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('gear2', 18) + ' Breakdown เครื่องจักร — ปัญหา · สาเหตุ · รูป <small class="muted">(' + (bl.length ? 'ล่าสุด ' + bl.length + ' ครั้ง' : 'ไม่มีในช่วงนี้') + ')</small></h4>'
-      + (bl.length ? '<div class="xbdl">' + bl.map(function (b) {
-        var f = b.files || [];
-        return '<div class="xbdc"><div class="xbdh"><b>' + esc(b.machine) + '</b><span class="xbdm">' + (b.minutes === '' || b.minutes == null ? 'ยังไม่จบ' : fmt(b.minutes, 0) + ' นาที') + '</span></div>'
-          + '<small class="muted">' + dd(b.date) + ' · ' + esc(b.start) + (b.end ? '–' + esc(b.end) : '') + (b.grp ? ' · ' + esc(b.grp) : '') + (b.by ? ' · ' + esc(b.by) : '') + '</small>'
-          + '<dl><dt>ปัญหา</dt><dd>' + esc(b.problem || '-') + '</dd><dt>สาเหตุ</dt><dd' + (b.cause ? '' : ' class="muted"') + '>' + esc(b.cause || 'ยังไม่ระบุ') + '</dd>' + (b.fix ? '<dt>การแก้ไข</dt><dd>' + esc(b.fix) + '</dd>' : '') + '</dl>'
-          + (f.length ? '<div class="xbdimgs">' + f.map(function (x) { return '<a href="' + esc(x.url) + '" target="_blank" rel="noopener" aria-label="ดูรูป ' + esc(b.machine) + '"><img src="' + esc(x.url) + '=w300" alt="" loading="lazy"></a>'; }).join('') + '</div>' : '<small class="muted">ไม่มีรูป</small>')
-          + '</div>';
-      }).join('') + '</div>' : '<div class="muted">ไม่มี Breakdown ในช่วงนี้ 👍</div>') + '</div>';
+      + '</div>'
+      + '</div></div>';
     if (r.days.length > 1) {
-      html += '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('chart', 18) + ' Yield รายวัน</h4>' + (window.DCH ? (function () {   // กราฟเส้น + เส้นเป้า (21/11/69)
+      html += '<div class="panel pbox xdfull"><h4>' + icon('chart', 18) + ' Yield รายวัน</h4>' + (window.DCH ? (function () {   // กราฟเส้น + เส้นเป้า (21/11/69)
         var D2 = r.days, ys = D2.map(function (d) { return d.yieldPct; }).filter(function (v) { return v != null; });
         var lo = ys.length ? Math.max(0, Math.floor((Math.min.apply(null, ys.concat([tg])) - 5) / 5) * 5) : 0;
         return window.DCH.area({ labels: D2.map(function (d) { return dd(d.date).replace(/ \d+$/, ''); }), calloutLabel: function (i) { return dd(D2[i].date); }, unit: '%', target: tg, targetLabel: 'เป้า ' + tg + '%', yMin: lo, yMax: 100, height: 210,
@@ -700,6 +689,18 @@
         return '<div class="xday" title="' + dd(d.date) + ': ' + (d.yieldPct == null ? '-' : d.yieldPct + '%') + '"><b>' + (d.yieldPct == null ? '-' : fmt(d.yieldPct, 0)) + '</b><em style="height:' + Math.max(3, Math.min(100, d.yieldPct || 0)) + '%;background:' + (ok ? '#16a34a' : '#dc2626') + '"></em><span>' + dd(d.date).replace(/ \d+$/, '') + '</span></div>';
       }).join('') + '</div>') + '</div>';
     }
+    // Breakdown: ปัญหา / สาเหตุ / การแก้ไข + รูป (ผู้ใช้ขอ 26/11/69 — ทั้งหน้าฝ่ายผลิตและผู้บริหาร)
+    var bl = r.bdList || [];
+    html += '<div class="panel pbox xdfull"><h4>' + icon('gear2', 18) + ' Breakdown เครื่องจักร — ปัญหา · สาเหตุ · รูป <small class="muted">(' + (bl.length ? 'ล่าสุด ' + bl.length + ' ครั้ง' : 'ไม่มีในช่วงนี้') + ')</small></h4>'
+      + (r.machines.length ? '<div class="xbdsum">' + r.machines.map(function (m) { return '<span class="xbdchip"><b>' + esc(m.name) + '</b> ' + fmt(m.minutes, 0) + ' นาที · ' + m.n + ' ครั้ง</span>'; }).join('') + '</div>' : '')
+      + (bl.length ? '<div class="xbdl">' + bl.map(function (b) {
+        var f = b.files || [];
+        return '<div class="xbdc"><div class="xbdh"><b>' + esc(b.machine) + '</b><span class="xbdm">' + (b.minutes === '' || b.minutes == null ? 'ยังไม่จบ' : fmt(b.minutes, 0) + ' นาที') + '</span></div>'
+          + '<small class="muted">' + dd(b.date) + ' · ' + esc(b.start) + (b.end ? '–' + esc(b.end) : '') + (b.grp ? ' · ' + esc(b.grp) : '') + (b.by ? ' · ' + esc(b.by) : '') + '</small>'
+          + '<dl><dt>ปัญหา</dt><dd>' + esc(b.problem || '-') + '</dd><dt>สาเหตุ</dt><dd' + (b.cause ? '' : ' class="muted"') + '>' + esc(b.cause || 'ยังไม่ระบุ') + '</dd>' + (b.fix ? '<dt>การแก้ไข</dt><dd>' + esc(b.fix) + '</dd>' : '') + '</dl>'
+          + (f.length ? '<div class="xbdimgs">' + f.map(function (x) { return '<a href="' + esc(x.url) + '" target="_blank" rel="noopener" aria-label="ดูรูป ' + esc(b.machine) + '"><img src="' + esc(x.url) + '=w300" alt="" loading="lazy"></a>'; }).join('') + '</div>' : '<small class="muted">ไม่มีรูป</small>')
+          + '</div>';
+      }).join('') + '</div>' : '<div class="muted">ไม่มี Breakdown ในช่วงนี้ 👍</div>') + '</div>';
     return html;
   };
 
@@ -1086,7 +1087,7 @@
     '.xcarryh{margin:16px 0 8px;font-size:15px;color:#6d28d9}.xcarryh small{color:var(--muted);font-weight:400;font-size:12.5px}.xcarryn{background:#f5f3ff;border:1.5px solid #ddd6fe;color:#5b21b6;font-size:14px;margin-bottom:12px}',
     '.xin select.xu{flex:none;width:auto;max-width:42%;border:0;border-left:1.5px solid var(--line);background:#f8fafc;color:#334155;font:inherit;font-size:13px;padding:0 6px;align-self:stretch;cursor:pointer}',
     '.xhint{font-size:12.5px;color:#9a3412;margin:-4px 2px 8px}',
-    '.xbdl{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}.xbdc{border:1px solid #e2e8f0;border-left:5px solid #dc2626;border-radius:14px;padding:12px;background:#fff;break-inside:avoid}.xbdh{display:flex;justify-content:space-between;gap:8px;align-items:baseline}.xbdm{color:#dc2626;font-weight:700;white-space:nowrap}.xbdc dl{margin:8px 0;display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:14px}.xbdc dt{color:#64748b;font-weight:600}.xbdc dd{margin:0;white-space:pre-wrap;word-break:break-word}.xbdimgs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.xbdimgs img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;display:block;background:#f1f5f9}'
+    '.xdg{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start;margin-bottom:16px}.xdcol{display:flex;flex-direction:column;gap:16px;min-width:0}.xdcol>.panel{margin:0}.xdfull{margin:0 0 16px}@media(max-width:900px){.xdg{grid-template-columns:minmax(0,1fr)}}.xbdsum{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}.xbdchip{background:#fef2f2;border:1px solid #fecaca;color:#7f1d1d;border-radius:999px;padding:6px 12px;font-size:14px}.xbdchip b{color:#991b1b}.xbdl{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}.xbdc{border:1px solid #e2e8f0;border-left:5px solid #dc2626;border-radius:14px;padding:12px;background:#fff;break-inside:avoid}.xbdh{display:flex;justify-content:space-between;gap:8px;align-items:baseline}.xbdm{color:#dc2626;font-weight:700;white-space:nowrap}.xbdc dl{margin:8px 0;display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:14px}.xbdc dt{color:#64748b;font-weight:600}.xbdc dd{margin:0;white-space:pre-wrap;word-break:break-word}.xbdimgs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.xbdimgs img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;display:block;background:#f1f5f9}'
     + '.xbdbtn{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}.xbdbtn .btn{cursor:pointer}.xnew{position:absolute;left:4px;bottom:4px;font-size:10px;font-style:normal;background:#16a34a;color:#fff;border-radius:6px;padding:1px 5px}.xbdph{position:relative;display:inline-block;margin-top:4px}.xbdph img{width:54px;height:54px;object-fit:cover;border-radius:8px;display:block}.xbdph em{position:absolute;right:2px;bottom:2px;font-size:10px;font-style:normal;background:#000a;color:#fff;border-radius:6px;padding:0 4px}',
     '.xchk.xall{font-weight:700;border-right:1.5px solid var(--line);padding-right:12px;margin-right:2px}.xeve{border-top:4px solid var(--g)}.xbd{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13.5px}.xbd small{grid-column:1/-1;color:var(--muted)}',
     '.xsrw{display:grid;grid-template-columns:22px minmax(0,2fr) minmax(0,1.2fr) minmax(0,.8fr) minmax(0,.8fr) 34px;gap:6px;align-items:end;margin-bottom:6px}.xsn{font-weight:700;color:var(--muted);padding-bottom:10px}.xsrw .icon-btn{margin-bottom:6px}',
