@@ -946,13 +946,13 @@
     var edit = !!r;
     var prs = P.data.docs.filter(function (x) { return x.type === 'PR' && x.status !== 'cancelled'; });
     var items = edit ? r.items.map(function (it) { return Object.assign({}, it); }) : [{ materialId: '', materialName: '', qty: '', unit: '' }];
-    wide({ icon: 'list', title: edit ? 'แก้ไข · ' + r.title : 'เปรียบเทียบราคาใหม่', sub: 'ระบุสิ่งที่จะซื้อ แล้วเพิ่มใบเสนอราคาของแต่ละผู้ขาย',
+    wide({ icon: 'list', title: edit ? 'แก้ไข · ' + r.title : 'เปรียบเทียบราคาใหม่', sub: 'ขั้นที่ 1: ระบุสิ่งที่จะซื้อ → ขั้นที่ 2: เลือกผู้ขายที่มีในระบบมาเทียบ (ใบเสนอราคาใหม่ เพิ่มภายหลังได้ ไม่บังคับ)',
       body: '<datalist id="matList2">' + materialList().map(function (m) { return '<option value="' + esc(m.name) + '">'; }).join('') + '</datalist>'
         + '<div class="pform">' + hl(F('rqTitle', 'เรื่อง *', edit ? r.title : '', 'text', ' placeholder="เช่น ซื้อพริกป่น ธ.ค. 69"'))
         + S('rqPr', 'อ้างอิง PR (ดึงรายการมาให้)', [['', '— ไม่อ้างอิง —']].concat(prs.map(function (x) { return [x.id, x.docNo + ' · ' + x.items.length + ' รายการ']; })), edit ? r.prId : '') + '</div>'
         + '<div class="psec"><div class="psec-h"><b>รายการที่ต้องการซื้อ</b><button type="button" class="btn btn-sm btn-line" id="rqAdd">' + icon('plus', 16) + 'เพิ่มรายการ</button></div><div id="rqItems"></div></div>'
         + '<div class="pform">' + T('rqNote', 'หมายเหตุ', edit ? r.note : '') + '</div>',
-      ok: 'บันทึก', onCancel: edit ? function () { rfqDetail(r.id); } : null,
+      ok: edit ? 'บันทึก' : 'ถัดไป: เลือกผู้ขาย', onCancel: edit ? function () { rfqDetail(r.id); } : null,
       foot: edit ? '<button type="button" class="link-btn danger" id="rqDel">' + icon('trash', 16) + 'ลบเรื่องนี้ (รวมใบเสนอราคา)</button>' : '',
       onOpen: function () {
         var draw = function () {
@@ -979,7 +979,7 @@
       submit: function () {
         var keep = items.filter(function (it) { return it.materialName.trim() && it.qty !== ''; }).map(function (it, i) { return Object.assign({}, it, { key: it.key || ('L' + Date.now().toString(36) + i) }); });
         return call('purSaveRfq', state.token, { id: edit ? r.id : '', title: v('rqTitle'), prId: v('rqPr'), note: v('rqNote'), items: keep }).then(function (res) {
-          if (!res.ok) return res.error; closeModal(); reload('บันทึกแล้ว').then(function () { rfqDetail(res.id); });
+          if (!res.ok) return res.error; closeModal(); reload('บันทึกแล้ว').then(function () { if (edit) rfqDetail(res.id); else vendorPick(res.id); });
         });
       } });
   }
@@ -1004,17 +1004,19 @@
       + row('เครดิต / เงื่อนไขชำระ', function (q) { return (q.creditDays !== '' ? q.creditDays + ' วัน' : '–') + (q.paymentTerms ? '<br><small>' + esc(q.paymentTerms) + '</small>' : ''); })
       + row('ยืนราคาถึง', function (q) { return q.validUntil ? dd(q.validUntil) : '–'; })
       + row('สเปก / คุณภาพ', function (q) { return q.spec ? '<small>' + esc(q.spec) + '</small>' : '–'; })
+      + row('ที่มาของราคา', function (q) { return sysQ(q) ? '<span class="tag code">ราคาในระบบ</span><br><small class="muted">' + esc(String(q.note).replace(SYSQ, '').trim()) + '</small>' : '<span class="tag ok">ใบเสนอราคา</span>' + (q.quoteNo ? '<br><small>' + esc(q.quoteNo) + '</small>' : ''); })
       + row('ไฟล์', function (q) { return q.files.length ? q.files.map(fileLink).join('<br>') : '–'; })
       + row('', function (q) { return '<button type="button" class="btn btn-sm btn-line" data-qe="' + q.id + '">แก้ไข</button> ' + (q.id === r.winnerId ? '' : '<button type="button" class="btn btn-sm btn-primary" data-qw="' + q.id + '">เลือกเจ้านี้</button>'); })
-      + '</tbody></table></div>' : '<div class="muted">ยังไม่มีใบเสนอราคา — กด "เพิ่มใบเสนอราคา" ของแต่ละผู้ขาย</div>';
+      + '</tbody></table></div>' : '<div class="muted">ยังไม่มีผู้ขายในการเปรียบเทียบนี้ — กด "เลือกผู้ขายที่มีในระบบ" ด้านล่าง (ถ้าต้องการหาเจ้าใหม่ กด "เพิ่มใบเสนอราคา")</div>';
     var win = qs.filter(function (q) { return q.id === r.winnerId; })[0], po = r.poId ? P.idx.doc[r.poId] : null;
-    var advice = qs.length > 1 ? rfqAdvice(r, qs, priceOf) : '';
+    var advice = qs.length > 1 ? rfqAdvice(r, qs, priceOf) : qs.length === 1 ? '<div class="advice"><div class="adv-h">💡 คำแนะนำในการเลือก</div><div>มีผู้ขายเจ้าเดียว (' + esc(qs[0].vendorName) + ') — ยังเทียบไม่ได้ ลองกด "เลือกผู้ขายที่มีในระบบ" เพิ่ม หรือขอใบเสนอราคาจากเจ้าอื่น</div></div>' : '';
     wide({ icon: 'list', title: r.title, sub: r.items.length + ' รายการ · ' + qs.length + ' ผู้ขาย', noOk: true, cancel: 'ปิด',
       body: advice + (win ? '<div class="note"><b>เลือก: ' + esc(win.vendorName) + '</b> (' + baht(win.total) + ') · ' + dd(r.decidedAt) + (r.reason ? '<br>เหตุผล: ' + esc(r.reason) : '') + (po ? '<br>PO: ' + esc(po.docNo) : '') + '</div>' : '') + table,
-      foot: '<div class="pfoot"><button type="button" class="btn btn-sm btn-primary" id="qAdd">' + icon('plus', 16) + 'เพิ่มใบเสนอราคา</button><button type="button" class="btn btn-sm btn-line" id="rqEdit">' + icon('edit', 16) + 'แก้ไขรายการ</button>'
+      foot: '<div class="pfoot"><button type="button" class="btn btn-sm btn-primary" id="qPick">' + icon('search', 16) + 'เลือกผู้ขายที่มีในระบบ</button><button type="button" class="btn btn-sm btn-line" id="qAdd">' + icon('plus', 16) + 'เพิ่มใบเสนอราคา (ไม่บังคับ)</button><button type="button" class="btn btn-sm btn-line" id="rqEdit">' + icon('edit', 16) + 'แก้ไขรายการ</button>'
         + (win && !po ? '<button type="button" class="btn btn-sm btn-line" id="rqPo">' + icon('doc', 16) + 'ลง PO (ผู้ขายที่เลือก)</button>' : '') + (win ? '<button type="button" class="btn btn-sm btn-line" id="rqUndo">ยกเลิกการเลือก</button>' : '') + '</div>',
       onOpen: function () {
         $('qAdd').addEventListener('click', function () { quoteModal(r, null); });
+        $('qPick').addEventListener('click', function () { vendorPick(r.id); });
         $('rqEdit').addEventListener('click', function () { rfqModal(r); });
         on('[data-qe]', 'click', function (el) { quoteModal(r, qs.filter(function (q) { return q.id === el.getAttribute('data-qe'); })[0]); }, $('mBody'));
         on('[data-qw]', 'click', function (el) { decideModal(r, qs.filter(function (q) { return q.id === el.getAttribute('data-qw'); })[0], minTotal); }, $('mBody'));
@@ -1024,6 +1026,55 @@
           docModal(null, 'PO', { id: r.prId || '', rfqId: r.id, docNo: r.title, vendorId: win.vendorId, vendorName: win.vendorName, vendorPhone: vn ? (vn.phone || vn.phone2 || '') : '', deliveryDate: win.leadDays !== '' ? addDays(todayIso(), Number(win.leadDays)) : '',
             items: r.items.map(function (it) { return { materialId: it.materialId, materialName: it.materialName, qty: it.qty, unit: it.unit, price: priceOf(win, it.key) === null ? '' : priceOf(win, it.key) }; }) });
         });
+      } });
+  }
+  // ---------- เลือกผู้ขายที่มีในระบบมาเทียบ (ผู้ใช้ขอ 26/11/69) ----------
+  // ราคาจาก priceSources (ผู้ขายแจ้ง / ราคาวัตถุดิบ / ใบเสนอราคาเดิม / PO ล่าสุด) ต่อรายการ → บันทึกเป็น "ใบเสนอราคา" ที่มีหมายเหตุ [ราคาในระบบ]
+  var SYSQ = '[ราคาในระบบ]';
+  function sysQ(q) { return String(q && q.note || '').indexOf(SYSQ) === 0; }
+  function vendorPick(id) {
+    var r = P.data.rfqs.filter(function (x) { return x.id === id; })[0]; if (!r) return;
+    var have = {}; P.data.quotes.filter(function (q) { return q.rfqId === id; }).forEach(function (q) { have[q.vendorId || q.vendorName] = 1; });
+    var src = priceSources().filter(function (x) { return !(x.src === 'ใบเสนอราคา' && P.data.quotes.some(function (q) { return q.rfqId === id && q.vendorName === x.vendor; })); });
+    var byV = {}, order = [];
+    r.items.forEach(function (it) {
+      src.forEach(function (x) {
+        var sc = it.materialId && x.src === 'ราคาวัตถุดิบ' && P.data.materials.some(function (m) { return m.id === it.materialId && m.name === x.name; }) ? 3 : pscore(it.materialName, x.name);
+        if (sc < 1 || x.price === '' || x.price == null) return;
+        var k = x.vid || x.vendor;
+        if (!byV[k]) { byV[k] = { k: k, vid: x.vid, name: x.vendor, p: {} }; order.push(k); }
+        var cur = byV[k].p[it.key];
+        if (!cur || sc > cur.sc || (sc === cur.sc && String(x.date || '') > String(cur.date || ''))) byV[k].p[it.key] = { price: Number(x.price), date: x.date || '', src: x.src, unit: x.unit, name: x.name, sc: sc };
+      });
+    });
+    var list = order.map(function (k) {
+      var o = byV[k], vn = o.vid ? ven(o.vid) : null, ev = o.vid ? latestEval(o.vid) : null, n = 0, tot = 0;
+      r.items.forEach(function (it) { var p = o.p[it.key]; if (p) { n++; tot += p.price * (Number(it.qty) || 0); } });
+      o.n = n; o.total = tot; o.credit = vn && vn.creditDays !== '' && vn.creditDays != null ? Number(vn.creditDays) : null; o.eval = ev ? Number(ev.score) : null; o.done = !!have[k] || !!have[o.name];
+      return o;
+    }).sort(function (a, b) { return b.n - a.n || a.total - b.total; });
+    var pre = {}; list.filter(function (o) { return !o.done; }).slice(0, 5).forEach(function (o) { pre[o.k] = 1; });
+    wide({ icon: 'search', title: 'เลือกผู้ขายที่มีในระบบ · ' + r.title, sub: 'ขั้นที่ 2: ติ๊กผู้ขายที่จะนำมาเทียบ — ราคาดึงจากข้อมูลในระบบ (ราคาที่เคยซื้อ / ผู้ขายแจ้ง)',
+      body: list.length ? '<div class="pvp-list">' + list.map(function (o) {
+        return '<label class="pvp' + (o.done ? ' done' : '') + '"><input type="checkbox" data-vk="' + esc(o.k) + '"' + (o.done ? ' disabled' : pre[o.k] ? ' checked' : '') + '><div class="pvp-b"><div class="pvp-h"><b>' + esc(o.name) + '</b>'
+          + (o.done ? '<span class="tag ok">อยู่ในการเทียบแล้ว</span>' : '') + '<span class="pvp-t">' + baht(o.total) + (o.n < r.items.length ? ' <small class="neg">(มีราคา ' + o.n + '/' + r.items.length + ' รายการ)</small>' : '') + '</span></div>'
+          + '<small class="muted">เครดิต ' + (o.credit == null ? 'ไม่ระบุ' : o.credit + ' วัน') + (o.eval != null ? ' · ผลประเมิน ' + o.eval + '/5' : '') + '</small>'
+          + '<ul>' + r.items.map(function (it) { var p = o.p[it.key]; return '<li>' + esc(it.materialName) + ': ' + (p ? '<b>' + baht(p.price) + '</b>/' + esc(p.unit || it.unit || 'หน่วย') + ' <small class="muted">· ' + esc(p.src) + (p.date ? ' ' + dd(String(p.date).slice(0, 10)) : '') + (pnorm(p.name) !== pnorm(it.materialName) ? ' · "' + esc(p.name) + '"' : '') + '</small>' : '<span class="muted">ไม่มีราคาในระบบ</span>') + '</li>'; }).join('') + '</ul></div></label>';
+      }).join('') + '</div>' : '<div class="note">ยังไม่มีผู้ขายในระบบที่มีราคาสินค้านี้ — กด "เพิ่มใบเสนอราคา" เพื่อใส่ราคาจากผู้ขายเอง หรือเพิ่มสินค้าที่ผู้ขายขายได้ที่หน้า "ผู้ขาย (Vendor)"</div>',
+      ok: list.length ? 'เพิ่มผู้ขายที่เลือกเข้าการเทียบ' : 'เพิ่มใบเสนอราคา', cancel: 'ข้ามไปก่อน', onCancel: function () { rfqDetail(id); },
+      check: function () { return list.length && !$('mBody').querySelector('[data-vk]:checked') ? 'ติ๊กผู้ขายอย่างน้อย 1 เจ้า (หรือกด "ข้ามไปก่อน")' : ''; },
+      submit: function () {
+        if (!list.length) { closeModal(); quoteModal(r, null); return Promise.resolve(); }
+        var pick = Array.prototype.map.call($('mBody').querySelectorAll('[data-vk]:checked'), function (el) { return byV[el.getAttribute('data-vk')]; });
+        return pick.reduce(function (pr, o) {
+          return pr.then(function () {
+            var dates = Object.keys(o.p).map(function (k) { return String(o.p[k].date || '').slice(0, 10); }).filter(String).sort();
+            var srcs = {}; Object.keys(o.p).forEach(function (k) { srcs[o.p[k].src] = 1; });
+            return call('purSaveQuote', state.token, { id: '', rfqId: id, vendorId: o.vid || '', vendorName: o.name, quoteNo: '', quoteDate: dates[0] || '', validUntil: '', leadDays: '', creditDays: o.credit == null ? '' : o.credit, paymentTerms: '', spec: '',
+              note: SYSQ + ' ' + Object.keys(srcs).join(' / ') + (dates.length ? ' ณ ' + dd(dates[0]) + (dates[dates.length - 1] !== dates[0] ? ' – ' + dd(dates[dates.length - 1]) : '') : ''),
+              items: r.items.map(function (it) { var p = o.p[it.key]; return { key: it.key, price: p ? p.price : '' }; }) }).then(function (res) { if (!res.ok) throw new Error(res.error); });
+          });
+        }, Promise.resolve()).then(function () { closeModal(); return reload('เพิ่มผู้ขาย ' + pick.length + ' เจ้าเข้าการเทียบแล้ว').then(function () { rfqDetail(id); }); }, function (e) { return String(e.message || e); });
       } });
   }
   // คำแนะนำการเลือกผู้ขาย: ให้คะแนนรวม ราคา 50 · ส่งของ 20 · เครดิต 15 · ผลประเมินผู้ขาย 15 แล้วอธิบายเหตุผลเป็นภาษาคน
@@ -1061,7 +1112,8 @@
     info.forEach(function (x) {
       if (x.missing) warn.push(esc(x.q.vendorName) + ' เสนอราคาไม่ครบ ' + x.missing + '/' + nItems + ' รายการ — ยอดรวมจึงเทียบกันตรง ๆ ไม่ได้');
       if (x.expired) warn.push(esc(x.q.vendorName) + ' ยืนราคาถึง ' + dd(x.q.validUntil) + ' หมดแล้ว — ควรขอยืนยันราคาใหม่');
-      if (x.lead === null) warn.push(esc(x.q.vendorName) + ' ยังไม่ระบุระยะเวลาส่งของ');
+      if (x.lead === null && !sysQ(x.q)) warn.push(esc(x.q.vendorName) + ' ยังไม่ระบุระยะเวลาส่งของ');
+      if (sysQ(x.q) && x.q.quoteDate && x.q.quoteDate < addDays(t, -180)) warn.push(esc(x.q.vendorName) + ' ใช้ราคาในระบบ ณ ' + dd(x.q.quoteDate) + ' (เก่ากว่า 6 เดือน) — ควรโทรถามราคาล่าสุดก่อนสั่ง');
     });
     var specs = info.filter(function (x) { return x.q.spec; });
     if (specs.length) warn.push('อย่าลืมเทียบสเปก/คุณภาพ: ' + specs.map(function (x) { return esc(x.q.vendorName) + ' — "' + esc(x.q.spec) + '"'; }).join(' · '));
@@ -1070,6 +1122,7 @@
       + '<ul>' + why.map(function (w) { return '<li>' + w + '</li>'; }).join('') + '</ul>'
       + (alt.length ? '<div class="adv-alt">' + alt.map(function (w) { return '<div>↳ ' + w + '</div>'; }).join('') + '</div>' : '')
       + (warn.length ? '<div class="adv-warn">' + warn.map(function (w) { return '<div>⚠ ' + w + '</div>'; }).join('') + '</div>' : '')
+      + (pool.some(function (x) { return sysQ(x.q); }) ? '<div class="muted" style="font-size:13px;margin-top:6px">ราคาที่มาจากข้อมูลในระบบเป็นราคาล่าสุดที่เคยซื้อ / ผู้ขายแจ้งไว้ — ส่งของและเครดิตใช้ข้อมูลของผู้ขาย</div>' : '')
       + '<div class="adv-score">' + pool.map(function (x) { return esc(x.q.vendorName) + ' ' + x.score; }).join(' · ') + ' — คิดจาก ราคา 50 · ส่งของ 20 · เครดิต 15 · ผลประเมินผู้ขาย 15 · เป็นคำแนะนำเท่านั้น ผู้ตัดสินใจคือฝ่ายจัดซื้อ</div></div>';
   }
   function decideModal(r, q, minTotal) {
@@ -1626,6 +1679,7 @@
     '.mstat{display:inline-block;font-weight:700;border-radius:8px;padding:4px 10px;margin-bottom:8px;background:#f1f5f9;color:#475569}.mstat.ok{background:#dcfce7;color:#15803d}.mstat.diff{background:#fee2e2;color:#b91c1c}.mstat.noinv{background:#fef3c7;color:#b45309}',
     '.minv{margin-top:6px}.minv .pfile b{font-size:13px}.ptable input{width:100%;min-width:70px;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;font:inherit;font-size:14px;text-align:right}',
     '.ptable.cmp th.qh{min-width:120px}.ptable.cmp th.win{background:#dcfce7}.ptable.cmp td.best{background:#f0fdf4;color:#15803d;font-weight:700}.ptable.cmp tr.sub td{background:#f8fafc}.ptable.cmp td .btn{margin:2px 0}',
+    '.pvp-list{display:grid;gap:10px}.pvp{display:flex;gap:12px;align-items:flex-start;border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;background:#fff;cursor:pointer}.pvp:has(input:checked){border-color:#2563eb;background:#eff6ff}.pvp.done{opacity:.7;cursor:default}.pvp input{width:22px;height:22px;margin-top:2px;flex:0 0 auto}.pvp-b{flex:1;min-width:0}.pvp-h{display:flex;gap:6px 10px;align-items:baseline;flex-wrap:wrap}.pvp-t{margin-left:auto;font-weight:800;white-space:nowrap}.pvp ul{margin:6px 0 0;padding-left:18px;font-size:14px}.pvp li{margin:2px 0;overflow-wrap:anywhere}' +
     '.advice{border:1.5px solid #fde68a;background:#fffbeb;border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:14px}.adv-h{font-weight:700;color:#b45309;margin-bottom:4px}.adv-main{font-size:15px}.advice ul{margin:6px 0 6px 18px;padding:0}.advice li{margin:2px 0}',
     '.adv-alt{border-top:1px dashed #fcd34d;padding-top:6px;margin-top:4px}.adv-warn{color:#b45309;font-size:13px;margin-top:6px}.adv-score{color:var(--muted);font-size:11.5px;margin-top:8px}',
     '.stars{color:#f59e0b;letter-spacing:1px}.stars i{color:#e2e8f0;font-style:normal}.pitem.rq{grid-template-columns:2.2fr 1fr 1fr auto}',
