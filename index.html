@@ -27,6 +27,9 @@
     background-color: var(--bg); color: var(--ink); font-size: 15px; line-height: 1.55;
     min-height: 100vh;
   }
+  /* ภาพโรงงานเป็นลายน้ำบนสีไล่ แดง → เขียว (ผู้ใช้ขอ 26/11/69: เข้ม 70%) — อยู่หลังเนื้อหา ไม่รับการแตะ · ติดกับจอเมื่อเลื่อน */
+  body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background: url('bg-factory.jpg') center / cover no-repeat; opacity: .7; }
   button { font: inherit; cursor: pointer; }
   svg.ic { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   .hidden { display: none !important; }
