@@ -12,7 +12,7 @@
   body { margin: 0; font-family: Sarabun, system-ui, sans-serif; color: var(--ink); background: #f1f5f9; font-size: 16px; }
   .wrap { max-width: 520px; margin: 0 auto; padding: 0 0 110px; }
   .head { padding: 16px; color: #fff; background: var(--blue); }
-  .head.ok { background: var(--ok); } .head.no { background: var(--no); }
+  .head.ok { background: var(--ok); } .head.gone { background: #64748b; } .head.no { background: var(--no); }
   .head b { display: block; font-size: 18px; } .head small { opacity: .9; }
   .card { background: #fff; margin: 12px; border-radius: 14px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(15,23,42,.08); }
   .nm { font-size: 20px; font-weight: 700; } .sub { color: var(--mut); font-size: 14px; margin-top: 2px; }
@@ -82,9 +82,10 @@
   function render() {
     var r = S.data, l = r.leave, pend = l.status === 'รออนุมัติ', act = S.acting;
     var st = act ? (act === 'ok' ? 'อนุมัติ' : 'ไม่อนุมัติ') : l.status;
-    var hc = st === 'รออนุมัติ' ? '' : st === 'อนุมัติ' ? 'ok' : 'no';
-    var h = '<div class="head ' + hc + '"><b>' + (st === 'รออนุมัติ' ? '📝 คำขอลา · รออนุมัติ' : st === 'อนุมัติ' ? '✅ อนุมัติแล้ว' : '❌ ไม่อนุมัติ') + '</b><small>ผู้เปิด: ' + esc(S.me || 'LINE') + '</small></div>';
-    if (act) h += '<div class="note saved" role="status">' + (act === 'ok' ? '✓ อนุมัติ' : '✕ ไม่อนุมัติ') + 'แล้ว<small>⏳ กำลังบันทึกเข้าระบบ…</small></div>';
+    var hc = S.gone ? 'gone' : st === 'รออนุมัติ' ? '' : st === 'อนุมัติ' ? 'ok' : 'no';
+    var h = '<div class="head ' + hc + '"><b>' + (S.gone ? '🗑 ใบลาถูกยกเลิกแล้ว' : st === 'รออนุมัติ' ? '📝 คำขอลา · รออนุมัติ' : st === 'อนุมัติ' ? '✅ อนุมัติแล้ว' : '❌ ไม่อนุมัติ') + '</b><small>ผู้เปิด: ' + esc(S.me || 'LINE') + '</small></div>';
+    if (S.gone) h += '<div class="note done">🗑 ใบลานี้ถูกยกเลิกในระบบแล้ว<small>ไม่ต้องอนุมัติ · กดปุ่มไม่ได้</small></div>';
+    else if (act) h += '<div class="note saved" role="status">' + (act === 'ok' ? '✓ อนุมัติ' : '✕ ไม่อนุมัติ') + 'แล้ว<small>⏳ กำลังบันทึกเข้าระบบ…</small></div>';
     else if (S.saved) h += '<div class="note saved" role="status">✓ บันทึกแล้ว<small>' + (l.status === 'อนุมัติ' ? 'อนุมัติ' : 'ไม่อนุมัติ') + 'ใบลานี้ในระบบฝ่ายบุคคลแล้ว</small></div>';
     else if (!pend) h += '<div class="note done">' + (l.status === 'อนุมัติ' ? '✓ อนุมัติไปแล้ว' : '✕ ไม่อนุมัติไปแล้ว') + (l.approver ? ' โดย ' + esc(l.approver) : '') + '<small>' + (l.decidedAt ? 'เมื่อ ' + esc(l.decidedAt) + ' · ' : '') + 'กดซ้ำไม่ได้</small></div>';
     else if (S.can === false) h += '<div class="note deny">⛔ คุณไม่มีสิทธิ์อนุมัติการลา<small>ดูรายละเอียดได้อย่างเดียว · ฝ่ายบุคคลเพิ่มสิทธิ์ได้ในหน้าตั้งค่า</small></div>';
@@ -93,8 +94,8 @@
       + row('ประเภท', esc(l.type)) + row('วันที่', esc(l.dates)) + row('จำนวน', esc(l.amount))
       + (l.by ? row('ผู้กรอกใบลา', esc(l.by)) : '') + (l.reason ? row('เหตุผล', esc(l.reason)) : '')
       + (l.files ? row('เอกสารแนบ', '📎 ' + l.files + ' ไฟล์ (ดูในระบบฝ่ายบุคคล)') : '')
-      + (l.bal && pend && !act ? row('สิทธิ์คงเหลือ', esc(l.bal.left) + '<br>หลังอนุมัติ ' + esc(l.bal.after), l.bal.neg ? 'red' : 'green') : '') + '</div>';
-    var dis = !pend || S.can === false || !!act;
+      + (l.bal && pend && !act && !S.gone ? row('สิทธิ์คงเหลือ', esc(l.bal.left) + '<br>หลังอนุมัติ ' + esc(l.bal.after), l.bal.neg ? 'red' : 'green') : '') + '</div>';
+    var dis = !pend || S.can === false || !!act || S.gone;
     h += '<div class="bar"><div class="in"><button class="bno" id="bNo"' + (dis ? ' disabled' : '') + '>✕ ไม่อนุมัติ</button><button class="bok" id="bOk"' + (dis ? ' disabled' : '') + '>✓ อนุมัติ</button></div></div>';
     document.getElementById('app').innerHTML = h;
     if (!dis) {
@@ -110,7 +111,7 @@
       return call('hrLiffDecide', S.tok, S.id, S.sig, act);
     }).then(function (r) {
       S.acting = null;
-      if (!r.ok) { if (/สิทธิ์/.test(r.error || '')) S.can = false; render(); alertBox(r.error); return; }
+      if (!r.ok) { if (r.gone) { S.gone = true; render(); return; } if (/สิทธิ์/.test(r.error || '')) S.can = false; render(); alertBox(r.error); return; }
       S.data = { leave: r.leave }; S.saved = r.decided; render();
     }).catch(function (e) { S.acting = null; render(); alertBox(e && e.message && !/fetch/i.test(e.message) ? e.message : 'เชื่อมต่อไม่ได้ ยังไม่ได้บันทึก — กดใหม่อีกครั้ง'); });
   }
@@ -132,6 +133,12 @@
     busy(false);
     if (!r.ok) { fail(r.error); return; }
     S.data = { leave: r.leave }; S.ah = r.ah || []; render(); checkCan();
+    // ตรวจสถานะจริงจากระบบในพื้นหลัง (ใบที่ถูกลบ / ตัดสินแล้ว จะเปลี่ยนตามทันที)
+    call('hrLiffStatus', S.id, S.sig).then(function (x) {
+      if (!x || !x.ok || S.acting || S.saved) return;
+      if (x.gone) { S.gone = true; render(); return; }
+      var l = S.data.leave; l.status = x.status; l.approver = x.approver; l.decidedAt = x.decidedAt; l.files = x.files; render();
+    }).catch(function () {});
   }).catch(function (e) { busy(false); fail(e && e.message && !/fetch/i.test(e.message) ? e.message : 'เชื่อมต่อไม่ได้ ลองปิดแล้วเปิดใหม่'); });
   S.ready = (S.liff ? Promise.resolve({ liffId: S.liff }) : call('hrLiffInfo')).then(function (i) {
     if (!i.liffId) throw new Error('ฝ่ายบุคคลยังไม่ได้ตั้งค่า LIFF');

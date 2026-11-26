@@ -444,7 +444,7 @@ function hrLiffDecide(idToken, id, sig, act) {
   var u = hrLiffUser_(idToken), c = hrLiffCan_(u);
   if (!c.can) return { ok: false, error: 'คุณไม่มีสิทธิ์อนุมัติการลา' };
   var dept = findDept_('HR'), r = hrDecideLeave_(dept, id, act === 'ok', c.name + ' (LINE)');
-  if (!r.leave) return { ok: false, error: r.error || 'ไม่พบใบลานี้' };
+  if (!r.leave) { hrLiffCacheDrop_(id); return { ok: false, gone: true, error: 'ใบลานี้ถูกยกเลิก / ลบออกจากระบบแล้ว' }; }
   var v = hrLiffFresh_(hrLiffBook_(dept), id, r.leave);
   return { ok: true, decided: !!r.ok, already: !!r.already, can: true, me: c.name, leave: v };
 }
@@ -465,4 +465,13 @@ function hrLiffView(id, sig) {
   var v = hrLiffCacheGet_(id);
   if (!v) { v = hrLiffFresh_(hrLiffBook_(findDept_('HR')), id); if (!v) return { ok: false, error: 'ไม่พบใบลานี้ (อาจถูกลบแล้ว)' }; }
   return { ok: true, leave: v, ah: hrLiffApprHash_() };
+}
+// ตรวจสถานะล่าสุดจากชีต (หน้า LIFF เรียกต่อจาก hrLiffView ในพื้นหลัง) — ใบลาที่ถูกลบ / ตัดสินแล้วจะไม่ค้างเป็น "รออนุมัติ"
+function hrLiffStatus(id, sig) {
+  if (!id || sig !== hrSign_('view|' + id)) return { ok: false, error: 'ลิงก์ไม่ถูกต้อง' };
+  hrRate_('liffs', 300, 600);
+  var l = hrById_(purRead_(hrLiffBook_(findDept_('HR')), 'hr_leaves'), id);
+  if (!l) { hrLiffCacheDrop_(id); return { ok: true, gone: true }; }
+  hrLiffCacheStatus_(l);
+  return { ok: true, status: l.status, approver: l.approver || '', decidedAt: String(l.decidedAt || '').slice(0, 16), files: purParseFiles_(l.files).length };
 }
