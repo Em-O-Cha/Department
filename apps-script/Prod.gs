@@ -659,6 +659,8 @@ function prdEveningFlex_(date, grp, plans, rep, target, prods) {
       // ผู้ใช้ขอ 24/11/69: G1 ยังไม่กรอก → ใช้ "ทำจริง" ที่ G2 กรอกไว้เลย ไม่ต้องรอ G1
       if (!pick && x.actBatch !== '' && x.actBatch != null) pick = { q: x.actBatch, u: x.actBatchUnit || 'batch' };
       right = pick ? prdFmt_(pick.q) + ' ' + pick.u : 'ยังไม่กรอก';
+      // ผู้ใช้ขอ 26/11/69: ทุกอาคาร — มี 2 จำนวน (G1 กรอกไว้ทั้ง 2 ช่อง) แสดงทั้งคู่ batch ก่อน คั่นด้วย " / "
+      if (qs.length > 1) right = [pick].concat(qs.filter(function (o) { return o !== pick; })).map(function (o) { return prdFmt_(o.q) + ' ' + o.u; }).join(' / ');
     } else if (grp === 'G1') {
       right = [x.actQty !== '' ? prdFmt_(x.actQty) + ' ' + unitOf(x) : '', prdQty2_(x)].filter(String).join(' / ') || 'ยังไม่กรอก';
       if (prdPlanText_(x)) sub[0] = (sub[0] ? sub[0] + ' · ' : '') + prdPlanText_(x);
