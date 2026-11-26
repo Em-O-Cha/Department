@@ -343,7 +343,7 @@ function cpBuildMonth_(ss, ym, rows) {
   cpDraw_(sh, rows, 'ตารางส่งสินค้า CP Ram ' + CP_MONTHS_[+p[1] - 1] + ' ' + (+p[0] + 543), true);
 }
 // วาดตารางส่งสินค้าลงแท็บ (แท็บรายเดือน = มีตารางรอบเงินเข้า · ไฟล์ PDF/Excel ที่ส่ง LINE = เฉพาะออเดอร์)
-function cpDraw_(sh, rows, title, withRounds) {
+function cpDraw_(sh, rows, title, withRounds, redDate) {
   sh.clear(); sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).breakApart();
   try { sh.setHiddenGridlines(true); } catch (e) {}
   rows = cpCase_(rows);
@@ -358,7 +358,8 @@ function cpDraw_(sh, rows, title, withRounds) {
   var vals = [], merges = [], row = 5, cancelRows = [], total = 0, redCells = [];
   // วันที่อัพเดทล่าสุดของตาราง → ข้อความ "อัพเดท …" ของแถวนั้นเป็นสีแดง (ผู้ใช้ขอ 24/11/69)
   // สีแดง = อัพเดทวันนี้เท่านั้น (ผู้ใช้ขอ 24/11/69: เช่น PO ใหม่วันที่ 24/11 → แดงเฉพาะ 24/11)
-  var maxU = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  // redDate = วันที่นำเข้า (ไฟล์ที่ส่ง LINE ทั้งเดือน ผู้ใช้ขอ 26/11/69) · ไม่ระบุ = วันนี้
+  var maxU = /^\d{4}-\d{2}-\d{2}$/.test(String(redDate || '')) ? String(redDate) : Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   groups.forEach(function (gr) {
     // วันเดียวกันแต่คนละสถานที่ส่ง → แยก Total ตามสถานที่ (ผู้ใช้ขอ 24/11/69): เรียงให้สถานที่เดียวกันติดกัน แล้ว Total / สถานที่ส่ง รวมช่องทีละสถานที่
     var pl = []; gr.rows.forEach(function (r) { var k = String(r.place || ''); if (pl.indexOf(k) < 0) pl.push(k); });
@@ -484,7 +485,7 @@ function cpFolder_(dept) {
   return it.hasNext() ? it.next() : parent.createFolder('รายงาน CP Ram');
 }
 // ไฟล์ PDF + Excel (+ Google Sheet ต้นทาง) ของตารางส่งสินค้า — withRounds = ใส่ตารางรอบเงินเข้า (ใช้ในระบบเท่านั้น ไม่ใช้กับ LINE)
-function cpMakeFiles_(dept, rows, title, name, withRounds) {
+function cpMakeFiles_(dept, rows, title, name, withRounds, redDate) {
   var folder = cpFolder_(dept), ss = SpreadsheetApp.create(name);
   DriveApp.getFileById(ss.getId()).moveTo(folder);
   // หลายเดือน → แยกชีตตามเดือน (ผู้ใช้ขอ 24/11/69) ทั้ง Excel และ PDF (PDF รวมทุกชีตในไฟล์เดียว)
@@ -494,7 +495,7 @@ function cpMakeFiles_(dept, rows, title, name, withRounds) {
     var sh = i ? ss.insertSheet(cpTabName_(ym), i) : ss.getSheets()[0];
     sh.setName(multi ? cpTabName_(ym) : 'ตารางส่งสินค้า');
     var p = ym.split('-'), mName = p.length === 2 ? CP_MONTHS_[+p[1] - 1] + ' ' + (+p[0] + 543) : '';
-    cpDraw_(sh, by[ym].map(function (r) { return Object.assign({}, r); }), multi && mName ? title + ' · ' + mName : title, withRounds);
+    cpDraw_(sh, by[ym].map(function (r) { return Object.assign({}, r); }), multi && mName ? title + ' · ' + mName : title, withRounds, redDate);
     // หลายหน้า: ตรึงแถวหัว (ชื่อตาราง + หัวคอลัมน์ แถว 1–4) → PDF พิมพ์หัวคอลัมน์ซ้ำทุกหน้า (fzr) — ผู้ใช้ขอ 23/11/69
     sh.setFrozenRows(by[ym].length <= 28 ? 0 : 4);
   });
@@ -506,9 +507,15 @@ function cpMakeFiles_(dept, rows, title, name, withRounds) {
 function cpTrash_(urls) { urls.forEach(function (u) { var id = String(u || '').match(/[-\w]{25,}/); if (id) try { DriveApp.getFileById(id[0]).setTrashed(true); } catch (e) {} }); }
 function cpImportFiles_(dept, ss, imp, lines) {
   cpTrash_([imp.pdfUrl, imp.xlsxUrl, imp.sheetUrl]);
-  var dates = lines.map(function (x) { return x.deliveryDate; }).filter(String).sort();
-  var rng = dates.length ? cpSlash_(dates[0]) + (dates[dates.length - 1] !== dates[0] ? ' – ' + cpSlash_(dates[dates.length - 1]) : '') : '';
-  var f = cpMakeFiles_(dept, lines, 'ใบแจ้งออเดอร์ CP Ram · ส่ง ' + rng, 'ออเดอร์ CP Ram ส่ง ' + rng.replace(/\//g, '-') + ' (' + imp.id.slice(-4) + ')', false);
+  // ไฟล์ที่ส่ง LINE = ทุกรายการของเดือนที่ PO นี้ส่ง (ทั้งเดือน เหมือนภาพตาราง) · "อัพเดท" วันที่นำเข้า = สีแดง (ผู้ใช้ขอ 26/11/69)
+  var yms = {}; lines.forEach(function (x) { var m = String(x.deliveryDate || '').slice(0, 7); if (m) yms[m] = 1; });
+  var all = purRead_(ss, 'cp_lines').filter(function (x) { return yms[String(x.deliveryDate || '').replace(/^'/, '').slice(0, 7)]; });
+  all.forEach(function (x) { Object.keys(x).forEach(function (k) { if (typeof x[k] === 'string') x[k] = x[k].replace(/^'/, ''); }); });
+  if (!all.length) all = lines;
+  var ks = Object.keys(yms).sort(), mn = function (ym) { var p = ym.split('-'); return CP_MONTHS_[+p[1] - 1] + ' ' + (+p[0] + 543); };
+  var mt = ks.length ? mn(ks[0]) + (ks.length > 1 ? ' – ' + mn(ks[ks.length - 1]) : '') : '';
+  var red = String(imp.createdAt || '').replace(/^'/, '').slice(0, 10);
+  var f = cpMakeFiles_(dept, all, 'ตารางส่งสินค้า CP Ram' + (ks.length === 1 ? ' ' + mt : ''), 'ตารางส่งสินค้า CP Ram ' + mt + ' (' + imp.id.slice(-4) + ')', false, red);
   imp.pdfUrl = f.pdfUrl; imp.xlsxUrl = f.xlsxUrl; imp.sheetUrl = f.sheetUrl;
   purWrite_(ss, 'cp_imports', imp);
   return f;
