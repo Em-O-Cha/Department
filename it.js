@@ -130,6 +130,7 @@
     + '.itn{width:36px;color:#94a3b8;text-align:right;font-size:12px}.itro{color:#64748b;background:#f8fafc;font-size:13px;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.itopen{position:absolute;right:10px;top:50%;transform:translateY(-50%);text-decoration:none;color:#173B68;font-weight:700}'
     + '.itact{white-space:nowrap;width:1%}.itbtn{border:1px solid #e2e8f0;background:#fff;border-radius:8px;width:30px;height:30px;margin-left:3px;cursor:pointer;color:#475569;display:inline-grid;place-items:center}.itbtn:hover{border-color:#173B68;color:#173B68}.itbtn.del:hover{border-color:#dc2626;color:#dc2626}.itempty{text-align:center;color:#94a3b8;padding:24px}'
     + '.itsave{position:sticky;bottom:0;display:flex;align-items:center;gap:12px;justify-content:space-between;background:#fff;border-radius:12px;padding:10px 14px;margin-top:10px;box-shadow:0 -2px 12px rgba(15,23,42,.08);color:#16a34a;font-weight:600}.itsave.on{color:#b45309;background:#fffbeb}.itsave .btn{flex:none;min-width:240px}.ittab td:nth-child(2) input{min-width:220px}.ittab td:has(.itopen) input{padding-right:26px}'
+    + '.ittab th,.ittab td,.ittab input,.ittab input.itnum,.itn,.itro{text-align:center}.ittab td:has(.itopen) input{padding-left:26px}'   // จัดกึ่งกลางทุกตาราง (ผู้ใช้ขอ 27/11/69)
     + '@media (max-width:700px){.itstat{margin-left:0;width:100%}.itsave{flex-direction:column;align-items:stretch}}';
   document.head.appendChild(css);
 })();
