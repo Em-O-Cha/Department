@@ -130,7 +130,7 @@ function dbBook_(deptKey, book, cfg, opener, sheetId) {
   d.realFn = real;
   // เขียนผ่านสมุดเสมือน (เช่น เปลี่ยนเป็นลาออกอัตโนมัติใน hrLoad) → ใช้ชีตจริง + ถือว่าสำเนาไม่สดแล้ว
   // เขียนผ่านสมุดเสมือน → ใช้ชีตจริง + จดว่าแท็บนั้นถูกแก้ (เฉพาะแท็บนั้น)
-  var w = function (tab) { d.cache = {}; dbStampTab_(sheetId, tab); return real(); };
+  var w = function (tab) { d.cache = {}; dbStampTab_(sheetId, tab); try { CacheService.getScriptCache().put('RCD_' + deptKey, Date.now() + '-' + Math.random().toString(36).slice(2, 8), 21600); } catch (e) {} return real(); };
   return { __db: d, getId: function () { return sheetId || real().getId(); },
     getSheetByName: function (n) { return w(n).getSheetByName(n); }, insertSheet: function (n) { return w(n).insertSheet(n); },
     getSheets: function () { return real().getSheets(); }, getSpreadsheetTimeZone: function () { return PUR_TZ_; },
@@ -176,6 +176,20 @@ function dbMarkTab_(ss, tab) {
   var id = ''; try { id = ss.getId(); } catch (e) { return; }
   if (DB_TRACK_ && DB_TRACK_[id + '\u0001' + tab]) return;   // จดไปแล้วในคำสั่งนี้
   dbStampTab_(id, tab);
+  dbTouchOwner_(id);
+}
+// ผู้ใช้ขอ 27/11/69 "ห้ามมีปัญหา": ทุกครั้งที่มีการเขียนลงชีตจริง ผลที่เก็บไว้ (RespCache) ของฝ่ายเจ้าของชีตหมดอายุเอง
+// ไม่ต้องพึ่งชื่อคำสั่ง · ครั้งเดียวต่อชีตต่อการทำงาน · ชีตที่ไม่ใช่ชีตหลักของฝ่ายใด (CP Ram / ค่าใช้จ่าย) = ฝ่ายบัญชี
+var DB_OWNER_DONE_ = {};
+function dbTouchOwner_(sheetId) {
+  if (DB_OWNER_DONE_[sheetId]) return;
+  DB_OWNER_DONE_[sheetId] = 1;
+  var owner = '';
+  try {
+    DEPARTMENTS.some(function (d) { if (!d.exec && deptConfig_(d.key).sheetId === sheetId) { owner = d.key; return true; } return false; });
+  } catch (e) {}
+  try { CacheService.getScriptCache().put('RCD_' + (owner || 'ACC'), Date.now() + '-' + Math.random().toString(36).slice(2, 8), 21600); } catch (e) {}
+  if (owner === 'PUR' || owner === 'RD' || owner === 'COST') try { CacheService.getScriptCache().put('RCD__ALL', Date.now() + '-' + Math.random().toString(36).slice(2, 8), 21600); } catch (e) {}   // อ่านข้ามฝ่าย (ต้นทุน)
 }
 // จบคำสั่งบันทึก: จดเวลาอีกครั้ง (คนที่อ่านระหว่างกำลังบันทึกจะได้ไม่ใช้สำเนาที่ยังไม่ครบ)
 function dbTrackStart_(isWrite) { DB_TRACK_ = isWrite ? {} : null; }
