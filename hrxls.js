@@ -153,9 +153,9 @@
     return me ? { h: r2(tot * me / sw) } : null;   // วันหยุดในช่วงลา = ไม่นับ
   }
   function cellText(l, p) {
-    var a = (AB[l.type] || AB.other)[0];
-    if (l.type === 'late') return a + (p.m ? ' ' + p.m + ' น.' : '');
-    return a + ' ' + r2(p.h) + ' ชม.';
+    var a = LTN[l.type] || LTN.other;   // ชื่อการลาเต็ม ไม่ใช้ตัวย่อ (ผู้ใช้ขอ 27/11/69)
+    if (l.type === 'late') return a + (p.m ? '\n' + p.m + ' นาที' : '');
+    return a + '\n' + r2(p.h) + ' ชม.';
   }
   X.leaveMonth = function (ym) {
     var h = H(), y = +ym.slice(0, 4), m = +ym.slice(5, 7), nd = new Date(y, m, 0).getDate(), first = ym + '-01', last = ym + '-' + pad(nd);
@@ -188,7 +188,7 @@
         var col = D0 + d - 1, we = weekend(d), a = ws.getCell(2, col), b = ws.getCell(3, col);
         a.value = WD[new Date(y, m - 1, d).getDay()]; b.value = d;
         [a, b].forEach(function (c) { c.font = { name: FONT, size: 16, bold: true }; c.alignment = { vertical: 'middle', horizontal: 'center' }; fill(c, we ? C_WEEKEND : C_HEAD); border(c); });
-        ws.getColumn(col).width = 9.5;
+        ws.getColumn(col).width = 12;
       }
       SUM.forEach(function (s, i) {
         ws.mergeCells(2, S0 + i, 3, S0 + i);
@@ -238,8 +238,8 @@
       var lg = people.length + 6;
       ws.mergeCells(lg, 1, lg, lastCol);
       var lc = ws.getCell(lg, 1);
-      lc.value = 'ตัวย่อ: ' + Object.keys(AB).map(function (k) { return AB[k][0] + ' = ' + LTN[k]; }).join(' · ') + ' · ตัวเลข = ชั่วโมงที่ลาในวันนั้น (สาย = นาที) · ช่องสีแดง "ลาออก" = ออกตั้งแต่วันนั้น · ช่องสีชมพู = วันหยุด';
-      lc.font = { name: FONT, size: 15 }; lc.alignment = { wrapText: true, vertical: 'top' }; ws.getRow(lg).height = 44;
+      lc.value = 'หมายเหตุ: ตัวเลข = ชั่วโมงที่ลาในวันนั้น (มาสาย = นาที) · ช่องสีแดง "ลาออก" = ออกตั้งแต่วันนั้น · ช่องสีชมพู = วันหยุด';
+      lc.font = { name: FONT, size: 15 }; lc.alignment = { wrapText: true, vertical: 'top' }; ws.getRow(lg).height = 30;
       return save(wb, 'สรุปการลา ขาด มาสาย ' + MONTHS[m - 1] + ' ' + (y + 543) + '.xlsx').then(function () { return people.length; });
     }).then(function (n) { toast('ดาวน์โหลดตารางสรุปการลา ' + MONTHS[m - 1] + ' แล้ว (' + n + ' คน)'); });
   };
