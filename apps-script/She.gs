@@ -608,6 +608,23 @@ function sheDashboard_(dept, from, to) {
   var near = inc.filter(function (x) { return x.type === 'near'; }).length;
   if (near) insights.push({ level: 'warn', text: 'เหตุการณ์เกือบเกิด (Near miss) ' + near + ' ครั้ง — ควรแก้ก่อนเกิดเหตุจริง' });
 
+  // รายงานสิ่งผิดปกติ (27/11/69): ค้าง = ยังไม่ปิดทุกช่วงเวลา · แจ้ง / ปิดในช่วง = ตามวันที่แจ้ง / วันที่ตรวจสอบ
+  var abAll = purRead_(ss, 'she_abnormal').map(sheAbOut_);
+  var abDone = function (a) { return a.result === 'ok'; };
+  var abIn = abAll.filter(function (a) { return a.reportDate >= from && a.reportDate <= to; });
+  var abOpen = abAll.filter(function (a) { return !abDone(a); });
+  var abLate = abOpen.filter(function (a) { return a.dueDate && a.dueDate < today; });
+  var abTopic = {}; abIn.forEach(function (a) { (a.topics.length ? a.topics : ['other']).forEach(function (k) { var n = SHE_AB_TOPICS_[k] || k; abTopic[n] = (abTopic[n] || 0) + 1; }); });
+  var abB = {}; abIn.forEach(function (a) { var n = a.building === 'other' ? (a.buildingOther || 'อื่น ๆ') : (a.building || 'ไม่ระบุ'); abB[n] = (abB[n] || 0) + 1; });
+  if (abOpen.length) insights.push({ level: abLate.length ? 'bad' : 'warn', text: 'รายงานสิ่งผิดปกติยังไม่ปิด ' + abOpen.length + ' เรื่อง' + (abLate.length ? ' · เกินกำหนด ' + abLate.length + ' เรื่อง' : '') });
+  var abnormal = { total: abIn.length, open: abOpen.length, overdue: abLate.length,
+    closed: abAll.filter(function (a) { return abDone(a) && a.verifyDate >= from && a.verifyDate <= to; }).length,
+    byTopic: sortObj(abTopic), byBuilding: sortObj(abB),
+    list: abOpen.sort(function (a, b) { return String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')) || String(b.reportDate).localeCompare(String(a.reportDate)); }).slice(0, 10).map(function (a) {
+      return { id: a.id, code: a.code, reportDate: a.reportDate, place: [a.building === 'other' ? (a.buildingOther || 'อื่น ๆ') : a.building, a.spot].filter(String).join(' · '),
+        detail: String(a.detail).slice(0, 160), responsible: a.responsible, dueDate: a.dueDate, late: !!(a.dueDate && a.dueDate < today), fail: a.result === 'fail', photo: (a.files[0] || {}).id || '' };
+    }) };
+
   var brief = function (f) { return { id: f.id, code: f.code, date: f.date, lastSeen: f.lastSeen, lastRound: f.lastRound, seenCount: f.seenCount, location: f.location, problem: f.problem, responsible: f.responsible, dueDate: f.dueDate, risk: f.risk, status: f.status,
     photo: (f.beforeFiles[0] || {}).id || '', after: (f.afterFiles[0] || {}).id || '' }; };
   return {
@@ -625,6 +642,6 @@ function sheDashboard_(dept, from, to) {
       list: inc.slice().sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); }).slice(0, 10).map(function (x) {
         return { date: x.date, type: SHE_INC_TYPES_[x.type] || x.type, location: x.location, person: x.person, lostDays: x.lostDays, injury: x.injury };
       }) },
-    trend: trend, insights: insights
+    abnormal: abnormal, trend: trend, insights: insights
   };
 }

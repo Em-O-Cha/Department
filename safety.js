@@ -199,6 +199,7 @@
       if (!r.ok) { $('dOut').innerHTML = '<div class="panel">' + esc(r.error) + '</div>'; return; }
       $('dOut').innerHTML = H.dashHtml(r);
       on('[data-fd]', 'click', function (el) { var f = H.data.findings.filter(function (x) { return x.id === el.getAttribute('data-fd'); })[0]; if (f) findingModal(f); }, $('dOut'));
+      on('[data-abo]', 'click', function (el) { var a = (H.data.abnormals || []).filter(function (x) { return x.id === el.getAttribute('data-abo'); })[0]; if (a) abModal(a); }, $('dOut'));
     }).catch(onServerError);
   }
   // ใช้ร่วมกับหน้า Dashboard ผู้บริหาร (executive.js)
@@ -213,6 +214,7 @@
       + tile(pc(i.pass), 'ผลตรวจผ่าน', i.pass == null ? '#64748b' : i.pass >= 95 ? '#16a34a' : '#d97706', 'ผ่าน ' + i.P + ' · ไม่ผ่าน ' + i.O + ' ข้อ')
       + tile(f.open, 'ข้อบกพร่องค้างแก้ไข', f.open ? '#d97706' : '#16a34a', 'เกินกำหนด ' + f.overdue + ' · เสี่ยงสูง ' + f.highOpen)
       + tile(f.total ? Math.round(f.done / f.total * 100) + '%' : '–', 'แก้ไขเสร็จ (ช่วงนี้)', '#2563eb', f.done + ' / ' + f.total + (f.avgCloseDays != null ? ' · เฉลี่ย ' + f.avgCloseDays + ' วัน' : ''))
+      + (r.abnormal ? tile(r.abnormal.open, 'สิ่งผิดปกติยังไม่ปิด', r.abnormal.overdue ? '#dc2626' : r.abnormal.open ? '#d97706' : '#16a34a', 'เกินกำหนด ' + r.abnormal.overdue + ' · แจ้งในช่วงนี้ ' + r.abnormal.total + ' · ปิดแล้ว ' + r.abnormal.closed) : '')
       + tile(x.safeDays == null ? '–' : x.safeDays, 'วันปลอดอุบัติเหตุ', x.accidents ? '#dc2626' : '#16a34a', x.lastAccident ? 'ครั้งล่าสุด ' + dd(x.lastAccident) : 'ยังไม่มีบันทึกอุบัติเหตุ')
       + '</div>';
     html += '<div class="panel pbox sins"><h4>' + icon('chart', 18) + ' ข้อสังเกต</h4>' + r.insights.map(function (s) { return '<div class="sin ' + s.level + '">' + esc(s.text) + '</div>'; }).join('') + '</div>';
@@ -238,6 +240,11 @@
       })() : '')
       + box(icon('alert', 18) + ' อุบัติเหตุ / เกือบเกิดเหตุ', (x.byType.length ? ['<div class="srisk">' + x.byType.map(function (t) { return '<span>' + esc(t.name) + ' <b>' + t.n + '</b></span>'; }).join('') + '</div>'] : [])
         .concat(x.list.map(function (o) { return '<div class="li"><span>' + dd(o.date) + ' · ' + esc(o.type) + '</span><b>' + esc(o.location || '') + '</b><small>' + esc([o.person, o.injury, o.lostDays ? 'หยุดงาน ' + o.lostDays + ' วัน' : ''].filter(String).join(' · ')) + '</small></div>'; })), 'ไม่มีเหตุการณ์ในช่วงนี้')
+      + (r.abnormal ? box(icon('warn', 18) + ' รายงานสิ่งผิดปกติ (ยังไม่ปิด)', (r.abnormal.byTopic.length ? ['<div class="srisk">' + r.abnormal.byTopic.map(function (t) { return '<span>' + esc(t.name) + ' <b>' + t.n + '</b></span>'; }).join('') + '</div>'] : [])
+        .concat(r.abnormal.list.map(function (o) {
+          return '<div class="li click' + (o.photo ? ' sabli' : '') + '" data-abo="' + esc(o.id) + '">' + (o.photo ? '<img src="' + img(o.photo, 160) + '" alt="" loading="lazy">' : '') + '<span>' + esc(o.code) + ' · ' + esc(o.place || '-') + ' · ' + esc(o.detail) + '</span>'
+            + '<b class="' + (o.late || o.fail ? 'neg' : '') + '">' + (o.dueDate ? 'กำหนด ' + dd(o.dueDate) : 'ยังไม่กำหนดวันเสร็จ') + '</b><small>แจ้ง ' + dd(o.reportDate) + ' · ผู้รับผิดชอบ ' + esc(o.responsible || '-') + (o.late ? ' · เกินกำหนด' : '') + (o.fail ? ' · ตรวจแล้วยังไม่เรียบร้อย' : '') + '</small></div>';
+        })), 'ไม่มีรายงานที่ค้าง 👍') : '')
       + '</div>';
     if (f.recent.length) html += '<div class="panel pbox" style="margin-top:14px"><h4>' + icon('camera', 18) + ' ข้อบกพร่องล่าสุด</h4><div class="srecent">' + f.recent.map(function (o) {
       return '<div class="src" data-fd="' + esc(o.id) + '">' + (o.photo ? '<img src="' + img(o.photo, 400) + '" alt="" loading="lazy">' : '<div class="snoimg">ไม่มีรูป</div>') + '<b>' + esc(o.location) + '</b><span>' + esc(o.problem) + '</span>' + (seenText(o) ? '<small class="sseen">🔁 ' + esc(seenText(o)) + '</small>' : '') + stTag(o) + '</div>';
@@ -1539,6 +1546,7 @@
     '.srecent{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}.src{border:1px solid var(--line);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:4px;font-size:13px;cursor:pointer}.src img,.src .snoimg{width:100%;height:110px;object-fit:cover;border-radius:8px}.src span{color:#334155}',
     // รายงาน FM-05 / FM-06 (A4 แนวนอน)
     '.sabst{display:inline-block;font-size:11.5px;font-weight:700;color:var(--s);background:color-mix(in srgb,var(--s) 12%,white);border-radius:99px;padding:1px 8px;vertical-align:1px}.sab1{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:#334155!important}',
+    '.li.sabli{grid-template-columns:auto 1fr auto}.sabli img{grid-row:1/3;width:52px;height:52px;object-fit:cover;border-radius:8px}.li.sabli small{grid-column:2/-1}',
     '.sabsec{border:1px solid #e2e8f0;border-radius:12px;padding:12px;margin-top:12px}.sabh{font-weight:800;color:#fff;background:var(--c);border-radius:8px;padding:6px 10px;margin:-2px -2px 10px;font-size:14px}',
     '.sabchk{display:flex;flex-wrap:wrap;gap:8px}.sabchk label{display:flex;align-items:center;gap:6px;border:1px solid #cbd5e1;border-radius:10px;padding:8px 12px;cursor:pointer;font-size:14px;background:#fff}.sabchk label:has(input:checked){border-color:var(--c);background:color-mix(in srgb,var(--c) 10%,white);font-weight:700}.sabchk input{width:18px;height:18px;margin:0;accent-color:var(--c)}',
     '.sabnote{margin:12px 0 0;font-size:12.5px;color:#b91c1c;font-style:italic}',
