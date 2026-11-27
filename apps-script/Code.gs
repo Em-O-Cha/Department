@@ -54,7 +54,7 @@ var DEPARTMENTS = [
     sheetId: '', ownerEmail: '', appUrl: '',
     menus: ['ต้นทุนสินค้า'] },
   // ฝ่ายขาย (ผู้ใช้ขอ 27/11/69): เปิดระบบ Revenue Spunky Online เดิมในหน้าเดียวกัน (Sales.gs) · ไม่อยู่ในหน้าผู้บริหาร (มีแท็บ ฝ่ายขาย = Meeting Dashboard แล้ว)
-  { key: 'SALES', name: 'ฝ่ายขาย',            en: 'Sales · Revenue Spunky Online', color: '#168B55', noExec: true,
+  { key: 'SALES', name: 'ฝ่ายขาย',            en: 'Sales · Revenue Spunky Online', color: '#B8860B', noExec: true,
     sheetId: '', ownerEmail: '', appUrl: '',
     menus: [] },
   // ผู้บริหาร: ไม่ใช่แผนก — ดู Dashboard ของทุกฝ่ายได้อย่างเดียว (Executive.gs) · ตั้งรหัสผ่านเองด้วยรหัสตั้งค่าจากผู้ดูแลระบบ
