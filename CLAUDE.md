@@ -6,3 +6,4 @@ Full notes live in the `Em-O-Cha/apps-script` repo's CLAUDE.md (backend = `depar
 - Never leave the user waiting in silence: every user-started request shows the "กำลังดำเนินการ…" popup (global `call()` in index.html / leave.html); multi-step flows show named step popups.
 - Run the `ux-review` skill (`.claude/skills/ux-review/`) before showing a preview or deploying any UI change.
 - This repo is public: never put passwords, sheet IDs or emails in it.
+- Fast data (standing rule, user asked 27/11/69): every department may get the Supabase read copy like ACC / HR — reads from the copy, saves to the sheet, only the saved tabs are re-read, no images in Supabase, page shows the last result at once and refreshes quietly. Full recipe in the apps-script repo's CLAUDE.md ("Standing rule: fast data for every department").
