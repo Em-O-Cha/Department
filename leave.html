@@ -105,7 +105,7 @@
   // หน้าต่าง "กำลังดำเนินการ" เมื่อคำสั่งที่ผู้ใช้กดใช้เวลาเกิน 0.4 วินาที (ผู้ใช้ขอ 26/11/69)
   var bAct = 0, bN = 0, bT = null, bEl = null, bAt = 0;
   ['pointerdown', 'click', 'submit', 'change'].forEach(function (ev) { document.addEventListener(ev, function () { bAct = Date.now(); }, true); });
-  function bStart() { bN++; if (bEl) return; clearTimeout(bT); bT = setTimeout(function () { if (!bN || bEl) return; bEl = document.createElement('div'); bEl.className = 'busyov'; bEl.setAttribute('role', 'status'); bEl.innerHTML = '<div class="busybox"><span class="busysp"></span><div><b>' + (S.lang === 'my' ? 'ခဏစောင့်ပါ…' : 'กำลังดำเนินการ…') + '</b><small>' + (S.lang === 'my' ? 'ထပ်မနှိပ်ပါနှင့်' : 'กรุณารอสักครู่ ไม่ต้องกดซ้ำ') + '</small></div></div>'; document.body.appendChild(bEl); bAt = Date.now(); }, 400); }
+  function bStart() { bN++; if (bEl) return; clearTimeout(bT); bT = setTimeout(function () { if (!bN || bEl) return; bEl = document.createElement('div'); bEl.className = 'busyov'; bEl.setAttribute('role', 'status'); bEl.innerHTML = '<div class="busybox"><span class="busysp"></span><div><b>' + (S.lang === 'my' ? 'ခဏစောင့်ပါ…' : 'กำลังดำเนินการ…') + '</b><small>' + (S.lang === 'my' ? 'ထပ်မနှိပ်ပါနှင့်' : 'กรุณารอสักครู่ ไม่ต้องกดซ้ำ') + '</small></div></div>'; document.body.appendChild(bEl); bAt = Date.now(); }, 8000); }   // ขึ้นเมื่อรอเกิน 8 วินาที (ผู้ใช้ขอ 27/11/69)
   function bEnd() { bN = Math.max(0, bN - 1); if (bN) return; clearTimeout(bT); var el = bEl; if (!el) return; bEl = null; setTimeout(function () { el.remove(); }, Math.max(0, 300 - (Date.now() - bAt))); }
   function call(fn) {
     var args = Array.prototype.slice.call(arguments, 1), mine = Date.now() - bAct < 1500;

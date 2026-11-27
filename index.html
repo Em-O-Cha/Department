@@ -532,8 +532,8 @@
       busyEl = document.createElement('div'); busyEl.className = 'busyov'; busyEl.setAttribute('role', 'status'); busyEl.setAttribute('aria-live', 'polite');
       busyEl.innerHTML = '<div class="busybox"><span class="busysp"></span><div><b>' + esc(label) + '</b><small>กรุณารอสักครู่ ไม่ต้องกดซ้ำ</small></div></div>';
       document.body.appendChild(busyEl); busyAt = Date.now();
-      busyT2 = setTimeout(function () { if (busyEl) busyEl.querySelector('small').textContent = 'ยังทำงานอยู่ ใช้เวลานานกว่าปกติ — กรุณารอ'; }, 8000);
-    }, 400);
+      busyT2 = setTimeout(function () { if (busyEl) busyEl.querySelector('small').textContent = 'ยังทำงานอยู่ ใช้เวลานานกว่าปกติ — กรุณารอ'; }, 12000);
+    }, 8000);   // ผู้ใช้ขอ 27/11/69: รอไม่เกิน 8 วินาที ไม่ต้องขึ้นป๊อปอัป (สั้น ๆ ขึ้นบ่อยแล้วซ้ำซ้อน)
   }
   function busyEnd() {
     busyN = Math.max(0, busyN - 1);
