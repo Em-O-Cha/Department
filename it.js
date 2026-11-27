@@ -11,10 +11,9 @@
     target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>'
   });
   var TABLES = {
-    it_sku: ['sku', 'สินค้า (SKU) · คอลัมน์ H–M', 'tag'], it_bulk: ['bulk', 'ราคาส่ง (SKU Bulk)', 'tag'], it_exp: ['exp', 'สินค้าส่งออก (SKU ส่งออก)', 'tag'],
+    it_sku: ['sku', 'สินค้า (SKU) · คอลัมน์ H–M', 'tag'], it_bulk: ['bulk', 'ราคาส่ง (SKU Bulk)', 'tag'],
     it_pay: ['pay', 'ช่องทางชำระเงิน (Payment)', 'card'], it_staff: ['staff', 'พนักงานขาย (Sales Name)', 'people2'], it_camp: ['camp', 'แคมเปญ (Campaign)', 'list'],
-    it_ad: ['ad', 'ช่องทางโฆษณา (AD)', 'list'], it_cust: ['cust', 'ประเภทลูกค้า (Customer)', 'people2'], it_target: ['target', 'เป้าหมายรายเดือน (Target)', 'target'],
-    it_kwi: ['kwItem', 'กลุ่มคำค้น Dashboard · รายการ', 'list'], it_kwp: ['kwProd', 'กลุ่มคำค้น Dashboard · สินค้า', 'list']
+    it_ad: ['ad', 'ช่องทางโฆษณา (AD)', 'list'], it_cust: ['cust', 'ประเภทลูกค้า (Customer)', 'people2'], it_target: ['target', 'เป้าหมายรายเดือน (Target)', 'target']
   };
   I.menus = function () {
     var m = [{ section: '👥 ระบบสมาชิก', tone: 'it' }, { id: 'it_mem', label: 'จัดการสมาชิก (Members LINE)', ic: 'people2' },
@@ -45,7 +44,7 @@
     var go_ = function () {
       if (!$('itWrap')) return;
       var f = document.createElement('iframe');
-      f.title = 'จัดการสมาชิก'; f.src = I.info.membersUrl; f.setAttribute('allow', 'clipboard-write; camera');
+      f.title = 'จัดการสมาชิก'; f.src = I.info.membersUrl + (I.info.membersUrl.indexOf('?') < 0 ? '?' : '&') + 'embed=it'; f.setAttribute('allow', 'clipboard-write; camera');
       f.onload = function () { var w = $('itWait'); if (w) w.classList.add('hidden'); };
       $('itWrap').appendChild(f);
     };

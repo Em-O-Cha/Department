@@ -6,15 +6,12 @@
 var IT_TABS_ = {
   sku: { tab: 'SKU', c0: 8, cols: [['Product_Name', 'text'], ['Pack', 'text'], ['Price on Line', 'num'], ['Link', 'url'], ['Weight', 'num'], ['สต๊อกคงเหลือ', 'ro']] },
   bulk: { tab: 'SKU Bulk', c0: 1, cols: [['Product_Name', 'text'], ['Pack', 'text'], ['5-9 ลัง', 'num'], ['10-19 ลัง', 'num'], ['20-29 ลัง', 'num'], ['30-49 ลัง', 'num'], ['50 ลังขึ้นไป', 'num'], ['Link', 'url'], ['Weight', 'num'], ['สต๊อกคงเหลือ', 'ro']] },
-  exp: { tab: 'SKU ส่งออก', c0: 1, cols: [['ProductName', 'text'], ['ProductName (Eng)', 'text'], ['Price', 'num'], ['Weight', 'num']] },
   pay: { tab: 'Payment', c0: 1, cols: [['PaymentType', 'text']] },
   staff: { tab: 'Sales Name', c0: 1, cols: [['StaffName', 'text']] },
   camp: { tab: 'Campaign', c0: 1, cols: [['CampaignName', 'text']] },
   ad: { tab: 'AD', c0: 1, cols: [['Channel Name', 'text'], ['Channel Name (Eng)', 'text']] },
   cust: { tab: 'Customer', c0: 1, cols: [['Customer Type', 'text']] },
-  target: { tab: 'Target', c0: 1, cols: [['Month', 'text'], ['Shopee', 'num'], ['TikTok', 'num'], ['Line Shop', 'num'], ['Facebook', 'num'], ['Bulk Buyers', 'num'], ['Total', 'ro']] },
-  kwItem: { tab: 'DashboardKeywordGroups_Item', c0: 1, cols: [['GroupName', 'text'], ['Keywords (คั่นด้วย ,)', 'text']] },
-  kwProd: { tab: 'DashboardKeywordGroups_Product', c0: 1, cols: [['GroupName', 'text'], ['Keywords (คั่นด้วย ,)', 'text']] }
+  target: { tab: 'Target', c0: 1, cols: [['Month', 'text'], ['Shopee', 'num'], ['TikTok', 'num'], ['Line Shop', 'num'], ['Facebook', 'num'], ['Bulk Buyers', 'num'], ['Total', 'ro']] }   // SKU ส่งออก / กลุ่มคำค้น Dashboard ไม่แก้ที่นี่ (ผู้ใช้ขอ 27/11/69)
 };
 function requireIt_(token) {
   var dept = requireDept_(token);
