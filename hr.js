@@ -186,7 +186,7 @@
     H.loading = call('hrLoad', state.token).then(function (d) {
       H.data = d; H.idx = {}; d.emps.concat(d.jobs || []).forEach(function (e) { H.idx[e.id] = e; }); H.loading = null;   // jobs = พนักงาน Job (ใช้ในการลาเท่านั้น)
       if (!H.pollT) H.pollT = setInterval(function () { pollLeaves(false); }, 60000);
-      if (!H.photosLoaded) { H.photosLoaded = true; call('hrPhotos', state.token).then(function (r) { if (r.ok) { H.photos = r.photos; if (String(state.page).indexOf('h_') === 0) H.render(state.page); } }).catch(function () { H.photosLoaded = false; }); }
+      if (!H.photosLoaded) { H.photosLoaded = true; call('hrPhotos', state.token).then(function (r) { if (r.ok) { H.photos = r.photos; if (String(state.page).indexOf('h_') === 0 && state.page !== 'h_dash') H.render(state.page); } }).catch(function () { H.photosLoaded = false; }); }
       return d;
     }, function (e) { H.loading = null; throw e; });
     return H.loading;
