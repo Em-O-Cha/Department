@@ -100,7 +100,7 @@
   function xpShowSales() { ['xlsBtn', 'pdfBtn'].forEach(function (id) { var b = $(id); if (b) b.classList.add('hidden'); }); }
 
   var css = document.createElement('style');
-  css.textContent = '.slbox.hidden{display:none}.slbox{position:relative;background:#fff;border-radius:14px;overflow:hidden;box-shadow:var(--shadow);height:calc(100vh - 110px);min-height:560px}'
+  css.textContent = '.main:has(#slWrap){padding:12px 14px}.slbox.hidden{display:none}.slbox{position:relative;background:#fff;border-radius:14px;overflow:hidden;box-shadow:var(--shadow);height:calc(100vh - 100px);min-height:560px}'
     + '.slbox iframe{display:block;width:100%;height:100%;border:0}'
     + '.slwait{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:12px;background:#fff;z-index:1;padding:20px;text-align:left}'
     + '.slwait div{display:flex;flex-direction:column;gap:4px}.slwait span:last-child{color:#64748b;font-size:13px}'
