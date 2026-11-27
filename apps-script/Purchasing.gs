@@ -76,6 +76,7 @@ function purBook_(dept) {
 }
 function purSheet_(ss, name) {
   var t = PUR_TABLES_[name];
+  if (!DB_READING_) dbMarkTab_(ss, t.tab);   // คำสั่งบันทึกแตะแท็บนี้ → สำเนาของแท็บนี้ในฐานข้อมูลไม่สดแล้ว
   var sh = ss.getSheetByName(t.tab);
   if (!sh) {
     sh = ss.insertSheet(t.tab);
@@ -105,7 +106,9 @@ function purId_(prefix) { return prefix + Date.now().toString(36).toUpperCase() 
 // อ่านทั้งแท็บ → [{key: value}] (+ _row = เลขแถวในชีต)
 function purRead_(ss, name) {
   if (ss && ss.__db) return dbBookRead_(ss, name);   // สมุดเสมือนจากฐานข้อมูลสำเนา (DeptDb.gs)
-  var sh = purSheet_(ss, name), t = PUR_TABLES_[name];
+  DB_READING_ = true;
+  try { var sh = purSheet_(ss, name); } finally { DB_READING_ = false; }   // อ่านอย่างเดียว → ไม่นับว่าแท็บนี้ถูกแก้ (DeptDb.gs)
+  var t = PUR_TABLES_[name];
   var last = sh.getLastRow(), width = sh.getLastColumn();
   if (last < 2) return [];
   var vals = sh.getRange(1, 1, last, width).getValues();

@@ -28,11 +28,12 @@ function rcStamp_(kind, deptKey, target) {
   var keys = rcStampKeys_(kind, deptKey, target), got = CacheService.getScriptCache().getAll(keys);
   return keys.map(function (k) { return got[k] || ''; }).join('.');
 }
+var RC_IN_CALL_ = false;   // อยู่ในคำสั่ง {fn} ของ doPost (การแก้ถูกจดทีละแท็บแล้ว)
 function rcTouchDept_(deptKey) {
   try {
     var c = CacheService.getScriptCache();
     c.put('RCD_' + deptKey, Date.now() + '-' + Math.random().toString(36).slice(2, 8), 21600);
-    if (deptKey !== '_ALL') c.put('DBD_' + deptKey, String(Date.now()), 21600);   // ฐานข้อมูลสำเนาของฝ่ายนี้ไม่สดแล้ว (DeptDb.gs)
+    if (deptKey !== '_ALL' && !DB_TRACK_ && !RC_IN_CALL_) c.put('DBD_' + deptKey, String(Date.now()), 21600);   // เส้นทางที่จดทีละแท็บไม่ได้ (เช่น LINE webhook) → ทั้งฝ่าย   // ฐานข้อมูลสำเนาของฝ่ายนี้ไม่สดแล้ว (DeptDb.gs)
   } catch (e) {}
 }
 // เรียกจาก doPost ก่อนและหลังทุกคำสั่ง

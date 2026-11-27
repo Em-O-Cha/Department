@@ -89,13 +89,13 @@ function doPost(e) {
     var fns = apiFunctions_(), fn = String(req.fn || '');
     if (!Object.prototype.hasOwnProperty.call(fns, fn)) throw new Error('ไม่รองรับคำสั่งนี้');
     var args = Array.isArray(req.args) ? req.args.slice(0, 8) : [];
-    try { deptDbNoteCall_(fn); } catch (e0) {}   // คำสั่งที่แก้ข้อมูลฝ่ายบัญชี → Dashboard คัดลอกข้อมูลใหม่ (DeptDb.gs)
+    RC_IN_CALL_ = true;   // การแก้ข้อมูลในคำสั่งนี้ถูกจดทีละแท็บ (DeptDb.gs dbMarkTab_)
     try { rcTouch_(fn, args); } catch (e2) {}   // คำสั่งแก้ข้อมูล → ผลที่เก็บไว้ของแผนกนั้นหมดอายุ (RespCache.gs)
-    try { perfStart_(fn); } catch (e4) {}
+    try { perfStart_(fn); dbTrackStart_(!(RC_READ_[fn] || RC_NOWRITE_.test(fn))); } catch (e4) {}
     out = { ok: true, val: respCall_(fn, fns[fn], args) };   // คำสั่งอ่าน: ใช้ผลที่เก็บไว้ถ้ามี
-    try { if (fn !== 'deptPerfLog') perfEnd_(); } catch (e5) {}
+    try { dbTrackEnd_(); if (fn !== 'deptPerfLog') perfEnd_(); } catch (e5) {}
     try { rcTouch_(fn, args); } catch (e3) {}
-    try { deptDbNoteCall_(fn); } catch (e1) {}
+    RC_IN_CALL_ = false;
   } catch (err) {
     out = { ok: false, err: String(err && err.message || err) };
   }

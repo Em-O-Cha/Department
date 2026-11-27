@@ -69,7 +69,8 @@ function hrBook_(dept) {
     var again = purRead_(ss, 'hr_settings').map(function (x) { return x.id; });
     miss.forEach(function (k) { if (again.indexOf(k) < 0) purWrite_(ss, 'hr_settings', { id: k, value: HR_SETTINGS_DEFAULT_[k] }); });
   });
-  ['hr_emps', 'hr_docs', 'hr_leaves', 'hr_trainings', 'hr_disc'].forEach(function (t) { purSheet_(ss, t); });
+  DB_READING_ = true;   // แค่ตรวจว่ามีแท็บครบ ไม่ใช่การแก้ข้อมูล
+  try { ['hr_emps', 'hr_docs', 'hr_leaves', 'hr_trainings', 'hr_disc'].forEach(function (t) { purSheet_(ss, t); }); } finally { DB_READING_ = false; }
   return ss;
 }
 function hrSettings_(ss) {

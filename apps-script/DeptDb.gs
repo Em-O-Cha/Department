@@ -72,9 +72,8 @@ var DB_STALE_MS_ = 30 * 60 * 1000;
 var DB_ACC_READS_ = /^(accLoad|accDashboard|accCompare|accMonthly|acc711Report|acc711Preview|apLoad|cpLoad|exLoad|exCheck|cpPreview|apIncome|apAiStatus|apAiRead|accLineDiag|accLineOaInfo|accLineTest)$/;
 
 // เรียกจาก doPost ทุกคำสั่ง (ก่อนและหลังทำงาน): คำสั่งที่แก้ข้อมูลฝ่ายบัญชี → จดเวลาที่แก้
-function deptDbNoteCall_(fn) {
-  if (/^(acc|cp|ex|ap)[A-Z0-9]/.test(fn) && !DB_ACC_READS_.test(fn)) CacheService.getScriptCache().put('DBD_ACC', String(Date.now()), 21600);
-}
+// ตั้งแต่ 27/11/69 จดทีละแท็บ (dbMarkTab_) แทนการถือว่าทั้งฝ่ายไม่สด — เหลือไว้เป็นชื่อเดิมเพื่อไม่ให้ Api.gs พัง
+function deptDbNoteCall_(fn) {}
 function dbFetch_(cfg, path, opt) {
   opt = opt || {};
   var o = { method: opt.method || 'get', headers: deptDbHeaders_(cfg.key), muteHttpExceptions: true };
@@ -130,9 +129,10 @@ function dbBook_(deptKey, book, cfg, opener, sheetId) {
   var real = function () { if (!d.real) { d.real = opener(); try { CacheService.getScriptCache().put('DBN_' + deptKey + '_' + book, d.real.getName(), 21600); } catch (e) {} } return d.real; };
   d.realFn = real;
   // เขียนผ่านสมุดเสมือน (เช่น เปลี่ยนเป็นลาออกอัตโนมัติใน hrLoad) → ใช้ชีตจริง + ถือว่าสำเนาไม่สดแล้ว
-  var w = function () { d.cache = {}; try { CacheService.getScriptCache().put('DBD_' + deptKey, String(Date.now()), 21600); } catch (e) {} return real(); };
+  // เขียนผ่านสมุดเสมือน → ใช้ชีตจริง + จดว่าแท็บนั้นถูกแก้ (เฉพาะแท็บนั้น)
+  var w = function (tab) { d.cache = {}; dbStampTab_(sheetId, tab); return real(); };
   return { __db: d, getId: function () { return sheetId || real().getId(); },
-    getSheetByName: function (n) { return w().getSheetByName(n); }, insertSheet: function (n) { return w().insertSheet(n); },
+    getSheetByName: function (n) { return w(n).getSheetByName(n); }, insertSheet: function (n) { return w(n).insertSheet(n); },
     getSheets: function () { return real().getSheets(); }, getSpreadsheetTimeZone: function () { return PUR_TZ_; },
     getUrl: function () { return sheetId ? 'https://docs.google.com/spreadsheets/d/' + sheetId + '/edit' : real().getUrl(); },
     getName: function () { return CacheService.getScriptCache().get('DBN_' + deptKey + '_' + book) || real().getName(); } };
@@ -144,7 +144,9 @@ function dbBookRead_(ss, name) {
     var kv = String(c.get(k) || '').split('|'), ts = Number(kv[0] || 0), known = kv.length > 1 ? Number(kv[1]) : -1, dirty = Number(c.get('DBD_' + d.dept) || 0), now = Date.now(), rows = null;
     // ผู้ใช้แจ้ง 27/11/69 ว่ายังช้า 40 วิ: เดิมเชื่อสำเนาแค่ 30 นาที → เกินแล้วต้องอ่านชีต + อัปโหลดใหม่ทุกครั้ง (ช้ากว่าไม่มีฐานข้อมูล)
     // ตอนนี้: ใช้สำเนาได้ตราบใดที่ชีตยังไม่ถูกแก้ (เวลาแก้ไขล่าสุดของไฟล์ใน Drive ≤ เวลาที่คัดลอก) และระบบไม่ได้บันทึกอะไรหลังจากนั้น
-    var fresh = ts && ts > dirty && (now - ts < DB_STALE_MS_ || dbSheetEdited_(d) <= ts);
+    // แยกทีละแท็บ (ผู้ใช้ขอ 27/11/69): บันทึกแท็บไหน → อ่านใหม่จากชีตเฉพาะแท็บนั้น แท็บอื่นยังใช้สำเนา
+    var tab = (PUR_TABLES_[name] || {}).tab || name, tabDirty = d.sheetId ? Number(c.get('DBW_' + d.sheetId + '_' + tab) || 0) : 0;
+    var fresh = ts && ts > dirty && ts > tabDirty && (now - ts < DB_STALE_MS_ || dbSheetEdited_(d) <= Math.max(ts, dbSysWrite_(d) + 120000));
     if (fresh) { try { rows = dbReadTab_(d.cfg, d.dept, d.book, name, known); perfNote_('db'); } catch (e) { rows = null; } }
     if (!rows) {
       var t1 = Date.now();
@@ -157,6 +159,33 @@ function dbBookRead_(ss, name) {
   }
   return JSON.parse(JSON.stringify(d.cache[name]));
 }
+// ---------- แท็บไหนถูกแก้ (แยกทีละแท็บ) ----------
+// DB_READING_ = purRead_ กำลังอ่าน (ไม่ใช่การแก้) · DB_TRACK_ = คำสั่งที่กำลังทำงานเป็นคำสั่งบันทึก (doPost ตั้งให้)
+var DB_READING_ = false, DB_TRACK_ = null;
+function dbStampTab_(sheetId, tab) {
+  if (!sheetId || !tab) return;
+  try {
+    var c = CacheService.getScriptCache(), now = String(Date.now());
+    c.putAll(function () { var o = {}; o['DBW_' + sheetId + '_' + tab] = now; o['DBS_' + sheetId] = now; return o; }(), 21600);
+  } catch (e) {}
+  if (DB_TRACK_) DB_TRACK_[sheetId + '\u0001' + tab] = 1;
+}
+// เรียกจาก purSheet_ (ชีตจริง) เมื่อไม่ใช่การอ่าน · ไม่รู้ว่าเป็นไฟล์ไหน = ข้าม
+function dbMarkTab_(ss, tab) {
+  if (!ss || ss.__db) return;
+  var id = ''; try { id = ss.getId(); } catch (e) { return; }
+  if (DB_TRACK_ && DB_TRACK_[id + '\u0001' + tab]) return;   // จดไปแล้วในคำสั่งนี้
+  dbStampTab_(id, tab);
+}
+// จบคำสั่งบันทึก: จดเวลาอีกครั้ง (คนที่อ่านระหว่างกำลังบันทึกจะได้ไม่ใช้สำเนาที่ยังไม่ครบ)
+function dbTrackStart_(isWrite) { DB_TRACK_ = isWrite ? {} : null; }
+function dbTrackEnd_() {
+  var t = DB_TRACK_; DB_TRACK_ = null;
+  if (!t) return;
+  Object.keys(t).forEach(function (k) { var p = k.split('\u0001'); dbStampTab_(p[0], p[1]); });
+}
+// เวลาที่ระบบบันทึกลงไฟล์นี้ล่าสุด (ใช้แยกว่าไฟล์เปลี่ยนเพราะระบบ ไม่ใช่มีคนแก้ในชีตเอง)
+function dbSysWrite_(d) { return d.sheetId ? Number(CacheService.getScriptCache().get('DBS_' + d.sheetId) || 0) : 0; }
 // เวลาแก้ไขล่าสุดของไฟล์ชีต (ms) — เก็บไว้ 60 วิ ต่อไฟล์ · อ่านไม่ได้ = ถือว่าเพิ่งแก้ (อ่านชีต)
 function dbSheetEdited_(d) {
   if (!d.sheetId) return Infinity;
