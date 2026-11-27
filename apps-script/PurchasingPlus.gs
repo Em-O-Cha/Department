@@ -224,7 +224,7 @@ function purVendorMetricsData_(ss, from, to) {
   return out;
 }
 function purVendorMetrics(token, period) {
-  var dept = requirePur_(token), ss = purBook_(dept), r = purQuarterRange_(period);
+  var dept = requirePur_(token), ss = purReadBook_(dept), r = purQuarterRange_(period);
   if (!r) return { ok: false, error: 'รอบประเมินไม่ถูกต้อง' };
   return { ok: true, period: period, from: r.from, to: r.to, metrics: purVendorMetricsData_(ss, r.from, r.to) };
 }
@@ -259,7 +259,7 @@ function purDeleteEval(token, id) {
 }
 // รายงานจัดอันดับผู้ขายของรอบ: คะแนนประเมิน + ตัวชี้วัด
 function purVendorReport(token, period) {
-  var dept = requirePur_(token), ss = purBook_(dept), r = purQuarterRange_(period);
+  var dept = requirePur_(token), ss = purReadBook_(dept), r = purQuarterRange_(period);
   if (!r) return { ok: false, error: 'เลือกรอบประเมิน' };
   var metrics = purVendorMetricsData_(ss, r.from, r.to), evals = purRead_(ss, 'evals').filter(function (x) { return x.period === period; });
   var byV = {}; evals.forEach(function (x) { byV[x.vendorId] = x; });

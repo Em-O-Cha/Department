@@ -24,7 +24,7 @@ function costMigrate_(ss) {
 }
 function costPurItems_() {
   var pur = DEPARTMENTS.filter(function (x) { return x.key === 'PUR'; })[0], ss;
-  try { ss = purBook_(pur); } catch (e) { return { items: [], error: 'เปิดข้อมูลฝ่ายจัดซื้อไม่ได้: ' + (e && e.message || e) }; }
+  try { ss = purReadBook_(pur); } catch (e) { return { items: [], error: 'เปิดข้อมูลฝ่ายจัดซื้อไม่ได้: ' + (e && e.message || e) }; }
   var vendors = purRead_(ss, 'vendors'), vmap = {}, items = [], best = {};
   vendors.forEach(function (v) { vmap[v.id] = v; });
   var put = function (x) {

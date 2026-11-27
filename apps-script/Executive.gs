@@ -17,8 +17,8 @@ var EXEC_BASE_ = { PUR: function (dept, from, to) { return purDashboard_(dept, f
   COST: function () { return costDashData_(); } };
 // ลำดับ = ลำดับที่แสดงในหน้า (บนลงล่าง)
 var EXEC_PARTS_ = {
-  PUR: [['rises', function (dept, from, to) { return purPriceReport_(purBook_(dept), from, to); }],
-        ['vendorInfo', function (dept) { return purVendorDash_(purBook_(dept)); }]],
+  PUR: [['rises', function (dept, from, to) { return purPriceReport_(purReadBook_(dept), from, to); }],
+        ['vendorInfo', function (dept) { return purVendorDash_(purReadBook_(dept)); }]],
   QA: [['cost', function (dept) {
     var ss = qaBook_(dept);
     return { today: purToday_(), tests: purRead_(ss, 'qa_tests').map(function (t) { return { year: t.year, kind: t.kind, status: t.status, price: t.price, sentDate: t.sentDate, testType: t.testType, sample: t.sample, lab: t.lab }; }),

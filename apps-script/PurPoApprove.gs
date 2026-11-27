@@ -364,7 +364,7 @@ function purPoOut_(r) {
     decidedAt: r.decidedAt, decidedBy: r.decidedBy, seenAt: r.seenAt, deliveryDate: r.deliveryDate, confirmedAt: r.confirmedAt, note: r.note, attach: r.attach || '' };
 }
 function purPoList_(ss) { purPoReg_(); return purRead_(ss, 'po_approvals').map(purPoOut_).sort(function (a, b) { return String(b.sentAt).localeCompare(String(a.sentAt)); }); }
-function purPoList(token) { var dept = requirePur_(token); return { ok: true, list: purPoList_(purBook_(dept)) }; }
+function purPoList(token) { var dept = requirePur_(token); return { ok: true, list: purPoList_(purReadBook_(dept)) }; }
 function purPoSeen(token, id) {
   var dept = requirePur_(token); purPoReg_();
   return purLocked_(function () {

@@ -235,3 +235,10 @@ function hrReadBook_(dept, prep) {
 function hrPrepJob_() { PUR_TABLES_.hr_jobs = HRJ_TABLE_; PUR_NUM_KEYS_.seq = 1; }
 function hrPrepTime_() { PUR_TABLES_.hr_time = HRT_TABLE_; PUR_NUM_KEYS_.lateMin = 1; PUR_NUM_KEYS_.earlyMin = 1; }
 function hrPrepDaily_() { PUR_TABLES_.hr_daily = HRD_TABLE_; PUR_NUM_KEYS_.total = 1; PUR_NUM_KEYS_.leaveCount = 1; PUR_NUM_KEYS_.resign = 1; }
+
+// สมุดฝ่ายจัดซื้อสำหรับคำสั่งที่อ่านอย่างเดียว (ผู้ใช้ขอ 27/11/69): ฐานข้อมูลสำเนา (ถ้าเชื่อมต่อ PUR ไว้) หรือชีต · การบันทึกยังใช้ purBook_
+function purReadBook_(dept) {
+  var cfg = deptDbCfg_(dept.key);
+  if (!cfg) return purBook_(dept);
+  return dbBook_(dept.key, 'main', cfg, function () { return purBook_(dept); }, deptConfig_(dept.key).sheetId);
+}

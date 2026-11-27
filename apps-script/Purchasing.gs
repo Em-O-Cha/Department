@@ -207,7 +207,7 @@ function purBalances_(moves) {
 
 // โหลดข้อมูลหลัก (ไม่รวมประวัติรับเข้าจ่ายออกทั้งหมด — ใช้ purMoves)
 function purLoad(token) {
-  var dept = requirePur_(token), ss = purBook_(dept);
+  var dept = requirePur_(token), ss = purReadBook_(dept);
   var vendors = purRead_(ss, 'vendors'), materials = purRead_(ss, 'materials'), docs = purRead_(ss, 'docs'), items = purRead_(ss, 'docItems');
   var moves = purRead_(ss, 'moves'), b = purBalances_(moves);
   var itemsByDoc = {};
@@ -232,7 +232,7 @@ function purLoad(token) {
 
 // ประวัติรับเข้าจ่ายออก ตามช่วงวันที่ (และวัตถุดิบ ถ้าระบุ)
 function purMoves(token, from, to, materialId) {
-  var dept = requirePur_(token), ss = purBook_(dept);
+  var dept = requirePur_(token), ss = purReadBook_(dept);
   from = purDate_(from) || '0000-00-00'; to = purDate_(to) || '9999-99-99';
   var list = purRead_(ss, 'moves').filter(function (m) { return m.date >= from && m.date <= to && (!materialId || m.materialId === materialId); });
   list.forEach(function (m) { m.files = purParseFiles_(m.files); });
@@ -242,7 +242,7 @@ function purMoves(token, from, to, materialId) {
 
 // รายงานช่วงวันที่: ยอดยกมา/รับเข้า/จ่ายออก/คงเหลือ ต่อวัตถุดิบ + มูลค่า (ราคา ณ วันที่) + ใบ PO + การชำระเงิน
 function purReport(token, from, to) {
-  var dept = requirePur_(token), ss = purBook_(dept);
+  var dept = requirePur_(token), ss = purReadBook_(dept);
   from = purDate_(from); to = purDate_(to);
   if (!from || !to || from > to) return { ok: false, error: 'เลือกช่วงวันที่ให้ถูกต้อง' };
   var materials = purRead_(ss, 'materials'), moves = purRead_(ss, 'moves'), prices = purRead_(ss, 'prices'), docs = purRead_(ss, 'docs');
@@ -594,7 +594,7 @@ function purRemoveFile(token, ownerType, ownerId, fileId) {
 
 // ประวัติราคาของวัตถุดิบ (เก่า → ใหม่)
 function purPriceHistory(token, materialId) {
-  var dept = requirePur_(token), ss = purBook_(dept);
+  var dept = requirePur_(token), ss = purReadBook_(dept);
   var list = purRead_(ss, 'prices').filter(function (p) { return p.materialId === materialId; })
     .sort(function (a, c) { return a.effectiveDate === c.effectiveDate ? String(a.createdAt).localeCompare(String(c.createdAt)) : a.effectiveDate.localeCompare(c.effectiveDate); });
   list.forEach(function (p) { delete p._row; });
@@ -610,7 +610,7 @@ function purLog(token, limit) {
 
 // ---------- สรุปสำหรับ Dashboard ผู้บริหาร (ดูอย่างเดียว · เรียกจาก Executive.gs) ----------
 function purDashboard_(dept, from, to) {
-  var ss = purBook_(dept), today = purToday_();
+  var ss = purReadBook_(dept), today = purToday_();
   var materials = purRead_(ss, 'materials'), moves = purRead_(ss, 'moves'), prices = purRead_(ss, 'prices'), docs = purRead_(ss, 'docs');
   var b = purBalances_(moves), byId = {};
   materials.forEach(function (m) { byId[m.id] = m; });
@@ -673,7 +673,7 @@ function purDashboard_(dept, from, to) {
 
 // ---------- รายงานสต๊อกคงเหลือ ณ วันที่ + มูลค่า (จำนวนคงเหลือ × ราคา ณ วันที่นั้น) ----------
 function purStockReport(token, asOf) {
-  var dept = requirePur_(token), ss = purBook_(dept);
+  var dept = requirePur_(token), ss = purReadBook_(dept);
   asOf = purDate_(asOf);
   if (!asOf) return { ok: false, error: 'เลือกวันที่' };
   var materials = purRead_(ss, 'materials'), prices = purRead_(ss, 'prices');
@@ -695,7 +695,7 @@ function purStockReport(token, asOf) {
 // ---------- รายงานประวัติราคา (ตามผู้ขาย / วัตถุดิบ) · ราคาที่มีผลในช่วงวันที่ + เทียบราคาก่อนหน้า ----------
 function purPriceReport(token, from, to) {
   var dept = requirePur_(token);
-  return purPriceReport_(purBook_(dept), from, to);
+  return purPriceReport_(purReadBook_(dept), from, to);
 }
 // ใช้ร่วมกับ Dashboard ผู้บริหาร (Executive.gs) — ราคาปรับขึ้นแยกตามสินค้า
 function purPriceReport_(ss, from, to) {
