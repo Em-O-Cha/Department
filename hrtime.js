@@ -174,7 +174,7 @@
       + '<div class="panel httab"><table><thead><tr><th>รหัส</th><th>ชื่อ</th><th>แผนก</th><th>เข้า</th><th>ออก</th><th>เวลาทำงาน</th><th>สาย</th><th>ออกก่อน</th><th>OT</th><th>หมายเหตุ</th></tr></thead><tbody>'
       + (all.filter(function (r) { return pass(r, T.f); }).map(function (r) {
         var cls = r.dayStatus === 'วันหยุด' && !r.kind ? 'off' : isAbsent(r) ? 'abs' : isLeave(r) ? 'lv' : r.lateMin > 0 ? 'late' : isMiss(r) || r.earlyMin > 0 ? 'warn' : '';
-        return '<tr class="' + cls + ' click" data-tid="' + esc(r.id) + '" title="แตะเพื่อแก้ไข"><td>' + esc(r.machineId) + '</td><td>' + who(r) + '</td><td>' + esc(r.dept) + '</td><td>' + esc(r.timeIn || '–') + '</td><td>' + esc(r.timeOut || '–') + '</td><td>' + esc(r.workTime || '') + '</td>'
+        return '<tr class="' + cls + ' click" data-tid="' + esc(r.id) + '" title="แตะเพื่อแก้ไข"><td>' + (r.machineId === 'ใบหน้า' ? '<span class="htface" title="ลงเวลาด้วยใบหน้าผ่าน LINE">📷 ใบหน้า</span>' : esc(r.machineId)) + '</td><td>' + who(r) + '</td><td>' + esc(r.dept) + '</td><td>' + esc(r.timeIn || '–') + '</td><td>' + esc(r.timeOut || '–') + '</td><td>' + esc(r.workTime || '') + '</td>'
           + '<td>' + (Number(r.lateMin) ? '<b class="neg">' + mm(r.lateMin) + '</b>' : '') + '</td><td>' + (Number(r.earlyMin) ? mm(r.earlyMin) : '') + '</td><td>' + esc([r.otBefore, r.otAfter].filter(String).join(' / ')) + '</td>'
           + '<td>' + (r.kind ? '<b class="' + (r.kind === 'ok' ? 'pos' : 'neg') + '">' + esc(kindLabel(r.kind)) + '</b> ' : '') + esc(r.dayStatus === 'วันหยุด' && !r.kind ? 'วันหยุด' : r.remark)
           + (r.editedAt ? ' <small class="htedit">HR แก้</small>' : '') + '</td></tr>';
@@ -214,13 +214,34 @@
   }
 
   // ---------- HR แก้ข้อมูลลงเวลา 1 แถว ----------
+  // แถวลงเวลาด้วยใบหน้า (LINE): รูปที่ถ่าย + ตำแหน่ง + ความตรงของหน้า — รูปไม่เปิดสาธารณะ โหลดผ่าน hrClockPhoto เมื่อกด
+  function faceInfo(r) {
+    var one = function (lab, t, ph, geo, sc) {
+      if (!t) return '<div class="htfi"><b>' + lab + '</b><span class="muted">ยังไม่ได้ลงเวลา</span></div>';
+      return '<div class="htfi"><b>' + lab + ' ' + esc(t) + ' น.</b>' + (sc ? '<span>🙂 หน้าตรง ' + esc(sc) + '%</span>' : '') + (geo ? '<span>📍 ' + esc(String(geo).split(' · ').pop()) + '</span>' : '')
+        + (ph ? '<button type="button" class="btn btn-sm btn-line" data-fph="' + esc(ph) + '">ดูรูปที่ถ่าย</button><div class="htfimg" data-fimg="' + esc(ph) + '"></div>' : '<span class="muted">ไม่มีรูป</span>') + '</div>';
+    };
+    return '<div class="htfbox"><div class="muted" style="font-size:13px;margin-bottom:6px">📷 ลงเวลาด้วยใบหน้าผ่าน LINE</div><div class="htfg">' + one('เข้างาน', r.timeIn, r.inPhoto, r.inGeo, r.inScore) + one('ออกงาน', r.timeOut, r.outPhoto, r.outGeo, r.outScore) + '</div></div>';
+  }
+  function bindFacePhotos() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-fph]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-fph'), box = document.querySelector('[data-fimg="' + id + '"]');
+        b.disabled = true; b.textContent = 'กำลังโหลดรูป…';
+        call('hrClockPhoto', state.token, id).then(function (x) {
+          if (!x.ok) { b.disabled = false; b.textContent = 'ดูรูปที่ถ่าย'; return toast(x.error); }
+          b.remove(); box.innerHTML = '<img src="' + x.url + '" alt="รูปที่ถ่ายตอนลงเวลา">';
+        }).catch(function (e) { b.disabled = false; b.textContent = 'ดูรูปที่ถ่าย'; onServerError(e); });
+      });
+    });
+  }
   function editDialog(r) {
     if (!r) return;
     if (!r.empId) { toast('ยังไม่ได้จับคู่รายชื่อนี้กับทะเบียน — กด "จับคู่รายชื่อ" ก่อน'); return; }
     var p = person(r.empId) || { name: r.name };
     var fld = function (id, label, val, type, extra) { return '<div class="pf"><label for="' + id + '">' + label + '</label><input id="' + id + '" type="' + (type || 'text') + '" value="' + esc(val == null ? '' : val) + '"' + (extra || '') + '></div>'; };
     openModal({ color: state.dept.color, icon: 'cal', wide: true, title: 'แก้ข้อมูลลงเวลา · ' + p.name, sub: th(r.date) + ' · รหัสที่เครื่อง ' + r.machineId + (r.shift ? ' · กะ ' + r.shift : ''),
-      body: '<p class="muted" style="margin-top:0">ในไฟล์: เข้า ' + esc(r.timeIn || '–') + ' · ออก ' + esc(r.timeOut || '–') + (r.remark ? ' · ' + esc(r.remark) : '') + '</p>'
+      body: (r.machineId === 'ใบหน้า' ? faceInfo(r) : '<p class="muted" style="margin-top:0">ในไฟล์: เข้า ' + esc(r.timeIn || '–') + ' · ออก ' + esc(r.timeOut || '–') + (r.remark ? ' · ' + esc(r.remark) : '') + '</p>')
         + '<div class="pform">' + '<div class="pf"><label for="teKind">สถานะวันนี้</label><select id="teKind">' + KINDS.map(function (k) { return '<option value="' + k[0] + '"' + ((r.kind || '') === k[0] ? ' selected' : '') + '>' + k[1] + '</option>'; }).join('') + '</select></div>'
         + fld('teIn', 'เวลาเข้า', r.timeIn, 'time') + fld('teOut', 'เวลาออก', r.timeOut, 'time')
         + fld('teLate', 'สาย (นาที)', r.lateMin || 0, 'number', ' min="0" inputmode="numeric"') + fld('teEarly', 'ออกก่อน (นาที)', r.earlyMin || 0, 'number', ' min="0" inputmode="numeric"')
@@ -228,6 +249,7 @@
         + '<p class="muted" style="margin:6px 0 0;font-size:13px">บันทึกแล้วระบบปรับหน้าการลา / ขาด / มาสายของวันนี้ให้ตาม (เลือกขาดงาน / ลา = ลงหน้าการลาเลย · มาทำงาน = ไม่ลง) · นำเข้าไฟล์วันนี้ซ้ำจะไม่ทับที่ HR แก้</p>',
       ok: 'บันทึก',
       onOpen: function () {
+        bindFacePhotos();
         $('teKind').addEventListener('change', function () { if (['absent', 'sick', 'personal', 'vacation', 'other'].indexOf(this.value) >= 0) { $('teLate').value = 0; $('teEarly').value = 0; } });
       },
       submit: function () {
@@ -313,6 +335,7 @@
     '.httab tr.click{cursor:pointer}.httab tr.click:hover td{background:#eef2ff}.httab tr.lv td{background:#f5f3ff}.htedit{color:#4338ca;background:#e0e7ff;border-radius:6px;padding:1px 6px}.httab tr.off td{color:#94a3b8}.httab tr.abs td{background:#fef2f2}.httab tr.late td{background:#fff7ed}.httab tr.warn td{background:#fffbeb}.htnomap{color:#b45309;background:#fef3c7;border-radius:6px;padding:1px 6px}.htjob{color:#c2410c}',
     '.htsum{display:grid;grid-template-columns:2fr repeat(4,1fr);gap:8px}.htsum div{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}.htsum b{display:block;font-size:20px}.htsum span{font-size:13px;color:#475569}.htsum .late b{color:#c2410c}.htsum .abs b{color:#dc2626}',
     '.htmap{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:10px}.htmr{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:7px 10px;border-top:1px solid var(--line)}.htmr:first-child{border-top:0}.htmr.need{background:#fffbeb}.htmr select{max-width:320px;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;font:inherit}',
+    '.htface{display:inline-block;background:#dbeafe;color:#1e40af;border-radius:6px;padding:1px 7px;font-size:12.5px;font-weight:700;white-space:nowrap}.htfbox{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px}.htfg{display:grid;grid-template-columns:1fr 1fr;gap:10px}.htfi{display:flex;flex-direction:column;gap:3px;font-size:14px}.htfi .btn{align-self:flex-start;margin-top:4px}.htfimg img{width:100%;max-width:240px;border-radius:10px;margin-top:4px;display:block}@media (max-width:560px){.htfg{grid-template-columns:1fr}}',
     '@media (max-width:700px){.htsum{grid-template-columns:repeat(2,1fr)}.htsum div:first-child{grid-column:1/-1}.htab{margin-left:0}}'
   ].join('\n');
   document.head.appendChild(css);

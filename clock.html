@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ลงเวลาเข้า-ออกงาน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* หน้าลงเวลาด้วยใบหน้า + GPS (เปิดจากปุ่ม "ลงเวลา" ในเมนู LINE ของฝ่ายบุคคล) — ผู้ใช้ขอ 27/11/69 */
+  :root { --ink: #0f172a; --mut: #475569; --line: #e2e8f0; --blue: #2563eb; --ok: #16a34a; --no: #dc2626; --warn: #c2410c; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Sarabun, system-ui, sans-serif; color: var(--ink); background: #f1f5f9; font-size: 16px; }
+  .wrap { max-width: 480px; margin: 0 auto; min-height: 100vh; background: #fff; display: flex; flex-direction: column; }
+  .hidden { display: none !important; }
+  .top { background: var(--blue); color: #fff; padding: 14px 16px 16px; }
+  .top small { opacity: .9; font-size: 13px; }
+  .who { display: flex; gap: 12px; align-items: center; margin-top: 6px; }
+  .av { width: 46px; height: 46px; border-radius: 50%; background: #dbeafe; color: var(--blue); display: grid; place-items: center; font-weight: 800; font-size: 20px; border: 2px solid #fff; flex: none; }
+  .who b { font-size: 18px; display: block; line-height: 1.25; } .who span { font-size: 13.5px; opacity: .92; }
+  .bd { padding: 16px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+  .clock { text-align: center; } .clock .t { font-size: 48px; font-weight: 800; line-height: 1.05; letter-spacing: 1px; }
+  .clock .d { font-size: 14.5px; color: var(--mut); }
+  .gps { display: flex; gap: 10px; align-items: center; border-radius: 12px; padding: 10px 12px; font-size: 15px; font-weight: 700; background: #f1f5f9; color: #334155; }
+  .gps small { display: block; font-weight: 400; font-size: 13px; }
+  .gps.ok { background: #dcfce7; color: #166534; } .gps.bad { background: #fee2e2; color: #991b1b; }
+  .btn { border: 0; border-radius: 16px; padding: 14px; font: 800 19px Sarabun, sans-serif; color: #fff; background: var(--ok); min-height: 60px; width: 100%; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .btn.out { background: var(--blue); }
+  .btn.sec { background: #fff; color: var(--blue); border: 2px solid #93c5fd; font-size: 16px; min-height: 50px; font-weight: 700; }
+  .btn:disabled { background: #cbd5e1; color: #64748b; border-color: #cbd5e1; cursor: not-allowed; }
+  .today { background: #f8fafc; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 15px; }
+  .today div { display: flex; justify-content: space-between; padding: 3px 0; } .today b { font-weight: 700; }
+  .pill { display: inline-block; border-radius: 99px; padding: 2px 10px; font-weight: 700; font-size: 13.5px; }
+  .pill.g { background: #dcfce7; color: #166534; } .pill.o { background: #ffedd5; color: #9a3412; }
+  .msg { border-radius: 12px; padding: 12px 14px; font-size: 15px; line-height: 1.55; }
+  .msg.err { background: #fff7ed; border: 1px solid #fdba74; color: #7c2d12; } .msg.info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; }
+  .msg b { display: block; margin-bottom: 2px; }
+  /* กล้อง */
+  .cam { position: fixed; inset: 0; background: #0f172a; z-index: 20; display: flex; flex-direction: column; align-items: center; color: #fff; }
+  .cam video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  .mask { position: absolute; left: 50%; top: 46%; width: min(64vw, 260px); aspect-ratio: 3 / 4; transform: translate(-50%, -50%); border-radius: 50%; border: 5px solid rgba(255,255,255,.75); box-shadow: 0 0 0 999px rgba(15,23,42,.55); transition: border-color .2s; }
+  .mask.good { border-color: #4ade80; } .mask.bad { border-color: #f87171; }
+  .ins { position: absolute; top: calc(14px + env(safe-area-inset-top)); left: 12px; right: 12px; background: rgba(255,255,255,.96); color: var(--ink); border-radius: 14px; padding: 10px 12px; text-align: center; z-index: 2; }
+  .ins b { display: block; font-size: 19px; } .ins small { font-size: 13.5px; color: var(--mut); }
+  .steps { position: absolute; bottom: calc(76px + env(safe-area-inset-bottom)); left: 14px; right: 14px; z-index: 2; display: flex; flex-direction: column; gap: 6px; font-size: 14.5px; }
+  .steps div { background: rgba(255,255,255,.16); border-radius: 10px; padding: 7px 11px; } .steps .ok { background: rgba(34,197,94,.38); }
+  .dots { display: flex; gap: 6px; justify-content: center; margin-top: 6px; } .dots i { width: 12px; height: 12px; border-radius: 50%; background: #cbd5e1; } .dots i.on { background: var(--ok); }
+  .cancel { position: absolute; bottom: calc(18px + env(safe-area-inset-bottom)); z-index: 2; background: rgba(255,255,255,.18); border: 1.5px solid rgba(255,255,255,.6); color: #fff; border-radius: 12px; padding: 10px 26px; font: 700 16px Sarabun, sans-serif; min-height: 44px; }
+  /* ผลลัพธ์ */
+  .done { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 26px 16px 16px; }
+  .ck { width: 96px; height: 96px; border-radius: 50%; background: var(--ok); color: #fff; display: grid; place-items: center; font-size: 54px; font-weight: 800; }
+  .ck.x { background: var(--no); }
+  .done h2 { margin: 4px 0 0; font-size: 22px; } .done .tm { font-size: 42px; font-weight: 800; color: #166534; line-height: 1; }
+  .det { width: 100%; text-align: left; background: #f8fafc; border-radius: 12px; padding: 10px 12px; font-size: 14.5px; line-height: 1.75; color: #334155; }
+  /* ลงทะเบียน */
+  .search { width: 100%; padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 12px; font: 16px Sarabun, sans-serif; }
+  .plist { display: flex; flex-direction: column; gap: 8px; }
+  .pp { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 12px; background: #fff; text-align: left; font: inherit; cursor: pointer; min-height: 56px; width: 100%; }
+  .pp.sel { border-color: var(--blue); background: #eff6ff; } .pp b { display: block; } .pp span { color: var(--mut); font-size: 13.5px; }
+  .chk { display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; line-height: 1.5; color: #334155; background: #f8fafc; border-radius: 12px; padding: 12px; }
+  .chk input { width: 22px; height: 22px; flex: none; margin-top: 1px; }
+  .load { flex: 1; display: grid; place-items: center; padding: 40px 16px; text-align: center; color: var(--mut); }
+  .spin { width: 42px; height: 42px; border-radius: 50%; border: 4px solid #cbd5e1; border-top-color: var(--blue); animation: sp 1s linear infinite; margin: 0 auto 12px; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .busy { position: fixed; inset: 0; background: rgba(15,23,42,.55); z-index: 40; display: grid; place-items: center; }
+  .busy .box { background: #fff; border-radius: 16px; padding: 20px 22px; text-align: center; max-width: 300px; }
+  .busy b { display: block; font-size: 17px; } .busy small { color: var(--mut); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="vLoad" class="load"><div><div class="spin"></div><b>กำลังเปิดระบบลงเวลา…</b><br><small>ครั้งแรกอาจใช้เวลา 5–10 วินาที</small></div></div>
+  <div id="vMain" class="hidden"></div>
+</div>
+<div id="vCam" class="cam hidden">
+  <video id="vid" playsinline muted autoplay></video>
+  <div id="mask" class="mask"></div>
+  <div class="ins"><b id="insT">กำลังเปิดกล้อง…</b><small id="insS"></small><div id="dots" class="dots hidden"></div></div>
+  <div id="steps" class="steps"></div>
+  <button type="button" class="cancel" id="camCancel">ยกเลิก</button>
+</div>
+<div id="busy" class="busy hidden"><div class="box"><div class="spin"></div><b id="busyT">กำลังบันทึก…</b><small>กรุณารอสักครู่ ไม่ต้องกดซ้ำ</small></div></div>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script>
+(function () {
+  var API = 'https://script.google.com/macros/s/AKfycbyWj0ra2zC_T-qOE6kAr0cHHzIV944lk_5n4Nk54md9WkHcslA_Pwx7UBNF5Uc0LXTc/exec';
+  var FACE_JS = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js';
+  var FACE_MODELS = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model/';
+  var S = { tok: '', d: null, faceReady: null, stream: null, run: 0 };
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'], WD = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+  function thDate(iso) { var p = String(iso).split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]); return 'วัน' + WD[d.getDay()] + ' ' + (+p[2]) + ' ' + MON[+p[1] - 1] + ' ' + String(+p[0] + 543).slice(2); }
+  function call(fn, args) {
+    return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args || [] }) })
+      .then(function (r) { return r.json(); }).then(function (r) { if (!r.ok) throw new Error(r.err || 'error'); return r.val; });
+  }
+  function busy(t) { $('busyT').textContent = t; $('busy').classList.remove('hidden'); }
+  function unbusy() { $('busy').classList.add('hidden'); }
+  function show(html) { $('vLoad').classList.add('hidden'); var m = $('vMain'); m.innerHTML = html; m.classList.remove('hidden'); window.scrollTo(0, 0); }
+  function fatal(t, sub) { show('<div class="bd"><div class="msg err"><b>' + esc(t) + '</b>' + esc(sub || '') + '</div><button class="btn sec" onclick="location.reload()">↻ ลองใหม่</button></div>'); }
+
+  // ---------- ใบหน้า (face-api.js: หาใบหน้า + จุดบนหน้า 68 จุด + รหัสใบหน้า 128 ค่า) ----------
+  function loadFace() {
+    if (S.faceReady) return S.faceReady;
+    S.faceReady = new Promise(function (ok, no) { var s = document.createElement('script'); s.src = FACE_JS; s.onload = ok; s.onerror = function () { no(new Error('โหลดระบบตรวจใบหน้าไม่ได้ — ตรวจอินเทอร์เน็ตแล้วลองใหม่')); }; document.head.appendChild(s); })
+      .then(function () {
+        var n = faceapi.nets;
+        return Promise.all([n.tinyFaceDetector.loadFromUri(FACE_MODELS), n.faceLandmark68Net.loadFromUri(FACE_MODELS), n.faceRecognitionNet.loadFromUri(FACE_MODELS)]);
+      });
+    S.faceReady.catch(function () { S.faceReady = null; });
+    return S.faceReady;
+  }
+  function ear(p) { var d = function (a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }; return (d(p[1], p[5]) + d(p[2], p[4])) / (2 * d(p[0], p[3]) || 1); }
+  function eyes(lm) { var pts = lm.positions; return (ear(pts.slice(36, 42)) + ear(pts.slice(42, 48))) / 2; }
+  function dist(a, b) { var s = 0; for (var i = 0; i < 128; i++) { var t = a[i] - b[i]; s += t * t; } return Math.sqrt(s); }
+  function openCam() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.reject(new Error('NOCAM'));
+    return navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false }).then(function (st) {
+      S.stream = st; var v = $('vid'); v.srcObject = st; return v.play().catch(function () {}).then(function () { return new Promise(function (r) { if (v.videoWidth) r(); else v.onloadedmetadata = function () { r(); }; }); });
+    });
+  }
+  function closeCam() { S.run++; if (S.stream) S.stream.getTracks().forEach(function (t) { t.stop(); }); S.stream = null; $('vCam').classList.add('hidden'); }
+  function snap(maxW) {
+    var v = $('vid'), w = Math.min(maxW || 480, v.videoWidth), h = Math.round(v.videoHeight * w / v.videoWidth), c = document.createElement('canvas');
+    c.width = w; c.height = h; var x = c.getContext('2d'); x.translate(w, 0); x.scale(-1, 1); x.drawImage(v, 0, 0, w, h);
+    return c.toDataURL('image/jpeg', 0.82);
+  }
+  function camErr(e) {
+    closeCam();
+    var m = e && e.message === 'NOCAM' ? 'แอป LINE ในมือถือเครื่องนี้เปิดกล้องไม่ได้ — อัปเดตแอป LINE เป็นรุ่นล่าสุด แล้วลองใหม่'
+      : (e && e.name === 'NotAllowedError') ? 'ยังไม่ได้อนุญาตให้ใช้กล้อง — กดอนุญาตกล้องให้ LINE ในการตั้งค่ามือถือ แล้วลองใหม่' : (e && e.message) || 'เปิดกล้องไม่ได้';
+    return m;
+  }
+  function camUi(t, s) { $('insT').textContent = t; $('insS').textContent = s || ''; }
+  function steps(list) { $('steps').innerHTML = list.map(function (x) { return '<div class="' + (x[0] ? 'ok' : '') + '">' + (x[0] ? '✓ ' : '⏳ ') + esc(x[1]) + '</div>'; }).join(''); }
+  // ตรวจภาพ 1 เฟรม: หน้าเดียว ใหญ่พอ อยู่กลางวงรี
+  function detect(withDesc) {
+    var v = $('vid'), opt = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+    var q = faceapi.detectAllFaces(v, opt).withFaceLandmarks();
+    if (withDesc) q = q.withFaceDescriptors();
+    return q.then(function (all) {
+      if (!all.length) return { err: 'ไม่พบใบหน้า — ให้หน้าอยู่ในวงรี ในที่สว่าง' };
+      if (all.length > 1) return { err: 'พบมากกว่า 1 หน้า — ให้มีคนเดียวในกล้อง' };
+      var f = all[0], b = f.detection.box, W = v.videoWidth, H = v.videoHeight, cx = (b.x + b.width / 2) / W, cy = (b.y + b.height / 2) / H;
+      if (b.width / W < 0.24) return { err: 'ขยับหน้าเข้าใกล้กล้องอีกนิด' };
+      if (Math.abs(cx - 0.5) > 0.2 || Math.abs(cy - 0.48) > 0.25) return { err: 'ขยับหน้าให้อยู่กลางวงรี' };
+      if (f.detection.score < 0.7) return { err: 'ภาพไม่ชัด — หันหน้าเข้าหาแสง' };
+      return { f: f, ear: eyes(f.landmarks), score: f.detection.score };
+    });
+  }
+
+  // ---------- เริ่ม ----------
+  function boot() {
+    var q = new URLSearchParams(location.search), lid = q.get('l');
+    var getId = lid ? Promise.resolve({ liffId: lid }) : call('hrClockInfo');
+    getId.then(function (i) {
+      if (!i || !i.liffId) throw new Error('ฝ่ายบุคคลยังไม่ได้ตั้งค่าหน้าลงเวลา');
+      return liff.init({ liffId: i.liffId });
+    }).then(function () {
+      if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return new Promise(function () {}); }
+      S.tok = liff.getIDToken();
+      loadFace().catch(function () {});   // โหลดโมเดลใบหน้าไปพร้อมกัน
+      return call('hrClockInit', [S.tok]);
+    }).then(function (d) {
+      if (!d || !d.ok) throw new Error((d && d.error) || 'โหลดข้อมูลไม่สำเร็จ');
+      S.d = d;
+      if (d.blocked) return fatal(d.blocked);
+      if (!d.registered) return regPage();
+      home();
+    }).catch(function (e) { fatal('เปิดหน้าลงเวลาไม่ได้', ' ' + (e.message || e)); });
+  }
+
+  // ---------- หน้าหลัก ----------
+  var gpsWatch = null;
+  function home(note) {
+    var d = S.d, e = d.emp, r = d.rec || {}, day = d.day || {};
+    var stage = !r.timeIn ? 'in' : (!r.timeOut ? 'out' : 'done');
+    var lateTag = r.timeIn ? (r.lateMin > 0 ? '<span class="pill o">⏰ สาย ' + r.lateMin + ' นาที</span>' : '<span class="pill g">✓ ตรงเวลา</span>') : '';
+    var earlyTag = r.timeOut && r.earlyMin > 0 ? ' <span class="pill o">ออกก่อน ' + r.earlyMin + ' นาที</span>' : '';
+    show('<div class="top"><small>ลงเวลาเข้า-ออกงาน</small><div class="who"><div class="av">' + esc((e.nick || e.name).slice(0, 1)) + '</div><div><b>' + esc(e.nick ? e.name + ' (' + e.nick + ')' : e.name) + '</b><span>' + esc([e.pos, e.group].filter(Boolean).join(' · ')) + '</span></div></div></div>'
+      + '<div class="bd">' + (note || '')
+      + '<div class="clock"><div class="t" id="clk">' + esc(d.now) + '</div><div class="d">' + thDate(d.today) + (day.work ? ' · เข้างาน ' + esc(day.inT) + ' น. · ออก ' + esc(day.outT) + ' น.' : ' · ไม่ใช่วันทำงาน (ไม่นับสาย)') + '</div></div>'
+      + '<div class="gps" id="gps">📍<div>กำลังตรวจตำแหน่ง…<small>เปิด GPS และอนุญาตให้ LINE ใช้ตำแหน่ง</small></div></div>'
+      + (stage === 'done' ? '<div class="msg info"><b>วันนี้ลงเวลาครบแล้ว ✓</b>ถ้าออกงานจริงช้ากว่าที่บันทึก กด "สแกนออกงานใหม่" ได้</div>' : '')
+      + '<button class="btn ' + (stage === 'in' ? '' : 'out') + '" id="go" disabled>📷 ' + (stage === 'in' ? 'สแกนหน้า เข้างาน' : stage === 'out' ? 'สแกนหน้า ออกงาน' : 'สแกนออกงานใหม่') + '</button>'
+      + '<button class="btn sec" id="regps">↻ ตรวจตำแหน่งอีกครั้ง</button>'
+      + '<div class="today"><b>วันนี้</b><div><span>เข้างาน</span><span>' + (r.timeIn ? esc(r.timeIn) + ' น. ' + lateTag : '—') + '</span></div><div><span>ออกงาน</span><span>' + (r.timeOut ? esc(r.timeOut) + ' น.' + earlyTag : '—') + '</span></div></div>'
+      + '</div>');
+    tick();
+    $('go').onclick = function () { scan(stage === 'in' ? 'in' : 'out'); };
+    $('regps').onclick = checkGps;
+    checkGps();
+  }
+  function tick() {
+    clearInterval(S.tk);
+    var p = String(S.d.now).split(':'), base = Date.now(), m0 = +p[0] * 60 + +p[1];
+    S.tk = setInterval(function () { var el = $('clk'); if (!el) return clearInterval(S.tk); var m = (m0 + Math.floor((Date.now() - base) / 60000)) % 1440; el.textContent = ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + m % 60).slice(-2); }, 5000);
+  }
+  function meters(a, b, c, d) { var R = 6371000, r = Math.PI / 180, x = Math.sin((c - a) * r / 2), y = Math.sin((d - b) * r / 2); var h = x * x + Math.cos(a * r) * Math.cos(c * r) * y * y; return Math.round(R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h))); }
+  function checkGps() {
+    var g = S.d.geo, box = $('gps'), go = $('go');
+    var set = function (cls, t, s, ok) { if (!$('gps')) return; box.className = 'gps ' + cls; box.innerHTML = '📍<div>' + t + '<small>' + s + '</small></div>'; go.disabled = !ok; };
+    S.pos = null;
+    if (!g.set) return set('bad', 'ฝ่ายบุคคลยังไม่ได้ตั้งจุดลงเวลา ✕', 'แจ้งฝ่ายบุคคล', false);
+    if (!navigator.geolocation) return set('bad', 'มือถือนี้ใช้ตำแหน่งไม่ได้ ✕', 'อัปเดตแอป LINE แล้วลองใหม่', false);
+    set('', 'กำลังตรวจตำแหน่ง…', 'รอสักครู่ (ไม่เกิน 20 วินาที)', false);
+    if (gpsWatch != null) navigator.geolocation.clearWatch(gpsWatch);
+    var best = null, t0 = Date.now();
+    var fin = function () {
+      if (gpsWatch != null) { navigator.geolocation.clearWatch(gpsWatch); gpsWatch = null; }
+      if (!best) return set('bad', 'ไม่ได้รับตำแหน่ง ✕', 'เปิด GPS / อนุญาตให้ LINE ใช้ตำแหน่ง แล้วกด "ตรวจตำแหน่งอีกครั้ง"', false);
+      var m = meters(best.lat, best.lng, g.lat, g.lng);
+      if (best.acc > g.maxAcc) return set('bad', 'ตำแหน่งยังไม่แม่นพอ ✕', 'คลาดเคลื่อน ' + best.acc + ' ม. — ออกไปที่โล่ง / ใกล้หน้าต่าง แล้วลองใหม่', false);
+      if (m > g.radius) return set('bad', 'อยู่นอกพื้นที่บริษัท ✕', 'ห่าง ' + (m >= 1000 ? (m / 1000).toFixed(1) + ' กม.' : m + ' ม.') + ' · ต้องอยู่ภายใน ' + g.radius + ' ม.', false);
+      S.pos = best; set('ok', 'อยู่ในพื้นที่บริษัท ✓', 'ห่างจุดลงเวลา ' + m + ' ม. (รัศมี ' + g.radius + ' ม.)', true);
+    };
+    gpsWatch = navigator.geolocation.watchPosition(function (p) {
+      var c = { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy) };
+      if (!best || c.acc < best.acc) best = c;
+      if (best.acc <= Math.min(30, g.maxAcc) || Date.now() - t0 > 20000) fin();
+    }, function (e) { if (gpsWatch != null) { fin(); } }, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+    setTimeout(function () { if (gpsWatch != null) fin(); }, 21000);
+  }
+
+  // ---------- สแกนหน้าลงเวลา (กะพริบตา 1 ครั้ง = คนจริง) ----------
+  function scan(kind) {
+    var run = ++S.run, pos = S.pos;
+    $('vCam').classList.remove('hidden'); $('dots').classList.add('hidden'); $('mask').className = 'mask';
+    camUi('กำลังเปิดกล้อง…', 'ครั้งแรกอาจใช้เวลาโหลดระบบตรวจใบหน้า 5–10 วินาที'); steps([]);
+    $('camCancel').onclick = function () { closeCam(); };
+    Promise.all([loadFace(), openCam()]).then(function () {
+      var st = { found: false, open: false, closed: false, blink: false }, t0 = Date.now(), best = null;
+      var loop = function () {
+        if (run !== S.run) return;
+        if (Date.now() - t0 > 30000) { closeCam(); return result(false, kind, { error: 'หมดเวลา — ลองใหม่ในที่สว่าง หันหน้าตรง แล้วกะพริบตา 1 ครั้ง' }); }
+        detect(st.blink).then(function (x) {
+          if (run !== S.run) return;
+          if (x.err) { $('mask').className = 'mask bad'; camUi(x.err, ''); return setTimeout(loop, 120); }
+          st.found = true; $('mask').className = 'mask good';
+          if (!st.blink) {
+            if (x.ear > 0.25) { if (st.closed) st.blink = true; else st.open = true; }
+            else if (x.ear < 0.2 && st.open) st.closed = true;
+          } else if (x.f.descriptor && x.ear > 0.24) { best = x; }
+          camUi(st.blink ? 'ดีมาก — มองกล้องค้างไว้' : 'กะพริบตา 1 ครั้ง', 'ถอดหน้ากาก · หันหน้าตรง · ให้หน้าอยู่ในวงรี');
+          steps([[true, 'พบใบหน้า'], [st.blink, st.blink ? 'กะพริบตาแล้ว (เช็คว่าเป็นคนจริง)' : 'รอกะพริบตา (เช็คว่าเป็นคนจริง)']]);
+          if (best) return send(best);
+          setTimeout(loop, 60);
+        }).catch(function () { setTimeout(loop, 200); });
+      };
+      var send = function (x) {
+        var photo = snap(480), desc = Array.from(x.f.descriptor);
+        closeCam(); busy(kind === 'in' ? 'กำลังบันทึกเวลาเข้างาน…' : 'กำลังบันทึกเวลาออกงาน…');
+        call('hrClockPunch', [S.tok, kind, desc, photo, pos, true]).then(function (r) { unbusy(); result(!!(r && r.ok), kind, r || {}); })
+          .catch(function (e) { unbusy(); result(false, kind, { error: 'เชื่อมต่อไม่ได้ — ตรวจอินเทอร์เน็ตแล้วลองใหม่ (' + (e.message || e) + ')' }); });
+      };
+      loop();
+    }).catch(function (e) { var m = camErr(e); home('<div class="msg err"><b>สแกนหน้าไม่ได้</b>' + esc(m) + '</div>'); });
+  }
+  function result(ok, kind, r) {
+    if (r && r.rec) S.d.rec = r.rec;
+    if (!ok) return home('<div class="msg err"><b>ลงเวลาไม่สำเร็จ</b>' + esc(r.error || 'ลองใหม่อีกครั้ง') + '</div>');
+    var tag = kind === 'in' ? (!r.work ? '<span class="pill g">วันหยุด · ไม่นับสาย</span>' : r.lateMin > 0 ? '<span class="pill o">⏰ สาย ' + r.lateMin + ' นาที</span>' : '<span class="pill g">✓ ตรงเวลา</span>')
+      : (r.work && r.earlyMin > 0 ? '<span class="pill o">ออกก่อนเวลา ' + r.earlyMin + ' นาที</span>' : '<span class="pill g">✓ บันทึกแล้ว</span>');
+    show('<div class="done"><div class="ck">✓</div><h2>' + (kind === 'in' ? 'ลงเวลาเข้างานแล้ว' : 'ลงเวลาออกงานแล้ว') + '</h2><div class="tm">' + esc(r.time) + ' น.</div>' + tag
+      + '<div class="det">📍 ในพื้นที่บริษัท (ห่าง ' + r.dist + ' ม.)<br>🙂 ยืนยันใบหน้าแล้ว (ตรง ' + r.score + '%)<br>📅 ' + thDate(r.date) + '</div>'
+      + '<div style="font-size:13.5px;color:#475569">ส่งเข้าระบบฝ่ายบุคคลแล้ว · รูปที่ถ่ายเก็บไว้ให้ฝ่ายบุคคลตรวจได้</div>'
+      + '<button class="btn sec" id="back">กลับหน้าลงเวลา</button><button class="btn out" id="close">ปิด</button></div>');
+    $('back').onclick = function () { home(); };
+    $('close').onclick = function () { try { liff.closeWindow(); } catch (e) { home(); } };
+  }
+
+  // ---------- ลงทะเบียนครั้งแรก ----------
+  function regPage() {
+    var d = S.d, sel = null;
+    if (!d.people || !d.people.length) return fatal('ยังไม่มีรายชื่อให้ลงทะเบียน', ' ฝ่ายบุคคลยังไม่ได้เปิดให้คุณใช้ลงเวลาด้วยใบหน้า หรือชื่อของคุณลงทะเบียนไปแล้ว — ติดต่อฝ่ายบุคคล');
+    show('<div class="top"><small>ลงเวลาเข้า-ออกงาน</small><div class="who"><div class="av">👤</div><div><b>ลงทะเบียนใบหน้าครั้งแรก</b><span>ทำครั้งเดียว ใช้เวลาประมาณ 1 นาที</span></div></div></div>'
+      + '<div class="bd"><div><b>1. เลือกชื่อของคุณ</b></div><input class="search" id="q" placeholder="ค้นหาชื่อ / ชื่อเล่น" aria-label="ค้นหาชื่อ"><div class="plist" id="pl"></div>'
+      + '<div><b>2. ยินยอมให้เก็บข้อมูลใบหน้า</b></div><label class="chk"><input type="checkbox" id="ok"><span>ข้าพเจ้ายินยอมให้บริษัทเก็บข้อมูลใบหน้าและตำแหน่ง ณ เวลาลงเวลา เพื่อใช้ยืนยันการเข้า-ออกงานเท่านั้น ข้อมูลเก็บในระบบฝ่ายบุคคล ไม่เปิดเผยต่อผู้อื่น และขอให้ลบได้ทุกเมื่อผ่านฝ่ายบุคคล</span></label>'
+      + '<button class="btn out" id="start" disabled>📷 เริ่มถ่ายหน้า</button><div class="msg info" style="font-size:14px">ถอดหน้ากาก / หมวก / แว่นกันแดด ยืนในที่สว่าง แสงอยู่ด้านหน้า ระบบจะถ่ายหลายรูปจนมั่นใจเอง</div></div>');
+    var draw = function () {
+      var q = $('q').value.trim().toLowerCase();
+      $('pl').innerHTML = d.people.filter(function (p) { return !q || (p.name + ' ' + p.nick).toLowerCase().indexOf(q) >= 0; }).map(function (p) {
+        return '<button type="button" class="pp' + (sel === p.id ? ' sel' : '') + '" data-id="' + esc(p.id) + '"><div class="av" style="width:38px;height:38px;font-size:16px;border-color:#dbeafe">' + esc((p.nick || p.name).slice(0, 1)) + '</div><div><b>' + esc(p.nick ? p.nick + ' · ' + p.name : p.name) + '</b><span>' + esc([p.pos, p.group].filter(Boolean).join(' · ')) + '</span></div></button>';
+      }).join('') || '<div class="msg info">ไม่พบชื่อนี้ — ถ้าไม่มีชื่อของคุณ ติดต่อฝ่ายบุคคล</div>';
+      Array.prototype.forEach.call(document.querySelectorAll('.pp'), function (b) { b.onclick = function () { sel = b.getAttribute('data-id'); draw(); upd(); }; });
+    };
+    var upd = function () { $('start').disabled = !(sel && $('ok').checked); };
+    $('q').oninput = draw; $('ok').onchange = upd; draw();
+    $('start').onclick = function () { enroll(d.people.filter(function (p) { return p.id === sel; })[0]); };
+  }
+  // ถ่ายหลายมุมจนระบบมั่นใจ: 6 รูป แต่ละรูปต้องเป็นหน้าเดียวกัน (ระยะห่างรหัสใบหน้า ≤ 0.45) ตาเปิด หน้าใหญ่พอ
+  var POSES = [['มองตรงที่กล้อง', ''], ['มองตรงที่กล้อง', 'ค้างไว้'], ['หันซ้ายเล็กน้อย', 'หันแค่นิดเดียว ให้เห็นหน้าทั้งหมด'], ['หันขวาเล็กน้อย', 'หันแค่นิดเดียว ให้เห็นหน้าทั้งหมด'], ['เงยหน้าเล็กน้อย', ''], ['มองตรงที่กล้องอีกครั้ง', 'ใกล้เสร็จแล้ว']];
+  function enroll(p) {
+    var run = ++S.run, got = [], last = 0, photo = '', tries = 0;
+    $('vCam').classList.remove('hidden'); $('mask').className = 'mask';
+    camUi('กำลังเปิดกล้อง…', 'ครั้งแรกอาจใช้เวลาโหลดระบบตรวจใบหน้า 5–10 วินาที'); steps([]);
+    var dots = function () { $('dots').classList.remove('hidden'); $('dots').innerHTML = POSES.map(function (x, i) { return '<i class="' + (i < got.length ? 'on' : '') + '"></i>'; }).join(''); };
+    $('camCancel').onclick = function () { closeCam(); regPage(); };
+    Promise.all([loadFace(), openCam()]).then(function () {
+      dots();
+      var loop = function () {
+        if (run !== S.run) return;
+        if (++tries > 900) { closeCam(); return regFail('ใช้เวลานานเกินไป — ยืนในที่สว่าง ถอดหน้ากาก แล้วลองใหม่'); }
+        var pose = POSES[got.length];
+        detect(true).then(function (x) {
+          if (run !== S.run) return;
+          if (x.err) { $('mask').className = 'mask bad'; camUi(x.err, pose[0]); return setTimeout(loop, 120); }
+          $('mask').className = 'mask good'; camUi(pose[0], pose[1] || 'ค้างไว้ ระบบจะถ่ายให้เอง');
+          if (x.ear < 0.22) { camUi('ลืมตาค้างไว้', pose[0]); return setTimeout(loop, 100); }
+          if (x.score < 0.8 || Date.now() - last < 700) return setTimeout(loop, 80);
+          var d = Array.from(x.f.descriptor);
+          var far = got.some(function (g) { return dist(g, d) > 0.45; });
+          if (far) {   // ไม่เหมือนรูปก่อนหน้า = คนละคน / ภาพเพี้ยน → เริ่มนับใหม่
+            got = []; photo = ''; dots(); camUi('เริ่มใหม่ — ให้มีคนเดียวในกล้อง', 'ภาพไม่ตรงกับรูปก่อนหน้า'); last = Date.now(); return setTimeout(loop, 400);
+          }
+          got.push(d); last = Date.now(); if (got.length === 1) photo = snap(480);
+          dots();
+          if (got.length >= POSES.length) return save();
+          setTimeout(loop, 80);
+        }).catch(function () { setTimeout(loop, 200); });
+      };
+      var save = function () {
+        // มั่นใจ = ทุกคู่ห่างกันไม่เกิน 0.45 (ตรวจซ้ำที่เซิร์ฟเวอร์อีกชั้น)
+        closeCam(); busy('กำลังบันทึกใบหน้า…');
+        call('hrClockEnroll', [S.tok, p.id, got, photo]).then(function (r) {
+          unbusy();
+          if (!r || !r.ok) return regFail((r && r.error) || 'บันทึกไม่สำเร็จ');
+          S.d.registered = true; S.d.emp = r.emp; S.d.rec = null;
+          home('<div class="msg info"><b>ลงทะเบียนใบหน้าเรียบร้อย ✓</b>ต่อไปกด "สแกนหน้า เข้างาน" ได้เลย</div>');
+        }).catch(function (e) { unbusy(); regFail('เชื่อมต่อไม่ได้ — ตรวจอินเทอร์เน็ตแล้วลองใหม่'); });
+      };
+      loop();
+    }).catch(function (e) { regFail(camErr(e)); });
+  }
+  function regFail(m) {
+    show('<div class="done"><div class="ck x">✕</div><h2>ลงทะเบียนไม่สำเร็จ</h2><div class="msg err" style="width:100%;text-align:left">' + esc(m) + '</div><button class="btn out" id="again">ลองใหม่</button></div>');
+    $('again').onclick = regPage;
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

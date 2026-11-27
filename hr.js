@@ -20,7 +20,7 @@
     { id: 'h_emp', label: 'ทะเบียนพนักงาน', ic: 'users' },
     { id: 'h_job', label: 'ทะเบียนพนักงาน Job', ic: 'users' },
     { id: 'h_leave', label: 'การลา / ขาด / มาสาย', ic: 'cal' },
-    { id: 'h_time', label: 'ลงเวลา (เครื่องสแกน)', ic: 'cal' },
+    { id: 'h_time', label: 'ลงเวลาเข้า-ออก', ic: 'cal' },
     { id: 'h_doc', label: 'เอกสาร & วันหมดอายุ', ic: 'idcard' },
     { id: 'h_train', label: 'การอบรม', ic: 'book' },
     { id: 'h_disc', label: 'วินัย / ใบเตือน', ic: 'gavel' },
@@ -1095,8 +1095,9 @@
       + '<h4>รหัสแบบฟอร์ม (แสดงมุมขวาบนของรายงาน · เว้นว่าง = ไม่แสดง)</h4><div class="pform">' + F('sFmR', 'ทะเบียนประวัติพนักงาน', s.fmRegister, 'text', ' placeholder="เช่น FM-HR-01-01 Rev.00 วันที่ประกาศใช้ 01/01/2026"')
       + F('sFmP', 'ประวัติพนักงานรายบุคคล', s.fmProfile) + F('sFmL', 'สรุปการลา', s.fmLeave) + '</div>'
       + '<button class="btn btn-primary" id="sSave">' + icon('check', 16) + ' บันทึกการตั้งค่า</button></div>'
-      + '<div class="panel" id="formBox" style="margin-top:14px"><span class="spinner dark"></span> กำลังโหลดลิงก์แบบฟอร์มขอลา…</div>';
-    formSettings();
+      + '<div class="panel" id="formBox" style="margin-top:14px"><span class="spinner dark"></span> กำลังโหลดลิงก์แบบฟอร์มขอลา…</div>'
+      + '<div class="panel" id="clockBox" style="margin-top:14px"><span class="spinner dark"></span> กำลังโหลดการตั้งค่าลงเวลาด้วยใบหน้า…</div>';
+    formSettings(); clockSettings();
     $('sSave').addEventListener('click', function () {
       var qq = {}; ['sick', 'personal', 'birthday', 'ordain', 'maternity', 'paternity'].forEach(function (k) { if (v('q_' + k) !== '') qq[k] = Number(v('q_' + k)); });
       var qd = Object.assign({}, s.quotaDays || {}); if (v('qVacDef') === '') delete qd.vacation; else qd.vacation = Number(v('qVacDef'));
@@ -1104,6 +1105,102 @@
       call('hrSaveSettings', state.token, { quotaHours: JSON.stringify(qq), quotas: JSON.stringify(qd), maternityPaidHours: v('sMatPaidH'), hoursMonThu: v('sHMT'), hoursFri: v('sHF'), hoursSat: v('sHS'), workDays: Number(v('sHS')) > 0 ? 'จ-ส' : 'จ-ศ', groups: v('sGroups'), buildings: v('sBld'), alertDays: v('sAlert'), fmRegister: v('sFmR'), fmProfile: v('sFmP'), fmLeave: v('sFmL') })
         .then(function (r) { b.disabled = false; if (!r.ok) return toast(r.error); H.data.settings = r.settings; toast('บันทึกการตั้งค่าแล้ว'); }).catch(onServerError);
     });
+  }
+  // ลงเวลาด้วยใบหน้า + GPS ผ่าน LINE (ผู้ใช้ขอ 27/11/69, HrClock.gs + clock.html)
+  function clockSettings() {
+    call('hrClockAdmin', state.token).then(function (r) {
+      var box = $('clockBox'); if (!box || !r.ok) return;
+      var c = r.cfg, sel = {}; (c.emps || []).forEach(function (id) { sel[id] = 1; });
+      var faced = {}; (r.faces || []).forEach(function (f) { faced[f.empId] = f; });
+      var groups = {}; (r.people || []).forEach(function (p) { var g = p.group || 'ไม่ระบุแผนก'; (groups[g] = groups[g] || []).push(p); });
+      var gk = Object.keys(groups).sort(function (a, b) { return a.localeCompare(b, 'th'); });
+      var inp = function (id, label, val, type, extra) { return '<div class="pf"><label for="' + id + '">' + label + '</label><input id="' + id + '" type="' + (type || 'text') + '" value="' + esc(val == null ? '' : val) + '"' + (extra || '') + '></div>'; };
+      box.innerHTML = '<h4 style="margin-top:0">🕘 ลงเวลาเข้า-ออกงานด้วยใบหน้า + GPS (ปุ่มในเมนู LINE)</h4>'
+        + '<div class="hline"><div class="' + (r.liffId ? 'ok' : '') + '">1. หน้าลงเวลาใน LINE (LIFF) ' + (r.liffId ? '✅ ตั้งแล้ว' : '⏳ ยังไม่ได้ตั้ง') + '</div>'
+        + '<p class="muted" style="margin:2px 0 6px;font-size:13.5px">ใน LINE Developers → LINE Login channel เดียวกับหน้าอนุมัติใบลา (อยู่ provider เดียวกับ OA "HR spunkyfood") → แท็บ LIFF → Add: Size <b>Full</b>, Endpoint URL ด้านล่าง, Scope <b>openid + profile</b> → คัดลอก LIFF ID มาใส่</p>'
+        + '<div class="pf"><label>Endpoint URL</label><input id="ckPage" readonly value="' + esc(r.page) + '"></div>'
+        + '<div class="pfoot"><input id="ckLiff" autocomplete="off" aria-label="LIFF ID หน้าลงเวลา" placeholder="LIFF ID เช่น 1234567890-AbCdEfGh" value="' + esc(r.liffId || '') + '" style="flex:1;min-width:200px;padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit">'
+        + '<button class="btn btn-sm btn-primary" id="ckLiffSave">บันทึก LIFF ID</button><button class="btn btn-sm btn-line" id="ckPageCopy">' + icon('copy', 16) + ' คัดลอก Endpoint URL</button></div>'
+        + (r.liffUrl ? '<div class="pf"><label>ลิงก์สำหรับปุ่ม "ลงเวลา" ในเมนู LINE (Rich menu → Action: Link)</label><input id="ckUrl" readonly value="' + esc(r.liffUrl) + '"></div><div class="pfoot"><button class="btn btn-sm btn-line" id="ckUrlCopy">' + icon('copy', 16) + ' คัดลอกลิงก์ปุ่ม</button></div>' : '')
+        + '<div class="' + (c.lat && c.lng ? 'ok' : '') + '">2. จุดลงเวลา (บริษัท) ' + (c.lat && c.lng ? '✅' : '⏳ ยังไม่ได้ตั้ง') + '</div>'
+        + '<p class="muted" style="margin:2px 0 6px;font-size:13.5px">วิธีง่ายสุด: ยืนอยู่ที่บริษัทแล้วกด "ใช้ตำแหน่งที่ยืนอยู่ตอนนี้" · หรือวางพิกัด / ลิงก์ Google Maps ที่มีพิกัด (กดค้างบนแผนที่ → คัดลอกตัวเลขพิกัด)</p>'
+        + '<div class="pform">' + inp('ckLat', 'ละติจูด', c.lat, 'text', ' inputmode="decimal" placeholder="เช่น 14.0712"') + inp('ckLng', 'ลองจิจูด', c.lng, 'text', ' inputmode="decimal" placeholder="เช่น 100.6123"')
+        + '<div class="pf full"><label for="ckPaste">วางพิกัด / ลิงก์ Google Maps</label><input id="ckPaste" placeholder="เช่น 14.0712, 100.6123 หรือลิงก์ที่มี @14.07,100.61"></div>'
+        + inp('ckRad', 'รัศมีที่ยอมให้ลงเวลา (เมตร)', c.radius, 'number', ' min="50" max="2000" inputmode="numeric"') + inp('ckAcc', 'ยอมให้ GPS คลาดเคลื่อนได้ไม่เกิน (เมตร)', c.maxAcc, 'number', ' min="20" max="500" inputmode="numeric"') + '</div>'
+        + '<div class="pfoot"><button class="btn btn-sm btn-line" id="ckHere">📍 ใช้ตำแหน่งที่ยืนอยู่ตอนนี้</button><a class="btn btn-sm btn-line" id="ckMap" target="_blank" rel="noopener" href="#">ดูจุดบนแผนที่ ↗</a></div>'
+        + '<div class="ok">3. เวลาเข้า-ออกงาน (นับสาย / ออกก่อน)</div><div class="pform">' + inp('ckIn', 'เข้างาน (ทุกวัน)', c.inTime, 'time') + inp('ckOutMT', 'ออกงาน จันทร์–พฤหัส', c.outMonThu, 'time') + inp('ckOutF', 'ออกงาน วันศุกร์', c.outFri, 'time') + '</div>'
+        + '<p class="muted" style="margin:2px 0 6px;font-size:13.5px">เสาร์–อาทิตย์ลงเวลาได้ แต่ไม่นับสาย · มาสายลงหน้าการลา "มาสาย" อัตโนมัติเหมือนเครื่องสแกน</p>'
+        + '<div class="' + ((c.emps || []).length ? 'ok' : '') + '">4. พนักงานที่ใช้ลงเวลาด้วยใบหน้า <span id="ckCnt"></span></div>'
+        + '<div class="pfoot"><input id="ckQ" placeholder="ค้นหาชื่อ" aria-label="ค้นหาชื่อพนักงาน" style="flex:1;min-width:160px;padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit"></div>'
+        + '<div class="ckemp" id="ckEmp">' + gk.map(function (g) {
+            return '<div class="ckg"><label class="ckgh"><input type="checkbox" data-grp="' + esc(g) + '"> <b>' + esc(g) + '</b> <small class="muted">(' + groups[g].length + ')</small></label>'
+              + groups[g].map(function (p) { return '<label class="cke" data-q="' + esc((p.name + ' ' + p.nick).toLowerCase()) + '"><input type="checkbox" data-emp="' + esc(p.id) + '" data-g="' + esc(g) + '"' + (sel[p.id] ? ' checked' : '') + '> ' + esc(p.nick ? p.nick + ' · ' + p.name : p.name) + (faced[p.id] ? ' <span class="cktag">✓ ลงทะเบียนหน้าแล้ว</span>' : '') + '</label>'; }).join('') + '</div>';
+          }).join('') + '</div>'
+        + '<div class="pfoot"><button class="btn btn-primary" id="ckSave">บันทึกการตั้งค่าลงเวลา</button></div>'
+        + '<div class="ok">5. ลงทะเบียนใบหน้าแล้ว ' + (r.faces || []).length + ' คน</div>'
+        + ((r.faces || []).length ? '<div class="ckfaces">' + r.faces.map(function (f) {
+            return '<div class="ckf"><div><b>' + esc(f.name) + '</b><small class="muted">LINE: ' + esc(f.lineName || '-') + ' · ลงทะเบียน ' + dd(f.enrolledAt) + (f.lastUsedAt ? ' · ใช้ล่าสุด ' + dd(f.lastUsedAt) + ' ' + esc(f.lastUsedAt.slice(11, 16)) : '') + '</small><div data-ckimg="' + esc(f.photo) + '"></div></div>'
+              + '<div class="ckfb">' + (f.photo ? '<button class="btn btn-sm btn-line" data-ckph="' + esc(f.photo) + '">ดูรูป</button>' : '') + '<button class="btn btn-sm btn-line" data-ckdel="' + esc(f.empId) + '" data-nm="' + esc(f.name) + '">ล้างข้อมูลใบหน้า</button></div></div>';
+          }).join('') + '</div>' : '<p class="muted" style="margin:2px 0">ยังไม่มี — พนักงานกดปุ่ม "ลงเวลา" ในเมนู LINE ครั้งแรกแล้วลงทะเบียนเอง</p>')
+        + '<small class="muted">ล้างข้อมูลใบหน้า = ลบรหัสใบหน้า + รูปลงทะเบียน คนนั้นต้องลงทะเบียนใหม่ (ใช้เมื่อเปลี่ยนมือถือ / บัญชี LINE หรือพนักงานขอลบตาม PDPA) · ประวัติลงเวลาเดิมยังอยู่</small></div>';
+      var copy = function (id, txt) { var i = $(id); i.select(); try { navigator.clipboard.writeText(txt); } catch (e) { document.execCommand('copy'); } toast('คัดลอกแล้ว'); };
+      $('ckPageCopy').addEventListener('click', function () { copy('ckPage', r.page); });
+      if ($('ckUrlCopy')) $('ckUrlCopy').addEventListener('click', function () { copy('ckUrl', r.liffUrl); });
+      $('ckLiffSave').addEventListener('click', function () {
+        var b = this; b.disabled = true;
+        call('hrClockSetLiff', state.token, $('ckLiff').value.trim()).then(function (x) { b.disabled = false; if (!x.ok) return toast(x.error); toast(x.liffId ? 'บันทึก LIFF ID แล้ว — คัดลอกลิงก์ปุ่มไปใส่ในเมนู LINE' : 'ลบ LIFF ID แล้ว'); clockSettings(); })
+          .catch(function (e) { b.disabled = false; onServerError(e); });
+      });
+      var mapLink = function () { var a = $('ckLat').value.trim(), b = $('ckLng').value.trim(); $('ckMap').href = a && b ? 'https://www.google.com/maps?q=' + encodeURIComponent(a + ',' + b) : '#'; $('ckMap').style.opacity = a && b ? 1 : .5; };
+      ['ckLat', 'ckLng'].forEach(function (id) { $(id).addEventListener('input', mapLink); }); mapLink();
+      $('ckPaste').addEventListener('input', function () {
+        var t = this.value, m = t.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) || t.match(/@(-?\d+\.\d+),\s*(-?\d+\.\d+)/) || t.match(/[?&](?:q|query|ll)=(-?\d+\.\d+),\s*(-?\d+\.\d+)/) || t.match(/(-?\d{1,2}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})/);
+        if (m) { $('ckLat').value = (+m[1]).toFixed(6); $('ckLng').value = (+m[2]).toFixed(6); mapLink(); toast('ใส่พิกัดแล้ว — ตรวจบนแผนที่ แล้วกดบันทึก'); }
+        else if (/maps\.app\.goo\.gl|goo\.gl/.test(t)) toast('ลิงก์ย่อแบบนี้ไม่มีตัวเลขพิกัด — เปิดลิงก์ในเบราว์เซอร์ กดค้างบนจุดแล้วคัดลอกตัวเลขพิกัดมาวาง');
+      });
+      $('ckHere').addEventListener('click', function () {
+        var b = this; if (!navigator.geolocation) return toast('เครื่องนี้ใช้ตำแหน่งไม่ได้');
+        b.disabled = true; b.textContent = 'กำลังหาตำแหน่ง…';
+        navigator.geolocation.getCurrentPosition(function (p) {
+          b.disabled = false; b.textContent = '📍 ใช้ตำแหน่งที่ยืนอยู่ตอนนี้';
+          $('ckLat').value = p.coords.latitude.toFixed(6); $('ckLng').value = p.coords.longitude.toFixed(6); mapLink();
+          toast('ได้ตำแหน่งแล้ว (คลาดเคลื่อน ' + Math.round(p.coords.accuracy) + ' ม.) — กดบันทึก');
+        }, function () { b.disabled = false; b.textContent = '📍 ใช้ตำแหน่งที่ยืนอยู่ตอนนี้'; toast('หาตำแหน่งไม่ได้ — อนุญาตให้เบราว์เซอร์ใช้ตำแหน่ง แล้วลองใหม่'); }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+      });
+      var emps = function () { return Array.prototype.filter.call(document.querySelectorAll('[data-emp]'), function (x) { return x.checked; }).map(function (x) { return x.getAttribute('data-emp'); }); };
+      var grpSync = function () {
+        Array.prototype.forEach.call(document.querySelectorAll('[data-grp]'), function (g) { var all = document.querySelectorAll('[data-emp][data-g="' + g.getAttribute('data-grp').replace(/"/g, '\\"') + '"]'), on = Array.prototype.filter.call(all, function (x) { return x.checked; }).length; g.checked = on && on === all.length; g.indeterminate = on > 0 && on < all.length; });
+        $('ckCnt').textContent = '(เลือกไว้ ' + emps().length + ' คน)';
+      };
+      Array.prototype.forEach.call(document.querySelectorAll('[data-grp]'), function (g) { g.addEventListener('change', function () { Array.prototype.forEach.call(document.querySelectorAll('[data-emp][data-g="' + g.getAttribute('data-grp').replace(/"/g, '\\"') + '"]'), function (x) { x.checked = g.checked; }); grpSync(); }); });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-emp]'), function (x) { x.addEventListener('change', grpSync); });
+      grpSync();
+      $('ckQ').addEventListener('input', function () { var q = this.value.trim().toLowerCase(); Array.prototype.forEach.call(document.querySelectorAll('.cke'), function (l) { l.style.display = !q || l.getAttribute('data-q').indexOf(q) >= 0 ? '' : 'none'; }); });
+      $('ckSave').addEventListener('click', function () {
+        var b = this, lat = $('ckLat').value.trim(), lng = $('ckLng').value.trim();
+        if ((lat === '') !== (lng === '')) return toast('ใส่ละติจูดและลองจิจูดให้ครบทั้งสองช่อง');
+        if (lat !== '' && (isNaN(+lat) || isNaN(+lng))) return toast('พิกัดต้องเป็นตัวเลข เช่น 14.0712, 100.6123');
+        b.disabled = true;
+        call('hrClockSave', state.token, { lat: lat, lng: lng, radius: $('ckRad').value, maxAcc: $('ckAcc').value, inTime: $('ckIn').value, outMonThu: $('ckOutMT').value, outFri: $('ckOutF').value, emps: emps() })
+          .then(function (x) { b.disabled = false; if (!x.ok) return toast(x.error); toast('บันทึกการตั้งค่าลงเวลาแล้ว'); clockSettings(); })
+          .catch(function (e) { b.disabled = false; onServerError(e); });
+      });
+      Array.prototype.forEach.call(box.querySelectorAll('[data-ckph]'), function (b) {
+        b.addEventListener('click', function () {
+          var id = b.getAttribute('data-ckph'); b.disabled = true; b.textContent = 'กำลังโหลด…';
+          call('hrClockPhoto', state.token, id).then(function (x) { if (!x.ok) { b.disabled = false; b.textContent = 'ดูรูป'; return toast(x.error); } b.remove(); box.querySelector('[data-ckimg="' + id + '"]').innerHTML = '<img src="' + x.url + '" alt="รูปลงทะเบียนใบหน้า" class="ckimg">'; })
+            .catch(function (e) { b.disabled = false; b.textContent = 'ดูรูป'; onServerError(e); });
+        });
+      });
+      Array.prototype.forEach.call(box.querySelectorAll('[data-ckdel]'), function (b) {
+        b.addEventListener('click', function () {
+          ask({ title: 'ล้างข้อมูลใบหน้าของ ' + b.getAttribute('data-nm') + '?', text: 'ลบรหัสใบหน้าและรูปลงทะเบียน คนนี้ต้องลงทะเบียนใหม่ก่อนลงเวลาครั้งถัดไป · ประวัติลงเวลาเดิมยังอยู่', ok: 'ล้างข้อมูล', tone: 'danger' }).then(function (ok) {
+            if (!ok) return; b.disabled = true;
+            call('hrClockReset', state.token, b.getAttribute('data-ckdel')).then(function (x) { if (!x.ok) { b.disabled = false; return toast(x.error); } toast('ล้างข้อมูลใบหน้าแล้ว'); clockSettings(); }).catch(function (e) { b.disabled = false; onServerError(e); });
+          });
+        });
+      });
+    }).catch(onServerError);
   }
   // แบบฟอร์มขอลาของพนักงาน (ลิงก์ + QR) และการแจ้งเตือน LINE กลุ่ม
   function formSettings() {
@@ -1265,6 +1362,7 @@
   // ---------- CSS ของโมดูล ----------
   var css = document.createElement('style');
   css.textContent = [
+    '.ckemp{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px 10px;margin:6px 0}.ckg{padding:6px 0;border-bottom:1px solid #eef2f7}.ckg:last-child{border-bottom:0}.ckgh{display:flex;gap:8px;align-items:center;min-height:36px;cursor:pointer}.cke{display:flex;gap:8px;align-items:center;min-height:36px;padding-left:26px;cursor:pointer;font-size:14.5px;flex-wrap:wrap}.ckg input{width:18px;height:18px}.cktag{background:#dcfce7;color:#166534;border-radius:6px;padding:0 6px;font-size:12px;font-weight:700}.ckfaces{display:flex;flex-direction:column;gap:8px;margin:6px 0}.ckf{display:flex;gap:10px;justify-content:space-between;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:8px 10px;flex-wrap:wrap}.ckf small{display:block}.ckfb{display:flex;gap:6px;flex-wrap:wrap}.ckimg{width:120px;border-radius:10px;margin-top:6px;display:block}',
     '.hnew{display:inline-flex;align-items:center;gap:4px;background:#dc2626;color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;margin-top:4px;white-space:nowrap;animation:hnewp 1.2s ease-in-out infinite}.hnew.seen{background:#2563eb;animation:none}',
     '.pinfo .hnew{align-self:flex-start;margin-top:6px}.hnewbox{background:#fef2f2;border:1.5px solid #fca5a5;border-radius:14px;padding:10px 12px;margin:0 0 14px}.hnewbox>b{display:block;color:#b91c1c;margin-bottom:6px}',
     '@keyframes hnewp{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.55);opacity:1}50%{box-shadow:0 0 0 6px rgba(220,38,38,0);opacity:.75}}',
