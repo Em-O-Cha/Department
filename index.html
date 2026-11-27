@@ -614,10 +614,10 @@
     });
   }
 
-  function openLogin(key) {
+  function openLogin(key, force) {
     var d = state.depts.filter(function (x) { return x.key === key; })[0];
     state.picked = d;
-    if (d.ready === false) { openDeptSetup(d, true); return; }
+    if (d.ready === false && !force) { openDeptSetup(d, true); return; }   // force = ผู้ดูแลระบบเข้าด้วยรหัสผู้ดูแล (การ์ดยังไม่ได้ตั้งรหัส)
     var dlg = $('loginForm');
     dlg.style.setProperty('--c', d.color);
     $('loginIcon').innerHTML = icon(d.key, 26);
@@ -1125,10 +1125,12 @@
         + field('mCode', 'รหัสตั้งค่า 8 ตัว จากผู้ดูแลระบบ (ไม่ใช่รหัสผ่าน)', 'text', 'เช่น ABCD-2345', 'code')
         + field('mPw1', 'รหัสผ่านใหม่' + (d.exec ? '' : 'ของแผนก') + ' (อย่างน้อย 6 ตัวอักษร)')
         + field('mPw2', 'พิมพ์รหัสผ่านใหม่อีกครั้ง'),
-      foot: '<div class="hint">' + icon('lock') + 'รหัสผ่านนี้รู้เฉพาะคนในแผนก ผู้ดูแลระบบไม่เห็นและตั้งแทนไม่ได้ · รหัสตั้งค่าใช้ได้ครั้งเดียว</div>',
+      foot: '<div class="hint">' + icon('lock') + 'รหัสผ่านนี้รู้เฉพาะคนในแผนก ผู้ดูแลระบบไม่เห็นและตั้งแทนไม่ได้ · รหัสตั้งค่าใช้ได้ครั้งเดียว</div>'
+        + (d.ready === false ? '<div class="hint"><button type="button" class="link-btn" id="mAdmIn">' + icon('key') + ' ผู้ดูแลระบบ: เข้าด้วยรหัสผู้ดูแลระบบ</button></div>' : ''),
       ok: 'ตั้งรหัสและเข้าสู่ระบบ', sticky: state.single,
       noCancel: state.single && d.ready === false,
       onCancel: function () { if (state.single || (d.ready !== false && !first)) openLogin(d.key); },
+      onOpen: function () { var b = $('mAdmIn'); if (b) b.addEventListener('click', function () { closeModal(); openLogin(d.key, true); }); },
       check: function () { return val('mCode').replace(/[^A-Za-z0-9]/g, '').length !== 8 ? 'ช่องแรกต้องเป็นรหัสตั้งค่า 8 ตัว (เช่น ABCD-2345) ที่ผู้ดูแลระบบออกให้ — ยังไม่มี ให้ขอจากผู้ดูแลระบบก่อน' : pwPairError(val('mPw1'), val('mPw2')); },
       submit: function () {
         return call('deptSetPasswordWithCode', d.key, val('mCode'), val('mPw1')).then(function (r) {

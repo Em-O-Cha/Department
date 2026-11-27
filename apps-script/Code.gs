@@ -95,6 +95,14 @@ function login(deptKey, password) {
   if (cache.get(lockKey)) {
     return { ok: false, error: 'ใส่รหัสผิดหลายครั้ง แผนกนี้ถูกล็อกชั่วคราว ลองใหม่ในอีก 10 นาที' };
   }
+  // ผู้ดูแลระบบเข้าได้ทุกการ์ดด้วยรหัสผู้ดูแลระบบ (ผู้ใช้ขอ 27/11/69) — รวมการ์ดที่ยังไม่ได้ตั้งรหัส · ไม่นับเป็นรหัสผิดของแผนก
+  if (!cache.get('lock_' + ADMIN_KEY_)) {
+    var adm = PropertiesService.getScriptProperties().getProperty(pwPropKey_(ADMIN_KEY_));
+    if (adm && verifyPassword_(password, adm)) {
+      cache.remove(failKey);
+      return { ok: true, token: createSession_(dept.key), dept: deptView_(dept), byAdmin: true };
+    }
+  }
   var stored = PropertiesService.getScriptProperties().getProperty(pwPropKey_(dept.key));
   if (!stored) return { ok: false, needSetup: true, error: 'แผนกนี้ยังไม่ได้ตั้งรหัสผ่าน — ขอรหัสตั้งค่าจากผู้ดูแลระบบ แล้วตั้งรหัสผ่านของแผนกเอง' };
 
