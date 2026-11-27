@@ -360,9 +360,7 @@ function hrSaveDisc(token, x) {
 // อนุมัติ / ไม่อนุมัติ คำขอลา (จากหน้า HR หรือปุ่มใน LINE)
 function hrDecideLeave(token, id, approve) {
   var dept = requireHr_(token);
-  var r = hrDecideLeave_(dept, id, approve, 'ฝ่ายบุคคล');
-  if (r.ok && r.leave.source === 'แบบฟอร์มพนักงาน') { try { hrLinePush_([hrLeaveFlex_(r.leave, r.emp || {}, null, true)]); } catch (e) {} }   // แจ้งกลุ่มว่าจัดการแล้ว
-  return r;
+  return hrDecideLeave_(dept, id, approve, 'ฝ่ายบุคคล');   // ไม่ส่งการ์ดอนุมัติตามหลังเข้ากลุ่ม (ผู้ใช้ขอ 27/11/69)
 }
 function hrDecideLeave_(dept, id, approve, who) {
   rcTouchDept_('HR');

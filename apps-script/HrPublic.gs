@@ -368,9 +368,8 @@ function hrLineWebhook_(events) {
         }
         var dept = findDept_('HR'), who = hrLineName_(gid, src.userId) + ' (LINE)';
         var r = hrDecideLeave_(dept, p[2], p[1] === 'ok', who);
-        if (r.ok) hrLineReply_(ev.replyToken, [hrLeaveFlex_(r.leave, r.emp || {}, null, true)]);
-        else if (r.already && r.leave) hrLineReply_(ev.replyToken, [hrLeaveFlex_(r.leave, r.emp || {}, null, true, true)]);
-        else hrLineReply_(ev.replyToken, [{ type: 'text', text: r.error || 'ทำรายการไม่ได้' }]);
+        // ไม่ส่งข้อความอนุมัติ / ไม่อนุมัติตามหลัง (ผู้ใช้ขอ 27/11/69) — ดูผลที่การ์ดเดิม / หน้า LIFF
+        if (!r.ok && !r.already) hrLineReply_(ev.replyToken, [{ type: 'text', text: r.error || 'ทำรายการไม่ได้' }]);
       }
     } catch (err) { Logger.log('hrLineWebhook_ ' + err); }
   });
