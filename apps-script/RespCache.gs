@@ -4,25 +4,28 @@
 // ตราแก้ไข: ทุกคำสั่งที่ไม่ใช่การอ่าน (มี token ของแผนก) → ตราแผนกนั้นเปลี่ยน · ผู้ดูแลระบบแก้อะไร → ตรารวม (RCD__ALL) เปลี่ยน
 // ทางที่แก้ข้อมูลโดยไม่มี token (แบบฟอร์มลา / ปุ่มอนุมัติใน LINE / LIFF) เรียก rcTouchDept_ เอง
 // 'own' = อ่านข้อมูลแผนกตัวเอง · 'all' = อ่านข้ามแผนก (ผู้บริหาร / ต้นทุนสินค้า) → ใช้ตราของทุกแผนก
+// 'target' = หน้าผู้บริหารของฝ่ายที่เลือก (args[1]) → ใช้ตราของฝ่ายนั้นเท่านั้น (ผู้ใช้ขอ 27/11/69: ฝ่ายอื่นบันทึกอะไร ไม่ต้องคำนวณใหม่)
 var RC_READ_ = {
   accLoad: 'own', accDashboard: 'own', accCompare: 'own', accMonthly: 'own', apLoad: 'own', apIncome: 'own', cpLoad: 'own', exLoad: 'own',
   purLoad: 'own', purMoves: 'own', purReport: 'own', purStockReport: 'own', purPriceReport: 'own', purPriceHistory: 'own', purVendorMetrics: 'own', purVendorReport: 'own',
   sheLoad: 'own', sheChecks: 'own', sheMonthReport: 'own', sheFindingReport: 'own', sheDashboard: 'own', sheMonthly: 'own', sheDocs: 'own',
   hrLoad: 'own', hrPhotos: 'own', hrDailyLoad: 'own', hrDashboard: 'own', hrLeaves: 'own', hrTimeList: 'own', hrJobs: 'own',
   qaLoad: 'own', qaDashboard: 'own', rdLoad: 'own', rdDashboard: 'own', prdLoad: 'own', prdDashboard: 'own',
-  costLoad: 'all', execOverview: 'all', execDashboard: 'all', execPart: 'all'
+  costLoad: 'all', execOverview: 'all', execDashboard: 'target', execPart: 'target'
 };
 // คำสั่งที่ไม่แก้ข้อมูล (ไม่ต้องเปลี่ยนตรา) นอกเหนือจาก RC_READ_
 var RC_NOWRITE_ = /^(getDepartments|getDepartmentHome|login|logout|getAdminStatus|adminOverview|adminDbStatus|execVerify|.*Log|.*Info|.*Test|.*Diag|.*Preview|.*Status|.*List|.*Check|costPurPrices|purPoSigs|purPoFile|hrFormInit|hrFormFind|hrFormPhotos|hrFormBalance|hrLiffView|hrLiffLoad|hrLiffStatus|hrLiffInfo|apAiRead)$/;
 var RC_TTL_ = 1800;
 var RC_ALL_KEYS_ = null;
-function rcStampKeys_(kind, deptKey) {
+var RC_TARGET_EXTRA_ = { COST: ['PUR', 'RD'], ACC: [] };   // ต้นทุนสินค้าอ่านราคาจากจัดซื้อ + สูตรจาก R&D
+function rcStampKeys_(kind, deptKey, target) {
+  if (kind === 'target') return [target].concat(RC_TARGET_EXTRA_[target] || []).map(function (k) { return 'RCD_' + k; }).concat(['RCD__ALL']);
   if (kind !== 'all') return ['RCD_' + deptKey, 'RCD__ALL'];
   if (!RC_ALL_KEYS_) RC_ALL_KEYS_ = DEPARTMENTS.map(function (d) { return 'RCD_' + d.key; }).concat(['RCD__ALL']);
   return RC_ALL_KEYS_;
 }
-function rcStamp_(kind, deptKey) {
-  var keys = rcStampKeys_(kind, deptKey), got = CacheService.getScriptCache().getAll(keys);
+function rcStamp_(kind, deptKey, target) {
+  var keys = rcStampKeys_(kind, deptKey, target), got = CacheService.getScriptCache().getAll(keys);
   return keys.map(function (k) { return got[k] || ''; }).join('.');
 }
 function rcTouchDept_(deptKey) { try { CacheService.getScriptCache().put('RCD_' + deptKey, Date.now() + '-' + Math.random().toString(36).slice(2, 8), 21600); } catch (e) {} }
@@ -65,7 +68,7 @@ function respCall_(fn, f, args) {
   var kind = RC_READ_[fn];
   if (!kind) return f.apply(null, args);
   var dept = requireDept_(args[0]);   // ตรวจสิทธิ์ก่อนเสมอ · คีย์แยกตามแผนก จึงไม่เห็นผลของแผนกอื่น
-  var key = rcKey_(fn, dept.key, args), stamp = rcStamp_(kind, dept.key), hit = rcGet_(key, stamp);
+  var key = rcKey_(fn, dept.key, args), stamp = rcStamp_(kind, dept.key, String(args[1] || '').toUpperCase().replace(/[^A-Z_]/g, '')), hit = rcGet_(key, stamp);
   if (hit !== undefined) { if (typeof PERF_ !== 'undefined' && PERF_) PERF_.rc = 'hit'; return hit; }
   if (typeof PERF_ !== 'undefined' && PERF_) PERF_.rc = 'miss';
   var val = f.apply(null, args);
