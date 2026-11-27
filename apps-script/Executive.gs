@@ -52,7 +52,7 @@ function execRange_(from, to) {
 // ฝ่ายขาย = Meeting Dashboard (repo dashboard-meeting + meeting-dashboard/DashboardApi.gs) เปิดในกรอบหน้า Dashboard ผู้บริหาร
 // หน้านั้นตรวจตั๋วผู้บริหารกับ execVerify (ไม่ต้องใส่รหัส Meeting Dashboard ซ้ำ)
 var EXEC_SALES_ = { key: 'SALES', name: 'ฝ่ายขาย', en: 'Sales (Meeting Dashboard)', color: '#B8860B', ready: true,
-  embed: 'https://em-o-cha.github.io/Dashboard-Meeting/?embed=exec' };
+  embed: 'https://em-o-cha.github.io/Dashboard-Meeting/?embed=exec&v=51' };
 // ฝ่ายการตลาด = Marketing Command Center (apps-script/marketing-dashboard) เปิดในกรอบเหมือนฝ่ายขาย · ตรวจตั๋วผู้บริหารกับ execVerify (ดูอย่างเดียว)
 var EXEC_MARKETING_ = { key: 'MKT', name: 'ฝ่ายการตลาด', en: 'Marketing Command Center', color: '#f97316', ready: true,
   embed: 'https://script.google.com/macros/s/AKfycbwD2aku-huwQA87WJlW3fIWUH4ghcQ2veJYTNmjuOcPS6BI-MkhyMlOdzadfS0EYOV46w/exec?embed=exec' };
