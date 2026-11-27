@@ -129,7 +129,7 @@ function hrLineTest(token) {
 // ไม่ส่งรายชื่อพนักงานทั้งหมดให้หน้าฟอร์มแล้ว (19/11/69: หน้าสแกนขอลาไม่ควรเห็นทุกคน) — ค้นด้วย hrFormFind ทีละชื่อ
 // emps: [] เผื่อหน้าเก่าที่ยังค้างในเครื่อง
 function hrFormInit(key) {
-  var dept = hrFormCheck_(key), ss = hrBook_(dept), st = hrSettings_(ss);
+  var dept = hrFormCheck_(key), ss = hrReadBook_(dept, hrPrepJob_), st = hrSettings_(ss);
   // รายชื่อให้เลือก (พร้อมรูปจาก hrFormPhotos) — กลับมาแสดงรายชื่อตามที่ผู้ใช้ขอ 19/11/69 · รวมพนักงาน Job
   return { ok: true, today: purToday_(), workDays: st.workDays, dayHours: st.dayHours, stdHours: st.stdHours, supervisors: hrSupervisors_(ss),
     emps: hrPeople_(ss).filter(hrActive_).sort(function (a, b) { return (Number(a.seq) || 9999) - (Number(b.seq) || 9999); })
@@ -150,7 +150,7 @@ function hrFormFind(key, q) {
   }).slice(0, 8).map(hrFormEmp_) };
 }
 function hrFormPhotos(key) {   // รูปย่อทุกคน (พนักงาน + Job) สำหรับหน้าเลือกชื่อ
-  var dept = hrFormCheck_(key), ss = hrBook_(dept), out = {};
+  var dept = hrFormCheck_(key), ss = hrReadBook_(dept, hrPrepJob_), out = {};
   hrPeople_(ss).forEach(function (e) { if (hrActive_(e) && /^data:image\//.test(String(e.photoThumb))) out[e.id] = e.photoThumb; });
   return { ok: true, photos: out };
 }
@@ -180,7 +180,7 @@ function hrBalance_(ss, e, year) {
   return out;
 }
 function hrFormBalance(key, empId) {
-  var dept = hrFormCheck_(key), ss = hrBook_(dept), e = hrById_(hrPeople_(ss), empId), st = hrSettings_(ss);
+  var dept = hrFormCheck_(key), ss = hrReadBook_(dept, hrPrepJob_), e = hrById_(hrPeople_(ss), empId), st = hrSettings_(ss);
   if (!e || !hrActive_(e)) return { ok: false, error: 'ไม่พบชื่อพนักงาน' };
   var year = purToday_().slice(0, 4);
   var mine = purRead_(ss, 'hr_leaves').filter(function (l) { return l.empId === e.id; }).sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).slice(0, 8)

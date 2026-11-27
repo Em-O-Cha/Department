@@ -34,7 +34,7 @@ function hrTimeInit(token) {
 function hrTimeList(token, from, to) {
   var dept = requireHr_(token);
   if (!purDate_(from) || !purDate_(to) || from > to) return { ok: false, error: 'เลือกช่วงวันที่ให้ถูกต้อง' };
-  var ss = hrtBook_(dept);
+  var ss = hrReadBook_(dept, hrPrepTime_);
   return { ok: true, map: hrtMap_(ss), rows: purRead_(ss, 'hr_time').filter(function (r) { return r.date >= from && r.date <= to; }).map(hrtOut_) };
 }
 // rows = แถวที่หน้าเว็บอ่านจากไฟล์ · map = { รหัสที่เครื่อง: empId | '' } ที่ HR จับคู่ / แก้

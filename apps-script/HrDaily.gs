@@ -93,7 +93,7 @@ function hrdLineCommand_(ev) {
 }
 // วันนั้น: ข้อมูลที่บันทึกไว้ หรือ (ยังไม่มี) ตั้งต้นจากรายชื่อ + จำนวนล่าสุดของฝ่ายที่กรอกจำนวนเอง
 function hrDailyLoad(token, date) {
-  var dept = requireHr_(token), ss = hrdBook_(dept), d = accDate_(date) || purToday_();
+  var dept = requireHr_(token), ss = hrReadBook_(dept, function () { hrPrepDaily_(); hrPrepJob_(); }), d = accDate_(date) || purToday_();
   // รหัสแถว = "D" + yyyy-MM-dd (ข้อความ — ถ้าเป็นวันที่ล้วน ชีตจะแปลงเป็นค่าวันที่แล้วเทียบไม่ได้)
   var all = purRead_(ss, 'hr_daily').filter(function (x) { return /^D\d{4}-\d{2}-\d{2}$/.test(String(x.id)); }).map(function (x) { x.d = String(x.id).slice(1); return x; })
     .sort(function (a, b) { return b.d.localeCompare(a.d); });

@@ -28,7 +28,13 @@ function rcStamp_(kind, deptKey, target) {
   var keys = rcStampKeys_(kind, deptKey, target), got = CacheService.getScriptCache().getAll(keys);
   return keys.map(function (k) { return got[k] || ''; }).join('.');
 }
-function rcTouchDept_(deptKey) { try { CacheService.getScriptCache().put('RCD_' + deptKey, Date.now() + '-' + Math.random().toString(36).slice(2, 8), 21600); } catch (e) {} }
+function rcTouchDept_(deptKey) {
+  try {
+    var c = CacheService.getScriptCache();
+    c.put('RCD_' + deptKey, Date.now() + '-' + Math.random().toString(36).slice(2, 8), 21600);
+    if (deptKey !== '_ALL') c.put('DBD_' + deptKey, String(Date.now()), 21600);   // ฐานข้อมูลสำเนาของฝ่ายนี้ไม่สดแล้ว (DeptDb.gs)
+  } catch (e) {}
+}
 // เรียกจาก doPost ก่อนและหลังทุกคำสั่ง
 function rcTouch_(fn, args) {
   if (RC_READ_[fn] || RC_NOWRITE_.test(fn)) return;

@@ -217,7 +217,7 @@ function hrAutoResign_(ss) {
   return n;
 }
 function hrLoad(token) {
-  var dept = requireHr_(token), ss = hrBook_(dept), today = purToday_(), since = (+today.slice(0, 4) - 1) + '-01-01', st = hrSettings_(ss);
+  var dept = requireHr_(token), ss = hrReadBook_(dept, hrPrepJob_), today = purToday_(), since = (+today.slice(0, 4) - 1) + '-01-01', st = hrSettings_(ss);
   try { hrAutoResign_(ss); } catch (e) {}
   return {
     ok: true, today: today, sheetUrl: ss.getUrl(), hasFolder: !!deptConfig_(dept.key).folderId, settings: st,
@@ -232,7 +232,7 @@ function hrLoad(token) {
 }
 // รูปย่อพนักงานทั้งหมด { empId: dataUrl } — แยกจาก hrLoad เพราะขนาดใหญ่ (โหลดครั้งเดียว)
 function hrPhotos(token) {
-  var dept = requireHr_(token), ss = hrBook_(dept), out = {};
+  var dept = requireHr_(token), ss = hrReadBook_(dept, hrPrepJob_), out = {};
   hrPeople_(ss).forEach(function (e) { if (/^data:image\//.test(String(e.photoThumb))) out[e.id] = e.photoThumb; });
   return { ok: true, photos: out };
 }
@@ -472,7 +472,7 @@ function hrSaveSettings(token, s) {
 function hrLeaves(token, from, to) {
   var dept = requireHr_(token);
   if (!purDate_(from) || !purDate_(to) || from > to) return { ok: false, error: 'เลือกช่วงวันที่ให้ถูกต้อง' };
-  var ss = hrBook_(dept), st = hrSettings_(ss);
+  var ss = hrReadBook_(dept), st = hrSettings_(ss);
   var all = purRead_(ss, 'hr_leaves');
   return { ok: true, leaves: all.filter(function (l) { return l.dateFrom <= to && (l.dateTo || l.dateFrom) >= from; }).map(function (l) { return hrLeaveOut_(l, st); }),
     notices: all.filter(hrHasNotice_).map(function (l) { return hrLeaveOut_(l, st); }) };   // เอกสารแนบใหม่ (ทุกช่วงวันที่)
@@ -502,7 +502,7 @@ function hrDashboard(token, from, to) {
   var d = hrDashboard_(dept, from, to); d.ok = true; return d;
 }
 function hrDashboard_(dept, from, to) {
-  var ss = hrBook_(dept), today = purToday_(), st = hrSettings_(ss);
+  var ss = hrReadBook_(dept, hrPrepJob_), today = purToday_(), st = hrSettings_(ss);
   var emps = purRead_(ss, 'hr_emps'), active = emps.filter(hrActive_), idx = {};
   emps.forEach(function (e) { idx[e.id] = e; });
   var cnt = function (arr, fn) { var o = {}; arr.forEach(function (x) { var k = fn(x) || 'ไม่ระบุ'; o[k] = (o[k] || 0) + 1; }); return Object.keys(o).map(function (k) { return { name: k, n: o[k] }; }).sort(function (a, b) { return b.n - a.n; }); };

@@ -47,7 +47,13 @@ function adminSetDb(token, deptKey, url, key) {
   url = String(url || '').trim().replace(/^(https:\/\/[a-z0-9-]+\.supabase\.co)(\/.*)?$/i, '$1').toLowerCase(); key = String(key || '').trim();
   if (!url && !key) { delete all[dept.key]; p.setProperty('DEPT_DB', JSON.stringify(all)); return { ok: true, dept: deptDbOut_(dept, null) }; }
   if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url)) return { ok: false, error: 'ลิงก์ต้องเป็นแบบ https://xxxx.supabase.co (คัดลอกจาก Data API → API URL)' };
-  if (!key) { var old = all[dept.key]; if (!old || !old.key) return { ok: false, error: 'ใส่กุญแจ Secret (sb_secret_…)' }; key = old.key; }
+  if (!key) {   // เว้นว่าง = กุญแจเดิมของฝ่ายนี้ หรือของฝ่ายอื่นที่ใช้โปรเจกต์เดียวกัน (ลิงก์เดียวกัน)
+    var old = all[dept.key] && all[dept.key].url === url ? all[dept.key] : null;
+    if (!old) Object.keys(all).some(function (k) { if (all[k] && all[k].url === url && all[k].key) { old = all[k]; return true; } return false; });
+    if (!old && all[dept.key]) old = all[dept.key];
+    if (!old || !old.key) return { ok: false, error: 'ใส่กุญแจ Secret (sb_secret_…)' };
+    key = old.key;
+  }
   if (!/^(sb_secret_|eyJ)/.test(key)) return { ok: false, error: 'กุญแจต้องขึ้นต้นด้วย sb_secret_ (อย่าใช้กุญแจ Publishable)' };
   var chk = deptDbCheck_({ url: url, key: key });
   if (!chk.ok) return chk;
@@ -95,7 +101,11 @@ function dbBook_(deptKey, book, cfg, opener, sheetId) {
   var d = { dept: deptKey, book: book, cfg: cfg, cache: {}, opener: opener, real: null, sheetId: sheetId || '' };
   var real = function () { if (!d.real) { d.real = opener(); try { CacheService.getScriptCache().put('DBN_' + deptKey + '_' + book, d.real.getName(), 21600); } catch (e) {} } return d.real; };
   d.realFn = real;
+  // เขียนผ่านสมุดเสมือน (เช่น เปลี่ยนเป็นลาออกอัตโนมัติใน hrLoad) → ใช้ชีตจริง + ถือว่าสำเนาไม่สดแล้ว
+  var w = function () { d.cache = {}; try { CacheService.getScriptCache().put('DBD_' + deptKey, String(Date.now()), 21600); } catch (e) {} return real(); };
   return { __db: d, getId: function () { return sheetId || real().getId(); },
+    getSheetByName: function (n) { return w().getSheetByName(n); }, insertSheet: function (n) { return w().insertSheet(n); },
+    getSheets: function () { return real().getSheets(); }, getSpreadsheetTimeZone: function () { return PUR_TZ_; },
     getUrl: function () { return sheetId ? 'https://docs.google.com/spreadsheets/d/' + sheetId + '/edit' : real().getUrl(); },
     getName: function () { return CacheService.getScriptCache().get('DBN_' + deptKey + '_' + book) || real().getName(); } };
 }
@@ -153,3 +163,16 @@ function accReadBook_(dept) {
   return dbBook_(dept.key, 'main', cfg, function () { return purBook_(dept); }, deptConfig_(dept.key).sheetId);
 }
 
+
+// สมุดฝ่ายบุคคลสำหรับคำสั่งที่อ่านอย่างเดียว (ผู้ใช้ขอ 27/11/69): ฐานข้อมูลสำเนา (ถ้าเชื่อมต่อ HR ไว้) หรือชีต
+// prep = ลงทะเบียนตารางเพิ่ม (hr_jobs / hr_time / hr_daily) · การบันทึกยังใช้ hrBook_ (ชีตจริง) เหมือนเดิม
+function hrReadBook_(dept, prep) {
+  hrRegister_();
+  if (prep) prep();
+  var cfg = deptDbCfg_(dept.key);
+  if (!cfg) return hrBook_(dept);
+  return dbBook_(dept.key, 'main', cfg, function () { return hrBook_(dept); }, deptConfig_(dept.key).sheetId);
+}
+function hrPrepJob_() { PUR_TABLES_.hr_jobs = HRJ_TABLE_; PUR_NUM_KEYS_.seq = 1; }
+function hrPrepTime_() { PUR_TABLES_.hr_time = HRT_TABLE_; PUR_NUM_KEYS_.lateMin = 1; PUR_NUM_KEYS_.earlyMin = 1; }
+function hrPrepDaily_() { PUR_TABLES_.hr_daily = HRD_TABLE_; PUR_NUM_KEYS_.total = 1; PUR_NUM_KEYS_.leaveCount = 1; PUR_NUM_KEYS_.resign = 1; }

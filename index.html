@@ -1205,13 +1205,15 @@
         Array.prototype.forEach.call($('dbList').querySelectorAll('[data-dbi]'), function (b) { b.addEventListener('click', function () { openDbDept(state.dbList[+b.getAttribute('data-dbi')]); }); });
       };
       var openDbDept = function (d) {
+        var same = !d.set && (state.dbList || []).filter(function (x) { return x.set && x.conn && x.host; })[0];   // ใช้โปรเจกต์เดียวกับฝ่ายที่เชื่อมต่อแล้วได้ ไม่ต้องใส่กุญแจซ้ำ
         openModal({
           color: d.color, icon: d.key, title: 'ฐานข้อมูลสำเนา · ' + d.name, sub: 'คัดลอกจากโปรเจกต์ Supabase ของ' + d.name,
           body: field('dbUrl', 'API URL (Project Settings → Data API)', 'text', 'https://xxxx.supabase.co')
-            + field('dbKey', 'กุญแจ Secret (Project Settings → API Keys → Secret keys)', 'password', d.set ? 'เว้นว่าง = ใช้กุญแจเดิม' : 'sb_secret_…')
+            + field('dbKey', 'กุญแจ Secret (Project Settings → API Keys → Secret keys)', 'password', d.set ? 'เว้นว่าง = ใช้กุญแจเดิม' : same ? 'เว้นว่าง = ใช้กุญแจเดียวกับ' + same.name : 'sb_secret_…')
+            + (same ? '<div class="note">ใส่ลิงก์ของ' + esc(same.name) + 'ไว้ให้แล้ว — ใช้โปรเจกต์เดียวกันได้ แค่กดบันทึก</div>' : '')
             + (d.set ? '<div class="note">ต้องการยกเลิกการเชื่อมต่อ: ลบลิงก์ให้ว่างแล้วกดบันทึก</div>' : ''),
           ok: 'บันทึกและตรวจสอบ',
-          onOpen: function () { if (d.host) $('dbUrl').value = 'https://' + d.host; },
+          onOpen: function () { if (d.host || same) $('dbUrl').value = 'https://' + (d.host || same.host); },
           submit: function () {
             var u = val('dbUrl').trim(), k = val('dbKey').trim();
             if (!u && !d.set) return Promise.resolve('ใส่ API URL');

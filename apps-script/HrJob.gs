@@ -22,7 +22,7 @@ function hrjOut_(j) { var o = {}; HRJ_TABLE_.cols.forEach(function (c) { o[c[0]]
 function hrjThumb_(v) { return typeof v === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/.test(v) && v.length < 48000 ? v : ''; }
 
 function hrJobs(token) {
-  var dept = requireHr_(token), ss = hrjBook_(dept);
+  var dept = requireHr_(token), ss = hrReadBook_(dept, hrPrepJob_);
   var rows = purRead_(ss, 'hr_jobs').sort(function (a, b) { return (Number(a.seq) || 9999) - (Number(b.seq) || 9999); });
   return { ok: true, today: purToday_(), jobs: rows.map(hrjOut_), buildings: hrSettings_(ss).buildings };
 }
