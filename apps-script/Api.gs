@@ -26,7 +26,7 @@ function apiFunctions_() {
     purVendorMetrics: purVendorMetrics, purSaveEval: purSaveEval, purDeleteEval: purDeleteEval, purVendorReport: purVendorReport,
     // ความปลอดภัยและสิ่งแวดล้อม (She.gs)
     sheLoad: sheLoad, sheChecks: sheChecks, sheSaveCheck: sheSaveCheck, sheDeleteCheck: sheDeleteCheck, sheSaveFinding: sheSaveFinding, sheDeleteFinding: sheDeleteFinding, sheMergeFindings: sheMergeFindings,
-    sheSaveIncident: sheSaveIncident, sheDeleteIncident: sheDeleteIncident, sheUploadFile: sheUploadFile, sheRemoveFile: sheRemoveFile,
+    sheSaveIncident: sheSaveIncident, sheSaveAbnormal: sheSaveAbnormal, sheDeleteAbnormal: sheDeleteAbnormal, sheDeleteIncident: sheDeleteIncident, sheUploadFile: sheUploadFile, sheRemoveFile: sheRemoveFile,
     sheSaveArea: sheSaveArea, sheSaveSettings: sheSaveSettings, sheMonthReport: sheMonthReport, sheFindingReport: sheFindingReport,
     sheDashboard: sheDashboard, sheLog: sheLog,
     // ฝ่ายบุคคล (Hr.gs)

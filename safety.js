@@ -23,6 +23,7 @@
     { id: 's_check', label: 'ตรวจเช็คประจำวันแต่ละอาคาร', ic: 'shield' },
     { id: 's_find', label: 'ข้อบกพร่อง / ติดตามแก้ไข', ic: 'warn' },
     { id: 's_inc', label: 'อุบัติเหตุ / เกือบเกิดเหตุ', ic: 'alert' },
+    { id: 's_abn', label: 'รายงานสิ่งผิดปกติ (Abnormality)', ic: 'warn' },
     { id: 's_mon', label: 'ตรวจประจำเดือน (ทางออกฉุกเฉิน / แจ้งเหตุเพลิงไหม้)', ic: 'clock' },
     { id: 's_doc', label: 'แฟ้มเอกสาร (Word / Excel / PowerPoint)', ic: 'folder' },
     { id: 's_rep', label: 'รายงาน / พิมพ์ PDF', ic: 'print' },
@@ -162,7 +163,7 @@
       });
       return;
     }
-    ({ s_dash: dash, s_check: walk, s_find: findings, s_inc: incidents, s_mon: monthly, s_doc: docsPage, s_rep: report, s_set: settings, s_log: logPage }[page] || dash)();
+    ({ s_dash: dash, s_check: walk, s_find: findings, s_inc: incidents, s_abn: abnormals, s_mon: monthly, s_doc: docsPage, s_rep: report, s_set: settings, s_log: logPage }[page] || dash)();
   };
   function landscape(onOff) {
     var el = document.getElementById('sheLandscape');
@@ -617,6 +618,127 @@
     });
   }
 
+  // ==================== แบบรายงานสิ่งผิดปกติ (ABNORMALITY REPORT) — จากไฟล์ Word ของผู้ใช้ (27/11/69) ====================
+  var AB_BUILD = ['G1', 'G2', 'G3', 'G4', 'G5', 'other'];
+  var AB_TOPIC = { safety: 'ความปลอดภัย', machine: 'เครื่องจักร', elec: 'ไฟฟ้า', building: 'อาคาร / สถานที่', chem: 'สารเคมี / ก๊าซ', fire: 'อัคคีภัย', env: 'สิ่งแวดล้อม', other: 'อื่น ๆ' };
+  var AB_INIT = { none: 'ยังไม่ได้ดำเนินการ', notify: 'แจ้งหัวหน้างาน', fence: 'กั้นพื้นที่ / หยุดใช้งาน', fixed: 'แก้ไขเบื้องต้นแล้ว' };
+  var AB_ST = { open: ['รอดำเนินการ', '#dc2626'], prog: ['กำลังแก้ไข', '#d97706'], fail: ['ตรวจแล้ว ยังไม่เรียบร้อย', '#b91c1c'], done: ['แก้ไขเรียบร้อย · ปิดรายงาน', '#16a34a'] };
+  function abSt(x) { return x.result === 'ok' ? 'done' : x.result === 'fail' ? 'fail' : (x.responsible || x.fixPlan || x.doneDate) ? 'prog' : 'open'; }
+  function abLate(x) { return abSt(x) !== 'done' && x.dueDate && x.dueDate < H.data.today; }
+  function abPlace(x) { return [x.building === 'other' ? (x.buildingOther || 'อื่น ๆ') : x.building, x.spot].filter(String).join(' · '); }
+  function abTopics(x) { return (x.topics || []).map(function (k) { return k === 'other' ? 'อื่น ๆ' + (x.topicOther ? ': ' + x.topicOther : '') : AB_TOPIC[k]; }).join(', '); }
+  function abnormals() {
+    var q = H.q, rows = H.data.abnormals || [];
+    q.abf = q.abf || 'pending';
+    var test = { pending: function (x) { return abSt(x) !== 'done'; }, late: abLate, done: function (x) { return abSt(x) === 'done'; }, all: function () { return true; } };
+    var show = rows.filter(test[q.abf]);
+    $('main').innerHTML = '<h3>รายงานสิ่งผิดปกติ (Abnormality Report)</h3>'
+      + '<div class="kpis">' + [[rows.length, 'รายงานทั้งหมด', '#475569'], [rows.filter(function (x) { return abSt(x) === 'open'; }).length, 'รอดำเนินการ', '#dc2626'],
+        [rows.filter(function (x) { return abSt(x) === 'prog' || abSt(x) === 'fail'; }).length, 'กำลังแก้ไข', '#d97706'], [rows.filter(abLate).length, 'เกินกำหนดแล้วเสร็จ', '#b91c1c'],
+        [rows.filter(function (x) { return abSt(x) === 'done'; }).length, 'แก้ไขเรียบร้อย', '#16a34a']]
+        .map(function (k) { return '<div class="kpi" style="--k:' + k[2] + '"><b>' + k[0] + '</b><span>' + k[1] + '</span></div>'; }).join('') + '</div>'
+      + '<div class="pbar"><div class="pchips" style="margin:0;flex:1">' + [['pending', 'ยังไม่ปิด'], ['late', 'เกินกำหนด'], ['done', 'แก้ไขเรียบร้อย'], ['all', 'ทั้งหมด']].map(function (c) {
+          return '<button class="chip' + (q.abf === c[0] ? ' on' : '') + '" data-abf="' + c[0] + '">' + c[1] + ' (' + rows.filter(test[c[0]]).length + ')</button>'; }).join('') + '</div>'
+      + '<button class="btn btn-sm btn-primary" id="abNew">' + icon('plus', 16) + ' แจ้งสิ่งผิดปกติ</button></div>'
+      + '<div class="plist">' + (show.map(function (x) {
+        var st = AB_ST[abSt(x)];
+        return '<button class="prow click" data-ab="' + x.id + '"><div class="pinfo"><b>' + esc(x.code) + ' · ' + dd(x.reportDate) + ' · <span class="sabst" style="--s:' + st[1] + '">' + st[0] + '</span>' + (abLate(x) ? ' <span class="sabst" style="--s:#b91c1c">เกินกำหนด</span>' : '') + '</b>'
+          + '<small>' + esc([abPlace(x), abTopics(x)].filter(String).join(' · ')) + '</small><small class="sab1">' + esc(x.detail) + '</small>'
+          + '<small>' + esc(['แจ้งโดย ' + x.reporter + (x.reporterDept ? ' (' + x.reporterDept + ')' : ''), x.responsible ? 'ผู้รับผิดชอบ ' + x.responsible : '', x.dueDate ? 'กำหนดเสร็จ ' + dd(x.dueDate) : ''].filter(String).join(' · ')) + '</small></div>'
+          + (x.files.length ? '<img class="sinc-img" src="' + img(x.files[0].id, 200) + '" alt="">' : '') + '<span class="sedit">' + icon('edit', 16) + ' เปิด</span></button>';
+      }).join('') || '<div class="panel muted">ไม่มีรายการ</div>') + '</div>';
+    on('[data-abf]', 'click', function (el) { q.abf = el.getAttribute('data-abf'); abnormals(); }, $('main'));
+    $('abNew').addEventListener('click', function () { abModal(null); });
+    on('[data-ab]', 'click', function (el) { abModal(rows.filter(function (x) { return x.id === el.getAttribute('data-ab'); })[0]); }, $('main'));
+  }
+  function abChecks(name, dict, picked, radio) {
+    return '<div class="sabchk">' + Object.keys(dict).map(function (k) {
+      return '<label><input type="' + (radio ? 'radio' : 'checkbox') + '" name="' + name + '" value="' + k + '"' + (picked.indexOf(k) >= 0 ? ' checked' : '') + '> ' + esc(dict[k]) + '</label>';
+    }).join('') + '</div>';
+  }
+  function abSec(n, title, body) { return '<div class="sabsec"><div class="sabh">' + n + '. ' + title + '</div><div class="pform">' + body + '</div></div>'; }
+  function abModal(x) {
+    var isNew = !x, pend = [];
+    x = x || { reportDate: H.data.today, reporter: store('abReporter'), reporterDept: store('abDept'), building: '', topics: [], initial: [], files: [] };
+    var bdict = {}; AB_BUILD.forEach(function (b) { bdict[b] = b === 'other' ? 'อื่น ๆ' : b; });
+    function gallery() {
+      $('g_ab').innerHTML = thumbs(x.files, isNew ? '' : 'files') + thumbs(pend.map(function (p, k) { return { dataUrl: p.dataUrl, tmp: 'i:' + k }; }), 'tmp') + shotBtns('pick', '1', '');
+      on('[data-pick]', 'click', function (el) { pickPhotos(function (arr) { pend = pend.concat(arr).slice(0, 6); gallery(); }, el.getAttribute('data-src') === 'cam'); }, $('g_ab'));
+      on('[data-del="tmp"]', 'click', function (el) { pend.splice(+el.getAttribute('data-fid').split(':')[1], 1); gallery(); }, $('g_ab'));
+      on('[data-del="files"]', 'click', function (el) {
+        ask('ลบรูปนี้?').then(function (ok) { if (!ok) return;
+          call('sheRemoveFile', state.token, 'abnormal', x.id, 'files', el.getAttribute('data-fid')).then(function (r) { if (!r.ok) return toast(r.error); x.files = r.files; gallery(); }).catch(onServerError); });
+      }, $('g_ab'));
+    }
+    var picked = function (name) { return Array.prototype.map.call(document.querySelectorAll('#mBody input[name="' + name + '"]:checked'), function (i) { return i.value; }); };
+    wide({
+      icon: 'warn', title: isNew ? 'แจ้งสิ่งผิดปกติ' : 'รายงานสิ่งผิดปกติ ' + x.code, sub: 'แบบรายงานสิ่งผิดปกติ · ABNORMALITY REPORT',
+      body: '<div class="pform">' + (isNew ? '<div class="pf"><label>เลขที่รายงาน</label><input value="ระบบออกเลขให้เมื่อบันทึก" disabled></div>' : '<div class="pf"><label>เลขที่รายงาน</label><input value="' + esc(x.code) + '" disabled></div>')
+          + F('abDate', 'วันที่แจ้ง *', x.reportDate, 'date') + '</div>'
+        + abSec(1, 'ผู้แจ้ง', F('abRep', 'ชื่อ-สกุล *', x.reporter) + F('abRDept', 'แผนก', x.reporterDept, 'text', ' list="sDeptsAb"') + datalist('sDeptsAb', list(H.data.settings.depts)))
+        + abSec(2, 'สถานที่พบสิ่งผิดปกติ', '<div class="pf full"><label>อาคาร</label>' + abChecks('abB', bdict, [x.building], true) + '</div>'
+          + '<div class="pf' + (x.building === 'other' ? '' : ' hidden') + '" id="abBOw">' + '<label for="abBO">อาคารอื่น ๆ (ระบุ)</label><input id="abBO" value="' + esc(x.buildingOther || '') + '"></div>'
+          + '<div class="pf full"><label for="abSpot">บริเวณ / จุดที่พบ</label><input id="abSpot" value="' + esc(x.spot || '') + '"></div>')
+        + abSec(3, 'หัวข้อสิ่งผิดปกติ', '<div class="pf full">' + abChecks('abT', AB_TOPIC, x.topics) + '</div><div class="pf full' + (x.topics.indexOf('other') >= 0 ? '' : ' hidden') + '" id="abTOw"><label for="abTO">หัวข้ออื่น ๆ (ระบุ)</label><input id="abTO" value="' + esc(x.topicOther || '') + '"></div>')
+        + abSec(4, 'รายละเอียดสิ่งผิดปกติที่พบ', T('abDet', 'รายละเอียด *', x.detail, 'พบอะไร ที่ไหน อันตรายอย่างไร'))
+        + '<div class="sabsec"><div class="sabh">5. ภาพประกอบ</div><div class="sphotos" id="g_ab"></div><p class="muted" style="margin:6px 0 0;font-size:12.5px">มีรูป = "มีภาพประกอบ" · ไม่มีรูป = "ไม่มีภาพประกอบ" (ระบบติ๊กในแบบฟอร์มให้เอง)</p></div>'
+        + abSec(6, 'การดำเนินการเบื้องต้น', '<div class="pf full">' + abChecks('abI', AB_INIT, x.initial) + '</div>' + T('abIN', 'รายละเอียดเพิ่มเติม (ถ้ามี)', x.initialNote))
+        + abSec(7, 'สำหรับผู้รับผิดชอบดำเนินการ', F('abResp', 'หน่วยงาน / ผู้รับผิดชอบ', x.responsible) + T('abPlan', 'แนวทางการแก้ไข', x.fixPlan)
+          + F('abDue', 'กำหนดแล้วเสร็จ', x.dueDate, 'date') + F('abDone', 'วันที่แก้ไขเสร็จ', x.doneDate, 'date'))
+        + abSec(8, 'ผลการตรวจสอบและปิดรายงาน', '<div class="pf full">' + abChecks('abRes', { '': 'ยังไม่ตรวจสอบ', ok: 'แก้ไขเรียบร้อย', fail: 'ยังไม่เรียบร้อย / ต้องแก้ไขเพิ่มเติม' }, [x.result || ''], true) + '</div>'
+          + F('abVer', 'ผู้ตรวจสอบ', x.verifier || '', 'text', ' list="sInspAb"') + datalist('sInspAb', inspectors()) + F('abVD', 'วันที่ตรวจสอบ', x.verifyDate, 'date'))
+        + '<p class="sabnote">หมายเหตุ: หากพบเหตุฉุกเฉินหรืออันตรายร้ายแรง ให้แจ้งหัวหน้างานและผู้เกี่ยวข้องทันที ไม่ต้องรอการบันทึกในระบบ</p>',
+      foot: isNew ? '' : '<div class="pfoot"><button type="button" class="link-btn" id="abPrint">' + icon('print', 16) + ' พิมพ์แบบฟอร์ม / PDF</button><button type="button" class="link-btn danger" id="abDel">' + icon('trash', 16) + ' ลบรายงานนี้</button></div>',
+      ok: 'บันทึก',
+      onOpen: function () {
+        gallery();
+        on('input[name="abB"]', 'change', function () { $('abBOw').classList.toggle('hidden', picked('abB')[0] !== 'other'); }, $('mBody'));
+        on('input[name="abT"]', 'change', function () { $('abTOw').classList.toggle('hidden', picked('abT').indexOf('other') < 0); }, $('mBody'));
+        on('input[name="abI"]', 'change', function (el) {   // "ยังไม่ได้ดำเนินการ" เลือกคู่กับข้ออื่นไม่ได้
+          if (!el.checked) return;
+          Array.prototype.forEach.call(document.querySelectorAll('#mBody input[name="abI"]'), function (i) { if (i !== el && (el.value === 'none' || i.value === 'none')) i.checked = false; });
+        }, $('mBody'));
+        $('abVD').addEventListener('focus', function () { if (!$('abVD').value && picked('abRes')[0]) $('abVD').value = H.data.today; });
+        if (!isNew) {
+          $('abPrint').addEventListener('click', function () { closeModal(); H.q.rep = 'ab'; H.q.abId = x.id; go('s_rep'); });
+          $('abDel').addEventListener('click', function () { confirmBox('ลบรายงาน ' + x.code + ' และรูปทั้งหมด?', function () { return call('sheDeleteAbnormal', state.token, x.id).then(function (r) { if (!r.ok) return r.error; closeModal(); reload('ลบแล้ว'); }); }); });
+        }
+      },
+      submit: function () {
+        var res = picked('abRes')[0] || '';
+        if (res && !v('abVer')) return Promise.resolve('ใส่ชื่อผู้ตรวจสอบก่อนปิดรายงาน');
+        store('abReporter', v('abRep')); store('abDept', v('abRDept'));
+        return call('sheSaveAbnormal', state.token, { id: x.id || '', reportDate: v('abDate'), reporter: v('abRep'), reporterDept: v('abRDept'), building: picked('abB')[0] || '', buildingOther: v('abBO'),
+          spot: v('abSpot'), topics: picked('abT'), topicOther: v('abTO'), detail: v('abDet'), initial: picked('abI'), initialNote: v('abIN'), responsible: v('abResp'), fixPlan: v('abPlan'),
+          dueDate: v('abDue'), doneDate: v('abDone'), result: res, verifier: v('abVer'), verifyDate: v('abVD') || (res ? H.data.today : '') }).then(function (r) {
+          if (!r.ok) return r.error;
+          return uploadAll(pend.map(function (p) { return ['abnormal', r.abnormal.id, 'files', p]; })).then(function (fails) { closeModal(); reload((isNew ? 'บันทึกแล้ว เลขที่ ' + r.abnormal.code : 'บันทึกแล้ว') + (fails ? ' · อัปโหลดรูปไม่สำเร็จ ' + fails + ' รูป' : '')); });
+        });
+      }
+    });
+  }
+  // แบบฟอร์มพิมพ์ A4 แนวตั้ง — วางเหมือนไฟล์ Word (หัวข้อ 1–8 ช่อง ☐ / ☑)
+  function abHtml(x) {
+    var bx = function (on) { return '<span class="sabx">' + (on ? '☑' : '☐') + '</span>'; }, line = function (t) { return t ? '<b>' + esc(t) + '</b>' : '<span class="sabdot"></span>'; };
+    var row = function (a) { return '<tr><td colspan="2">' + a + '</td></tr>'; }, h = function (t) { return '<tr><th colspan="2">' + t + '</th></tr>'; };
+    return '<div class="sreport sabform"><div class="sabtitle"><b>แบบรายงานสิ่งผิดปกติ</b><span>ABNORMALITY REPORT</span></div><table class="sabt">'
+      + '<tr><td>เลขที่รายงาน: ' + line(x.code) + '</td><td>วันที่แจ้ง: ' + line(thDate(x.reportDate)) + '</td></tr>'
+      + h('1. ผู้แจ้ง') + '<tr><td>ชื่อ-สกุล: ' + line(x.reporter) + '</td><td>แผนก: ' + line(x.reporterDept) + '</td></tr>'
+      + h('2. สถานที่พบสิ่งผิดปกติ') + row('อาคาร: ' + AB_BUILD.map(function (b) { return bx(x.building === b) + (b === 'other' ? ' อื่น ๆ ' + line(x.buildingOther) : ' ' + b); }).join(' &nbsp; '))
+      + row('บริเวณ / จุดที่พบ: ' + line(x.spot))
+      + h('3. หัวข้อสิ่งผิดปกติ') + row(Object.keys(AB_TOPIC).map(function (k) { return bx(x.topics.indexOf(k) >= 0) + ' ' + AB_TOPIC[k] + (k === 'other' ? ' ' + line(x.topicOther) : ''); }).join(' &nbsp; '))
+      + h('4. รายละเอียดสิ่งผิดปกติที่พบ') + row('<div class="sabbox">' + esc(x.detail || '') + '</div>')
+      + h('5. ภาพประกอบ') + row(bx(x.files.length) + ' มีภาพประกอบ &nbsp; ' + bx(!x.files.length) + ' ไม่มีภาพประกอบ'
+        + (x.files.length ? '<div class="sabpics">' + x.files.slice(0, 4).map(function (f) { return '<img src="' + img(f.id, 700) + '" alt="">'; }).join('') + '</div>' : ''))
+      + h('6. การดำเนินการเบื้องต้น') + row(Object.keys(AB_INIT).map(function (k) { return bx(x.initial.indexOf(k) >= 0) + ' ' + AB_INIT[k]; }).join(' &nbsp; '))
+      + row('รายละเอียดเพิ่มเติม (ถ้ามี): ' + line(x.initialNote))
+      + h('7. สำหรับผู้รับผิดชอบดำเนินการ') + row('หน่วยงาน / ผู้รับผิดชอบ: ' + line(x.responsible)) + row('แนวทางการแก้ไข: ' + line(x.fixPlan))
+      + '<tr><td>กำหนดแล้วเสร็จ: ' + line(x.dueDate ? thDate(x.dueDate) : '') + '</td><td>วันที่แก้ไขเสร็จ: ' + line(x.doneDate ? thDate(x.doneDate) : '') + '</td></tr>'
+      + h('8. ผลการตรวจสอบและปิดรายงาน') + row(bx(x.result === 'ok') + ' แก้ไขเรียบร้อย &nbsp; ' + bx(x.result === 'fail') + ' ยังไม่เรียบร้อย / ต้องแก้ไขเพิ่มเติม')
+      + '<tr><td>ผู้ตรวจสอบ: ' + line(x.verifier) + '</td><td>วันที่: ' + line(x.verifyDate ? thDate(x.verifyDate) : '') + '</td></tr>'
+      + '</table><p class="sabnote2">หมายเหตุ: หากพบเหตุฉุกเฉินหรืออันตรายร้ายแรง ให้แจ้งหัวหน้างานและผู้เกี่ยวข้องทันที ไม่ต้องรอการบันทึกในระบบ</p></div>';
+  }
+
   // ==================== รายงาน / พิมพ์ PDF ====================
   function report() {
     var q = H.q, t = H.data.today;
@@ -626,23 +748,27 @@
     if (!q.rArea) q.rArea = (activeAreas()[0] || {}).id || '';
     var areaOpts = H.data.areas.map(function (a) { return '<option value="' + a.id + '"' + (q.rArea === a.id ? ' selected' : '') + '>' + esc(a.name) + '</option>'; }).join('');
     var mf = /^m/.test(q.rep) ? q.rep.slice(1) : '';
-    var ctl = mf ? '<label class="pchk">เดือน <input type="month" id="rYm" value="' + q.rYm + '"></label>' : q.rep === 'f05'
+    var abl = H.data.abnormals || [];
+    if (q.rep === 'ab' && !q.abId && abl.length) q.abId = abl[0].id;
+    var ctl = q.rep === 'ab' ? '<select id="rAb">' + (abl.map(function (x) { return '<option value="' + x.id + '"' + (q.abId === x.id ? ' selected' : '') + '>' + esc(x.code + ' · ' + dd(x.reportDate) + ' · ' + String(x.detail).slice(0, 40)) + '</option>'; }).join('') || '<option value="">ยังไม่มีรายงาน — พิมพ์แบบฟอร์มเปล่า</option>') + '</select>'
+      : mf ? '<label class="pchk">เดือน <input type="month" id="rYm" value="' + q.rYm + '"></label>' : q.rep === 'f05'
       ? '<label class="pchk">ตั้งแต่ <input type="date" id="rFrom" value="' + q.rFrom + '"></label><label class="pchk">ถึง <input type="date" id="rTo" value="' + q.rTo + '"></label>'
         + '<select id="rArea5"><option value="">ทุกพื้นที่</option>' + H.data.areas.map(function (a) { return '<option value="' + a.id + '"' + (q.r5Area === a.id ? ' selected' : '') + '>' + esc(a.name) + '</option>'; }).join('') + '</select>'
         + '<select id="rSt"><option value="">ทุกสถานะ</option><option value="pending"' + (q.rSt === 'pending' ? ' selected' : '') + '>ค้างแก้ไข</option><option value="done"' + (q.rSt === 'done' ? ' selected' : '') + '>แก้ไขเรียบร้อย</option></select>'
       : '<label class="pchk">เดือน <input type="month" id="rYm" value="' + q.rYm + '"></label><select id="rArea">' + areaOpts + '</select>';
     $('main').innerHTML = '<h3>รายงาน / พิมพ์ PDF</h3><p class="lead">กด "พิมพ์ / บันทึก PDF" แล้วเลือก "บันทึกเป็น PDF" (บน iPad: พิมพ์ → แตะแชร์ → บันทึกไปยังไฟล์) · กระดาษ A4 ตามแบบฟอร์ม (แนวนอน / แนวตั้ง)</p>'
-      + '<div class="pchips noprint">' + [['f05', 'FM-SHE-01-05 สรุปรายงานสำรวจตรวจสอบ'], ['f06', 'FM-SHE-01-06 แบบตรวจความปลอดภัย (รายเดือน)']].concat(Object.keys(SHEM).map(function (k) { return ['m' + k, 'FM-SHE-' + k + ' ' + SHEM[k].name]; })).map(function (c) { return '<button class="chip' + (q.rep === c[0] ? ' on' : '') + '" data-rep="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>'
+      + '<div class="pchips noprint">' + [['f05', 'FM-SHE-01-05 สรุปรายงานสำรวจตรวจสอบ'], ['f06', 'FM-SHE-01-06 แบบตรวจความปลอดภัย (รายเดือน)'], ['ab', 'แบบรายงานสิ่งผิดปกติ (Abnormality)']].concat(Object.keys(SHEM).map(function (k) { return ['m' + k, 'FM-SHE-' + k + ' ' + SHEM[k].name]; })).map(function (c) { return '<button class="chip' + (q.rep === c[0] ? ' on' : '') + '" data-rep="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>'
       + '<div class="pbar noprint">' + ctl + '<button class="btn btn-sm btn-primary" id="rGo">ดูรายงาน</button><button class="btn btn-sm btn-line" id="rPrint">' + icon('print', 16) + ' พิมพ์ / บันทึก PDF</button></div>'
       + '<div id="rOut"></div>';
     on('[data-rep]', 'click', function (el) { q.rep = el.getAttribute('data-rep'); report(); }, $('main'));
     $('rPrint').addEventListener('click', function () {
       if (!$('rOut').innerHTML) return toast('กด "ดูรายงาน" ก่อน');
-      var old = document.title; document.title = mf ? 'FM-SHE-' + mf + '_' + q.rYm : q.rep === 'f05' ? 'FM-SHE-01-05_' + q.rFrom + '_' + q.rTo : 'FM-SHE-01-06_' + ((area(q.rArea) || {}).name || '') + '_' + q.rYm;
+      var old = document.title; document.title = q.rep === 'ab' ? 'แบบรายงานสิ่งผิดปกติ_' + ((abl.filter(function (x) { return x.id === q.abId; })[0] || {}).code || 'เปล่า') : mf ? 'FM-SHE-' + mf + '_' + q.rYm : q.rep === 'f05' ? 'FM-SHE-01-05_' + q.rFrom + '_' + q.rTo : 'FM-SHE-01-06_' + ((area(q.rArea) || {}).name || '') + '_' + q.rYm;
       window.print(); setTimeout(function () { document.title = old; }, 1500);
     });
     $('rGo').addEventListener('click', function () {
-      if (mf) q.rYm = v('rYm');
+      if (q.rep === 'ab') q.abId = v('rAb');
+      else if (mf) q.rYm = v('rYm');
       else if (q.rep === 'f05') { q.rFrom = v('rFrom'); q.rTo = v('rTo'); q.r5Area = v('rArea5'); q.rSt = v('rSt'); } else { q.rYm = v('rYm'); q.rArea = v('rArea'); }
       runReport();
     });
@@ -651,6 +777,12 @@
   function runReport() {
     var q = H.q;
     $('rOut').innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังสร้างรายงาน…</div>';
+    if (q.rep === 'ab') {   // แบบรายงานสิ่งผิดปกติ: A4 แนวตั้ง จากข้อมูลในหน้า (ไม่ต้องโหลดใหม่)
+      landscape(false);
+      var ab = (H.data.abnormals || []).filter(function (x) { return x.id === q.abId; })[0] || { code: '', reportDate: '', topics: [], initial: [], files: [] };
+      $('rOut').innerHTML = abHtml(ab);
+      return;
+    }
     if (/^m/.test(q.rep)) {
       var form = q.rep.slice(1); landscape(!!SHEM[form].land);
       return call('sheMonthly', state.token, q.rYm).then(function (r) {
@@ -1406,6 +1538,14 @@
     '.sdup{background:#f5f3ff;border:1.5px solid #ddd6fe;font-size:14px;margin-bottom:12px}.sdupr{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px dashed #ddd6fe;margin-top:8px}.sdupr small{display:block;color:var(--muted);font-size:12px}',
     '.srecent{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}.src{border:1px solid var(--line);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:4px;font-size:13px;cursor:pointer}.src img,.src .snoimg{width:100%;height:110px;object-fit:cover;border-radius:8px}.src span{color:#334155}',
     // รายงาน FM-05 / FM-06 (A4 แนวนอน)
+    '.sabst{display:inline-block;font-size:11.5px;font-weight:700;color:var(--s);background:color-mix(in srgb,var(--s) 12%,white);border-radius:99px;padding:1px 8px;vertical-align:1px}.sab1{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:#334155!important}',
+    '.sabsec{border:1px solid #e2e8f0;border-radius:12px;padding:12px;margin-top:12px}.sabh{font-weight:800;color:#fff;background:var(--c);border-radius:8px;padding:6px 10px;margin:-2px -2px 10px;font-size:14px}',
+    '.sabchk{display:flex;flex-wrap:wrap;gap:8px}.sabchk label{display:flex;align-items:center;gap:6px;border:1px solid #cbd5e1;border-radius:10px;padding:8px 12px;cursor:pointer;font-size:14px;background:#fff}.sabchk label:has(input:checked){border-color:var(--c);background:color-mix(in srgb,var(--c) 10%,white);font-weight:700}.sabchk input{width:18px;height:18px;margin:0;accent-color:var(--c)}',
+    '.sabnote{margin:12px 0 0;font-size:12.5px;color:#b91c1c;font-style:italic}',
+    '.sabform{max-width:820px;margin-left:auto;margin-right:auto;font-size:14px}.sabtitle{text-align:center;margin-bottom:8px}.sabtitle b{display:block;font-size:22px}.sabtitle span{font-family:Arial,sans-serif;font-weight:700;font-size:13px}',
+    '.sabt{width:100%;border-collapse:collapse;table-layout:fixed}.sabt td,.sabt th{border:1px solid #a6b0ba;padding:6px 8px;vertical-align:top;text-align:left;line-height:1.6}.sabt th{background:#dbe5f1;color:#1f3864;font-weight:700}.sabx{font-size:16px}',
+    '.sabdot{display:inline-block;min-width:160px;border-bottom:1px dotted #475569;height:1em}.sabbox{min-height:70px;white-space:pre-wrap}.sabpics{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:6px}.sabpics img{width:100%;max-height:200px;object-fit:contain;border:1px solid #e2e8f0}.sabnote2{font-style:italic;font-size:12.5px;margin:8px 0 0;text-align:center}',
+    '@media print{.sabform{font-size:11pt;max-width:none}.sabpics img{max-height:55mm}.sabt tr{break-inside:avoid}}',
     '.sreport{background:#fff;border-radius:14px;padding:18px;margin-top:14px;box-shadow:var(--shadow);color:#0f172a;overflow-x:auto}',
     '.shead{display:grid;grid-template-columns:auto auto 1fr auto;align-items:center;gap:10px;border:1px solid #0f172a;padding:8px 10px}.slogo{height:52px}.sco b{display:block;font-size:13px}.sco span{font-size:12px;color:#334155}',
     '.stitle{text-align:center;font-weight:700;font-size:15px}.sfm{font-size:10.5px;text-align:right;line-height:1.5;border:1px solid #94a3b8;border-radius:4px;padding:3px 7px;white-space:nowrap}',

@@ -32,6 +32,14 @@ var SHE_TABLES_ = {
     ['person', 'ผู้ประสบเหตุ'], ['dept', 'แผนก'], ['injury', 'การบาดเจ็บ / ความเสียหาย'], ['lostDays', 'วันหยุดงาน'],
     ['cause', 'สาเหตุ'], ['action', 'การแก้ไข / ป้องกัน'], ['reporter', 'ผู้รายงาน'], ['files', 'รูปถ่าย'],
     ['createdAt', 'บันทึกเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
+  // แบบรายงานสิ่งผิดปกติ (ABNORMALITY REPORT) — จากไฟล์ Word ของผู้ใช้ (27/11/69) · หัวข้อ 1–8 ตามแบบฟอร์ม
+  she_abnormal: { tab: 'รายงานสิ่งผิดปกติ', cols: [
+    ['id', 'รหัส'], ['code', 'เลขที่รายงาน'], ['reportDate', 'วันที่แจ้ง'], ['reporter', 'ผู้แจ้ง ชื่อ-สกุล'], ['reporterDept', 'แผนกผู้แจ้ง'],
+    ['building', 'อาคาร'], ['buildingOther', 'อาคารอื่น ๆ'], ['spot', 'บริเวณ / จุดที่พบ'], ['topics', 'หัวข้อสิ่งผิดปกติ'], ['topicOther', 'หัวข้ออื่น ๆ'],
+    ['detail', 'รายละเอียดสิ่งผิดปกติที่พบ'], ['initial', 'การดำเนินการเบื้องต้น'], ['initialNote', 'รายละเอียดเพิ่มเติม'],
+    ['responsible', 'หน่วยงาน / ผู้รับผิดชอบ'], ['fixPlan', 'แนวทางการแก้ไข'], ['dueDate', 'กำหนดแล้วเสร็จ'], ['doneDate', 'วันที่แก้ไขเสร็จ'],
+    ['result', 'ผลการตรวจสอบ'], ['verifier', 'ผู้ตรวจสอบ'], ['verifyDate', 'วันที่ตรวจสอบ'], ['files', 'ภาพประกอบ'],
+    ['createdAt', 'บันทึกเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
   she_settings: { tab: 'ตั้งค่า', cols: [['id', 'รายการ'], ['value', 'ค่า']] }
 };
 var SHE_FINDING_ST_ = { open: 'พบปัญหา', progress: 'อยู่ระหว่างดำเนินการ', done: 'ปรับปรุงแก้ไขเรียบร้อย' };
@@ -75,7 +83,7 @@ function sheRegister_() {
   if (typeof shemInit_ === 'function') shemInit_();   // ตรวจประจำเดือน FM-SHE-05-04…08 (SheMonthly.gs)
   if (typeof shedInit_ === 'function') shedInit_();   // แฟ้มเอกสาร Word / Excel / PowerPoint แยกปี (SheDocs.gs)
   Object.keys(SHE_TABLES_).forEach(function (k) { PUR_TABLES_[k] = SHE_TABLES_[k]; });
-  ['doneDate', 'lastSeen'].forEach(function (k) { PUR_DATE_KEYS_[k] = 1; });
+  ['doneDate', 'lastSeen', 'reportDate', 'verifyDate'].forEach(function (k) { PUR_DATE_KEYS_[k] = 1; });
   ['rounds', 'round', 'no', 'order', 'lostDays', 'passCount', 'failCount', 'lastRound', 'seenCount'].forEach(function (k) { PUR_NUM_KEYS_[k] = 1; });
 }
 function sheBook_(dept) {
@@ -137,7 +145,8 @@ function sheLoad(token) {
     settings: sheSettings_(ss), areas: sheAreasWithItems_(ss),
     checks: purRead_(ss, 'she_checks').filter(function (c) { return c.date >= since; }).map(sheCheckOut_),
     findings: purRead_(ss, 'she_findings').filter(sheLive_).map(sheFindingOut_).sort(function (a, b) { return String(b.lastSeen + b.createdAt).localeCompare(String(a.lastSeen + a.createdAt)); }),
-    incidents: purRead_(ss, 'she_incidents').map(function (x) { x.files = purParseFiles_(x.files); return x; }).sort(function (a, b) { return String(b.date + b.time).localeCompare(String(a.date + a.time)); })
+    incidents: purRead_(ss, 'she_incidents').map(function (x) { x.files = purParseFiles_(x.files); return x; }).sort(function (a, b) { return String(b.date + b.time).localeCompare(String(a.date + a.time)); }),
+    abnormals: purRead_(ss, 'she_abnormal').map(sheAbOut_).sort(function (a, b) { return String(b.reportDate + b.code).localeCompare(String(a.reportDate + a.code)); })
   };
 }
 
@@ -340,9 +349,58 @@ function sheDeleteIncident(token, id) {
   });
 }
 
+// ---------- แบบรายงานสิ่งผิดปกติ (ABNORMALITY REPORT, ผู้ใช้ขอ 27/11/69) ----------
+// เลขที่ AByymm-nnn (ปี ค.ศ. 2 หลัก + เดือนของวันที่แจ้ง) · หัวข้อ / การดำเนินการเบื้องต้น เก็บเป็นรหัสคั่นด้วย ,
+var SHE_AB_BUILD_ = ['G1', 'G2', 'G3', 'G4', 'G5', 'other'];
+var SHE_AB_TOPICS_ = { safety: 'ความปลอดภัย', machine: 'เครื่องจักร', elec: 'ไฟฟ้า', building: 'อาคาร / สถานที่', chem: 'สารเคมี / ก๊าซ', fire: 'อัคคีภัย', env: 'สิ่งแวดล้อม', other: 'อื่น ๆ' };
+var SHE_AB_INIT_ = { none: 'ยังไม่ได้ดำเนินการ', notify: 'แจ้งหัวหน้างาน', fence: 'กั้นพื้นที่ / หยุดใช้งาน', fixed: 'แก้ไขเบื้องต้นแล้ว' };
+function sheAbOut_(x) { x.files = purParseFiles_(x.files); x.topics = String(x.topics || '').split(',').filter(String); x.initial = String(x.initial || '').split(',').filter(String); return x; }
+function sheAbCode_(ss, date) {
+  var pre = 'AB' + String(date).slice(2, 4) + String(date).slice(5, 7) + '-', n = 0;
+  purRead_(ss, 'she_abnormal').forEach(function (x) { if (String(x.code).indexOf(pre) === 0) n = Math.max(n, parseInt(String(x.code).slice(pre.length), 10) || 0); });
+  return pre + ('00' + (n + 1)).slice(-3);
+}
+function sheSaveAbnormal(token, x) {
+  var dept = requireShe_(token);
+  x = x || {};
+  var date = purDate_(x.reportDate);
+  if (!date) return { ok: false, error: 'ระบุวันที่แจ้ง' };
+  if (!purClean_(x.reporter, 120)) return { ok: false, error: 'ระบุชื่อผู้แจ้ง' };
+  if (!sheText_(x.detail, 2000)) return { ok: false, error: 'ระบุรายละเอียดสิ่งผิดปกติที่พบ' };
+  var pick = function (arr, dict) { return (Array.isArray(arr) ? arr : []).filter(function (k) { return dict[k]; }).join(','); };
+  return purLocked_(function () {
+    var ss = sheBook_(dept), now = purNow_();
+    var row = x.id ? purRead_(ss, 'she_abnormal').filter(function (r) { return r.id === x.id; })[0] : null;
+    if (x.id && !row) return { ok: false, error: 'ไม่พบรายการ' };
+    var rec = row || { id: purId_('AB'), code: sheAbCode_(ss, date), files: '[]', createdAt: now };
+    rec.reportDate = date; rec.reporter = purClean_(x.reporter, 120); rec.reporterDept = purClean_(x.reporterDept, 120);
+    rec.building = SHE_AB_BUILD_.indexOf(x.building) >= 0 ? x.building : ''; rec.buildingOther = rec.building === 'other' ? purClean_(x.buildingOther, 80) : '';
+    rec.spot = purClean_(x.spot, 200); rec.topics = pick(x.topics, SHE_AB_TOPICS_); rec.topicOther = rec.topics.indexOf('other') >= 0 ? purClean_(x.topicOther, 120) : '';
+    rec.detail = sheText_(x.detail, 2000); rec.initial = pick(x.initial, SHE_AB_INIT_); rec.initialNote = sheText_(x.initialNote, 1000);
+    rec.responsible = purClean_(x.responsible, 150); rec.fixPlan = sheText_(x.fixPlan, 1500); rec.dueDate = purDate_(x.dueDate) || ''; rec.doneDate = purDate_(x.doneDate) || '';
+    rec.result = x.result === 'ok' || x.result === 'fail' ? x.result : ''; rec.verifier = purClean_(x.verifier, 120); rec.verifyDate = purDate_(x.verifyDate) || '';
+    rec.updatedAt = now;
+    purWrite_(ss, 'she_abnormal', rec);
+    purLogWrite_(ss, row ? 'แก้รายงานสิ่งผิดปกติ' : 'บันทึกรายงานสิ่งผิดปกติ', 'she_abnormal', rec.id, rec.code + ' ' + rec.detail.slice(0, 60));
+    var out = purRead_(ss, 'she_abnormal').filter(function (r) { return r.id === rec.id; })[0];
+    return { ok: true, abnormal: sheAbOut_(out) };
+  });
+}
+function sheDeleteAbnormal(token, id) {
+  var dept = requireShe_(token);
+  return purLocked_(function () {
+    var ss = sheBook_(dept), row = purRead_(ss, 'she_abnormal').filter(function (x) { return x.id === id; })[0];
+    if (!row) return { ok: false, error: 'ไม่พบรายการ' };
+    purParseFiles_(row.files).forEach(function (f) { try { DriveApp.getFileById(f.id).setTrashed(true); } catch (e) {} });
+    sheDeleteRow_(ss, 'she_abnormal', row);
+    purLogWrite_(ss, 'ลบรายงานสิ่งผิดปกติ', 'she_abnormal', id, row.code);
+    return { ok: true };
+  });
+}
+
 // ---------- รูปถ่าย (เก็บในโฟลเดอร์ Drive ของฝ่าย · เปิดดูได้ด้วยลิงก์ เพื่อแสดงในหน้าเว็บ/รายงาน) ----------
 var SHE_FILE_SLOTS_ = { finding: { table: 'she_findings', slots: { before: 'beforeFiles', after: 'afterFiles' } },
-  incident: { table: 'she_incidents', slots: { files: 'files' } }, check: { table: 'she_checks', slots: { files: 'files' } } };
+  incident: { table: 'she_incidents', slots: { files: 'files' } }, abnormal: { table: 'she_abnormal', slots: { files: 'files' } }, check: { table: 'she_checks', slots: { files: 'files' } } };
 function sheUploadFile(token, ownerType, ownerId, slot, fileName, mimeType, base64) {
   var dept = requireShe_(token);
   var o = SHE_FILE_SLOTS_[ownerType], col = o && o.slots[slot];
@@ -356,7 +414,7 @@ function sheUploadFile(token, ownerType, ownerId, slot, fileName, mimeType, base
     var ss = sheBook_(dept), row = purRead_(ss, o.table).filter(function (x) { return x.id === ownerId; })[0];
     if (!row) return { ok: false, error: 'ไม่พบรายการ' };
     var safe = purClean_(fileName, 100).replace(/[\\/:*?"<>|]/g, '_') || 'photo.jpg';
-    var prefix = ownerType === 'finding' ? (row.code || row.id) + '_' + (slot === 'before' ? 'ก่อน' : 'หลัง') : (row.date + '_' + row.id);
+    var prefix = ownerType === 'finding' ? (row.code || row.id) + '_' + (slot === 'before' ? 'ก่อน' : 'หลัง') : ownerType === 'abnormal' ? row.code : (row.date + '_' + row.id);
     var f = DriveApp.getFolderById(folderId).createFile(Utilities.newBlob(bytes, mimeType, prefix + '_' + safe));
     try { f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
     var files = purParseFiles_(row[col]);
