@@ -23,7 +23,10 @@ function hrcBook_() {
   if (!dept) throw new Error('ไม่พบฝ่ายบุคคล');
   hrRegister_(); PUR_TABLES_.hr_time = HRT_TABLE_; PUR_TABLES_.hr_faces = HRF_TABLE_;
   PUR_NUM_KEYS_.lateMin = 1; PUR_NUM_KEYS_.earlyMin = 1;
-  return { dept: dept, ss: purBook_(dept) };
+  var o = { dept: dept, ss: purBook_(dept) };
+  // อ่านจากฐานข้อมูลสำเนาของฝ่ายบุคคล (Supabase) ถ้าเชื่อมไว้ — เร็วกว่าอ่านชีต · บันทึกยังลงชีตเสมอ (ผู้ใช้ย้ายข้อมูล HR ไป Supabase 27/11/69)
+  o.rb = function () { if (!o._rb) o._rb = hrReadBook_(dept, function () { PUR_TABLES_.hr_time = HRT_TABLE_; PUR_TABLES_.hr_faces = HRF_TABLE_; PUR_NUM_KEYS_.lateMin = 1; PUR_NUM_KEYS_.earlyMin = 1; }); return o._rb; };
+  return o;
 }
 function hrcLiffId_() { return props_().getProperty('HR_CLOCK_LIFF_ID') || ''; }
 function hrcCfg_(ss) {
@@ -37,10 +40,15 @@ function hrcUser_(idToken) {
   var L = hrcLiffId_();
   if (!L) throw new Error('ฝ่ายบุคคลยังไม่ได้ตั้งค่าหน้าลงเวลา');
   if (!idToken) throw new Error('กรุณาเปิดหน้านี้จากปุ่ม "ลงเวลา" ในแอป LINE');
+  // ID token เดิมตรวจแล้วจำไว้ 10 นาที (เปิดหน้า → ลงทะเบียน / สแกน ไม่ต้องถาม LINE ซ้ำ)
+  var key = 'HRCU_' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(idToken))).slice(0, 40), c = CacheService.getScriptCache(), hit = c.get(key);
+  if (hit) try { return JSON.parse(hit); } catch (e) {}
   var res = UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/verify', { method: 'post', payload: { id_token: String(idToken), client_id: L.split('-')[0] }, muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) throw new Error('ยืนยันตัวตน LINE ไม่ผ่าน — ปิดหน้านี้แล้วกดปุ่ม "ลงเวลา" ใหม่');
-  var j = JSON.parse(res.getContentText());
-  return { id: j.sub, name: j.name || '' };
+  var j = JSON.parse(res.getContentText()), u = { id: j.sub, name: j.name || '' };
+  var ttl = Math.min(600, Math.floor((Number(j.exp) * 1000 - Date.now()) / 1000));
+  if (ttl > 30) try { c.put(key, JSON.stringify(u), ttl); } catch (e) {}
+  return u;
 }
 function hrcFaces_(row) { try { var a = JSON.parse(row.faces || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
 function hrcDesc_(d) {
@@ -77,13 +85,24 @@ function hrcSavePhoto_(dept, b64, name) {
 }
 function hrcEmpOut_(e) { return { id: e.id, name: e.fullName || '', nick: e.nickname || '', pos: e.position || '', group: e.group || '' }; }
 function hrcTodayRow_(ss, empId, date) { return hrById_(purRead_(ss, 'hr_time'), 'F' + date.replace(/-/g, '') + '_' + empId); }
+// หาแถววันนี้ในชีตด้วย TextFinder (ไม่ต้องอ่านทั้งแท็บลงเวลา ซึ่งมีข้อมูลเครื่องสแกนหลายพันแถว)
+function hrcFindRow_(ss, id) {
+  var sh = ss.getSheetByName(HRT_TABLE_.tab);
+  if (!sh || sh.getLastRow() < 2) return null;
+  var cell = sh.getRange(2, 1, sh.getLastRow() - 1, 1).createTextFinder(id).matchEntireCell(true).findNext();
+  if (!cell) return null;
+  var n = sh.getLastColumn(), head = sh.getRange(1, 1, 1, n).getValues()[0].map(String), v = sh.getRange(cell.getRow(), 1, 1, n).getValues()[0], o = { _row: cell.getRow() };
+  HRT_TABLE_.cols.forEach(function (c) { var i = head.indexOf(c[1]); if (i < 0) return; var x = v[i]; o[c[0]] = x instanceof Date ? (c[0] === 'date' ? purFmtDate_(x) : Utilities.formatDate(x, PUR_TZ_, c[0] === 'importedAt' || c[0] === 'editedAt' ? 'yyyy-MM-dd HH:mm:ss' : 'HH:mm')) : (x == null ? '' : String(x)); });
+  o.lateMin = Number(o.lateMin) || 0; o.earlyMin = Number(o.earlyMin) || 0;
+  return o;
+}
 function hrcRowOut_(r) { return r ? { timeIn: r.timeIn || '', timeOut: r.timeOut || '', lateMin: Number(r.lateMin) || 0, earlyMin: Number(r.earlyMin) || 0 } : null; }
 
 // ---------- หน้า LIFF (ไม่มีรหัสผ่าน — ยืนยันตัวตนด้วย LINE) ----------
 function hrClockInfo() { return { ok: true, liffId: hrcLiffId_() }; }   // LIFF ID ไม่ใช่ความลับ
 function hrClockInit(idToken) {
   try {
-    var u = hrcUser_(idToken), b = hrcBook_(), ss = b.ss, cfg = hrcCfg_(ss), today = purToday_();
+    var u = hrcUser_(idToken), b = hrcBook_(), ss = b.rb(), cfg = hrcCfg_(ss), today = purToday_();
     var me = purRead_(ss, 'hr_faces').filter(function (f) { return f.lineUserId === u.id; })[0];
     var day = hrcDay_(cfg, today), base = { ok: true, today: today, now: purNow_().slice(11, 16), day: day,
       geo: { set: !!(cfg.lat && cfg.lng), lat: Number(cfg.lat) || 0, lng: Number(cfg.lng) || 0, radius: Number(cfg.radius) || 200, maxAcc: Number(cfg.maxAcc) || 100 } };
@@ -141,9 +160,9 @@ function hrClockPunch(idToken, kind, desc, photo, geo, live, stamp) {
     if (!d) return { ok: false, error: 'อ่านใบหน้าไม่ได้ — สแกนใหม่อีกครั้ง' };
     if (!live) return { ok: false, error: 'ยังไม่ผ่านการกะพริบตา — สแกนใหม่อีกครั้ง' };
     return purLocked_(function () {
-      var ss = b.ss, cfg = hrcCfg_(ss), me = purRead_(ss, 'hr_faces').filter(function (f) { return f.lineUserId === u.id; })[0];
+      var ss = b.ss, rb = b.rb(), cfg = hrcCfg_(rb), me = purRead_(rb, 'hr_faces').filter(function (f) { return f.lineUserId === u.id; })[0];
       if (!me) return { ok: false, error: 'ยังไม่ได้ลงทะเบียนใบหน้า — ปิดแล้วเปิดหน้าใหม่' };
-      var emp = hrById_(purRead_(ss, 'hr_emps'), me.empId);
+      var emp = hrById_(purRead_(rb, 'hr_emps'), me.empId);
       if (!emp || emp.status === 'ลาออก') return { ok: false, error: 'บัญชีนี้ไม่ได้อยู่ในรายชื่อพนักงานที่ทำงานอยู่' };
       var dist = hrcBest_(hrcFaces_(me), d);
       if (dist > HRC_MATCH_) return { ok: false, face: true, error: 'ใบหน้าไม่ตรงกับที่ลงทะเบียนไว้ — ถอดหน้ากาก / แว่นกันแดด หันหน้าตรงในที่สว่าง แล้วลองใหม่' };
@@ -156,7 +175,7 @@ function hrClockPunch(idToken, kind, desc, photo, geo, live, stamp) {
       if (m > Number(cfg.radius || 200)) return { ok: false, error: 'อยู่นอกพื้นที่บริษัท (ห่าง ' + m + ' ม.)' };
       var now = purNow_(), at = hrcStampTime_(stamp), atS = at ? Utilities.formatDate(at, PUR_TZ_, 'yyyy-MM-dd HH:mm:ss') : now;
       var date = atS.slice(0, 10), hm = atS.slice(11, 16), day = hrcDay_(cfg, date);
-      var row = hrcTodayRow_(ss, emp.id, date);
+      var row = hrcFindRow_(ss, 'F' + date.replace(/-/g, '') + '_' + emp.id);
       if (kind === 'in' && row && row.timeIn) return { ok: false, error: 'วันนี้ลงเวลาเข้างานไปแล้ว ' + row.timeIn + ' น.', rec: hrcRowOut_(row) };
       if (kind === 'out' && !(row && row.timeIn)) return { ok: false, error: 'ยังไม่ได้ลงเวลาเข้างานวันนี้' };
       if (!row) row = { id: 'F' + date.replace(/-/g, '') + '_' + emp.id, date: date, machineId: HRC_SRC_, empId: emp.id, kind: '', editedAt: '' };
@@ -173,7 +192,6 @@ function hrClockPunch(idToken, kind, desc, photo, geo, live, stamp) {
       }
       purWrite_(ss, 'hr_time', row);
       if (kind === 'in') hrtSyncLeaves_(ss, [row], now);
-      me.lastUsedAt = now; purWrite_(ss, 'hr_faces', me);
       rcTouchDept_('HR');
       return { ok: true, kind: kind, time: hm, date: date, work: day.work, lateMin: Number(row.lateMin) || 0, earlyMin: Number(row.earlyMin) || 0,
         dist: m, score: hrcScore_(dist), rec: hrcRowOut_(row) };
@@ -184,7 +202,9 @@ function hrClockPunch(idToken, kind, desc, photo, geo, live, stamp) {
 // ---------- หน้าตั้งค่าฝ่ายบุคคล ----------
 function hrClockAdmin(token) {
   var dept = requireHr_(token), ss = hrBook_(dept); PUR_TABLES_.hr_faces = HRF_TABLE_;
-  var faces = purRead_(ss, 'hr_faces').map(function (f) { return { empId: f.empId, name: f.name, lineName: f.lineName, enrolledAt: String(f.enrolledAt || '').slice(0, 16), lastUsedAt: String(f.lastUsedAt || '').slice(0, 16), photo: f.photo || '' }; });
+  PUR_TABLES_.hr_time = HRT_TABLE_;
+  var last = {}; purRead_(ss, 'hr_time').forEach(function (r) { if (r.machineId !== HRC_SRC_) return; var t = String(r.importedAt || ''); if (t > (last[r.empId] || '')) last[r.empId] = t; });
+  var faces = purRead_(ss, 'hr_faces').map(function (f) { return { empId: f.empId, name: f.name, lineName: f.lineName, enrolledAt: String(f.enrolledAt || '').slice(0, 16), lastUsedAt: String(last[f.empId] || f.lastUsedAt || '').slice(0, 16), photo: f.photo || '' }; });
   var people = purRead_(ss, 'hr_emps').filter(function (e) { return e.status !== 'ลาออก'; }).map(hrcEmpOut_);
   var L = hrcLiffId_();
   return { ok: true, cfg: hrcCfg_(ss), liffId: L, liffUrl: L ? 'https://liff.line.me/' + L : '', page: HR_CLOCK_PAGE_, faces: faces, people: people };
