@@ -66,7 +66,8 @@ function respCall_(fn, f, args) {
   if (!kind) return f.apply(null, args);
   var dept = requireDept_(args[0]);   // ตรวจสิทธิ์ก่อนเสมอ · คีย์แยกตามแผนก จึงไม่เห็นผลของแผนกอื่น
   var key = rcKey_(fn, dept.key, args), stamp = rcStamp_(kind, dept.key), hit = rcGet_(key, stamp);
-  if (hit !== undefined) return hit;
+  if (hit !== undefined) { if (typeof PERF_ !== 'undefined' && PERF_) PERF_.rc = 'hit'; return hit; }
+  if (typeof PERF_ !== 'undefined' && PERF_) PERF_.rc = 'miss';
   var val = f.apply(null, args);
   rcPut_(key, val, stamp);
   return val;

@@ -38,7 +38,7 @@ function apiFunctions_() {
     hrTimeInit: hrTimeInit, hrTimeList: hrTimeList, hrTimeSave: hrTimeSave, hrTimeEdit: hrTimeEdit, hrJobs: hrJobs, hrSaveJob: hrSaveJob, hrDeleteJob: hrDeleteJob, hrFormInit: hrFormInit, hrFormFind: hrFormFind, hrFormPhotos: hrFormPhotos, hrFormBalance: hrFormBalance, hrFormSubmit: hrFormSubmit, hrLiffLoad: hrLiffLoad, hrLiffView: hrLiffView, hrLiffStatus: hrLiffStatus, hrLiffInfo: hrLiffInfo, hrLiffDecide: hrLiffDecide, hrSetLiff: hrSetLiff, hrFormUpload: hrFormUpload, hrAckAttach: hrAckAttach,
     // ฝ่ายบัญชี — รายงานรับออเดอร์ 7-11 (Acc.gs)
     accLoad: accLoad, cpLoad: cpLoad, cpSetSheet: cpSetSheet, cpPreview: cpPreview, cpSave: cpSave, cpSaveMap: cpSaveMap, cpUpdateLine: cpUpdateLine, cpRebuild: cpRebuild, cpSendLine: cpSendLine, cpSendMoveLine: cpSendMoveLine, cpMakeImportFiles: cpMakeImportFiles, cpMonthFiles: cpMonthFiles, cpAllFiles: cpAllFiles, acc711Preview: acc711Preview, acc711Save: acc711Save, acc711DeleteImport: acc711DeleteImport, acc711Report: acc711Report,
-    acc711Pdf: acc711Pdf, acc711SendLine: acc711SendLine, accLineTest: accLineTest, accLineOaInfo: accLineOaInfo, accSwitchOa: accSwitchOa, accLineDiag: accLineDiag, accSaveMap: accSaveMap, accUploadProductImage: accUploadProductImage, accDashboard: accDashboard,
+    acc711Pdf: acc711Pdf, acc711SendLine: acc711SendLine, accLineTest: accLineTest, accLineOaInfo: accLineOaInfo, accSwitchOa: accSwitchOa, accLineDiag: accLineDiag, deptPerfLog: deptPerfLog, accSaveMap: accSaveMap, accUploadProductImage: accUploadProductImage, accDashboard: accDashboard,
     // ฝ่ายประกันคุณภาพ — ข้อร้องเรียนลูกค้า (Qa.gs)
     qaLoad: qaLoad, qaSave: qaSave, qaDelete: qaDelete, qaUploadFile: qaUploadFile, qaRemoveFile: qaRemoveFile, qaSaveSettings: qaSaveSettings,
     qaLog: qaLog, qaDashboard: qaDashboard, qaSaveTest: qaSaveTest, qaDeleteTest: qaDeleteTest, qaSaveNewProd: qaSaveNewProd, qaDeleteNewProd: qaDeleteNewProd,
@@ -91,7 +91,9 @@ function doPost(e) {
     var args = Array.isArray(req.args) ? req.args.slice(0, 8) : [];
     try { deptDbNoteCall_(fn); } catch (e0) {}   // คำสั่งที่แก้ข้อมูลฝ่ายบัญชี → Dashboard คัดลอกข้อมูลใหม่ (DeptDb.gs)
     try { rcTouch_(fn, args); } catch (e2) {}   // คำสั่งแก้ข้อมูล → ผลที่เก็บไว้ของแผนกนั้นหมดอายุ (RespCache.gs)
+    try { perfStart_(fn); } catch (e4) {}
     out = { ok: true, val: respCall_(fn, fns[fn], args) };   // คำสั่งอ่าน: ใช้ผลที่เก็บไว้ถ้ามี
+    try { if (fn !== 'deptPerfLog') perfEnd_(); } catch (e5) {}
     try { rcTouch_(fn, args); } catch (e3) {}
     try { deptDbNoteCall_(fn); } catch (e1) {}
   } catch (err) {

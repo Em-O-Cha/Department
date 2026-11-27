@@ -92,7 +92,7 @@ function dbReplaceTab_(cfg, dept, book, tab, rows) {
 }
 // สมุดเสมือน: purRead_ อ่านจากฐานข้อมูลแทนชีต · opener() = เปิดชีตจริง (เมื่อจำเป็นเท่านั้น)
 function dbBook_(deptKey, book, cfg, opener, sheetId) {
-  var d = { dept: deptKey, book: book, cfg: cfg, cache: {}, opener: opener, real: null };
+  var d = { dept: deptKey, book: book, cfg: cfg, cache: {}, opener: opener, real: null, sheetId: sheetId || '' };
   var real = function () { if (!d.real) { d.real = opener(); try { CacheService.getScriptCache().put('DBN_' + deptKey + '_' + book, d.real.getName(), 21600); } catch (e) {} } return d.real; };
   d.realFn = real;
   return { __db: d, getId: function () { return sheetId || real().getId(); },
@@ -104,15 +104,43 @@ function dbBookRead_(ss, name) {
   if (!d.cache[name]) {
     var c = CacheService.getScriptCache(), k = 'DBT_' + d.dept + '_' + d.book + '_' + name;
     var ts = Number(c.get(k) || 0), dirty = Number(c.get('DBD_' + d.dept) || 0), now = Date.now(), rows = null;
-    if (ts && ts > dirty && now - ts < DB_STALE_MS_) { try { rows = dbReadTab_(d.cfg, d.dept, d.book, name); } catch (e) { rows = null; } }
+    // ผู้ใช้แจ้ง 27/11/69 ว่ายังช้า 40 วิ: เดิมเชื่อสำเนาแค่ 30 นาที → เกินแล้วต้องอ่านชีต + อัปโหลดใหม่ทุกครั้ง (ช้ากว่าไม่มีฐานข้อมูล)
+    // ตอนนี้: ใช้สำเนาได้ตราบใดที่ชีตยังไม่ถูกแก้ (เวลาแก้ไขล่าสุดของไฟล์ใน Drive ≤ เวลาที่คัดลอก) และระบบไม่ได้บันทึกอะไรหลังจากนั้น
+    var fresh = ts && ts > dirty && (now - ts < DB_STALE_MS_ || dbSheetEdited_(d) <= ts);
+    if (fresh) { try { rows = dbReadTab_(d.cfg, d.dept, d.book, name); perfNote_('db'); } catch (e) { rows = null; } }
     if (!rows) {
       rows = purRead_(d.realFn(), name);   // ชีตจริง (ไม่มี __db)
+      perfNote_('sheet');
       try { dbReplaceTab_(d.cfg, d.dept, d.book, name, rows); c.put(k, String(now), 21600); } catch (e) {}
     }
     d.cache[name] = rows;
   }
   return JSON.parse(JSON.stringify(d.cache[name]));
 }
+// เวลาแก้ไขล่าสุดของไฟล์ชีต (ms) — เก็บไว้ 60 วิ ต่อไฟล์ · อ่านไม่ได้ = ถือว่าเพิ่งแก้ (อ่านชีต)
+function dbSheetEdited_(d) {
+  if (!d.sheetId) return Infinity;
+  if (d.edited != null) return d.edited;
+  var c = CacheService.getScriptCache(), k = 'DBE_' + d.sheetId, v = c.get(k);
+  if (v) return (d.edited = Number(v));
+  try { d.edited = DriveApp.getFileById(d.sheetId).getLastUpdated().getTime(); c.put(k, String(d.edited), 60); } catch (e) { d.edited = Infinity; }
+  return d.edited;
+}
+// ---------- บันทึกเวลาที่ใช้ต่อคำสั่ง (ไว้ตรวจว่าช้าตรงไหน; ไม่มีข้อมูลลูกค้า) ----------
+var PERF_ = null;
+function perfStart_(fn) { PERF_ = { fn: fn, t0: Date.now(), db: 0, sheet: 0, rc: '' }; }
+function perfNote_(kind) { if (PERF_) PERF_[kind] = (PERF_[kind] || 0) + 1; }
+function perfEnd_() {
+  if (!PERF_) return;
+  try {
+    var c = CacheService.getScriptCache(), list = JSON.parse(c.get('PERF_LOG') || '[]');
+    list.unshift({ at: Utilities.formatDate(new Date(), PUR_TZ_, 'dd/MM HH:mm:ss'), fn: PERF_.fn, ms: Date.now() - PERF_.t0, cache: PERF_.rc, dbTabs: PERF_.db, sheetTabs: PERF_.sheet });
+    c.put('PERF_LOG', JSON.stringify(list.slice(0, 60)), 21600);
+  } catch (e) {}
+  PERF_ = null;
+}
+// สาธารณะ (ไม่มีข้อมูลลับ): ชื่อคำสั่ง + เวลาที่ใช้ล่าสุด 60 รายการ
+function deptPerfLog() { return { ok: true, log: JSON.parse(CacheService.getScriptCache().get('PERF_LOG') || '[]') }; }
 // สมุดย่อย CP Ram / ค่าใช้จ่าย ของสมุดเสมือน
 function dbSubBook_(main, book, id, prep) {
   var d = main.__db;
