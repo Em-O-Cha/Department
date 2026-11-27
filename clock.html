@@ -166,9 +166,12 @@
   }
   function boot() {
     var q = new URLSearchParams(location.search), lid = q.get('l');
-    gpsStart();
+    // ปุ่ม "ขอลา" ในเมนู LINE = ลิงก์ LIFF เดียวกัน + ?go=leave → ไปหน้าขอลาเลย (ไม่หาตำแหน่ง / ไม่โหลดระบบตรวจหน้า)
+    S.goLeave = q.get('go') === 'leave' || /go=leave/.test(q.get('liff.state') || '');
+    if (S.goLeave) { var lt = document.querySelector('#vLoad b'); if (lt) lt.textContent = 'กำลังเปิดหน้าขอลา…'; }
+    if (!S.goLeave) gpsStart();
     // เวลาตอนกดเมนู "ลงเวลา" (เปิดหน้านี้) — ใช้เป็นเวลาเข้างานถ้าสแกนเสร็จภายใน 3 นาที (ผู้ใช้ห่วงว่าเปิดหน้าช้าแล้วจะสาย 27/11/69)
-    S.openAt = Date.now(); S.openStamp = call('hrClockStamp').catch(function () { return null; });
+    S.openAt = Date.now(); S.openStamp = S.goLeave ? Promise.resolve(null) : call('hrClockStamp').catch(function () { return null; });
     var getId = lid ? Promise.resolve({ liffId: lid }) : call('hrClockInfo');
     getId.then(function (i) {
       if (!i || !i.liffId) throw new Error('ฝ่ายบุคคลยังไม่ได้ตั้งค่าหน้าลงเวลา');
@@ -176,11 +179,12 @@
     }).then(function () {
       if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return new Promise(function () {}); }
       S.tok = liff.getIDToken();
-      loadFace().catch(function () {});   // โหลดโมเดลใบหน้าไปพร้อมกัน
+      if (!S.goLeave) loadFace().catch(function () {});   // โหลดโมเดลใบหน้าไปพร้อมกัน
       return call('hrClockInit', [S.tok]);
     }).then(function (d) {
       if (!d || !d.ok) throw new Error((d && d.error) || 'โหลดข้อมูลไม่สำเร็จ');
       S.d = d;
+      if (S.goLeave && d.leaveUrl) { location.replace(d.leaveUrl); return; }
       if (d.blocked) return fatal(d.blocked);
       if (!d.registered) return regPage();
       home();
@@ -199,7 +203,7 @@
       + '<div class="gps" id="gps">📍<div>กำลังตรวจตำแหน่ง…<small>เปิด GPS และอนุญาตให้ LINE ใช้ตำแหน่ง</small></div></div>'
       + (stage === 'done' ? '<div class="msg info"><b>วันนี้ลงเวลาครบแล้ว ✓</b>ถ้าออกงานจริงช้ากว่าที่บันทึก กด "สแกนออกงานใหม่" ได้</div>' : '')
       + '<button class="btn ' + (stage === 'in' ? '' : 'out') + '" id="go" disabled>📷 ' + (stage === 'in' ? 'สแกนหน้า เข้างาน' : stage === 'out' ? 'สแกนหน้า ออกงาน' : 'สแกนออกงานใหม่') + '</button>'
-      + '<div style="font-size:13px;color:#475569;text-align:center;margin-top:-4px">' + (stage === 'in' ? 'เวลาเข้างาน = เวลาที่กดเมนู &quot;ลงเวลา&quot; (ถ้าสแกนเสร็จภายใน 3 นาที) — หน้าโหลดช้าไม่ทำให้สาย' : 'เวลาออกงาน = เวลาที่กดปุ่มสแกน') + '</div>' + '<button class="btn sec" id="regps">↻ ตรวจตำแหน่งอีกครั้ง</button>'
+      + '<div style="font-size:13px;color:#475569;text-align:center;margin-top:-4px">' + (stage === 'in' ? 'เวลาเข้างาน = เวลาที่กดเมนู &quot;ลงเวลา&quot; (ถ้าสแกนเสร็จภายใน 3 นาที) — หน้าโหลดช้าไม่ทำให้สาย' : 'เวลาออกงาน = เวลาที่กดปุ่มสแกน') + '</div>' + '<button class="btn sec" id="regps">↻ ตรวจตำแหน่งอีกครั้ง</button>' + (d.leaveUrl ? '<a class="btn sec" href="' + esc(d.leaveUrl) + '" style="text-decoration:none">📝 ขอลา / ดูวันลาคงเหลือ</a>' : '')
       + '<div class="today"><b>วันนี้</b><div><span>เข้างาน</span><span>' + (r.timeIn ? esc(r.timeIn) + ' น. ' + lateTag : '—') + '</span></div><div><span>ออกงาน</span><span>' + (r.timeOut ? esc(r.timeOut) + ' น.' + earlyTag : '—') + '</span></div></div>'
       + '</div>');
     tick();
@@ -294,11 +298,11 @@
   // ---------- ลงทะเบียนครั้งแรก ----------
   function regPage() {
     var d = S.d, sel = null;
-    if (!d.people || !d.people.length) return fatal('ยังไม่มีรายชื่อให้ลงทะเบียน', ' ฝ่ายบุคคลยังไม่ได้เปิดให้คุณใช้ลงเวลาด้วยใบหน้า หรือชื่อของคุณลงทะเบียนไปแล้ว — ติดต่อฝ่ายบุคคล');
+    if (!d.people || !d.people.length) { fatal('ยังไม่มีรายชื่อให้ลงทะเบียน', ' ฝ่ายบุคคลยังไม่ได้เปิดให้คุณใช้ลงเวลาด้วยใบหน้า หรือชื่อของคุณลงทะเบียนไปแล้ว — ติดต่อฝ่ายบุคคล'); if (d.leaveUrl) $('vMain').querySelector('.bd').insertAdjacentHTML('beforeend', '<a class="btn sec" href="' + esc(d.leaveUrl) + '" style="text-decoration:none">📝 ขอลา (ไม่ต้องลงทะเบียนหน้า)</a>'); return; }
     show('<div class="top"><small>ลงเวลาเข้า-ออกงาน</small><div class="who"><div class="av">👤</div><div><b>ลงทะเบียนใบหน้าครั้งแรก</b><span>ทำครั้งเดียว ใช้เวลาประมาณ 1 นาที</span></div></div></div>'
       + '<div class="bd"><div><b>1. เลือกชื่อของคุณ</b></div><input class="search" id="q" placeholder="ค้นหาชื่อ / ชื่อเล่น" aria-label="ค้นหาชื่อ"><div class="plist" id="pl"></div>'
       + '<div><b>2. ยินยอมให้เก็บข้อมูลใบหน้า</b></div><label class="chk"><input type="checkbox" id="ok"><span>ข้าพเจ้ายินยอมให้บริษัทเก็บข้อมูลใบหน้าและตำแหน่ง ณ เวลาลงเวลา เพื่อใช้ยืนยันการเข้า-ออกงานเท่านั้น ข้อมูลเก็บในระบบฝ่ายบุคคล ไม่เปิดเผยต่อผู้อื่น และขอให้ลบได้ทุกเมื่อผ่านฝ่ายบุคคล</span></label>'
-      + '<button class="btn out" id="start" disabled>📷 เริ่มถ่ายหน้า</button><div class="msg info" style="font-size:14px">ถอดหน้ากาก / หมวก / แว่นกันแดด ยืนในที่สว่าง แสงอยู่ด้านหน้า ระบบจะถ่ายหลายรูปจนมั่นใจเอง</div></div>');
+      + '<button class="btn out" id="start" disabled>📷 เริ่มถ่ายหน้า</button><div class="msg info" style="font-size:14px">ถอดหน้ากาก / หมวก / แว่นกันแดด ยืนในที่สว่าง แสงอยู่ด้านหน้า ระบบจะถ่ายหลายรูปจนมั่นใจเอง</div>' + (d.leaveUrl ? '<a class="btn sec" href="' + esc(d.leaveUrl) + '" style="text-decoration:none">📝 จะขอลา? กดที่นี่ (ไม่ต้องลงทะเบียนหน้า)</a>' : '') + '</div>');
     var draw = function () {
       var q = $('q').value.trim().toLowerCase();
       $('pl').innerHTML = d.people.filter(function (p) { return !q || (p.name + ' ' + p.nick).toLowerCase().indexOf(q) >= 0; }).map(function (p) {

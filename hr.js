@@ -1121,7 +1121,8 @@
         + '<div class="pf"><label>Endpoint URL</label><input id="ckPage" readonly value="' + esc(r.page) + '"></div>'
         + '<div class="pfoot"><input id="ckLiff" autocomplete="off" aria-label="LIFF ID หน้าลงเวลา" placeholder="LIFF ID เช่น 1234567890-AbCdEfGh" value="' + esc(r.liffId || '') + '" style="flex:1;min-width:200px;padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit">'
         + '<button class="btn btn-sm btn-primary" id="ckLiffSave">บันทึก LIFF ID</button><button class="btn btn-sm btn-line" id="ckPageCopy">' + icon('copy', 16) + ' คัดลอก Endpoint URL</button></div>'
-        + (r.liffUrl ? '<div class="pf"><label>ลิงก์สำหรับปุ่ม "ลงเวลา" ในเมนู LINE (Rich menu → Action: Link)</label><input id="ckUrl" readonly value="' + esc(r.liffUrl) + '"></div><div class="pfoot"><button class="btn btn-sm btn-line" id="ckUrlCopy">' + icon('copy', 16) + ' คัดลอกลิงก์ปุ่ม</button></div>' : '')
+        + (r.liffUrl ? '<div class="pf"><label>ลิงก์สำหรับปุ่ม "ลงเวลา" ในเมนู LINE (Rich menu → Action: Link)</label><input id="ckUrl" readonly value="' + esc(r.liffUrl) + '"></div><div class="pfoot"><button class="btn btn-sm btn-line" id="ckUrlCopy">' + icon('copy', 16) + ' คัดลอกลิงก์ปุ่ม</button></div>'
+          + '<div class="pf"><label>ลิงก์สำหรับปุ่ม "ขอลา" ในเมนู LINE (เปิดแบบฟอร์มขอลา · คนที่ลงทะเบียนหน้าแล้วระบบเลือกชื่อให้เลย)</label><input id="ckLvUrl" readonly value="' + esc(r.liffUrl + '?go=leave') + '"></div><div class="pfoot"><button class="btn btn-sm btn-line" id="ckLvCopy">' + icon('copy', 16) + ' คัดลอกลิงก์ปุ่มขอลา</button></div>' : '')
         + '<div class="' + (c.lat && c.lng ? 'ok' : '') + '">2. จุดลงเวลา (บริษัท) ' + (c.lat && c.lng ? '✅' : '⏳ ยังไม่ได้ตั้ง') + '</div>'
         + '<p class="muted" style="margin:2px 0 6px;font-size:13.5px">วิธีง่ายสุด: ยืนอยู่ที่บริษัทแล้วกด "ใช้ตำแหน่งที่ยืนอยู่ตอนนี้" · หรือวางพิกัด / ลิงก์ Google Maps ที่มีพิกัด (กดค้างบนแผนที่ → คัดลอกตัวเลขพิกัด)</p>'
         + '<div class="pform">' + inp('ckLat', 'ละติจูด', c.lat, 'text', ' inputmode="decimal" placeholder="เช่น 14.0712"') + inp('ckLng', 'ลองจิจูด', c.lng, 'text', ' inputmode="decimal" placeholder="เช่น 100.6123"')
@@ -1146,6 +1147,7 @@
       var copy = function (id, txt) { var i = $(id); i.select(); try { navigator.clipboard.writeText(txt); } catch (e) { document.execCommand('copy'); } toast('คัดลอกแล้ว'); };
       $('ckPageCopy').addEventListener('click', function () { copy('ckPage', r.page); });
       if ($('ckUrlCopy')) $('ckUrlCopy').addEventListener('click', function () { copy('ckUrl', r.liffUrl); });
+      if ($('ckLvCopy')) $('ckLvCopy').addEventListener('click', function () { copy('ckLvUrl', r.liffUrl + '?go=leave'); });
       $('ckLiffSave').addEventListener('click', function () {
         var b = this; b.disabled = true;
         call('hrClockSetLiff', state.token, $('ckLiff').value.trim()).then(function (x) { b.disabled = false; if (!x.ok) return toast(x.error); toast(x.liffId ? 'บันทึก LIFF ID แล้ว — คัดลอกลิงก์ปุ่มไปใส่ในเมนู LINE' : 'ลบ LIFF ID แล้ว'); clockSettings(); })

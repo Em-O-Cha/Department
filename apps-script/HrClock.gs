@@ -98,6 +98,8 @@ function hrcFindRow_(ss, id) {
 }
 function hrcRowOut_(r) { return r ? { timeIn: r.timeIn || '', timeOut: r.timeOut || '', lateMin: Number(r.lateMin) || 0, earlyMin: Number(r.earlyMin) || 0 } : null; }
 
+// ปุ่ม "ขอลา" ในเมนู LINE (ผู้ใช้ขอ 27/11/69): เปิดแบบฟอร์มขอลาเดิม · คนที่ลงทะเบียนหน้าแล้ว = เลือกชื่อให้เลย (e=)
+function hrcLeaveUrl_(empId) { return HR_FORM_URL_ + '?k=' + encodeURIComponent(hrFormKey_()) + (empId ? '&e=' + encodeURIComponent(empId) : ''); }
 // ---------- หน้า LIFF (ไม่มีรหัสผ่าน — ยืนยันตัวตนด้วย LINE) ----------
 function hrClockInfo() { return { ok: true, liffId: hrcLiffId_() }; }   // LIFF ID ไม่ใช่ความลับ
 function hrClockInit(idToken) {
@@ -109,13 +111,13 @@ function hrClockInit(idToken) {
     if (me) {
       var emp = hrById_(purRead_(ss, 'hr_emps'), me.empId);
       if (!emp || emp.status === 'ลาออก') return Object.assign(base, { registered: false, blocked: 'บัญชีนี้ไม่ได้อยู่ในรายชื่อพนักงานที่ทำงานอยู่ — ติดต่อฝ่ายบุคคล' });
-      return Object.assign(base, { registered: true, emp: hrcEmpOut_(emp), rec: hrcRowOut_(hrcTodayRow_(ss, emp.id, today)) });
+      return Object.assign(base, { registered: true, emp: hrcEmpOut_(emp), rec: hrcRowOut_(hrcTodayRow_(ss, emp.id, today)), leaveUrl: hrcLeaveUrl_(emp.id) });
     }
     var used = {}; purRead_(ss, 'hr_faces').forEach(function (f) { used[f.empId] = 1; });
     var allow = {}; cfg.emps.forEach(function (id) { allow[id] = 1; });
     var list = purRead_(ss, 'hr_emps').filter(function (e) { return allow[e.id] && e.status !== 'ลาออก' && !used[e.id]; }).map(hrcEmpOut_)
       .sort(function (a, b) { return (a.nick || a.name).localeCompare(b.nick || b.name, 'th'); });
-    return Object.assign(base, { registered: false, lineName: u.name, people: list });
+    return Object.assign(base, { registered: false, lineName: u.name, people: list, leaveUrl: hrcLeaveUrl_('') });
   } catch (e) { return { ok: false, error: String(e.message || e) }; }
 }
 // ลงทะเบียนใบหน้าครั้งแรก: descs = รหัสใบหน้าหลายรูปที่หน้าเว็บถ่ายจนมั่นใจ (3–8 รูป)

@@ -97,6 +97,8 @@
       types: { sick: 'ဖျားနာခွင့်', personal: 'ကိစ္စခွင့်', vacation: 'နှစ်စဉ်ခွင့်', birthday: 'မွေးနေ့ခွင့်', maternity: 'မီးဖွားခွင့်', paternity: 'ကလေးပြုစုခွင့် (အမျိုးသား)', ordain: 'ရဟန်းခံခွင့်', other: 'အခြားခွင့်' }, calNote: 'အားလပ်ရက်များ အပါအဝင် ရက်တိုင်း ရေတွက်သည်', paid: 'လစာပေးသည်', unpaid: 'လစာမပေးပါ' }
   };
   var S = { lang: get('lang') || 'th', data: null, photos: {}, me: get('me') || '', emp: null, found: null, bal: null, f: { type: '', from: '', to: '', half: false, mode: 'full', tf: '', tt: '', reason: '', files: [], sup: get('sup') || '', by: get('by') || '' }, grp: '' };
+  // เปิดจากปุ่ม "ขอลา" ในเมนู LINE (หน้าลงเวลา clock.html ส่ง e = รหัสพนักงานที่ผูกกับบัญชี LINE) → เลือกชื่อให้เลย
+  (function () { var e = new URLSearchParams(location.search).get('e'); if (e) { S.me = e; set('me', e); } })();
   function get(k) { try { return localStorage.getItem('leave_' + k) || ''; } catch (e) { return ''; } }
   function set(k, v) { try { localStorage.setItem('leave_' + k, v); } catch (e) {} }
   function t(k) { return TX[S.lang][k]; }
