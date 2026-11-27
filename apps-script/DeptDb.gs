@@ -83,14 +83,32 @@ function dbFetch_(cfg, path, opt) {
   if (c < 200 || c >= 300) throw new Error('ฐานข้อมูลตอบกลับ ' + c + ': ' + String(r.getContentText()).slice(0, 160));
   return r.getContentText();
 }
-function dbReadTab_(cfg, dept, book, tab) {
-  var out = [], size = 1000;
-  for (var off = 0; off < 200000; off += size) {
-    var q = '/rest/v1/dept_rows?select=data&dept=eq.' + encodeURIComponent(dept) + '&book=eq.' + encodeURIComponent(book) + '&tab=eq.' + encodeURIComponent(tab) + '&order=row_no.asc&limit=' + size + '&offset=' + off;
-    var page = JSON.parse(dbFetch_(cfg, q) || '[]');
-    page.forEach(function (x) { out.push(x.data); });
-    if (page.length < size) break;
+// อ่านแท็บจากฐานข้อมูล: จำนวนแถวจาก dept_sync (คัดลอกพร้อมกัน) → ดึงทุกหน้าพร้อมกันด้วย fetchAll (เดิมทีละหน้า = ช้าเมื่อแถวเยอะ)
+function dbReadTab_(cfg, dept, book, tab, known) {
+  var t0 = Date.now(), size = 1000, base = '/rest/v1/dept_rows?select=data&dept=eq.' + encodeURIComponent(dept) + '&book=eq.' + encodeURIComponent(book) + '&tab=eq.' + encodeURIComponent(tab) + '&order=row_no.asc&limit=' + size + '&offset=';
+  var n = known >= 0 ? known : -1;
+  if (n < 0) try {
+    var s = JSON.parse(dbFetch_(cfg, '/rest/v1/dept_sync?select=rows&dept=eq.' + encodeURIComponent(dept) + '&book=eq.' + encodeURIComponent(book) + '&tab=eq.' + encodeURIComponent(tab)) || '[]');
+    if (s.length) n = Number(s[0].rows) || 0;
+  } catch (e) { n = -1; }
+  var out = [];
+  if (n >= 0) {
+    var reqs = [];
+    for (var off = 0; off < Math.max(n, 1); off += size) reqs.push({ url: cfg.url + base + off, method: 'get', headers: deptDbHeaders_(cfg.key), muteHttpExceptions: true });
+    UrlFetchApp.fetchAll(reqs).forEach(function (r) {
+      var c = r.getResponseCode();
+      if (c < 200 || c >= 300) throw new Error('ฐานข้อมูลตอบกลับ ' + c);
+      JSON.parse(r.getContentText() || '[]').forEach(function (x) { out.push(x.data); });
+    });
+    if (out.length !== n) throw new Error('จำนวนแถวไม่ตรง');   // กำลังคัดลอกอยู่ → อ่านจากชีตแทน
+  } else {
+    for (var o = 0; o < 200000; o += size) {
+      var page = JSON.parse(dbFetch_(cfg, base + o) || '[]');
+      page.forEach(function (x) { out.push(x.data); });
+      if (page.length < size) break;
+    }
   }
+  if (PERF_) { PERF_.dbMs = (PERF_.dbMs || 0) + Date.now() - t0; PERF_.rows = (PERF_.rows || 0) + out.length; }
   return out;
 }
 function dbReplaceTab_(cfg, dept, book, tab, rows) {
@@ -113,15 +131,16 @@ function dbBookRead_(ss, name) {
   var d = ss.__db;
   if (!d.cache[name]) {
     var c = CacheService.getScriptCache(), k = 'DBT_' + d.dept + '_' + d.book + '_' + name;
-    var ts = Number(c.get(k) || 0), dirty = Number(c.get('DBD_' + d.dept) || 0), now = Date.now(), rows = null;
+    var kv = String(c.get(k) || '').split('|'), ts = Number(kv[0] || 0), known = kv.length > 1 ? Number(kv[1]) : -1, dirty = Number(c.get('DBD_' + d.dept) || 0), now = Date.now(), rows = null;
     // ผู้ใช้แจ้ง 27/11/69 ว่ายังช้า 40 วิ: เดิมเชื่อสำเนาแค่ 30 นาที → เกินแล้วต้องอ่านชีต + อัปโหลดใหม่ทุกครั้ง (ช้ากว่าไม่มีฐานข้อมูล)
     // ตอนนี้: ใช้สำเนาได้ตราบใดที่ชีตยังไม่ถูกแก้ (เวลาแก้ไขล่าสุดของไฟล์ใน Drive ≤ เวลาที่คัดลอก) และระบบไม่ได้บันทึกอะไรหลังจากนั้น
     var fresh = ts && ts > dirty && (now - ts < DB_STALE_MS_ || dbSheetEdited_(d) <= ts);
-    if (fresh) { try { rows = dbReadTab_(d.cfg, d.dept, d.book, name); perfNote_('db'); } catch (e) { rows = null; } }
+    if (fresh) { try { rows = dbReadTab_(d.cfg, d.dept, d.book, name, known); perfNote_('db'); } catch (e) { rows = null; } }
     if (!rows) {
+      var t1 = Date.now();
       rows = purRead_(d.realFn(), name);   // ชีตจริง (ไม่มี __db)
-      perfNote_('sheet');
-      try { dbReplaceTab_(d.cfg, d.dept, d.book, name, rows); c.put(k, String(now), 21600); } catch (e) {}
+      perfNote_('sheet'); if (PERF_) PERF_.sheetMs = (PERF_.sheetMs || 0) + Date.now() - t1;
+      try { dbReplaceTab_(d.cfg, d.dept, d.book, name, rows); c.put(k, now + '|' + rows.length, 21600); } catch (e) {}
     }
     d.cache[name] = rows;
   }
@@ -144,7 +163,7 @@ function perfEnd_() {
   if (!PERF_) return;
   try {
     var c = CacheService.getScriptCache(), list = JSON.parse(c.get('PERF_LOG') || '[]');
-    list.unshift({ at: Utilities.formatDate(new Date(), PUR_TZ_, 'dd/MM HH:mm:ss'), fn: PERF_.fn, ms: Date.now() - PERF_.t0, cache: PERF_.rc, dbTabs: PERF_.db, sheetTabs: PERF_.sheet });
+    list.unshift({ at: Utilities.formatDate(new Date(), PUR_TZ_, 'dd/MM HH:mm:ss'), fn: PERF_.fn, ms: Date.now() - PERF_.t0, cache: PERF_.rc, dbTabs: PERF_.db, sheetTabs: PERF_.sheet, dbMs: PERF_.dbMs || 0, rows: PERF_.rows || 0, sheetMs: PERF_.sheetMs || 0 });
     c.put('PERF_LOG', JSON.stringify(list.slice(0, 60)), 21600);
   } catch (e) {}
   PERF_ = null;

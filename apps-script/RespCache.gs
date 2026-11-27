@@ -14,7 +14,7 @@ var RC_READ_ = {
   costLoad: 'all', execOverview: 'all', execDashboard: 'target', execPart: 'target'
 };
 // คำสั่งที่ไม่แก้ข้อมูล (ไม่ต้องเปลี่ยนตรา) นอกเหนือจาก RC_READ_
-var RC_NOWRITE_ = /^(getDepartments|getDepartmentHome|login|logout|getAdminStatus|adminOverview|adminDbStatus|execVerify|.*Log|.*Info|.*Test|.*Diag|.*Preview|.*Status|.*List|.*Check|costPurPrices|purPoSigs|purPoFile|hrFormInit|hrFormFind|hrFormPhotos|hrFormBalance|hrLiffView|hrLiffLoad|hrLiffStatus|hrLiffInfo|apAiRead)$/;
+var RC_NOWRITE_ = /^(getDepartments|getDepartmentHome|login|logout|getAdminStatus|adminOverview|adminDbStatus|adminSetDb|deptPerfLog|execVerify|.*Log|.*Info|.*Test|.*Diag|.*Preview|.*Status|.*List|.*Check|costPurPrices|purPoSigs|purPoFile|hrFormInit|hrFormFind|hrFormPhotos|hrFormBalance|hrLiffView|hrLiffLoad|hrLiffStatus|hrLiffInfo|apAiRead)$/;
 var RC_TTL_ = 1800;
 var RC_ALL_KEYS_ = null;
 var RC_TARGET_EXTRA_ = { COST: ['PUR', 'RD'], ACC: [] };   // ต้นทุนสินค้าอ่านราคาจากจัดซื้อ + สูตรจาก R&D
