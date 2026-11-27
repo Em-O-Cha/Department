@@ -91,7 +91,7 @@ function doPost(e) {
     var args = Array.isArray(req.args) ? req.args.slice(0, 8) : [];
     RC_IN_CALL_ = true;   // การแก้ข้อมูลในคำสั่งนี้ถูกจดทีละแท็บ (DeptDb.gs dbMarkTab_)
     try { rcTouch_(fn, args); } catch (e2) {}   // คำสั่งแก้ข้อมูล → ผลที่เก็บไว้ของแผนกนั้นหมดอายุ (RespCache.gs)
-    try { perfStart_(fn); dbTrackStart_(!(RC_READ_[fn] || RC_NOWRITE_.test(fn))); } catch (e4) {}
+    try { perfStart_(fn); dbTrackStart_(!rcIsRead_(fn)); } catch (e4) {}
     out = { ok: true, val: respCall_(fn, fns[fn], args) };   // คำสั่งอ่าน: ใช้ผลที่เก็บไว้ถ้ามี
     try { dbTrackEnd_(); if (fn !== 'deptPerfLog') perfEnd_(); } catch (e5) {}
     try { rcTouch_(fn, args); } catch (e3) {}

@@ -37,8 +37,12 @@ function rcTouchDept_(deptKey) {
   } catch (e) {}
 }
 // เรียกจาก doPost ก่อนและหลังทุกคำสั่ง
+// คำสั่งที่ไม่แก้ข้อมูล · ชื่อที่มีคำว่า Save / Delete / Set … ถือว่าแก้ข้อมูลเสมอ (ผู้ใช้แจ้ง 27/11/69: ฝ่ายความปลอดภัยบันทึกแล้วไม่ขึ้น —
+// sheSaveCheck ลงท้ายด้วย "Check" จึงถูกนับเป็นคำสั่งอ่าน ผลเดิมที่เก็บไว้ไม่หมดอายุ · เช่นเดียวกับ qaSaveTest / qaDeleteTest / sheDeleteCheck)
+var RC_WRITE_HINT_ = /(Save|Delete|Set|Upload|Update|Import|Send|Decide|Remove|Add|Merge|Rename|Close|Receive|Ack|Confirm|Seen|Use|Move|New)/;
+function rcIsRead_(fn) { return !RC_WRITE_HINT_.test(fn) && !!(RC_READ_[fn] || RC_NOWRITE_.test(fn)); }
 function rcTouch_(fn, args) {
-  if (RC_READ_[fn] || RC_NOWRITE_.test(fn)) return;
+  if (rcIsRead_(fn)) return;
   var t = args && args[0];
   if (typeof t !== 'string' || t.length < 16) return;
   var key = sessionKey_(t);
@@ -48,7 +52,7 @@ function rcTouch_(fn, args) {
 }
 function rcKey_(fn, deptKey, args) {
   var h = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, fn + '|' + JSON.stringify(args.slice(1)) + '|' + Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd'));
-  return 'RC2_' + deptKey + '_' + h.map(function (b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('');
+  return 'RC3_' + deptKey + '_' + h.map(function (b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('');
 }
 function rcGet_(key, stamp) {
   try {
