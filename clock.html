@@ -152,8 +152,21 @@
   }
 
   // ---------- เริ่ม ----------
+  // ตำแหน่ง: เริ่มหาตั้งแต่เปิดหน้า (ไปพร้อมกับโหลดข้อมูล) · ผ่านทันทีที่ได้ค่าที่อยู่ในพื้นที่และแม่นพอ ไม่ต้องรอครบเวลา
+  var G = { best: null, err: null, watch: null, t0: 0, cb: null };
+  function gpsStart() {
+    if (!navigator.geolocation) { G.err = 'nogeo'; return; }
+    if (G.watch != null) navigator.geolocation.clearWatch(G.watch);
+    G.best = null; G.err = null; G.t0 = Date.now();
+    G.watch = navigator.geolocation.watchPosition(function (p) {
+      var c = { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy) };
+      if (!G.best || c.acc <= G.best.acc) G.best = c;
+      if (G.cb) G.cb();
+    }, function (e) { G.err = e && e.code === 1 ? 'deny' : 'fail'; if (G.cb) G.cb(); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+  }
   function boot() {
     var q = new URLSearchParams(location.search), lid = q.get('l');
+    gpsStart();
     var getId = lid ? Promise.resolve({ liffId: lid }) : call('hrClockInfo');
     getId.then(function (i) {
       if (!i || !i.liffId) throw new Error('ฝ่ายบุคคลยังไม่ได้ตั้งค่าหน้าลงเวลา');
@@ -173,7 +186,6 @@
   }
 
   // ---------- หน้าหลัก ----------
-  var gpsWatch = null;
   function home(note) {
     var d = S.d, e = d.emp, r = d.rec || {}, day = d.day || {};
     var stage = !r.timeIn ? 'in' : (!r.timeOut ? 'out' : 'done');
@@ -185,12 +197,12 @@
       + '<div class="gps" id="gps">📍<div>กำลังตรวจตำแหน่ง…<small>เปิด GPS และอนุญาตให้ LINE ใช้ตำแหน่ง</small></div></div>'
       + (stage === 'done' ? '<div class="msg info"><b>วันนี้ลงเวลาครบแล้ว ✓</b>ถ้าออกงานจริงช้ากว่าที่บันทึก กด "สแกนออกงานใหม่" ได้</div>' : '')
       + '<button class="btn ' + (stage === 'in' ? '' : 'out') + '" id="go" disabled>📷 ' + (stage === 'in' ? 'สแกนหน้า เข้างาน' : stage === 'out' ? 'สแกนหน้า ออกงาน' : 'สแกนออกงานใหม่') + '</button>'
-      + '<button class="btn sec" id="regps">↻ ตรวจตำแหน่งอีกครั้ง</button>'
+      + '<div style="font-size:13px;color:#475569;text-align:center;margin-top:-4px">เวลาที่บันทึก = เวลาที่กดปุ่มนี้ (โหลดกล้องช้าก็ไม่ทำให้สาย)</div>' + '<button class="btn sec" id="regps">↻ ตรวจตำแหน่งอีกครั้ง</button>'
       + '<div class="today"><b>วันนี้</b><div><span>เข้างาน</span><span>' + (r.timeIn ? esc(r.timeIn) + ' น. ' + lateTag : '—') + '</span></div><div><span>ออกงาน</span><span>' + (r.timeOut ? esc(r.timeOut) + ' น.' + earlyTag : '—') + '</span></div></div>'
       + '</div>');
     tick();
     $('go').onclick = function () { scan(stage === 'in' ? 'in' : 'out'); };
-    $('regps').onclick = checkGps;
+    $('regps').onclick = function () { checkGps(true); };
     checkGps();
   }
   function tick() {
@@ -199,34 +211,39 @@
     S.tk = setInterval(function () { var el = $('clk'); if (!el) return clearInterval(S.tk); var m = (m0 + Math.floor((Date.now() - base) / 60000)) % 1440; el.textContent = ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + m % 60).slice(-2); }, 5000);
   }
   function meters(a, b, c, d) { var R = 6371000, r = Math.PI / 180, x = Math.sin((c - a) * r / 2), y = Math.sin((d - b) * r / 2); var h = x * x + Math.cos(a * r) * Math.cos(c * r) * y * y; return Math.round(R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h))); }
-  function checkGps() {
+  function checkGps(restart) {
     var g = S.d.geo, box = $('gps'), go = $('go');
-    var set = function (cls, t, s, ok) { if (!$('gps')) return; box.className = 'gps ' + cls; box.innerHTML = '📍<div>' + t + '<small>' + s + '</small></div>'; go.disabled = !ok; };
-    S.pos = null;
+    var set = function (cls, t, sub, ok) { if (!$('gps')) return; box.className = 'gps ' + cls; box.innerHTML = '📍<div>' + t + '<small>' + sub + '</small></div>'; go.disabled = !ok; };
+    S.pos = null; clearTimeout(G.to);
     if (!g.set) return set('bad', 'ฝ่ายบุคคลยังไม่ได้ตั้งจุดลงเวลา ✕', 'แจ้งฝ่ายบุคคล', false);
-    if (!navigator.geolocation) return set('bad', 'มือถือนี้ใช้ตำแหน่งไม่ได้ ✕', 'อัปเดตแอป LINE แล้วลองใหม่', false);
-    set('', 'กำลังตรวจตำแหน่ง…', 'รอสักครู่ (ไม่เกิน 20 วินาที)', false);
-    if (gpsWatch != null) navigator.geolocation.clearWatch(gpsWatch);
-    var best = null, t0 = Date.now();
-    var fin = function () {
-      if (gpsWatch != null) { navigator.geolocation.clearWatch(gpsWatch); gpsWatch = null; }
-      if (!best) return set('bad', 'ไม่ได้รับตำแหน่ง ✕', 'เปิด GPS / อนุญาตให้ LINE ใช้ตำแหน่ง แล้วกด "ตรวจตำแหน่งอีกครั้ง"', false);
-      var m = meters(best.lat, best.lng, g.lat, g.lng);
-      if (best.acc > g.maxAcc) return set('bad', 'ตำแหน่งยังไม่แม่นพอ ✕', 'คลาดเคลื่อน ' + best.acc + ' ม. — ออกไปที่โล่ง / ใกล้หน้าต่าง แล้วลองใหม่', false);
-      if (m > g.radius) return set('bad', 'อยู่นอกพื้นที่บริษัท ✕', 'ห่าง ' + (m >= 1000 ? (m / 1000).toFixed(1) + ' กม.' : m + ' ม.') + ' · ต้องอยู่ภายใน ' + g.radius + ' ม.', false);
-      S.pos = best; set('ok', 'อยู่ในพื้นที่บริษัท ✓', 'ห่างจุดลงเวลา ' + m + ' ม. (รัศมี ' + g.radius + ' ม.)', true);
+    if (G.err === 'nogeo') return set('bad', 'มือถือนี้ใช้ตำแหน่งไม่ได้ ✕', 'อัปเดตแอป LINE แล้วลองใหม่', false);
+    if (restart) gpsStart();
+    var done = false;
+    var judge = function (final) {
+      if (done || !$('gps')) return;
+      var b = G.best;
+      if (b) {
+        var m = meters(b.lat, b.lng, g.lat, g.lng);
+        if (b.acc <= g.maxAcc && m <= g.radius) { done = true; S.pos = b; return set('ok', 'อยู่ในพื้นที่บริษัท ✓', 'ห่างจุดลงเวลา ' + m + ' ม. (รัศมี ' + g.radius + ' ม.)', true); }
+        var away = 'ห่าง ' + (m >= 1000 ? (m / 1000).toFixed(1) + ' กม.' : m + ' ม.') + ' · ต้องอยู่ภายใน ' + g.radius + ' ม.';
+        if (!final) return b.acc <= g.maxAcc ? set('bad', 'อยู่นอกพื้นที่บริษัท ✕', away + ' (เดินเข้ามาแล้วจะกดได้เอง)', false) : set('', 'กำลังตรวจตำแหน่ง…', 'ตอนนี้คลาดเคลื่อน ' + b.acc + ' ม. · รอให้แม่นขึ้น', false);
+        done = true;
+        if (b.acc > g.maxAcc) return set('bad', 'ตำแหน่งยังไม่แม่นพอ ✕', 'คลาดเคลื่อน ' + b.acc + ' ม. — ออกไปที่โล่ง / ใกล้หน้าต่าง แล้วกด "ตรวจตำแหน่งอีกครั้ง"', false);
+        return set('bad', 'อยู่นอกพื้นที่บริษัท ✕', away, false);
+      }
+      if (G.err === 'deny') { done = true; return set('bad', 'ยังไม่ได้อนุญาตให้ใช้ตำแหน่ง ✕', 'อนุญาตให้ LINE ใช้ตำแหน่งในการตั้งค่ามือถือ แล้วกด "ตรวจตำแหน่งอีกครั้ง"', false); }
+      if (final) { done = true; return set('bad', 'ไม่ได้รับตำแหน่ง ✕', 'เปิด GPS แล้วกด "ตรวจตำแหน่งอีกครั้ง"', false); }
+      set('', 'กำลังตรวจตำแหน่ง…', 'เปิด GPS และอนุญาตให้ LINE ใช้ตำแหน่ง', false);
     };
-    gpsWatch = navigator.geolocation.watchPosition(function (p) {
-      var c = { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy) };
-      if (!best || c.acc < best.acc) best = c;
-      if (best.acc <= Math.min(30, g.maxAcc) || Date.now() - t0 > 20000) fin();
-    }, function (e) { if (gpsWatch != null) { fin(); } }, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
-    setTimeout(function () { if (gpsWatch != null) fin(); }, 21000);
+    G.cb = function () { judge(false); };
+    judge(false);
+    G.to = setTimeout(function () { judge(true); }, Math.max(1000, 20000 - (Date.now() - G.t0)));
   }
-
   // ---------- สแกนหน้าลงเวลา (กะพริบตา 1 ครั้ง = คนจริง) ----------
   function scan(kind) {
     var run = ++S.run, pos = S.pos;
+    // เวลาที่บันทึก = เวลาที่กดปุ่มนี้ (เวลาของเซิร์ฟเวอร์) ไม่ใช่เวลาที่ส่งผลเสร็จ — โหลดกล้องช้าก็ไม่ทำให้สาย
+    var stampP = call('hrClockStamp').catch(function () { return null; });
     $('vCam').classList.remove('hidden'); $('dots').classList.add('hidden'); $('mask').className = 'mask';
     camUi('กำลังเปิดกล้อง…', 'ครั้งแรกอาจใช้เวลาโหลดระบบตรวจใบหน้า 5–10 วินาที'); steps([]);
     $('camCancel').onclick = function () { closeCam(); };
@@ -252,7 +269,7 @@
       var send = function (x) {
         var photo = snap(480), desc = Array.from(x.f.descriptor);
         closeCam(); busy(kind === 'in' ? 'กำลังบันทึกเวลาเข้างาน…' : 'กำลังบันทึกเวลาออกงาน…');
-        call('hrClockPunch', [S.tok, kind, desc, photo, pos, true]).then(function (r) { unbusy(); result(!!(r && r.ok), kind, r || {}); })
+        stampP.then(function (st) { return call('hrClockPunch', [S.tok, kind, desc, photo, pos, true, st]); }).then(function (r) { unbusy(); result(!!(r && r.ok), kind, r || {}); })
           .catch(function (e) { unbusy(); result(false, kind, { error: 'เชื่อมต่อไม่ได้ — ตรวจอินเทอร์เน็ตแล้วลองใหม่ (' + (e.message || e) + ')' }); });
       };
       loop();

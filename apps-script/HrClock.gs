@@ -125,8 +125,15 @@ function hrClockEnroll(idToken, empId, descs, photo) {
     });
   } catch (e) { return { ok: false, error: String(e.message || e) }; }
 }
+// เวลาตอนกดปุ่มสแกน (ผู้ใช้ห่วงว่าโหลดนานแล้วจะสาย 27/11/69): หน้าเว็บขอเวลานี้ทันทีที่กด → ลงเวลาตามเวลาที่กด ถ้าส่งผลภายใน 3 นาที
+// เวลามาจากเซิร์ฟเวอร์ + ลายเซ็น (แก้เวลาในมือถือไม่ได้)
+function hrClockStamp() { var t = Date.now(); return { ok: true, t: t, s: hrSign_('clk|' + t) }; }
+function hrcStampTime_(st) {
+  var t = st && Number(st.t), age = Date.now() - t;
+  return t && st.s === hrSign_('clk|' + t) && age >= 0 && age <= 180000 ? new Date(t) : null;
+}
 // ลงเวลา: kind in | out · desc = รหัสใบหน้าตอนนี้ · geo = {lat, lng, acc} · live = กะพริบตาผ่าน (หน้าเว็บตรวจ)
-function hrClockPunch(idToken, kind, desc, photo, geo, live) {
+function hrClockPunch(idToken, kind, desc, photo, geo, live, stamp) {
   try {
     var u = hrcUser_(idToken), b = hrcBook_();
     if (kind !== 'in' && kind !== 'out') return { ok: false, error: 'คำสั่งไม่ถูกต้อง' };
@@ -147,7 +154,8 @@ function hrClockPunch(idToken, kind, desc, photo, geo, live) {
       if (acc > Number(cfg.maxAcc || 100)) return { ok: false, error: 'ตำแหน่งยังไม่แม่นพอ (คลาดเคลื่อน ' + acc + ' ม.) — ออกไปที่โล่ง / เปิด GPS แล้วลองใหม่' };
       var m = hrcMeters_(lat, lng, Number(cfg.lat), Number(cfg.lng));
       if (m > Number(cfg.radius || 200)) return { ok: false, error: 'อยู่นอกพื้นที่บริษัท (ห่าง ' + m + ' ม.)' };
-      var now = purNow_(), date = now.slice(0, 10), hm = now.slice(11, 16), day = hrcDay_(cfg, date);
+      var now = purNow_(), at = hrcStampTime_(stamp), atS = at ? Utilities.formatDate(at, PUR_TZ_, 'yyyy-MM-dd HH:mm:ss') : now;
+      var date = atS.slice(0, 10), hm = atS.slice(11, 16), day = hrcDay_(cfg, date);
       var row = hrcTodayRow_(ss, emp.id, date);
       if (kind === 'in' && row && row.timeIn) return { ok: false, error: 'วันนี้ลงเวลาเข้างานไปแล้ว ' + row.timeIn + ' น.', rec: hrcRowOut_(row) };
       if (kind === 'out' && !(row && row.timeIn)) return { ok: false, error: 'ยังไม่ได้ลงเวลาเข้างานวันนี้' };
