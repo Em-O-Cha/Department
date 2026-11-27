@@ -83,6 +83,8 @@
   // สถานะใบลา: อนุมัติ = เขียว · รออนุมัติ = ส้ม · ไม่อนุมัติ = แดง (ผู้ใช้ขอ 20/11/69)
   function stTag(l) { var c = l.status === 'อนุมัติ' ? 'ok' : l.status === 'ไม่อนุมัติ' ? 'no' : 'wait'; return '<span class="hst ' + c + '">' + (l.status === 'อนุมัติ' ? '✓ อนุมัติแล้ว' : l.status === 'ไม่อนุมัติ' ? '✕ ไม่อนุมัติ' : '⏳ ' + esc(l.status || 'รออนุมัติ')) + '</span>'; }
   function emp(id) { return H.idx[id] || null; }
+  // ผู้กรอกแบบสั้นในรายการ (ผู้ใช้ขอ 27/11/69): "กรอกเอง · พี่ก้อย (ชื่อเต็ม)" → "กรอกเอง" · "หัวหน้ากรอกให้ · มายด์ (ชื่อเต็ม)" → "หัวหน้า มายด์ กรอกให้"
+  function byShort(t) { t = String(t || ''); if (/^กรอกเอง/.test(t)) return 'กรอกเอง'; var m = t.match(/^หัวหน้ากรอกให้\s*·\s*([^(]+)/); return m ? 'หัวหน้า ' + m[1].trim() + ' กรอกให้' : t; }
   function active() { return H.data.emps.filter(function (e) { return e.status !== 'ลาออก'; }); }
   function uniq(arr) { return arr.filter(function (x, i, a) { return x && a.indexOf(x) === i; }); }
   function confirmBox(msg, fn) { openModal({ color: '#dc2626', icon: 'warn', title: 'ยืนยัน', body: '<p>' + esc(msg) + '</p>', ok: 'ยืนยัน', submit: fn }); }
@@ -664,7 +666,7 @@
       + '<b style="flex:1">' + rows.length + ' รายการ</b><button class="btn btn-sm btn-line" id="lXls">' + icon('dl', 16) + ' ตารางสรุปเดือนนี้ (Excel)</button><button class="btn btn-sm btn-primary" id="lNew">' + icon('plus', 16) + ' บันทึกการลา</button></div>'
       + '<div class="plist">' + (rows.map(function (l) {
         var e = emp(l.empId) || { fullName: '(ไม่พบพนักงาน)' };
-        return '<button class="prow click" data-lv="' + l.id + '">' + photo(e, 'hph sm') + '<div class="pinfo"><b>' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</b><small>' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + (l.reason ? ' · ' + esc(l.reason) : '') + (l.filledBy ? ' · ผู้กรอก ' + esc(l.filledBy) : l.supervisor ? ' · หัวหน้างาน ' + esc(l.supervisor) : '') + '</small>' + attTag(l) + '</div>'
+        return '<button class="prow click hlv" data-lv="' + l.id + '">' + photo(e, 'hph sm') + '<div class="pinfo"><b>' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</b><small>' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + (l.reason ? ' · ' + esc(l.reason) : '') + (l.filledBy ? ' · ' + esc(byShort(l.filledBy)) : l.supervisor ? ' · หัวหน้างาน ' + esc(String(l.supervisor).replace(/\s*\(.*\)\s*$/, '')) : '') + '</small>' + attTag(l) + '</div>'
           + '<div class="pprice"><span class="htype ' + l.type + '">' + LT[l.type] + '</span><small>' + lvLen(l) + '</small>' + stTag(l) + '</div></button>';
       }).join('') || '<div class="panel muted">ไม่มีรายการ</div>') + '</div>';
     $('lM').addEventListener('change', function () { q.lm = v('lM'); if (q.lm && q.lm.slice(0, 4) < String(+H.data.today.slice(0, 4) - 1)) loadOld(q.lm); else leaves(); });
@@ -1245,6 +1247,10 @@
     '.pinfo .hnew{align-self:flex-start;margin-top:6px}.hnewbox{background:#fef2f2;border:1.5px solid #fca5a5;border-radius:14px;padding:10px 12px;margin:0 0 14px}.hnewbox>b{display:block;color:#b91c1c;margin-bottom:6px}',
     '@keyframes hnewp{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.55);opacity:1}50%{box-shadow:0 0 0 6px rgba(220,38,38,0);opacity:.75}}',
     '.hpcs{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}.hpc{background:#fff;border:1px solid var(--line);border-left:5px solid #f59e0b;border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow);min-width:0}',
+    // รายการลาแบบกระชับ (ผู้ใช้ขอ 27/11/69: แถวสูงเกิน): ประเภท · ชั่วโมง · สถานะ อยู่บรรทัดเดียวด้านขวา
+    '.prow.hlv{padding:7px 12px;gap:10px;flex-wrap:nowrap}.prow.hlv .hph.sm{width:34px;height:42px}.prow.hlv .pinfo b{font-size:15px}.prow.hlv .pinfo small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.prow.hlv .pinfo{min-width:0;flex:1}'
+    + '.prow.hlv .pprice{display:flex;flex-direction:row;align-items:center;gap:8px;flex:0 0 auto}.prow.hlv .pprice small{white-space:nowrap}'
+    + '@media (max-width:640px){.prow.hlv .pprice{flex-direction:column;align-items:flex-end;gap:2px}}',
     '.hpc-head{display:flex;gap:12px;align-items:center}.hpc-head .hph{flex:0 0 auto}.hpc-who{min-width:0;display:flex;flex-direction:column;gap:2px}.hpc-who b{font-size:16px;line-height:1.3;word-break:break-word}.hpc-nick{align-self:flex-start;font-size:13px;font-weight:700;color:#1e40af;background:#eff6ff;border-radius:99px;padding:1px 10px}',
     '.hpc-what{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:14.5px}.hpc-len{color:var(--muted)}',
     '.hpc-bal{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;font-size:12.5px}.hpc-bal span{display:flex;flex-direction:column;flex:1;min-width:0}.hpc-bal b{font-size:14.5px}.hpc-bal i{font-style:normal;font-weight:700}.hpc-bal.pos{background:#f0fdf4;color:#166534}.hpc-bal.neg{background:#fef2f2;color:#b91c1c}',
