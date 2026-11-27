@@ -201,8 +201,24 @@ function hrWorkDays_(from, to, st) {
 }
 
 // ---------- โหลดข้อมูลทั้งหมดของหน้า (การลาตั้งแต่ต้นปีที่แล้ว) ----------
+// ถึงวันที่ลาออกที่ตั้งไว้ล่วงหน้าแล้ว → เปลี่ยนสถานะเป็นลาออกให้เอง (พนักงาน + Job; ผู้ใช้ขอ 27/11/69) · เรียกตอนโหลดหน้า HR / แบบฟอร์มลา
+function hrAutoResign_(ss) {
+  var today = purToday_(), n = 0;
+  [['hr_emps', 'ลาออก'], ['hr_jobs', 'ลาออก']].forEach(function (t) {
+    if (t[0] === 'hr_jobs') { PUR_TABLES_.hr_jobs = HRJ_TABLE_; PUR_NUM_KEYS_.seq = 1; }
+    purRead_(ss, t[0]).forEach(function (r) {
+      if (r.endDate && String(r.endDate) <= today && r.status !== t[1]) {
+        r.status = t[1]; r.updatedAt = purNow_(); purWrite_(ss, t[0], r); n++;
+        purLogWrite_(ss, 'เปลี่ยนเป็นลาออกอัตโนมัติ (ถึงวันที่ออก)', t[0], r.id, (r.fullName || r.name || '') + ' · วันที่ออก ' + r.endDate);
+      }
+    });
+  });
+  if (n) rcTouchDept_('HR');
+  return n;
+}
 function hrLoad(token) {
   var dept = requireHr_(token), ss = hrBook_(dept), today = purToday_(), since = (+today.slice(0, 4) - 1) + '-01-01', st = hrSettings_(ss);
+  try { hrAutoResign_(ss); } catch (e) {}
   return {
     ok: true, today: today, sheetUrl: ss.getUrl(), hasFolder: !!deptConfig_(dept.key).folderId, settings: st,
     emps: purRead_(ss, 'hr_emps').map(hrEmpOut_).sort(function (a, b) { return (Number(a.seq) || 9999) - (Number(b.seq) || 9999); }),
@@ -240,8 +256,9 @@ function hrSaveEmp(token, e) {
     ['birthDate', 'startDate', 'endDate'].forEach(function (k) { if (e[k] !== undefined) rec[k] = purDate_(e[k]); });
     if (e.vacDays !== undefined) { var vd = String(e.vacDays).trim() === '' ? NaN : Number(e.vacDays); rec.vacDays = isFinite(vd) ? Math.max(0, Math.min(60, Math.round(vd * 2) / 2)) : ''; }
     rec.status = HR_STATUS_[e.status] ? e.status : (rec.status || 'ทำงาน');
+    // ผู้ใช้ขอ 27/11/69: วันที่ลาออกต้องไม่หาย (เดิมล้างทิ้งเมื่อสถานะยังไม่ใช่ลาออก) · ถึงวันที่ออกแล้ว = เปลี่ยนเป็นลาออกเอง · วันที่ในอนาคต = ยังทำงานอยู่จนถึงวันนั้น
+    if (rec.endDate && rec.endDate <= purToday_()) rec.status = 'ลาออก';
     if (rec.status === 'ลาออก' && !rec.endDate) rec.endDate = purToday_();
-    if (rec.status !== 'ลาออก') { rec.endDate = ''; }
     if (e.seq !== undefined && e.seq !== '') rec.seq = Math.round(Number(e.seq) || rec.seq);
     if (typeof e.photoThumb === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/.test(e.photoThumb) && e.photoThumb.length < 48000) rec.photoThumb = e.photoThumb;
     rec.updatedAt = now;

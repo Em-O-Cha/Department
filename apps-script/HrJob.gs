@@ -42,6 +42,7 @@ function hrSaveJob(token, j) {
     rec.startDate = purDate_(j.startDate);
     rec.endDate = purDate_(j.endDate);
     if (!rec.status) rec.status = 'ทำงานอยู่';
+    if (rec.endDate && rec.endDate <= purToday_()) rec.status = 'ลาออก';   // ถึงวันที่ออกแล้ว = ลาออก (ผู้ใช้ขอ 27/11/69)
     if (j.removePhoto) rec.photoThumb = '';
     else if (hrjThumb_(j.photoThumb)) rec.photoThumb = j.photoThumb;
     rec.updatedAt = now;

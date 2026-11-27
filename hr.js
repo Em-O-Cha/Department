@@ -10,6 +10,7 @@
     cal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
     idcard: '<rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="12" r="2.5"/><path d="M14 10h5M14 14h4"/>',
     book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+    dl: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
     gavel: '<path d="M14 13l-7.5 7.5a2.1 2.1 0 0 1-3-3L11 10"/><path d="M16 16l6-6M8 8l6-6M9 7l8 8M21 11l-8-8"/>'
   });
 
@@ -233,6 +234,14 @@
       return cols.map(function (c) { var v = r[c[0]]; if (v == null) return ''; if (/Date$/.test(c[0])) return v ? dd(v) : ''; return c[0] === 'seq' && v !== '' && !isNaN(v) ? Number(v) : String(v); });
     }));
   }
+  H.XP_EMP = XP_EMP; H.XP_JOB = XP_JOB;
+  // ปุ่ม Excel ด้านบน: ทะเบียนพนักงาน / Job = ไฟล์จัดรูปแบบพร้อมรูป · หน้าการลา = ตารางสรุปการลารายเดือน (ผู้ใช้ขอ 27/11/69, hrxls.js)
+  H.exportFile = function (page) {
+    if (!window.HRXLS || !H.data) return null;
+    if (page === 'h_emp' || page === 'h_job') return HRXLS.registry(page);
+    if (page === 'h_leave') return HRXLS.leaveMonth(H.q.lm || H.data.today.slice(0, 7));
+    return null;
+  };
   H.exportData = function (page) {
     if (page === 'h_emp' && H.data) {
       var e = H.data.emps.slice().sort(function (a, b) { return (Number(a.seq) || 9999) - (Number(b.seq) || 9999); });
@@ -652,7 +661,7 @@
       + pendingBox()
       + leaveTabs()
       + '<div class="pbar"><label class="pchk">เดือน <input type="month" id="lM" value="' + esc(q.lm) + '"></label><select id="lT"><option value="">ทุกประเภท</option>' + Object.keys(LT).map(function (k) { return '<option value="' + k + '"' + (q.lt === k ? ' selected' : '') + '>' + LT[k] + '</option>'; }).join('') + '</select>'
-      + '<b style="flex:1">' + rows.length + ' รายการ</b><button class="btn btn-sm btn-primary" id="lNew">' + icon('plus', 16) + ' บันทึกการลา</button></div>'
+      + '<b style="flex:1">' + rows.length + ' รายการ</b><button class="btn btn-sm btn-line" id="lXls">' + icon('dl', 16) + ' ตารางสรุปเดือนนี้ (Excel)</button><button class="btn btn-sm btn-primary" id="lNew">' + icon('plus', 16) + ' บันทึกการลา</button></div>'
       + '<div class="plist">' + (rows.map(function (l) {
         var e = emp(l.empId) || { fullName: '(ไม่พบพนักงาน)' };
         return '<button class="prow click" data-lv="' + l.id + '">' + photo(e, 'hph sm') + '<div class="pinfo"><b>' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</b><small>' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + (l.reason ? ' · ' + esc(l.reason) : '') + (l.filledBy ? ' · ผู้กรอก ' + esc(l.filledBy) : l.supervisor ? ' · หัวหน้างาน ' + esc(l.supervisor) : '') + '</small>' + attTag(l) + '</div>'
@@ -661,6 +670,10 @@
     $('lM').addEventListener('change', function () { q.lm = v('lM'); if (q.lm && q.lm.slice(0, 4) < String(+H.data.today.slice(0, 4) - 1)) loadOld(q.lm); else leaves(); });
     $('lT').addEventListener('change', function () { q.lt = v('lT'); leaves(); });
     $('lNew').addEventListener('click', function () { leaveModal(null); });
+    $('lXls').addEventListener('click', function () {
+      var b = this; b.disabled = true; b.innerHTML = '<span class="spinner dark"></span> กำลังสร้างไฟล์…';
+      HRXLS.leaveMonth(q.lm).catch(function (e) { toast('สร้างไฟล์ไม่ได้: ' + (e && e.message || e)); }).then(function () { b.disabled = false; b.innerHTML = icon('dl', 16) + ' ตารางสรุปเดือนนี้ (Excel)'; });
+    });
     on('[data-lv]', 'click', function (el) { var l = H.data.leaves.filter(function (x) { return x.id === el.getAttribute('data-lv'); })[0], nf = l ? newFiles(l) : []; ackAttach(l, el); H.newAtt = nf; leaveModal(l); H.newAtt = null; }, $('main'));
     bindLeaveTabs(); bindPending($('main'));
   }

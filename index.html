@@ -934,6 +934,7 @@
       var data = mod && mod.exportData ? mod.exportData(page) : null;
       return Promise.resolve(data).then(function (d) {
         var sheets = d && d.sheets && d.sheets.length ? d.sheets : xpScreenSheets();
+        if (state.dept && state.dept.key === 'HR' && window.HRXLS) return HRXLS.styled(sheets, xpFileName('xlsx'));   // ฝ่ายบุคคล: หัวตาราง + เส้นตาราง (ผู้ใช้ขอ 27/11/69)
         XLSX.writeFile(xpBook(sheets), xpFileName('xlsx'));
         toast('ดาวน์โหลดไฟล์ Excel แล้ว');
       });
@@ -1345,7 +1346,8 @@
 <script src="purchasing.js?v=36"></script>
 <script src="poapprove.js?v=9"></script>
 <script src="safety.js?v=20"></script>
-<script src="hr.js?v=39"></script>
+<script src="hr.js?v=40"></script>
+<script src="hrxls.js?v=2"></script>
 <script src="hrdaily.js?v=21"></script>
 <script src="hrtime.js?v=3"></script>
 <script src="accounting.js?v=44"></script>
