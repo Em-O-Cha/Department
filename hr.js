@@ -224,7 +224,7 @@
     }, function (e) { H.polling = false; if (String(e && e.message).indexOf('SESSION_EXPIRED') >= 0) { clearInterval(H.pollT); H.pollT = null; } });
   }
   H.dirtyLeaves = function () { pollLeaves(true); };   // หน้าลงเวลานำเข้าแล้ว → ดึงการลาใหม่ (มาสาย / ขาดงานจากเครื่องสแกน)
-  H.reset = function () { if (window.HRTIME) HRTIME.reset(); H.jobs = null; if (H.pollT) { clearInterval(H.pollT); H.pollT = null; } if (window.HRDAILY) HRDAILY.reset(); H.data = null; H.q = {}; H.photos = {}; H.photosLoaded = false; pageSize(''); };
+  H.reset = function () { H.dcache = null; H.dashSig = ''; if (window.HRTIME) HRTIME.reset(); H.jobs = null; if (H.pollT) { clearInterval(H.pollT); H.pollT = null; } if (window.HRDAILY) HRDAILY.reset(); H.data = null; H.q = {}; H.photos = {}; H.photosLoaded = false; pageSize(''); };
   // ปุ่ม "Excel" บนแถบด้านบน: ทะเบียนพนักงาน / พนักงาน Job ส่งข้อมูลครบทุกช่อง (หน้าอื่นอ่านจากหน้าจอ)
   var XP_EMP = [['code', 'รหัสพนักงาน'], ['seq', 'ลำดับ'], ['vacDays', 'วันลาพักร้อน (วัน/ปี)'], ['fullName', 'ชื่อ-นามสกุล'], ['nickname', 'ชื่อเล่น'], ['gender', 'เพศ'], ['nationality', 'สัญชาติ'], ['religion', 'ศาสนา'],
     ['birthDate', 'วันเกิด'], ['idNo', 'เลขบัตรประชาชน / พาสปอร์ต'], ['phone', 'เบอร์โทร'], ['addrReg', 'ที่อยู่ตามทะเบียนบ้าน'], ['addrNow', 'ที่อยู่ปัจจุบัน'], ['building', 'อาคาร'],
@@ -344,6 +344,7 @@
       pr.then(function (r) {
         if (mine !== H.dseq || state.page !== 'h_dash' || !r.ok) return;
         var sig = k + JSON.stringify(r);
+        H.dcache = H.dcache || {}; H.dcache[k] = { r: r, at: Date.now() };
         if (sig !== H.dashSig) { H.dashSig = sig; drawDash(r); }
       }).catch(function () {});
       return;
@@ -358,10 +359,14 @@
     on('[data-q]', 'click', function (el) { var p = el.getAttribute('data-q').split('|'); q.from = p[0]; q.to = p[1]; dash(); }, $('main'));
     ['dFrom', 'dTo'].forEach(function (id) { $(id).addEventListener('change', function () { if (v('dFrom') && v('dTo') && v('dFrom') <= v('dTo')) { q.from = v('dFrom'); q.to = v('dTo'); dash(); } }); });
     $('dPrint').addEventListener('click', function () { window.print(); });
+    // เหมือนฝ่ายบัญชี (ผู้ใช้ขอ 27/11/69): ผลสรุปที่เคยโหลดในช่วงวันที่เดียวกัน (ไม่เกิน 5 นาที) ขึ้นทันที แล้วเช็คข้อมูลใหม่เงียบ ๆ เบื้องหลัง
+    var key = q.from + '|' + q.to, hit = (H.dcache || {})[key];
+    if (hit && Date.now() - hit.at < 300000) { H.dashSig = key + JSON.stringify(hit.r); drawDash(hit.r); dash(true); return; }
     var my = H.dseq = (H.dseq || 0) + 1;
     call('hrDashboard', state.token, q.from, q.to).then(function (r) {
       if (my !== H.dseq || state.page !== 'h_dash') return;
-      H.dashSig = r.ok ? q.from + '|' + q.to + JSON.stringify(r) : '';
+      H.dashSig = r.ok ? key + JSON.stringify(r) : '';
+      if (r.ok) { H.dcache = H.dcache || {}; H.dcache[key] = { r: r, at: Date.now() }; }
       drawDash(r);
     }).catch(onServerError);
   }

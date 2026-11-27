@@ -19,7 +19,7 @@
     if (!X.depts) return [{ id: 'x_dash', label: 'Dashboard ทุกฝ่าย', ic: 'chart' }];
     return [{ group: 'เลือกฝ่าย' }].concat(X.depts.map(function (d) { return { id: 'x_dash_' + d.key, label: d.name + (d.ready ? '' : ' (ยังไม่มีข้อมูล)'), ic: d.key }; }));
   };
-  X.reset = function () { X.depts = null; X.data = null; X.q = {}; };
+  X.reset = function () { X.depts = null; X.data = null; X.cache = null; X.q = {}; };
 
   X.render = function (page) {
     var t = today();
@@ -60,12 +60,15 @@
     if (curDept().embed) return embed(curDept());
     var key = X.q.dept + '|' + X.q.from + '|' + X.q.to;
     if (X.data && X.data.key === key) return draw(X.data);
+    // เหมือนฝ่ายบัญชี (ผู้ใช้ขอ 27/11/69): ฝ่าย + ช่วงวันที่ที่เคยเปิดภายใน 5 นาที ขึ้นทันที (รวมส่วนเสริมที่โหลดแล้ว)
+    var hit = (X.cache || {})[key];
+    if (hit && Date.now() - hit.at < 300000) { X.data = hit.r; return draw(hit.r); }
     var my = ++X.seq;
     $('xOut').innerHTML = '<div class="panel"><span class="spinner dark"></span> กำลังโหลดข้อมูล…</div>';
     call('execDashboard', state.token, X.q.dept, X.q.from, X.q.to, true).then(function (r) {   // true = ส่วนหลักก่อน ส่วนเสริมโหลดทีละส่วน (execPart)
       if (my !== X.seq || String(state.page).indexOf('x_dash') !== 0) return;
       if (!r.ok) { $('xOut').innerHTML = '<div class="panel err">' + esc(r.error) + '</div>'; return; }
-      r.key = key; X.data = r; draw(r);
+      r.key = key; X.data = r; X.cache = X.cache || {}; X.cache[key] = { r: r, at: Date.now() }; draw(r);
     }).catch(onServerError);
   }
 
