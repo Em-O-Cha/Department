@@ -640,7 +640,7 @@ function sheDashboard_(dept, from, to) {
     incidents: { total: inc.length, accidents: accIn.length, near: near, lostDays: lostDays, lastAccident: last, safeDays: last ? sheDays_(last, today) : null,
       byType: cnt(inc, 'type', SHE_INC_TYPES_),
       list: inc.slice().sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); }).slice(0, 10).map(function (x) {
-        return { date: x.date, type: SHE_INC_TYPES_[x.type] || x.type, location: x.location, person: x.person, lostDays: x.lostDays, injury: x.injury };
+        return { date: x.date, type: SHE_INC_TYPES_[x.type] || x.type, location: x.location, person: x.person, lostDays: x.lostDays, injury: x.injury, photo: (purParseFiles_(x.files).filter(function (f) { return /^image\//.test(f.mime || 'image/'); })[0] || {}).id || '' };
       }) },
     abnormal: abnormal, trend: trend, insights: insights
   };

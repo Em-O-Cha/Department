@@ -226,7 +226,7 @@
       }), 'ยังไม่มีพื้นที่ตรวจ')
       + box(icon('warn', 18) + ' หัวข้อที่ไม่ผ่านบ่อย', i.topItems.map(function (t) { return bar(t.area + ' · ' + t.category, t.n, i.topItems[0].n, '#dc2626'); }), 'ไม่มีข้อที่ไม่ผ่านในช่วงนี้ 👍')
       + box(icon('warn', 18) + ' ข้อบกพร่องเกินกำหนดแก้ไข', f.overdueList.map(function (o) {
-        return '<div class="li click" data-fd="' + esc(o.id) + '"><span>' + esc(o.code) + ' · ' + esc(o.location) + ' · ' + esc(o.problem) + '</span><b class="neg">' + dd(o.dueDate) + '</b><small>ผู้รับผิดชอบ ' + esc(o.responsible || '-') + ' · ความเสี่ยง' + (RISK[o.risk] || '') + '</small></div>';
+        return '<div class="li click' + (o.photo ? ' sabli' : '') + '" data-fd="' + esc(o.id) + '">' + (o.photo ? '<img src="' + img(o.photo, 240) + '" alt="" loading="lazy">' : '') + '<span>' + esc(o.code) + ' · ' + esc(o.location) + ' · ' + esc(o.problem) + '</span><b class="neg">' + dd(o.dueDate) + '</b><small>ผู้รับผิดชอบ ' + esc(o.responsible || '-') + ' · ความเสี่ยง' + (RISK[o.risk] || '') + '</small></div>';
       }), 'ไม่มีรายการเกินกำหนด')
       + box(icon('chart', 18) + ' ข้อบกพร่องแยกพื้นที่ / ความเสี่ยง', f.byArea.map(function (a) { return bar(a.name, a.n, f.byArea[0].n, '#d97706'); })
         .concat(f.byRisk.length ? ['<div class="xsep" style="margin:12px 0"></div>' + (window.DCH ? window.DCH.donut(f.byRisk.map(function (rk) { return { name: 'ความเสี่ยง' + rk.name, n: rk.n, color: /สูง|วิกฤต/.test(rk.name) ? '#dc2626' : /กลาง/.test(rk.name) ? '#f59e0b' : /ต่ำ/.test(rk.name) ? '#16a34a' : null }; }), { sub: 'ข้อบกพร่อง', unit: ' เรื่อง', title: 'ข้อบกพร่องแยกความเสี่ยง' }) : '<div class="srisk">' + f.byRisk.map(function (rk) { return '<span>' + esc(rk.name) + ' <b>' + rk.n + '</b></span>'; }).join('') + '</div>')] : []), 'ไม่มีข้อบกพร่องในช่วงนี้')
@@ -239,10 +239,10 @@
               { name: 'อุบัติเหตุ / เกือบเกิด', color: '#dc2626', fill: false, dash: true, values: T.map(function (m) { return m.incidents + m.near; }) }], unit: ' เรื่อง' }) + '</div>';
       })() : '')
       + box(icon('alert', 18) + ' อุบัติเหตุ / เกือบเกิดเหตุ', (x.byType.length ? ['<div class="srisk">' + x.byType.map(function (t) { return '<span>' + esc(t.name) + ' <b>' + t.n + '</b></span>'; }).join('') + '</div>'] : [])
-        .concat(x.list.map(function (o) { return '<div class="li"><span>' + dd(o.date) + ' · ' + esc(o.type) + '</span><b>' + esc(o.location || '') + '</b><small>' + esc([o.person, o.injury, o.lostDays ? 'หยุดงาน ' + o.lostDays + ' วัน' : ''].filter(String).join(' · ')) + '</small></div>'; })), 'ไม่มีเหตุการณ์ในช่วงนี้')
+        .concat(x.list.map(function (o) { return '<div class="li' + (o.photo ? ' sabli' : '') + '">' + (o.photo ? '<img src="' + img(o.photo, 240) + '" alt="" loading="lazy">' : '') + '<span>' + dd(o.date) + ' · ' + esc(o.type) + '</span><b>' + esc(o.location || '') + '</b><small>' + esc([o.person, o.injury, o.lostDays ? 'หยุดงาน ' + o.lostDays + ' วัน' : ''].filter(String).join(' · ')) + '</small></div>'; })), 'ไม่มีเหตุการณ์ในช่วงนี้')
       + (r.abnormal ? box(icon('warn', 18) + ' รายงานสิ่งผิดปกติ (ยังไม่ปิด)', (r.abnormal.byTopic.length ? ['<div class="srisk">' + r.abnormal.byTopic.map(function (t) { return '<span>' + esc(t.name) + ' <b>' + t.n + '</b></span>'; }).join('') + '</div>'] : [])
         .concat(r.abnormal.list.map(function (o) {
-          return '<div class="li click' + (o.photo ? ' sabli' : '') + '" data-abo="' + esc(o.id) + '">' + (o.photo ? '<img src="' + img(o.photo, 160) + '" alt="" loading="lazy">' : '') + '<span>' + esc(o.code) + ' · ' + esc(o.place || '-') + ' · ' + esc(o.detail) + '</span>'
+          return '<div class="li click' + (o.photo ? ' sabli' : '') + '" data-abo="' + esc(o.id) + '">' + (o.photo ? '<img src="' + img(o.photo, 240) + '" alt="" loading="lazy">' : '') + '<span>' + esc(o.code) + ' · ' + esc(o.place || '-') + ' · ' + esc(o.detail) + '</span>'
             + '<b class="' + (o.late || o.fail ? 'neg' : '') + '">' + (o.dueDate ? 'กำหนด ' + dd(o.dueDate) : 'ยังไม่กำหนดวันเสร็จ') + '</b><small>แจ้ง ' + dd(o.reportDate) + ' · ผู้รับผิดชอบ ' + esc(o.responsible || '-') + (o.late ? ' · เกินกำหนด' : '') + (o.fail ? ' · ตรวจแล้วยังไม่เรียบร้อย' : '') + '</small></div>';
         })), 'ไม่มีรายงานที่ค้าง 👍') : '')
       + '</div>';
@@ -1546,7 +1546,7 @@
     '.srecent{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}.src{border:1px solid var(--line);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:4px;font-size:13px;cursor:pointer}.src img,.src .snoimg{width:100%;height:110px;object-fit:cover;border-radius:8px}.src span{color:#334155}',
     // รายงาน FM-05 / FM-06 (A4 แนวนอน)
     '.sabst{display:inline-block;font-size:11.5px;font-weight:700;color:var(--s);background:color-mix(in srgb,var(--s) 12%,white);border-radius:99px;padding:1px 8px;vertical-align:1px}.sab1{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:#334155!important}',
-    '.li.sabli{grid-template-columns:auto 1fr auto}.sabli img{grid-row:1/3;width:52px;height:52px;object-fit:cover;border-radius:8px}.li.sabli small{grid-column:2/-1}',
+    '.li.sabli{grid-template-columns:auto 1fr auto}.sabli img{grid-row:1/3;width:76px;height:76px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0}.li.sabli small{grid-column:2/-1}',
     '.sabsec{border:1px solid #e2e8f0;border-radius:12px;padding:12px;margin-top:12px}.sabh{font-weight:800;color:#fff;background:var(--c);border-radius:8px;padding:6px 10px;margin:-2px -2px 10px;font-size:14px}',
     '.sabchk{display:flex;flex-wrap:wrap;gap:8px}.sabchk label{display:flex;align-items:center;gap:6px;border:1px solid #cbd5e1;border-radius:10px;padding:8px 12px;cursor:pointer;font-size:14px;background:#fff}.sabchk label:has(input:checked){border-color:var(--c);background:color-mix(in srgb,var(--c) 10%,white);font-weight:700}.sabchk input{width:18px;height:18px;margin:0;accent-color:var(--c)}',
     '.sabnote{margin:12px 0 0;font-size:12.5px;color:#b91c1c;font-style:italic}',
