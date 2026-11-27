@@ -52,9 +52,14 @@
     var pd = topRight.filter(function (t) { return RX.date.test(t.s); })[0];
     var term = topRight.filter(function (t) { return /^:\s*\d+$/.test(t.s); })[0];
     // ส่งที่: แบบเดิม "0400 / WD01 LLKC RM WHD" · แบบใหม่มีแค่รหัส "0412" (อยู่แถวเดียวกับสกุลเงิน THB ด้านขวา)
-    var ship = items.filter(function (t) { return RX.ship.test(t.s); })[0];
+    // ผู้ใช้ย้ำ 27/11/69: ใช้ช่อง "ส่งที่" เท่านั้น ห้ามใช้ "นำส่ง" — ที่อยู่นำส่ง (เช่น "789/173 หมู่1") ก็หน้าตาเป็น ตัวเลข/… เหมือนกัน
+    // จึงเลือก: ① แถวเดียวกับสกุลเงิน (THB) ② ตัวที่อยู่ต่ำสุด (ช่องส่งที่อยู่ใต้นำส่งเสมอ) ③ ไม่มี "/" = รหัสอย่างเดียวในแถว THB
+    var cur = items.filter(function (t) { return /^[A-Z]{3}$/.test(t.s) && t.x > 380 && t.y > 540 && t.y < 640; })[0];
+    // หลัง "/" ของส่งที่เป็นอักษรอังกฤษ (WD01 …) · ที่อยู่ "789/173" หลัง "/" เป็นตัวเลข → ตัดออก · ข้อความมีภาษาไทย → ตัดออก
+    var shipC = items.filter(function (t) { return /^\d{3,5}\s*\/\s*[A-Z]/.test(t.s) && !/[\u0E00-\u0E7F]/.test(t.s) && t.x < 380; });
+    var ship = (cur && shipC.filter(function (t) { return Math.abs(t.y - cur.y) <= 4; })[0])
+      || shipC.sort(function (a, b) { return a.y - b.y; })[0];
     if (!ship) {
-      var cur = items.filter(function (t) { return /^[A-Z]{3}$/.test(t.s) && t.x > 380 && t.y > 540 && t.y < 640; })[0];
       ship = items.filter(function (t) { return /^\d{3,5}$/.test(t.s) && t.x > 40 && t.x < 200 && (cur ? Math.abs(t.y - cur.y) <= 4 : t.y > 575 && t.y < 615); })[0];
     }
     var pg = items.filter(function (t) { return /^\d+\s*\/\s*\d+$/.test(t.s) && t.y > 700; })[0];
