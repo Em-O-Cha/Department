@@ -195,6 +195,7 @@ function hrFormSubmit(key, r) {
   r = r || {};
   hrRate_('submit', 40, 600);
   if (HR_FORM_TYPES_.indexOf(r.type) < 0) return { ok: false, error: 'เลือกประเภทการลา' };
+  if (r.type === 'other' && !String(r.reason || '').trim()) return { ok: false, error: 'ลาอื่น ๆ ต้องใส่เหตุผล' };   // ผู้ใช้ขอ 27/11/69
   var today = purToday_(), f = purDate_(r.dateFrom), t = purDate_(r.dateTo) || f;
   if (!f) return { ok: false, error: 'เลือกวันที่ลา' };
   if (t < f) return { ok: false, error: 'วันที่สิ้นสุดต้องไม่ก่อนวันเริ่ม' };
