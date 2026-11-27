@@ -63,7 +63,7 @@ function execCfgKey_(key) { return key === 'COST' ? costHome_().key : key; }
 // รายชื่อฝ่าย + ฝ่ายไหนมี Dashboard แล้ว
 function execOverview(token) {
   requireExec_(token);
-  return { ok: true, depts: [EXEC_SALES_, EXEC_MARKETING_].concat(activeDepartments_().filter(function (d) { return !d.exec; }).map(function (d) {
+  return { ok: true, depts: [EXEC_SALES_, EXEC_MARKETING_].concat(activeDepartments_().filter(function (d) { return !d.exec && !d.noExec; }).map(function (d) {
     return { key: d.key, name: d.name, en: d.en, color: d.color, ready: !!EXEC_DASHBOARDS_[d.key] && !!deptConfig_(execCfgKey_(d.key)).sheetId };
   })) };
 }

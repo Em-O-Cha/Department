@@ -53,6 +53,10 @@ var DEPARTMENTS = [
   { key: 'COST', name: 'ต้นทุนสินค้า',        en: 'Product Costing',     color: '#dc2626',
     sheetId: '', ownerEmail: '', appUrl: '',
     menus: ['ต้นทุนสินค้า'] },
+  // ฝ่ายขาย (ผู้ใช้ขอ 27/11/69): เปิดระบบ Revenue Spunky Online เดิมในหน้าเดียวกัน (Sales.gs) · ไม่อยู่ในหน้าผู้บริหาร (มีแท็บ ฝ่ายขาย = Meeting Dashboard แล้ว)
+  { key: 'SALES', name: 'ฝ่ายขาย',            en: 'Sales · Revenue Spunky Online', color: '#168B55', noExec: true,
+    sheetId: '', ownerEmail: '', appUrl: '',
+    menus: [] },
   // ผู้บริหาร: ไม่ใช่แผนก — ดู Dashboard ของทุกฝ่ายได้อย่างเดียว (Executive.gs) · ตั้งรหัสผ่านเองด้วยรหัสตั้งค่าจากผู้ดูแลระบบ
   { key: 'EXEC', name: 'ผู้บริหาร',            en: 'Executive Dashboard', color: '#c62828', exec: true,
     sheetId: '', ownerEmail: '', appUrl: '',
@@ -141,7 +145,7 @@ function findDept_(key) {
 }
 
 // โมดูลที่ทำแล้วของแต่ละแผนก (หน้าเว็บสร้างเมนูตามโมดูล) — ยังไม่มี = เมนูตัวอย่าง
-var DEPT_MODULES_ = { HR: 'hr', ACC: 'accounting', PUR: 'purchasing', QA: 'quality', SHE: 'safety', PROD: 'production', RD: 'rd', COST: 'cost', EXEC: 'executive' };
+var DEPT_MODULES_ = { HR: 'hr', ACC: 'accounting', PUR: 'purchasing', QA: 'quality', SHE: 'safety', PROD: 'production', RD: 'rd', COST: 'cost', SALES: 'sales', EXEC: 'executive' };
 function deptView_(d) {
   return { key: d.key, name: d.name, en: d.en, color: d.color, menus: d.menus.slice(), ownerEmail: d.ownerEmail || '', module: DEPT_MODULES_[d.key] || '' };
 }
@@ -175,6 +179,7 @@ function openDeptSpreadsheet_(dept) {
 function deptSheetLinks_(dept) {
   var url = function (id) { return 'https://docs.google.com/spreadsheets/d/' + id + '/edit'; }, out = [];
   if (dept.exec) return out;
+  if (dept.key === 'SALES') return typeof salesSheetLinks_ === 'function' ? salesSheetLinks_() : out;
   var key = dept.key === 'COST' && typeof costHome_ === 'function' ? costHome_().key : dept.key, id = deptConfig_(key).sheetId;
   if (id) out.push({ label: dept.key === 'ACC' ? 'ชีตหลัก (ออเดอร์ 7-11 / ต่างประเทศ)' : 'Google Sheet ของฝ่าย', url: url(id) });
   if (dept.key === 'ACC' && id) {
