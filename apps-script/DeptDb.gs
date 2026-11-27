@@ -111,7 +111,17 @@ function dbReadTab_(cfg, dept, book, tab, known) {
   if (PERF_) { PERF_.dbMs = (PERF_.dbMs || 0) + Date.now() - t0; PERF_.rows = (PERF_.rows || 0) + out.length; }
   return out;
 }
+// รูปที่ฝังในชีต (data:image… เช่น รูปย่อพนักงาน) ไม่คัดลอกขึ้นฐานข้อมูล (ผู้ใช้ขอ 27/11/69: ไม่ให้เปลืองพื้นที่ Supabase)
+// หน้าที่ต้องใช้รูป (hrPhotos / hrFormPhotos / hrJobs) อ่านจากชีตโดยตรง
+function dbNoImg_(rows) {
+  return rows.map(function (r) {
+    var o = {};
+    Object.keys(r).forEach(function (k) { var v = r[k]; o[k] = typeof v === 'string' && v.indexOf('data:image/') === 0 ? '' : v; });
+    return o;
+  });
+}
 function dbReplaceTab_(cfg, dept, book, tab, rows) {
+  rows = dbNoImg_(rows);
   dbFetch_(cfg, '/rest/v1/rpc/replace_tab', { method: 'post', body: { p_dept: dept, p_book: book, p_tab: tab, p_rows: rows } });
 }
 // สมุดเสมือน: purRead_ อ่านจากฐานข้อมูลแทนชีต · opener() = เปิดชีตจริง (เมื่อจำเป็นเท่านั้น)
@@ -130,7 +140,7 @@ function dbBook_(deptKey, book, cfg, opener, sheetId) {
 function dbBookRead_(ss, name) {
   var d = ss.__db;
   if (!d.cache[name]) {
-    var c = CacheService.getScriptCache(), k = 'DBT_' + d.dept + '_' + d.book + '_' + name;
+    var c = CacheService.getScriptCache(), k = 'DBT_' + d.dept + '_' + d.book + '_' + name + (/^hr_(emps|jobs)$/.test(name) ? '_v2' : '');   // _v2 = คัดลอกใหม่ครั้งเดียวเพื่อลบรูปที่เคยขึ้นไปแล้ว
     var kv = String(c.get(k) || '').split('|'), ts = Number(kv[0] || 0), known = kv.length > 1 ? Number(kv[1]) : -1, dirty = Number(c.get('DBD_' + d.dept) || 0), now = Date.now(), rows = null;
     // ผู้ใช้แจ้ง 27/11/69 ว่ายังช้า 40 วิ: เดิมเชื่อสำเนาแค่ 30 นาที → เกินแล้วต้องอ่านชีต + อัปโหลดใหม่ทุกครั้ง (ช้ากว่าไม่มีฐานข้อมูล)
     // ตอนนี้: ใช้สำเนาได้ตราบใดที่ชีตยังไม่ถูกแก้ (เวลาแก้ไขล่าสุดของไฟล์ใน Drive ≤ เวลาที่คัดลอก) และระบบไม่ได้บันทึกอะไรหลังจากนั้น
@@ -139,8 +149,9 @@ function dbBookRead_(ss, name) {
     if (!rows) {
       var t1 = Date.now();
       rows = purRead_(d.realFn(), name);   // ชีตจริง (ไม่มี __db)
+      var full = rows; rows = dbNoImg_(rows);   // ให้ผลเหมือนอ่านจากฐานข้อมูล (ไม่มีรูป) ทุกครั้ง
       perfNote_('sheet'); if (PERF_) PERF_.sheetMs = (PERF_.sheetMs || 0) + Date.now() - t1;
-      try { dbReplaceTab_(d.cfg, d.dept, d.book, name, rows); c.put(k, now + '|' + rows.length, 21600); } catch (e) {}
+      try { dbReplaceTab_(d.cfg, d.dept, d.book, name, full); c.put(k, now + '|' + rows.length, 21600); } catch (e) {}
     }
     d.cache[name] = rows;
   }

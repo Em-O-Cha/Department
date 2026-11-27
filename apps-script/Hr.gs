@@ -232,7 +232,7 @@ function hrLoad(token) {
 }
 // รูปย่อพนักงานทั้งหมด { empId: dataUrl } — แยกจาก hrLoad เพราะขนาดใหญ่ (โหลดครั้งเดียว)
 function hrPhotos(token) {
-  var dept = requireHr_(token), ss = hrReadBook_(dept, hrPrepJob_), out = {};
+  var dept = requireHr_(token), ss = hrBook_(dept), out = {};   // รูปอยู่ในชีตเท่านั้น (ไม่คัดลอกขึ้นฐานข้อมูล)
   hrPeople_(ss).forEach(function (e) { if (/^data:image\//.test(String(e.photoThumb))) out[e.id] = e.photoThumb; });
   return { ok: true, photos: out };
 }

@@ -150,7 +150,7 @@ function hrFormFind(key, q) {
   }).slice(0, 8).map(hrFormEmp_) };
 }
 function hrFormPhotos(key) {   // รูปย่อทุกคน (พนักงาน + Job) สำหรับหน้าเลือกชื่อ
-  var dept = hrFormCheck_(key), ss = hrReadBook_(dept, hrPrepJob_), out = {};
+  var dept = hrFormCheck_(key), ss = hrBook_(dept), out = {};   // รูปอยู่ในชีตเท่านั้น
   hrPeople_(ss).forEach(function (e) { if (hrActive_(e) && /^data:image\//.test(String(e.photoThumb))) out[e.id] = e.photoThumb; });
   return { ok: true, photos: out };
 }
