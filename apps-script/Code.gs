@@ -119,6 +119,7 @@ function getDepartmentHome(token) {
   var dept = requireDept_(token);
   var view = deptView_(dept);
   view.sheet = sheetStatus_(dept);
+  try { view.sheetLinks = deptSheetLinks_(dept); } catch (e) { view.sheetLinks = []; }
   return { ok: true, dept: view };
 }
 
@@ -169,6 +170,21 @@ function openDeptSpreadsheet_(dept) {
   return SpreadsheetApp.openById(id);
 }
 
+// ลิงก์เปิด Google Sheet ของฝ่าย (ผู้ใช้ขอ 27/11/69: ทุกฝ่ายมีลิงก์เหมือนกัน) — แสดงในเมนูด้านซ้าย
+// บัญชี: ชีตหลัก + CP Ram + ค่าใช้จ่าย (ถ้าเชื่อมไว้) · ต้นทุน: ชีตที่เก็บต้นทุนจริง (COST หรือ RD) · ผู้บริหาร: ไม่มี
+function deptSheetLinks_(dept) {
+  var url = function (id) { return 'https://docs.google.com/spreadsheets/d/' + id + '/edit'; }, out = [];
+  if (dept.exec) return out;
+  var key = dept.key === 'COST' && typeof costHome_ === 'function' ? costHome_().key : dept.key, id = deptConfig_(key).sheetId;
+  if (id) out.push({ label: dept.key === 'ACC' ? 'ชีตหลัก (ออเดอร์ 7-11 / ต่างประเทศ)' : 'Google Sheet ของฝ่าย', url: url(id) });
+  if (dept.key === 'ACC' && id) {
+    try { var ss = accReadBook_(dept); accRegister_();
+      var cp = cpSheetId_(ss); if (cp) out.push({ label: 'ตารางส่งสินค้า CP Ram', url: url(cp) });
+      var ap = apSheetId_(ss); if (ap) out.push({ label: 'ค่าใช้จ่าย (จ่าย)', url: url(ap) });
+    } catch (e) {}
+  }
+  return out;
+}
 function sheetStatus_(dept) {
   if (!deptConfig_(dept.key).sheetId) return { connected: false, message: 'ยังไม่ได้เชื่อม Google Sheet' };
   try {
