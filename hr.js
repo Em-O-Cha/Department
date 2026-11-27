@@ -664,7 +664,7 @@
       + leaveTabs()
       + '<div class="pbar"><label class="pchk">เดือน <input type="month" id="lM" value="' + esc(q.lm) + '"></label><select id="lT"><option value="">ทุกประเภท</option>' + Object.keys(LT).map(function (k) { return '<option value="' + k + '"' + (q.lt === k ? ' selected' : '') + '>' + LT[k] + '</option>'; }).join('') + '</select>'
       + '<b style="flex:1">' + rows.length + ' รายการ</b><button class="btn btn-sm btn-line" id="lXls">' + icon('dl', 16) + ' ตารางสรุปเดือนนี้ (Excel)</button><button class="btn btn-sm btn-primary" id="lNew">' + icon('plus', 16) + ' บันทึกการลา</button></div>'
-      + '<div class="plist">' + (rows.map(function (l) {
+      + '<div class="plist hlvgrid">' + (rows.map(function (l) {
         var e = emp(l.empId) || { fullName: '(ไม่พบพนักงาน)' };
         return '<button class="prow click hlv" data-lv="' + l.id + '">' + photo(e, 'hph sm') + '<div class="pinfo"><b>' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</b><small>' + dd(l.dateFrom) + (l.dateTo && l.dateTo !== l.dateFrom ? ' – ' + dd(l.dateTo) : '') + (l.reason ? ' · ' + esc(l.reason) : '') + (l.filledBy ? ' · ' + esc(byShort(l.filledBy)) : l.supervisor ? ' · หัวหน้างาน ' + esc(String(l.supervisor).replace(/\s*\(.*\)\s*$/, '')) : '') + '</small>' + attTag(l) + '</div>'
           + '<div class="pprice"><span class="htype ' + l.type + '">' + LT[l.type] + '</span><small>' + lvLen(l) + '</small>' + stTag(l) + '</div></button>';
@@ -1248,7 +1248,8 @@
     '@keyframes hnewp{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.55);opacity:1}50%{box-shadow:0 0 0 6px rgba(220,38,38,0);opacity:.75}}',
     '.hpcs{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}.hpc{background:#fff;border:1px solid var(--line);border-left:5px solid #f59e0b;border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow);min-width:0}',
     // รายการลาแบบกระชับ (ผู้ใช้ขอ 27/11/69: แถวสูงเกิน): ประเภท · ชั่วโมง · สถานะ อยู่บรรทัดเดียวด้านขวา
-    '.prow.hlv{padding:7px 12px;gap:10px;flex-wrap:nowrap}.prow.hlv .hph.sm{width:34px;height:42px}.prow.hlv .pinfo b{font-size:15px}.prow.hlv .pinfo small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.prow.hlv .pinfo{min-width:0;flex:1}'
+    '@media (min-width:1000px){.plist.hlvgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.plist.hlvgrid>.prow,.plist.hlvgrid>.panel{margin:0}.plist.hlvgrid>.panel{grid-column:1/-1}.plist.hlvgrid .prow.hlv .pprice{display:grid;grid-template-columns:auto auto;gap:3px 6px;justify-items:end;align-items:center}.plist.hlvgrid .prow.hlv .pprice>.htype{grid-column:1/-1}}'
+    + '.prow.hlv{padding:7px 12px;gap:10px;flex-wrap:nowrap}.prow.hlv .hph.sm{width:34px;height:42px}.prow.hlv .pinfo b{font-size:15px}.prow.hlv .pinfo small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.prow.hlv .pinfo{min-width:0;flex:1}'
     + '.prow.hlv .pprice{display:flex;flex-direction:row;align-items:center;gap:8px;flex:0 0 auto}.prow.hlv .pprice small{white-space:nowrap}'
     + '@media (max-width:640px){.prow.hlv .pprice{flex-direction:column;align-items:flex-end;gap:2px}}',
     '.hpc-head{display:flex;gap:12px;align-items:center}.hpc-head .hph{flex:0 0 auto}.hpc-who{min-width:0;display:flex;flex-direction:column;gap:2px}.hpc-who b{font-size:16px;line-height:1.3;word-break:break-word}.hpc-nick{align-self:flex-start;font-size:13px;font-weight:700;color:#1e40af;background:#eff6ff;border-radius:99px;padding:1px 10px}',
