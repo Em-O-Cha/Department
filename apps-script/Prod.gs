@@ -189,7 +189,7 @@ function prdCalc_(o, prod, s) {
 
 // ---------- โหลดหน้า ----------
 function prdLoad(token, from, to) {
-  var dept = requirePrd_(token), ss = prdBook_(dept);
+  var dept = requirePrd_(token), ss = prdReadBook_(dept);
   prdSeedProducts_(ss);
   var today = purToday_();
   from = purDate_(from) || Utilities.formatDate(new Date(Date.now() - 45 * 864e5), PUR_TZ_, 'yyyy-MM-dd');
@@ -517,7 +517,7 @@ function prdDashboard(token, from, to) {
   var d = prdDashboard_(dept, from, to); d.ok = true; return d;
 }
 function prdDashboard_(dept, from, to) {
-  var ss = prdBook_(dept), s = prdSettings_(ss), defTarget = Number(s.target) || 85, today = purToday_();
+  var ss = prdReadBook_(dept), s = prdSettings_(ss), defTarget = Number(s.target) || 85, today = purToday_();
   var prods = {}; purRead_(ss, 'prd_products').forEach(function (p) { prods[p.id] = p; });
   var plans = purRead_(ss, 'prd_plans').filter(function (x) { return x.date >= from && x.date <= to && x.status !== 'cancel'; });
   var g2 = plans.filter(function (x) { return x.grp === 'G2' && x.yieldPct !== ''; });

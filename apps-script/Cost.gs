@@ -54,11 +54,11 @@ function costPurItems_() {
 }
 // โหลดหน้าต้นทุน (การ์ด COST)
 function costLoad(token) {
-  var home = costDept_(token), ss = rdBook_(home), today = purToday_(), prods = [];
+  var home = costDept_(token), ss = rdReadBook_(home), today = purToday_(), prods = [];
   if (home.key === 'COST') purLocked_(function () { costMigrate_(ss); });
   try {
     var rd = DEPARTMENTS.filter(function (x) { return x.key === 'RD'; })[0];
-    if (deptConfig_('RD').sheetId) prods = purRead_(home.key === 'RD' ? ss : rdBook_(rd), 'rd_products').map(function (p) { return rdOut_(p, today); });
+    if (deptConfig_('RD').sheetId) prods = purRead_(home.key === 'RD' ? ss : rdReadBook_(rd), 'rd_products').map(function (p) { return rdOut_(p, today); });
   } catch (e) {}
   return { ok: true, today: today, settings: rdSettings_(ss), costs: purRead_(ss, 'rd_costs').map(rdCostOut_),
     products: prods, pur: costPurItems_(), hasFolder: !!deptConfig_(home.key).folderId, home: home.key };
@@ -69,7 +69,7 @@ function costPurPrices(token) { costDept_(token); return Object.assign({ ok: tru
 // Dashboard ต้นทุนสินค้า สำหรับหน้าผู้บริหาร (ผู้ใช้ขอ 26/11/69) — ข้อมูลเดียวกับหน้าการ์ด COST (COSTM.dashHtml คิดในหน้าเว็บ)
 // ราคาจัดซื้อส่งเฉพาะผู้ขายที่ใช้ในสูตรต้นทุน (ข้อมูลไม่ใหญ่เกิน)
 function costDashData_() {
-  var home = costHome_(), ss = rdBook_(home), costs = purRead_(ss, 'rd_costs').map(rdCostOut_), used = {};
+  var home = costHome_(), ss = rdReadBook_(home), costs = purRead_(ss, 'rd_costs').map(rdCostOut_), used = {};
   costs.forEach(function (c) { (c.ingredients || []).concat(c.packaging || []).forEach(function (x) { if (x && x.vendor) used[x.vendor] = 1; }); });
   var pur = costPurItems_();
   return { kind: 'cost', today: purToday_(), costs: costs, pur: { items: (pur.items || []).filter(function (x) { return used[x.vendor]; }), error: pur.error } };

@@ -242,3 +242,16 @@ function purReadBook_(dept) {
   if (!cfg) return purBook_(dept);
   return dbBook_(dept.key, 'main', cfg, function () { return purBook_(dept); }, deptConfig_(dept.key).sheetId);
 }
+
+// ---------- ฝ่ายอื่น ๆ (ผู้ใช้ขอ 27/11/69: ทำครบทุกฝ่าย + Dashboard ผู้บริหาร) ----------
+// opener = ฟังก์ชันเปิดชีตจริงของฝ่าย (ลงทะเบียนตารางให้แล้ว) · prep = ลงทะเบียนตารางก่อนอ่านจากฐานข้อมูล
+function deptReadBook_(dept, opener, prep) {
+  if (prep) prep();
+  var cfg = deptDbCfg_(dept.key);
+  if (!cfg) return opener(dept);
+  return dbBook_(dept.key, 'main', cfg, function () { return opener(dept); }, deptConfig_(dept.key).sheetId);
+}
+function sheReadBook_(dept) { return deptReadBook_(dept, sheBook_, sheRegister_); }
+function qaReadBook_(dept) { return deptReadBook_(dept, qaBook_, qaRegister_); }
+function rdReadBook_(dept) { return deptReadBook_(dept, rdBook_, rdRegister_); }
+function prdReadBook_(dept) { return deptReadBook_(dept, prdBook_, prdRegister_); }

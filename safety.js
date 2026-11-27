@@ -193,7 +193,7 @@
     ['dFrom', 'dTo'].forEach(function (id) { $(id).addEventListener('change', function () { if (v('dFrom') && v('dTo') && v('dFrom') <= v('dTo')) { q.from = v('dFrom'); q.to = v('dTo'); dash(); } }); });
     $('dPrint').addEventListener('click', function () { window.print(); });
     var my = H.dseq = (H.dseq || 0) + 1;
-    call('sheDashboard', state.token, q.from, q.to).then(function (r) {
+    dashCall('sheDashboard', [q.from, q.to], function (r) {
       if (my !== H.dseq || state.page !== 's_dash') return;
       if (!r.ok) { $('dOut').innerHTML = '<div class="panel">' + esc(r.error) + '</div>'; return; }
       $('dOut').innerHTML = H.dashHtml(r);

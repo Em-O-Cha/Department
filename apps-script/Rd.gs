@@ -79,10 +79,10 @@ function rdPartnerOut_(x) { x.products = rdLines_(x.products, 200); return x; }
 // ---------- โหลด ----------
 // ต้นทุนอยู่ชีตการ์ด COST เมื่อผูกแล้ว (Cost.gs costHome_) ไม่งั้นอยู่ชีต RD
 function rdCostsFor_(ss) {
-  try { var h = costHome_(); return purRead_(h.key === 'RD' ? ss : rdBook_(h), 'rd_costs').map(rdCostOut_); } catch (e) { return []; }
+  try { var h = costHome_(); return purRead_(h.key === 'RD' ? ss : rdReadBook_(h), 'rd_costs').map(rdCostOut_); } catch (e) { return []; }
 }
 function rdLoad(token) {
-  var dept = requireRd_(token), ss = rdBook_(dept), today = purToday_();
+  var dept = requireRd_(token), ss = rdReadBook_(dept), today = purToday_();
   return { ok: true, today: today, sheetUrl: ss.getUrl(), settings: rdSettings_(ss),
     products: purRead_(ss, 'rd_products').map(function (p) { return rdOut_(p, today); }),
     partners: purRead_(ss, 'rd_partners').map(rdPartnerOut_),
@@ -288,7 +288,7 @@ function rdDashboard(token, from, to) {
   var d = rdDashboard_(dept, from, to); d.ok = true; return d;
 }
 function rdDashboard_(dept, from, to) {
-  var ss = rdBook_(dept), today = purToday_();
+  var ss = rdReadBook_(dept), today = purToday_();
   var all = purRead_(ss, 'rd_products').map(function (p) { return rdOut_(p, today); });
   var partners = purRead_(ss, 'rd_partners').map(rdPartnerOut_).filter(function (x) { return x.active !== 'off'; });
   // โครงการในช่วง = ช่วงพัฒนาคาบเกี่ยวกับช่วงที่เลือก (เริ่มก่อนสิ้นช่วง และยังไม่จบก่อนต้นช่วง)

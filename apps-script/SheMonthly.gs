@@ -37,7 +37,7 @@ function sheMonthly(token, ym) {
   var dept = requireShe_(token);
   ym = String(ym || '').slice(0, 7);
   if (!/^\d{4}-\d{2}$/.test(ym)) return { ok: false, error: 'เลือกเดือน' };
-  var ss = sheBook_(dept), all = purRead_(ss, 'she_monthly').map(shemOut_), recs = {}, done = {};
+  var ss = sheReadBook_(dept), all = purRead_(ss, 'she_monthly').map(shemOut_), recs = {}, done = {};
   var from = (function () { var y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 11; while (m < 1) { m += 12; y--; } return y + '-' + ('0' + m).slice(-2); })();
   all.forEach(function (r) {
     if (r.ym === ym) recs[r.form] = r;

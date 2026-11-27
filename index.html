@@ -497,6 +497,17 @@
 
   // หน้าเว็บนี้อยู่บน GitHub Pages — ข้อมูล/รหัสผ่านทำงานที่ Google Apps Script (Api.gs ใน repo apps-script/departments)
   var API_URL = 'https://script.google.com/macros/s/AKfycbyWj0ra2zC_T-qOE6kAr0cHHzIV944lk_5n4Nk54md9WkHcslA_Pwx7UBNF5Uc0LXTc/exec';
+  // Dashboard ทุกฝ่าย (ผู้ใช้ขอ 27/11/69 เหมือนบัญชี / HR): ผลที่เคยโหลด (ไม่เกิน 5 นาที) ขึ้นทันที แล้วเช็คข้อมูลใหม่เงียบ ๆ วาดใหม่เฉพาะเมื่อเปลี่ยน
+  window.dashCall = function (fn, args, cb) {
+    var c = dashCall.cache = dashCall.cache || {}, key = (state.dept && state.dept.key) + '|' + fn + '|' + JSON.stringify(args), hit = c[key], sig0 = '';
+    if (hit && Date.now() - hit.at < 300000) { sig0 = JSON.stringify(hit.r); cb(hit.r, true); call.quiet = true; } else hit = null;
+    var p = call.apply(null, [fn, state.token].concat(args));
+    call.quiet = false;
+    return p.then(function (r) {
+      if (r && r.ok) c[key] = { r: r, at: Date.now() };
+      if (!hit || JSON.stringify(r) !== sig0) cb(r, false);
+    }, function (e) { if (!hit) throw e; });
+  };
   function call(fn) {
     var args = Array.prototype.slice.call(arguments, 1);
     var mine = Date.now() - busyAct < 1500 && !call.quiet;   // เรียกจากการกดของผู้ใช้ → แสดงหน้าต่าง "กำลังดำเนินการ" (งานเบื้องหลัง / poll ไม่แสดง)
@@ -804,6 +815,7 @@
     else toast('เกิดข้อผิดพลาด: ' + (err && err.message || err));
   }
   $('logoutBtn').addEventListener('click', function () {
+    window.dashCall.cache = {};
     var t = state.token; backToHome('ออกจากระบบแล้ว');
     call('logout', t).catch(function () {});
   });
@@ -1347,7 +1359,7 @@
 <script src="dcharts.js?v=1"></script>
 <script src="purchasing.js?v=36"></script>
 <script src="poapprove.js?v=9"></script>
-<script src="safety.js?v=20"></script>
+<script src="safety.js?v=21"></script>
 <script src="hr.js?v=45"></script>
 <script src="hrxls.js?v=3"></script>
 <script src="hrdaily.js?v=21"></script>
@@ -1356,9 +1368,9 @@
 <script src="cpram.js?v=26"></script>
 <script src="exportorder.js?v=4"></script>
 <script src="payables.js?v=28"></script>
-<script src="quality.js?v=10"></script>
-<script src="production.js?v=36"></script>
-<script src="rd.js?v=11"></script>
+<script src="quality.js?v=11"></script>
+<script src="production.js?v=37"></script>
+<script src="rd.js?v=12"></script>
 <script src="executive.js?v=29"></script>
 </body>
 </html>

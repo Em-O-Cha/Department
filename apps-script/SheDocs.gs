@@ -39,7 +39,7 @@ function shedOut_(d) {
     fileId: d.fileId || '', url: d.url || '', note: d.note || '', by: d.by || '', createdAt: d.createdAt || '', updatedAt: d.updatedAt || '' };
 }
 function sheDocs(token) {
-  var dept = requireShe_(token), ss = sheBook_(dept);
+  var dept = requireShe_(token), ss = sheReadBook_(dept);
   return { ok: true, years: shedYears_(ss), roots: shedRoots_(ss), cats: String(sheSettings_(ss).docCats || SHED_CATS_DEFAULT_), docs: purRead_(ss, 'she_docs').map(shedOut_).sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }) };
 }
 // โฟลเดอร์ปลายทาง: ฝ่าย / แฟ้มเอกสาร SHE / ปี xxxx (central = Drive ของบัญชีระบบ)

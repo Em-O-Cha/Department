@@ -131,7 +131,7 @@ function sheLive_(f) { return !f.mergedInto; }
 
 // ---------- โหลดข้อมูลทั้งหมดของหน้า (ผลตรวจย้อนหลัง 70 วัน) ----------
 function sheLoad(token) {
-  var dept = requireShe_(token), ss = sheBook_(dept), today = purToday_(), since = sheAddDays_(today, -70);
+  var dept = requireShe_(token), ss = sheReadBook_(dept), today = purToday_(), since = sheAddDays_(today, -70);
   return {
     ok: true, today: today, sheetUrl: ss.getUrl(), hasFolder: !!deptConfig_(dept.key).folderId,
     settings: sheSettings_(ss), areas: sheAreasWithItems_(ss),
@@ -202,7 +202,7 @@ function sheChecks(token, from, to) {
   var dept = requireShe_(token);
   if (!purDate_(from) || !purDate_(to) || from > to) return { ok: false, error: 'เลือกช่วงวันที่ให้ถูกต้อง' };
   if (sheDays_(from, to) > 92) return { ok: false, error: 'เลือกช่วงไม่เกิน 3 เดือน' };
-  var ss = sheBook_(dept);
+  var ss = sheReadBook_(dept);
   return { ok: true, checks: purRead_(ss, 'she_checks').filter(function (c) { return c.date >= from && c.date <= to; }).map(sheCheckOut_) };
 }
 function sheDeleteCheck(token, id) {
@@ -441,7 +441,7 @@ function sheSaveSettings(token, s) {
 function sheMonthReport(token, ym, areaId) {
   var dept = requireShe_(token);
   if (!/^\d{4}-\d{2}$/.test(String(ym))) return { ok: false, error: 'เลือกเดือน' };
-  var ss = sheBook_(dept), area = sheAreasWithItems_(ss).filter(function (a) { return a.id === areaId; })[0];
+  var ss = sheReadBook_(dept), area = sheAreasWithItems_(ss).filter(function (a) { return a.id === areaId; })[0];
   if (!area) return { ok: false, error: 'ไม่พบพื้นที่' };
   var checks = purRead_(ss, 'she_checks').filter(function (c) { return c.areaId === area.id && String(c.date).slice(0, 7) === ym; }).map(sheCheckOut_);
   var findings = purRead_(ss, 'she_findings').filter(function (f) { return sheLive_(f) && f.areaId === area.id && String(f.date).slice(0, 7) === ym; }).map(sheFindingOut_);
@@ -455,7 +455,7 @@ function sheMonthReport(token, ym, areaId) {
 function sheFindingReport(token, from, to) {
   var dept = requireShe_(token);
   if (!purDate_(from) || !purDate_(to) || from > to) return { ok: false, error: 'เลือกช่วงวันที่ให้ถูกต้อง' };
-  var ss = sheBook_(dept);
+  var ss = sheReadBook_(dept);
   return { ok: true, from: from, to: to, settings: sheSettings_(ss),
     findings: purRead_(ss, 'she_findings').filter(function (f) { return sheLive_(f) && f.date >= from && f.date <= to; }).map(sheFindingOut_)
       .sort(function (a, b) { return String(a.date + a.code).localeCompare(String(b.date + b.code)); }) };
@@ -474,7 +474,7 @@ function sheDashboard(token, from, to) {
   return d;
 }
 function sheDashboard_(dept, from, to) {
-  var ss = sheBook_(dept), today = purToday_(), areas = sheAreasWithItems_(ss);
+  var ss = sheReadBook_(dept), today = purToday_(), areas = sheAreasWithItems_(ss);
   var activeAreas = areas.filter(function (a) { return a.active !== 'ปิด'; });
   var itemIdx = {}, areaIdx = {};
   areas.forEach(function (a) { areaIdx[a.id] = a; a.items.forEach(function (it) { itemIdx[it.id] = it; }); });

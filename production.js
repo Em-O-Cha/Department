@@ -647,7 +647,7 @@
     ['qFrom', 'qTo'].forEach(function (id) { $(id).addEventListener('change', function () { var a = $('qFrom').value, b = $('qTo').value; if (a && b && a <= b) { q.from = a; q.to = b; dash(); } else toast('เลือกช่วงวันที่ให้ถูกต้อง'); }); });
     $('qPrint').addEventListener('click', function () { window.print(); });
     var my = H.dseq = (H.dseq || 0) + 1;
-    call('prdDashboard', state.token, q.from, q.to).then(function (r) {
+    dashCall('prdDashboard', [q.from, q.to], function (r) {
       if (my !== H.dseq || state.page !== 'p_dash') return;
       $('qOut').innerHTML = r.ok ? H.dashHtml(r) : '<div class="panel">' + esc(r.error) + '</div>';
     }).catch(onServerError);

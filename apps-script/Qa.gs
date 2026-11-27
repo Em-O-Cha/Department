@@ -82,7 +82,7 @@ function qaNextCode_(ss, date) {
 
 // ---------- โหลดหน้า ----------
 function qaLoad(token) {
-  var dept = requireQa_(token), ss = qaBook_(dept);
+  var dept = requireQa_(token), ss = qaReadBook_(dept);
   return { ok: true, today: purToday_(), sheetUrl: ss.getUrl(), hasFolder: !!deptConfig_(dept.key).folderId, settings: qaSettings_(ss),
     complaints: purRead_(ss, 'qa_complaints').map(qaOut_).sort(function (a, b) { return String(b.recvDate + b.code).localeCompare(String(a.recvDate + a.code)); }),
     tests: purRead_(ss, 'qa_tests').map(function (t) { t.files = purParseFiles_(t.files); return t; }),
@@ -236,7 +236,7 @@ function qaDashboard(token, from, to) {
   var d = qaDashboard_(dept, from, to); d.ok = true; return d;
 }
 function qaDashboard_(dept, from, to) {
-  var ss = qaBook_(dept), s = qaSettings_(ss), today = purToday_(), closeDays = Number(s.closeDays) || 15, replyDays = Number(s.replyDays) || 1;
+  var ss = qaReadBook_(dept), s = qaSettings_(ss), today = purToday_(), closeDays = Number(s.closeDays) || 15, replyDays = Number(s.replyDays) || 1;
   var all = purRead_(ss, 'qa_complaints').map(qaOut_);
   var inRange = all.filter(function (c) { return c.recvDate >= from && c.recvDate <= to; });
   var isClosed = function (c) { return String(c.status).indexOf('closed') === 0; };
