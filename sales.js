@@ -17,7 +17,7 @@
   });
   // app: rev = Revenue Spunky Online · stock = Stock Flow (ระบบสต๊อก Sales & Marketing, ผู้ใช้ขอ 27/11/69 ให้อยู่เฉพาะการ์ดฝ่ายขาย)
   var TABS = [
-    { group: 'ยอดขาย (Revenue)' },
+    { section: '💰 ยอดขาย (Revenue)', tone: 'gold' },
     { id: 'sl_rdash', app: 'rev', tab: 'dashboard', label: 'Dashboard ยอดขาย', ic: 'chart2' },
     { id: 'sl_add', app: 'rev', tab: 'add', label: 'เพิ่มยอดขาย', ic: 'plus' },
     { id: 'sl_search', app: 'rev', tab: 'search', label: 'ค้นหา / แก้ไข', ic: 'search' },
@@ -25,7 +25,7 @@
     { id: 'sl_aff', app: 'rev', tab: 'affiliate', label: 'Affiliate', ic: 'people' },
     { id: 'sl_labels', app: 'rev', tab: 'labels', label: 'ใบจัดส่ง', ic: 'printer' },
     { id: 'sl_stock', app: 'rev', tab: 'stock', label: 'ตัดสต๊อกอัตโนมัติ', ic: 'box' },
-    { group: 'สต๊อกสินค้า (Stock Flow)' },
+    { section: '📦 สต๊อกสินค้า (Stock Flow)', tone: 'gold' },
     { id: 'st_over', app: 'stock', tab: 'dashboard', label: 'ภาพรวมสต๊อก', ic: 'box' },
     { id: 'st_receive', app: 'stock', tab: 'receive', label: 'รับเข้า', ic: 'plus' },
     { id: 'st_issue', app: 'stock', tab: 'issue', label: 'จ่ายออก', ic: 'minus' },
@@ -38,7 +38,7 @@
   var APP = { rev: { title: 'Revenue Spunky Online', key: 'url' }, stock: { title: 'ระบบสต๊อก (Stock Flow)', key: 'stockUrl' } };
   var W = { rev: { win: null, ready: false }, stock: { win: null, ready: false } };
   function pageOf(id) { return PAGES.filter(function (t) { return t.id === id; })[0] || PAGES[0]; }
-  S.menus = function () { return TABS.map(function (t) { return t.group ? { group: t.group } : { id: t.id, label: t.label, ic: t.ic }; }); };
+  S.menus = function () { return TABS.map(function (t) { return t.section ? { section: t.section, tone: t.tone } : { id: t.id, label: t.label, ic: t.ic }; }); };
   S.reset = function () { W.rev = { win: null, ready: false }; W.stock = { win: null, ready: false }; };
   S.exportFile = function () { return null; };
 

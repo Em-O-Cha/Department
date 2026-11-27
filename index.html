@@ -168,6 +168,9 @@
   .nav .navg { font-size: 12.5px; font-weight: 700; color: #64748b; padding: 10px 14px 2px; letter-spacing: .02em; }
   .nav .navs + .navg { padding-top: 4px; }
   .nav button.t-in, .nav button.t-out { margin-left: 8px; }
+  /* ฝ่ายขาย: หัวข้อ ยอดขาย / สต๊อกสินค้า เป็นแถบสีทองทึบ ตัวขาว (ผู้ใช้ขอ 27/11/69 ให้หัวข้อเด่นชัด) */
+  .nav .navs.t-gold { color: #fff; background: #B8860B; font-size: 14px; padding: 9px 12px; box-shadow: 0 2px 6px rgba(184,134,11,.3); }
+  .nav button.t-gold { margin-left: 8px; }
   .navbtn, .morebtn { display: none; }
   .moremenu { position: absolute; right: 12px; top: calc(100% + 6px); background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 12px 32px rgba(15,23,42,.22); padding: 6px; min-width: 220px; z-index: 40; }
   .moremenu button { width: 100%; border: 0; background: none; text-align: left; display: flex; gap: 10px; align-items: center; padding: 12px; min-height: 46px; border-radius: 10px; font: inherit; font-size: 15px; cursor: pointer; color: var(--ink); }
@@ -692,7 +695,8 @@
     var tone = '', curLabel = '';
     $('nav').innerHTML = items.map(function (it) {
       if (it.section != null) { tone = it.tone || ''; return '<div class="navs' + (tone ? ' t-' + tone : '') + '">' + (tone === 'in' ? '⬇ ' : tone === 'out' ? '⬆ ' : '') + esc(it.section) + '</div>'; }   // หัวข้อใหญ่ (เช่น รับ / จ่าย ของฝ่ายบัญชี) — สีเด่นกว่าหัวข้อกลุ่ม
-      if (it.group) return '<div class="navg">' + esc(it.group) + '</div>';   // หัวข้อกลุ่มเมนู (โมดูลใส่ { group: 'ชื่อกลุ่ม' })
+      if (it.group) return '<div class="navg">' + esc(it.group) + '</div>';
+      if (it.id === 'pw') tone = '';   // เปลี่ยนรหัสผ่าน ไม่อยู่ใต้หัวข้อของโมดูล   // หัวข้อกลุ่มเมนู (โมดูลใส่ { group: 'ชื่อกลุ่ม' })
       if (state.page === it.id) curLabel = it.label;
       return '<button data-page="' + it.id + '" class="' + (state.page === it.id ? 'active' : '') + (tone ? ' t-' + tone : '') + '"' + (state.page === it.id ? ' aria-current="page"' : '') + '>' + icon(it.ic) + esc(it.label) + '</button>';
     }).join('') + sheetLinksHtml();
@@ -1384,7 +1388,7 @@
 <script src="quality.js?v=12"></script>
 <script src="production.js?v=37"></script>
 <script src="rd.js?v=12"></script>
-<script src="sales.js?v=2"></script>
+<script src="sales.js?v=3"></script>
 <script src="executive.js?v=29"></script>
 </body>
 </html>
