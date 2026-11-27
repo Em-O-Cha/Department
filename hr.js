@@ -219,7 +219,8 @@
       if (newAtt) setTimeout(function () { toast('📎 พนักงานแนบเอกสารการลาใหม่ ' + newAtt + ' รายการ'); }, fresh ? 2500 : 0);
       renderNav();
       var busy = !$('modalOverlay').classList.contains('hidden') || /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '');
-      if (!busy && (state.page === 'h_leave' || state.page === 'h_dash')) H.render(state.page);
+      if (!busy && state.page === 'h_leave') H.render(state.page);
+      else if (!busy && state.page === 'h_dash') dash(true);   // Dashboard: อัปเดตเงียบ ๆ ไม่ล้างหน้า (ผู้ใช้ถาม 27/11/69 ว่าทำไมต้องโหลดอีกรอบ)
     }, function (e) { H.polling = false; if (String(e && e.message).indexOf('SESSION_EXPIRED') >= 0) { clearInterval(H.pollT); H.pollT = null; } });
   }
   H.dirtyLeaves = function () { pollLeaves(true); };   // หน้าลงเวลานำเข้าแล้ว → ดึงการลาใหม่ (มาสาย / ขาดงานจากเครื่องสแกน)
@@ -333,8 +334,20 @@
   }
 
   // ==================== ภาพรวม / Dashboard ====================
-  function dash() {
+  function dash(silent) {
     var t = H.data.today, q = H.q;
+    if (silent === true && $('dOut') && H.dashSig) {   // เปลี่ยนเฉพาะเมื่อข้อมูลสรุปเปลี่ยนจริง · ไม่ขึ้น "กำลังสรุป…"
+      var mine = H.dseq = (H.dseq || 0) + 1, k = q.from + '|' + q.to;
+      call.quiet = true;
+      var pr = call('hrDashboard', state.token, q.from, q.to);
+      call.quiet = false;
+      pr.then(function (r) {
+        if (mine !== H.dseq || state.page !== 'h_dash' || !r.ok) return;
+        var sig = k + JSON.stringify(r);
+        if (sig !== H.dashSig) { H.dashSig = sig; drawDash(r); }
+      }).catch(function () {});
+      return;
+    }
     if (!q.from) { q.from = t.slice(0, 8) + '01'; q.to = t; }
     var quick = [['เดือนนี้', t.slice(0, 8) + '01', t], ['เดือนก่อน', addDays(t.slice(0, 8) + '01', -1).slice(0, 8) + '01', addDays(t.slice(0, 8) + '01', -1)],
       ['3 เดือน', addDays(t, -89), t], ['ปีนี้', t.slice(0, 4) + '-01-01', t]];
@@ -348,10 +361,14 @@
     var my = H.dseq = (H.dseq || 0) + 1;
     call('hrDashboard', state.token, q.from, q.to).then(function (r) {
       if (my !== H.dseq || state.page !== 'h_dash') return;
-      $('dOut').innerHTML = r.ok ? H.dashHtml(r) : '<div class="panel">' + esc(r.error) + '</div>';
-      on('[data-emp]', 'click', function (el) { profile(el.getAttribute('data-emp')); }, $('dOut'));
-      on('.hpendl.click', 'click', function () { go('h_leave'); }, $('dOut'));
+      H.dashSig = r.ok ? q.from + '|' + q.to + JSON.stringify(r) : '';
+      drawDash(r);
     }).catch(onServerError);
+  }
+  function drawDash(r) {
+    $('dOut').innerHTML = r.ok ? H.dashHtml(r) : '<div class="panel">' + esc(r.error) + '</div>';
+    on('[data-emp]', 'click', function (el) { profile(el.getAttribute('data-emp')); }, $('dOut'));
+    on('.hpendl.click', 'click', function () { go('h_leave'); }, $('dOut'));
   }
   // ใช้ร่วมกับ Dashboard ผู้บริหาร (executive.js)
   H.dashHtml = function (r) {
