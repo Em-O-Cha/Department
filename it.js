@@ -67,6 +67,8 @@
     });
   }
   function colLetter(n) { var s = ''; while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
+  // ตัวเลขหลักพันขึ้นไปแสดงมี , (ผู้ใช้ขอ 27/11/69) — ค่าที่เก็บ / บันทึกยังเป็นตัวเลขล้วน
+  function fmtN(v) { v = String(v == null ? '' : v); var m = v.match(/^(-?)(\d+)(\.\d+)?$/); return m ? m[1] + m[2].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (m[3] || '') : v; }
   function draw() {
     var c = I.cur, d = c.d, q = c.q.trim().toLowerCase();
     var head = '<tr><th class="itn">#</th>' + d.cols.map(function (col, j) { return '<th>' + esc(col.label) + '<small>' + colLetter(d.col0 + j) + (col.type === 'ro' ? ' · อ่านอย่างเดียว' : '') + '</small></th>'; }).join('') + '<th class="itact"></th></tr>';
@@ -74,8 +76,8 @@
       if (q && !r.v.join(' ').toLowerCase().includes(q)) return '';
       return '<tr data-i="' + i + '"' + (r.from < 0 ? ' class="itnew"' : '') + '><td class="itn">' + (i + 1) + '</td>' + d.cols.map(function (col, j) {
         var v = r.v[j] == null ? '' : String(r.v[j]);
-        if (col.type === 'ro') return '<td class="itro" title="' + esc(v) + '">' + esc(/^=/.test(v) ? 'คำนวณอัตโนมัติ' : v) + '</td>';
-        return '<td><input data-j="' + j + '" value="' + esc(v) + '"' + (col.type === 'num' ? ' inputmode="decimal" class="itnum"' : '') + ' aria-label="' + esc(col.label) + ' แถว ' + (i + 1) + '">'
+        if (col.type === 'ro') return '<td class="itro" title="' + esc(v) + '">' + esc(/^=/.test(v) ? 'คำนวณอัตโนมัติ' : fmtN(v)) + '</td>';
+        return '<td><input data-j="' + j + '" value="' + esc(col.type === 'num' ? fmtN(v) : v) + '"' + (col.type === 'num' ? ' inputmode="decimal" class="itnum"' : '') + ' aria-label="' + esc(col.label) + ' แถว ' + (i + 1) + '">'
           + (col.type === 'url' && /^https?:/.test(v) ? '<a class="itopen" href="' + esc(v) + '" target="_blank" rel="noopener" title="เปิดลิงก์">↗</a>' : '') + '</td>';
       }).join('') + '<td class="itact"><button type="button" class="itbtn" data-up="' + i + '" title="เลื่อนขึ้น" aria-label="เลื่อนขึ้น">↑</button><button type="button" class="itbtn" data-dn="' + i + '" title="เลื่อนลง" aria-label="เลื่อนลง">↓</button><button type="button" class="itbtn del" data-del="' + i + '" title="ลบแถว" aria-label="ลบแถว">' + icon('trash', 15) + '</button></td></tr>';
     }).join('');
@@ -90,7 +92,9 @@
     window.scrollTo(0, y);
     var mark = function () { if (!c.dirty) { c.dirty = true; var b = document.querySelector('.itsave'); if (b) { b.classList.add('on'); b.querySelector('span').textContent = '● มีการแก้ไขที่ยังไม่บันทึก'; $('itSave').disabled = false; } } };
     Array.prototype.forEach.call(document.querySelectorAll('.ittab input[data-j]'), function (el) {
-      el.addEventListener('input', function () { var i = +el.closest('tr').getAttribute('data-i'); c.rows[i].v[+el.getAttribute('data-j')] = el.value; mark(); });
+      var isN = el.classList.contains('itnum');
+      el.addEventListener('input', function () { var i = +el.closest('tr').getAttribute('data-i'); c.rows[i].v[+el.getAttribute('data-j')] = isN ? el.value.replace(/,/g, '').trim() : el.value; mark(); });
+      if (isN) { el.addEventListener('blur', function () { el.value = fmtN(el.value.replace(/,/g, '').trim()); }); }
     });
     $('itQ').addEventListener('input', function () { c.q = $('itQ').value; clearTimeout(I.qt); I.qt = setTimeout(function () { draw(); var e = $('itQ'); e.focus(); e.setSelectionRange(e.value.length, e.value.length); }, 250); });
     $('itAdd').addEventListener('click', function () { c.q = ''; c.rows.push({ from: -1, v: d.cols.map(function () { return ''; }) }); c.dirty = true; draw(); var ins = document.querySelectorAll('.ittab tbody tr:last-child input'); if (ins[0]) { ins[0].focus(); ins[0].scrollIntoView({ block: 'center' }); } });
