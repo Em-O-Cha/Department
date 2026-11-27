@@ -167,6 +167,8 @@
   function boot() {
     var q = new URLSearchParams(location.search), lid = q.get('l');
     gpsStart();
+    // เวลาตอนกดเมนู "ลงเวลา" (เปิดหน้านี้) — ใช้เป็นเวลาเข้างานถ้าสแกนเสร็จภายใน 3 นาที (ผู้ใช้ห่วงว่าเปิดหน้าช้าแล้วจะสาย 27/11/69)
+    S.openAt = Date.now(); S.openStamp = call('hrClockStamp').catch(function () { return null; });
     var getId = lid ? Promise.resolve({ liffId: lid }) : call('hrClockInfo');
     getId.then(function (i) {
       if (!i || !i.liffId) throw new Error('ฝ่ายบุคคลยังไม่ได้ตั้งค่าหน้าลงเวลา');
@@ -197,7 +199,7 @@
       + '<div class="gps" id="gps">📍<div>กำลังตรวจตำแหน่ง…<small>เปิด GPS และอนุญาตให้ LINE ใช้ตำแหน่ง</small></div></div>'
       + (stage === 'done' ? '<div class="msg info"><b>วันนี้ลงเวลาครบแล้ว ✓</b>ถ้าออกงานจริงช้ากว่าที่บันทึก กด "สแกนออกงานใหม่" ได้</div>' : '')
       + '<button class="btn ' + (stage === 'in' ? '' : 'out') + '" id="go" disabled>📷 ' + (stage === 'in' ? 'สแกนหน้า เข้างาน' : stage === 'out' ? 'สแกนหน้า ออกงาน' : 'สแกนออกงานใหม่') + '</button>'
-      + '<div style="font-size:13px;color:#475569;text-align:center;margin-top:-4px">เวลาที่บันทึก = เวลาที่กดปุ่มนี้ (โหลดกล้องช้าก็ไม่ทำให้สาย)</div>' + '<button class="btn sec" id="regps">↻ ตรวจตำแหน่งอีกครั้ง</button>'
+      + '<div style="font-size:13px;color:#475569;text-align:center;margin-top:-4px">' + (stage === 'in' ? 'เวลาเข้างาน = เวลาที่กดเมนู &quot;ลงเวลา&quot; (ถ้าสแกนเสร็จภายใน 3 นาที) — หน้าโหลดช้าไม่ทำให้สาย' : 'เวลาออกงาน = เวลาที่กดปุ่มสแกน') + '</div>' + '<button class="btn sec" id="regps">↻ ตรวจตำแหน่งอีกครั้ง</button>'
       + '<div class="today"><b>วันนี้</b><div><span>เข้างาน</span><span>' + (r.timeIn ? esc(r.timeIn) + ' น. ' + lateTag : '—') + '</span></div><div><span>ออกงาน</span><span>' + (r.timeOut ? esc(r.timeOut) + ' น.' + earlyTag : '—') + '</span></div></div>'
       + '</div>');
     tick();
@@ -243,7 +245,8 @@
   function scan(kind) {
     var run = ++S.run, pos = S.pos;
     // เวลาที่บันทึก = เวลาที่กดปุ่มนี้ (เวลาของเซิร์ฟเวอร์) ไม่ใช่เวลาที่ส่งผลเสร็จ — โหลดกล้องช้าก็ไม่ทำให้สาย
-    var stampP = call('hrClockStamp').catch(function () { return null; });
+    var pressP = call('hrClockStamp').catch(function () { return null; });
+    var stampP = kind === 'in' && Date.now() - S.openAt < 170000 ? S.openStamp.then(function (st) { return st || pressP; }) : pressP;   // ออกงาน = เวลาที่กดปุ่มสแกน
     $('vCam').classList.remove('hidden'); $('dots').classList.add('hidden'); $('mask').className = 'mask';
     camUi('กำลังเปิดกล้อง…', 'ครั้งแรกอาจใช้เวลาโหลดระบบตรวจใบหน้า 5–10 วินาที'); steps([]);
     $('camCancel').onclick = function () { closeCam(); };
