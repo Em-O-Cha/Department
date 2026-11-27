@@ -9,7 +9,7 @@ var APP_PAGE_URL = 'https://em-o-cha.github.io/Department/';
 
 function apiFunctions_() {
   return {
-    getDepartments: getDepartments, login: login, logout: logout, getDepartmentHome: getDepartmentHome, salesInfo: salesInfo,
+    getDepartments: getDepartments, login: login, logout: logout, getDepartmentHome: getDepartmentHome, salesInfo: salesInfo, itInfo: itInfo, itMasterLoad: itMasterLoad, itMasterSave: itMasterSave,
     deptSetPasswordWithCode: deptSetPasswordWithCode, changeMyPassword: changeMyPassword,
     getAdminStatus: getAdminStatus, adminSendEmailCode: adminSendEmailCode, adminSetPasswordWithEmailCode: adminSetPasswordWithEmailCode,
     adminLogin: adminLogin, adminChangePassword: adminChangePassword, adminOverview: adminOverview,

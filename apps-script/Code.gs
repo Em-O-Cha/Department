@@ -57,6 +57,10 @@ var DEPARTMENTS = [
   { key: 'SALES', name: 'ฝ่ายขาย',            en: 'Sales · Revenue Spunky Online', color: '#B8860B', noExec: true,
     sheetId: '', ownerEmail: '', appUrl: '',
     menus: [] },
+  // ฝ่าย IT (ผู้ใช้ขอ 27/11/69): ระบบจัดการองค์กรที่ผู้ใช้เข้าเอง — แอดมินสมาชิก · Master Data Sales · Stripe (It.gs)
+  { key: 'IT', name: 'ฝ่าย IT', en: 'IT · ระบบจัดการองค์กร', color: '#173B68', noExec: true,
+    sheetId: '', ownerEmail: '', appUrl: '',
+    menus: [] },
   // ผู้บริหาร: ไม่ใช่แผนก — ดู Dashboard ของทุกฝ่ายได้อย่างเดียว (Executive.gs) · ตั้งรหัสผ่านเองด้วยรหัสตั้งค่าจากผู้ดูแลระบบ
   { key: 'EXEC', name: 'ผู้บริหาร',            en: 'Executive Dashboard', color: '#c62828', exec: true,
     sheetId: '', ownerEmail: '', appUrl: '',
@@ -147,7 +151,7 @@ function findDept_(key) {
 }
 
 // โมดูลที่ทำแล้วของแต่ละแผนก (หน้าเว็บสร้างเมนูตามโมดูล) — ยังไม่มี = เมนูตัวอย่าง
-var DEPT_MODULES_ = { HR: 'hr', ACC: 'accounting', PUR: 'purchasing', QA: 'quality', SHE: 'safety', PROD: 'production', RD: 'rd', COST: 'cost', SALES: 'sales', EXEC: 'executive' };
+var DEPT_MODULES_ = { HR: 'hr', ACC: 'accounting', PUR: 'purchasing', QA: 'quality', SHE: 'safety', PROD: 'production', RD: 'rd', COST: 'cost', SALES: 'sales', IT: 'it', EXEC: 'executive' };
 function deptView_(d) {
   return { key: d.key, name: d.name, en: d.en, color: d.color, menus: d.menus.slice(), ownerEmail: d.ownerEmail || '', module: DEPT_MODULES_[d.key] || '' };
 }
@@ -181,6 +185,7 @@ function openDeptSpreadsheet_(dept) {
 function deptSheetLinks_(dept) {
   var url = function (id) { return 'https://docs.google.com/spreadsheets/d/' + id + '/edit'; }, out = [];
   if (dept.exec) return out;
+  if (dept.key === 'IT') return typeof IT_MASTER_SHEET_ID_ !== 'undefined' ? [{ label: 'Master Data Sales', url: url(IT_MASTER_SHEET_ID_) }] : out;
   if (dept.key === 'SALES') return typeof salesSheetLinks_ === 'function' ? salesSheetLinks_() : out;
   var key = dept.key === 'COST' && typeof costHome_ === 'function' ? costHome_().key : dept.key, id = deptConfig_(key).sheetId;
   if (id) out.push({ label: dept.key === 'ACC' ? 'ชีตหลัก (ออเดอร์ 7-11 / ต่างประเทศ)' : 'Google Sheet ของฝ่าย', url: url(id) });
