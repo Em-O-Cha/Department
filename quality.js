@@ -587,7 +587,7 @@
         return '<div class="sbar"><span>' + esc(k) + '</span><i><em style="width:' + Math.max(2, Math.round(byType[k] / mx * 100)) + '%;background:#7c3aed"></em></i><b>' + baht(byType[k]) + '</b></div>'; }).join('') + '</div>' : '')
       + '<div class="pbar"><div class="psearch">' + icon('search', 18) + '<input id="tSearch" placeholder="ค้นหาตัวอย่าง / รายการตรวจ / แล็บ" value="' + esc(H.q.ts || '') + '"></div></div>'
       + '<div class="pchips">' + [['all', 'ทั้งหมด'], ['plan', 'ยังไม่ส่ง'], ['sent', 'รอผล'], ['done', 'ได้ผล / จ่ายแล้ว'], ['cancel', 'ยกเลิก']].map(function (x) {
-        return '<button class="chip' + (f === x[0] ? ' on' : '') + '" data-tf="' + x[0] + '">' + x[1] + ' (' + (cnt[x[0]] || 0) + ')</button>'; }).join('') + '</div><div id="tList"></div>';
+        return '<button class="chip' + (f === x[0] ? ' on' : '') + '" data-tf="' + x[0] + '">' + x[1] + ' (' + (cnt[x[0]] || 0) + ')</button>'; }).join('') + '</div><div id="tList" class="qtgrid"></div>';
     var draw = function () {
       var q = (H.q.ts || '').toLowerCase();
       var rows = all.filter(function (t) { return (f === 'all' || t.status === f) && (!q || [t.sample, t.testType, t.lab, t.note].join(' ').toLowerCase().indexOf(q) >= 0); });
@@ -771,7 +771,7 @@
     '.qtag{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:99px;white-space:nowrap}.qtag.qopen{background:#e0e7ff;color:#3730a3}.qtag.qinvestigating{background:#fef3c7;color:#92400e}.qtag.qfixing{background:#ffedd5;color:#9a3412}',
     '.qother{margin-top:6px;width:100%}.qwhy details{background:#faf5ff;border:1px solid #e9d5ff;border-radius:12px;padding:10px 14px}.qwhy summary{cursor:pointer;font-weight:600;color:#6d28d9;font-size:14px;min-height:28px}.qwhy p{margin:8px 0;font-size:13.5px;color:var(--muted)}.qwhy ol{margin:6px 0 8px;padding-left:20px;font-size:13.5px;line-height:1.7}',
     '.qtag.qrecord{background:#e0e7ff;color:#3730a3}.qst .record.on{border-color:#4f46e5;background:#4f46e5;color:#fff}.qst .record.on small{color:#e0e7ff}',
-    '.qtg{padding:0;overflow:hidden;margin-bottom:12px}.qtgh{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:11px 14px;background:#f8fafc;border-bottom:1px solid var(--line)}.qtgh b{font-size:15px}.qtgh em{margin-left:auto;font-style:normal;font-weight:700;color:#5b21b6}',
+    '.qtgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start}.qtgrid>.empty{grid-column:1/-1}@media(min-width:1000px){.qtgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}.qtg{padding:0;overflow:hidden;margin-bottom:0}.qtgh{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:11px 14px;background:#f8fafc;border-bottom:1px solid var(--line)}.qtgh b{font-size:15px}.qtgh em{margin-left:auto;font-style:normal;font-weight:700;color:#5b21b6}',
     '.qmk{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:99px;background:#ede9fe;color:#5b21b6}',
     '.qtr{display:flex;gap:10px;align-items:center;width:100%;text-align:left;background:#fff;border:0;border-bottom:1px solid #f1f5f9;padding:10px 14px;cursor:pointer;min-height:48px;font:inherit;color:inherit}.qtr:last-child{border-bottom:0}.qtr:hover,.qtr:focus-visible{background:#faf5ff;outline:none}',
     '.qtn{flex:1;min-width:0}.qtn b{display:block;font-size:14px;font-weight:600}.qtn small{display:block;color:var(--muted);font-size:12px;margin-top:2px}.qtp{font-weight:700;white-space:nowrap;font-size:14px}',
