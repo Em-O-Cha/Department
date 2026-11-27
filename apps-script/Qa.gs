@@ -270,7 +270,7 @@ function qaDashboard_(dept, from, to) {
     byIssue: count('issueType'), byProduct: count('product').slice(0, 8), byChannel: count('channel'), byCause: count('causeCat'),
     bySeverity: ['C', 'H', 'M', 'L'].map(function (k) { return { key: k, name: QA_SEV_[k], n: inRange.filter(function (c) { return c.severity === k; }).length }; }),
     overdueList: overdue.sort(function (a, b) { return String(a.recvDate).localeCompare(String(b.recvDate)); }).slice(0, 10).map(function (c) {
-      return { id: c.id, code: c.code, recvDate: c.recvDate, product: c.product, issueType: c.issueType, severity: c.severity, status: c.status, days: qaDays_(c.recvDate, today), rounds: c.rounds.length };
+      return { id: c.id, code: c.code, recvDate: c.recvDate, product: c.product, issueType: c.issueType, severity: c.severity, status: c.status, days: qaDays_(c.recvDate, today), rounds: c.rounds.length, photo: (c.files.filter(function (f) { return /^image\//.test(f.mime || 'image/'); })[0] || {}).id || '' };
     }),
     trend: trend };
 }

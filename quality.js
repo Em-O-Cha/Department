@@ -166,7 +166,7 @@
     var mxT = Math.max.apply(null, r.trend.map(function (m) { return m.n; }).concat([1]));
     html += '<div class="pgrid">'
       + box(icon('warn', 18) + ' เรื่องค้างเกินกำหนด', r.overdueList.map(function (o) {
-        return '<div class="li' + (interactive ? ' click" data-cc="' + esc(o.id) : '') + '"><span>' + esc(o.code) + ' · ' + esc(o.product) + ' · ' + esc(o.issueType) + '</span><b class="neg">' + o.days + ' วัน</b><small>รับเรื่อง ' + dd(o.recvDate) + ' · ' + (ST[o.status] || '') + ' · แก้ไขแล้ว ' + o.rounds + ' รอบ · ความรุนแรง' + (SEV[o.severity] || '') + '</small></div>';
+        return '<div class="li' + (o.photo ? ' qph' : '') + (interactive ? ' click" data-cc="' + esc(o.id) : '') + '">' + (o.photo ? '<img class="qth" src="' + img(o.photo, 240) + '" alt="" loading="lazy">' : '') + '<span>' + esc(o.code) + ' · ' + esc(o.product) + ' · ' + esc(o.issueType) + '</span><b class="neg">' + o.days + ' วัน</b><small>รับเรื่อง ' + dd(o.recvDate) + ' · ' + (ST[o.status] || '') + ' · แก้ไขแล้ว ' + o.rounds + ' รอบ · ความรุนแรง' + (SEV[o.severity] || '') + '</small></div>';
       }), 'ไม่มีเรื่องค้างเกินกำหนด 👍')
       + box(icon('chart', 18) + ' ประเภทปัญหา', r.byIssue.length && window.DCH ? [window.DCH.donut(r.byIssue, { sub: 'เรื่อง', unit: ' เรื่อง', title: 'ประเภทปัญหา' })] : bars(r.byIssue, '#7c3aed'), 'ไม่มีข้อร้องเรียนในช่วงนี้')
       + box(icon('chart', 18) + ' สินค้าที่ถูกร้องเรียน', bars(r.byProduct, '#2563eb'), 'ไม่มีข้อร้องเรียนในช่วงนี้')
@@ -782,7 +782,7 @@
     '.qstage{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:99px;white-space:nowrap;background:#f1f5f9;color:#475569}.qstage.s0{background:#fef3c7;color:#92400e}.qstage.s1{background:#dbeafe;color:#1e40af}.qstage.s2{background:#ede9fe;color:#5b21b6}.qstage.s3{background:#dcfce7;color:#166534}.qstage.s4{background:#f1f5f9;color:#64748b}',
     '.qtag.qclosed_ok{background:#dcfce7;color:#166534}.qtag.qclosed_fail{background:#f1f5f9;color:#334155;border:1px solid #cbd5e1}.qtag.late{background:#b91c1c;color:#fff}',
     '.qsev{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:99px;border:1px solid}.qsev.sL{color:#166534;border-color:#86efac}.qsev.sM{color:#92400e;border-color:#fcd34d}.qsev.sH{color:#b91c1c;border-color:#fca5a5}.qsev.sC{color:#fff;background:#991b1b;border-color:#991b1b}',
-    '.qlatechip{border-color:#fca5a5;color:#b91c1c}.qlist{display:flex;flex-direction:column;gap:10px}',
+    '.li.qph{grid-template-columns:auto 1fr auto;column-gap:10px}.qth{grid-row:1/3;width:76px;height:76px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0}.li.qph small{grid-column:2/-1}.qlatechip{border-color:#fca5a5;color:#b91c1c}.qlist{display:flex;flex-direction:column;gap:10px}',
     '.qcard{display:flex;flex-direction:column;gap:5px;text-align:left;width:100%;background:#fff;border:1px solid var(--line);border-left:6px solid #fcd34d;border-radius:12px;padding:12px 14px;box-shadow:var(--shadow);color:inherit}.qcard:hover{border-color:var(--c)}',
     '.qcard.sL{border-left-color:#86efac}.qcard.sH{border-left-color:#f87171}.qcard.sC{border-left-color:#991b1b}.qc1{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.qc1 span{color:var(--muted);font-size:13px}',
     '.qc2{font-size:15px}.qc2 small{color:var(--muted)}.qc3{font-size:13.5px;color:#475569}.qc4{display:flex;gap:6px;flex-wrap:wrap;align-items:center}',

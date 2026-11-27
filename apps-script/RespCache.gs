@@ -52,7 +52,7 @@ function rcTouch_(fn, args) {
 }
 function rcKey_(fn, deptKey, args) {
   var h = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, fn + '|' + JSON.stringify(args.slice(1)) + '|' + Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd'));
-  return 'RC5_' + deptKey + '_' + h.map(function (b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('');
+  return 'RC6_' + deptKey + '_' + h.map(function (b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('');
 }
 function rcGet_(key, stamp) {
   try {
