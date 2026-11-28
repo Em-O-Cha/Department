@@ -971,6 +971,17 @@
   var CM = window.COSTM = {};
   CM.menus = function () { return [{ id: 'c_dash', label: 'Dashboard ต้นทุนสินค้า', ic: 'chart' }, { id: 'c_cost', label: 'ต้นทุนสินค้า', ic: 'coin' }]; };
   CM.reset = function () { H.reset(); };
+  // เช็กข้อมูลใหม่ทุก 1 นาที (index.html dashAuto, ผู้ใช้ขอ 28/11/69)
+  CM.autoRefresh = function (done) {
+    if (state.page !== 'c_dash' || !H.data || !H.data._cost) return;
+    call.quiet = true; var pr = call('costLoad', state.token); call.quiet = false;
+    pr.then(function (d) {
+      if (!d || !d.ok || state.page !== 'c_dash') return;
+      d._cost = true; d.partners = d.partners || []; d.trials = d.trials || [];
+      var a = JSON.stringify(d), b = JSON.stringify(H.data); if (a === b) return;
+      H.data = d; costDash(); done(true);
+    }).catch(function () {});
+  };
   CM.exportFile = function (page, kind) { return H.exportFile(page, kind); };
   CM.render = function (page) {
     if (!H.data || !H.data._cost) {

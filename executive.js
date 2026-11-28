@@ -56,6 +56,19 @@
   function on(sel, fn) { Array.prototype.forEach.call($('main').querySelectorAll(sel), function (el) { el.addEventListener('click', function () { fn(el); }); }); }
 
   function curDept() { return (X.depts || []).filter(function (d) { return d.key === X.q.dept; })[0] || {}; }
+  // เช็กข้อมูลใหม่ทุก 1 นาที (index.html dashAuto, ผู้ใช้ขอ 28/11/69): ส่วนหลักของฝ่ายที่เปิดอยู่ · เปลี่ยน → วาดใหม่ (ส่วนเสริมโหลดใหม่ด้วย)
+  X.autoRefresh = function (done) {
+    if (String(state.page).indexOf('x_dash') !== 0 || !X.data || !X.q.dept || curDept().embed) return;
+    var key = X.q.dept + '|' + X.q.from + '|' + X.q.to, my = X.seq;
+    call.quiet = true; var pr = call('execDashboard', state.token, X.q.dept, X.q.from, X.q.to, true); call.quiet = false;
+    pr.then(function (r) {
+      if (!r || !r.ok || my !== X.seq || String(state.page).indexOf('x_dash') !== 0 || !X.data || X.data.key !== key) return;
+      r.key = key;
+      var base = function (o) { var c = {}; Object.keys(o).forEach(function (k) { if ((o.parts || []).indexOf(k) < 0) c[k] = o[k]; }); return JSON.stringify(c); };
+      if (base(r) === base(X.data)) return;
+      X.data = r; X.cache = X.cache || {}; X.cache[key] = { r: r, at: Date.now() }; draw(r); done(true);
+    }).catch(function () {});
+  };
   function load() {
     if (curDept().embed) return embed(curDept());
     var key = X.q.dept + '|' + X.q.from + '|' + X.q.to;

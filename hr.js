@@ -343,6 +343,12 @@
   }
 
   // ==================== ภาพรวม / Dashboard ====================
+  // เช็กข้อมูลใหม่ทุก 1 นาที (index.html dashAuto, ผู้ใช้ขอ 28/11/69)
+  H.autoRefresh = function (done) {
+    if (state.page !== 'h_dash' || !H.data || !$('dOut')) return;
+    var before = H.dashSig; dash(true);
+    var t = setInterval(function () { if (H.dashSig !== before) { clearInterval(t); done(true); } }, 500); setTimeout(function () { clearInterval(t); }, 30000);
+  };
   function dash(silent) {
     var t = H.data.today, q = H.q;
     if (silent === true && $('dOut') && H.dashSig) {   // เปลี่ยนเฉพาะเมื่อข้อมูลสรุปเปลี่ยนจริง · ไม่ขึ้น "กำลังสรุป…"

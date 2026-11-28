@@ -106,6 +106,13 @@
     waitBox(waitTitle, waitText);
     return P.load().then(function () { if (String(state.page).indexOf('p_') === 0) P.render(state.page); if (msg) toast(msg); fn(); }).catch(function (e) { closeModal(); onServerError(e); });
   }
+  // เช็กข้อมูลใหม่ทุก 1 นาที (index.html dashAuto, ผู้ใช้ขอ 28/11/69): โหลดเงียบ ๆ แล้ววาดภาพรวมใหม่เมื่อข้อมูลเปลี่ยน
+  P.autoRefresh = function (done) {
+    if (state.page !== 'p_dash' || !P.data || P.loading) return;
+    var before = JSON.stringify(P.data);
+    call.quiet = true; var pr = P.load(); call.quiet = false;
+    pr.then(function () { if (state.page !== 'p_dash' || JSON.stringify(P.data) === before) return; dash(); renderNav(); done(true); }).catch(function () {});
+  };
   P.reset = function () { P.data = null; P.report = null; P.q = {}; avlPage(false); };
   P.menus = function () {
     // จำนวน PO ที่อนุมัติใหม่แต่ยังไม่เปิดดู (ผู้ใช้ขอ 24/11/69)

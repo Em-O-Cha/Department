@@ -513,6 +513,7 @@
   // Dashboard ทุกฝ่าย (ผู้ใช้ขอ 27/11/69 เหมือนบัญชี / HR): ผลที่เคยโหลด (ไม่เกิน 5 นาที) ขึ้นทันที แล้วเช็คข้อมูลใหม่เงียบ ๆ วาดใหม่เฉพาะเมื่อเปลี่ยน
   window.dashCall = function (fn, args, cb) {
     var c = dashCall.cache = dashCall.cache || {}, key = (state.dept && state.dept.key) + '|' + fn + '|' + JSON.stringify(args), hit = c[key], sig0 = '';
+    dashCall.last = { fn: fn, args: args, cb: cb, page: state.page, key: key };   // ใช้เช็กข้อมูลใหม่ทุก 1 นาที (dashAuto)
     if (hit && Date.now() - hit.at < 300000) { sig0 = JSON.stringify(hit.r); cb(hit.r, true); call.quiet = true; } else hit = null;
     var p = call.apply(null, [fn, state.token].concat(args));
     call.quiet = false;
@@ -521,6 +522,37 @@
       if (!hit || JSON.stringify(r) !== sig0) cb(r, false);
     }, function (e) { if (!hit) throw e; });
   };
+  // ==================== Dashboard ทุกฝ่าย: เช็กข้อมูลใหม่ทุก 1 นาที (ผู้ใช้ขอ 28/11/69) ====================
+  // เงียบ ๆ (ไม่มีหน้าต่างรอ) · วาดใหม่เฉพาะเมื่อข้อมูลเปลี่ยน + แจ้ง "มีข้อมูลใหม่" · คงตำแหน่งที่เลื่อนไว้
+  // ข้าม: แท็บไม่ได้เปิดอยู่ · มีหน้าต่าง (dialog) เปิด · กำลังพิมพ์ · ฝ่ายบัญชีมีของตัวเองอยู่แล้ว (accounting.js autoTick)
+  // หน้าที่ใช้ dashCall (ความปลอดภัย / QA / ผลิต / R&D / ช่าง) รีเฟรชให้เลย · ฝ่ายอื่นใช้ module.autoRefresh(done) (HR / จัดซื้อ / ต้นทุน / ผู้บริหาร)
+  window.dashCall.refresh = function (done) {
+    var L = dashCall.last; if (!L || L.page !== state.page) return false;
+    call.quiet = true; var p = call.apply(null, [L.fn, state.token].concat(L.args)); call.quiet = false;
+    p.then(function (r) {
+      if (!r || !r.ok || L !== dashCall.last || state.page !== L.page) return;
+      var c = dashCall.cache = dashCall.cache || {}, old = c[L.key], changed = !old || JSON.stringify(old.r) !== JSON.stringify(r);
+      c[L.key] = { r: r, at: Date.now() };
+      if (changed) { L.cb(r, false); done(true); }
+    }).catch(function () {});
+    return true;
+  };
+  var dashAutoAt = 0;
+  function dashAuto() {
+    if (!state.dept || state.admin || document.hidden) return;
+    if (!/(^|_)dash(_|$)/.test(String(state.page))) return;
+    var m = deptModule(); if (m && m === window.ACC) return;
+    if (!$('modalOverlay').classList.contains('hidden')) return;
+    var a = document.activeElement; if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && $('main').contains(a)) return;
+    dashAutoAt = Date.now();
+    var y = window.scrollY, page = state.page;
+    var done = function (changed) { if (!changed || state.page !== page) return; window.scrollTo(0, y); toast('มีข้อมูลใหม่ — อัปเดต Dashboard แล้ว'); };
+    if (window.dashCall.refresh(done)) return;
+    if (m && m.autoRefresh) m.autoRefresh(done);
+  }
+  setInterval(dashAuto, 60000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && Date.now() - dashAutoAt > 60000) setTimeout(dashAuto, 500); });
+
   function call(fn) {
     var args = Array.prototype.slice.call(arguments, 1);
     var mine = Date.now() - busyAct < 1500 && !call.quiet;   // เรียกจากการกดของผู้ใช้ → แสดงหน้าต่าง "กำลังดำเนินการ" (งานเบื้องหลัง / poll ไม่แสดง)
@@ -1385,10 +1417,10 @@
   }).catch(function () { toast('โหลดรายชื่อแผนกไม่ได้'); });
 </script>
 <script src="dcharts.js?v=1"></script>
-<script src="purchasing.js?v=36"></script>
+<script src="purchasing.js?v=37"></script>
 <script src="poapprove.js?v=9"></script>
 <script src="safety.js?v=25"></script>
-<script src="hr.js?v=48"></script>
+<script src="hr.js?v=49"></script>
 <script src="hrxls.js?v=3"></script>
 <script src="hrdaily.js?v=21"></script>
 <script src="hrtime.js?v=5"></script>
@@ -1398,10 +1430,10 @@
 <script src="payables.js?v=28"></script>
 <script src="quality.js?v=13"></script>
 <script src="production.js?v=37"></script>
-<script src="rd.js?v=13"></script>
+<script src="rd.js?v=14"></script>
 <script src="sales.js?v=4"></script>
 <script src="it.js?v=5"></script>
 <script src="mnt.js?v=2"></script>
-<script src="executive.js?v=30"></script>
+<script src="executive.js?v=31"></script>
 </body>
 </html>
