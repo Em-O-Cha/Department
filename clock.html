@@ -22,7 +22,7 @@
   .clock { text-align: center; } .clock .t { font-size: 48px; font-weight: 800; line-height: 1.05; letter-spacing: 1px; }
   .clock .d { font-size: 14.5px; color: var(--mut); }
   .gps { display: flex; gap: 10px; align-items: center; border-radius: 12px; padding: 10px 12px; font-size: 15px; font-weight: 700; background: #f1f5f9; color: #334155; }
-  .gps small { display: block; font-weight: 400; font-size: 13px; }
+  .gps small { display: block; font-weight: 400; font-size: 14px; }
   .gps.ok { background: #dcfce7; color: #166534; } .gps.bad { background: #fee2e2; color: #991b1b; }
   .btn { border: 0; border-radius: 16px; padding: 14px; font: 800 19px Sarabun, sans-serif; color: #fff; background: var(--ok); min-height: 60px; width: 100%; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
   .btn.out { background: var(--blue); }
@@ -63,6 +63,9 @@
   .spin { width: 42px; height: 42px; border-radius: 50%; border: 4px solid #cbd5e1; border-top-color: var(--blue); animation: sp 1s linear infinite; margin: 0 auto 12px; }
   @keyframes sp { to { transform: rotate(360deg); } }
   .busy { position: fixed; inset: 0; background: rgba(15,23,42,.55); z-index: 40; display: grid; place-items: center; }
+  .hint { font-size: 14px; color: #475569; text-align: center; margin-top: -4px; line-height: 1.45; } .hint.wait { color: #9a3412; font-weight: 700; }
+  .rg { margin-top: 8px; background: #fff; color: #991b1b; border: 1.5px solid #fca5a5; border-radius: 10px; padding: 8px 12px; font: 700 15px Sarabun, sans-serif; min-height: 44px; width: 100%; }
+  .nil { color: #64748b; font-size: 14px; }
   .busy .box { background: #fff; border-radius: 16px; padding: 20px 22px; text-align: center; max-width: 300px; }
   .busy b { display: block; font-size: 17px; } .busy small { color: var(--mut); }
 </style>
@@ -99,6 +102,12 @@
   function busy(t) { $('busyT').textContent = t; $('busy').classList.remove('hidden'); }
   function unbusy() { $('busy').classList.add('hidden'); }
   function show(html) { $('vLoad').classList.add('hidden'); var m = $('vMain'); m.innerHTML = html; m.classList.remove('hidden'); window.scrollTo(0, 0); }
+  // UX 28/11/69: ไม่โชว์ข้อความภาษาอังกฤษจากระบบ (เช่น "Failed to fetch" / "Unexpected token") ให้พนักงาน
+  function nice(e) {
+    var m = String((e && e.message) || e || '');
+    if (/fetch|network|json|token|load failed|timeout|abort|unexpected|syntax|^error$/i.test(m) || !/[ก-๙]/.test(m)) return 'เชื่อมต่อระบบไม่ได้ — ตรวจอินเทอร์เน็ต / สัญญาณมือถือ แล้วกด "ลองใหม่" (ถ้ายังไม่ได้ แจ้งฝ่ายบุคคล)';
+    return m;
+  }
   function fatal(t, sub) { show('<div class="bd"><div class="msg err"><b>' + esc(t) + '</b>' + esc(sub || '') + '</div><button class="btn sec" onclick="location.reload()">↻ ลองใหม่</button></div>'); }
 
   // ---------- ใบหน้า (face-api.js: หาใบหน้า + จุดบนหน้า 68 จุด + รหัสใบหน้า 128 ค่า) ----------
@@ -188,7 +197,7 @@
       if (d.blocked) return fatal(d.blocked);
       if (!d.registered) return regPage();
       home();
-    }).catch(function (e) { fatal('เปิดหน้าลงเวลาไม่ได้', ' ' + (e.message || e)); });
+    }).catch(function (e) { fatal('เปิดหน้าลงเวลาไม่ได้', nice(e)); });
   }
 
   // ---------- หน้าหลัก ----------
@@ -200,15 +209,16 @@
     show('<div class="top"><small>ลงเวลาเข้า-ออกงาน</small><div class="who"><div class="av">' + esc((e.nick || e.name).slice(0, 1)) + '</div><div><b>' + esc(e.nick ? e.name + ' (' + e.nick + ')' : e.name) + '</b><span>' + esc([e.pos, e.group].filter(Boolean).join(' · ')) + '</span></div></div></div>'
       + '<div class="bd">' + (note || '')
       + '<div class="clock"><div class="t" id="clk">' + esc(d.now) + '</div><div class="d">' + thDate(d.today) + (day.work ? ' · เข้างาน ' + esc(day.inT) + ' น. · ออก ' + esc(day.outT) + ' น.' : ' · ไม่ใช่วันทำงาน (ไม่นับสาย)') + '</div></div>'
-      + '<div class="gps" id="gps">📍<div>กำลังตรวจตำแหน่ง…<small>เปิด GPS และอนุญาตให้ LINE ใช้ตำแหน่ง</small></div></div>'
+      + '<div class="today"><b>วันนี้</b><div><span>เข้างาน</span><span>' + (r.timeIn ? esc(r.timeIn) + ' น. ' + lateTag : '<span class="nil">ยังไม่ได้ลง</span>') + '</span></div><div><span>ออกงาน</span><span>' + (r.timeOut ? esc(r.timeOut) + ' น.' + earlyTag : '<span class="nil">ยังไม่ได้ลง</span>') + '</span></div></div>'
       + (stage === 'done' ? '<div class="msg info"><b>วันนี้ลงเวลาครบแล้ว ✓</b>ถ้าออกงานจริงช้ากว่าที่บันทึก กด "สแกนออกงานใหม่" ได้</div>' : '')
-      + '<button class="btn ' + (stage === 'in' ? '' : 'out') + '" id="go" disabled>📷 ' + (stage === 'in' ? 'สแกนหน้า เข้างาน' : stage === 'out' ? 'สแกนหน้า ออกงาน' : 'สแกนออกงานใหม่') + '</button>'
-      + '<div style="font-size:13px;color:#475569;text-align:center;margin-top:-4px">' + (stage === 'in' ? 'เวลาเข้างาน = เวลาที่กดเมนู &quot;ลงเวลา&quot; (ถ้าสแกนเสร็จภายใน 3 นาที) — หน้าโหลดช้าไม่ทำให้สาย' : 'เวลาออกงาน = เวลาที่กดปุ่มสแกน') + '</div>' + '<button class="btn sec" id="regps">↻ ตรวจตำแหน่งอีกครั้ง</button>' + (d.leaveUrl ? '<a class="btn sec" href="' + esc(d.leaveUrl) + '" style="text-decoration:none">📝 ขอลา / ดูวันลาคงเหลือ</a>' : '')
-      + '<div class="today"><b>วันนี้</b><div><span>เข้างาน</span><span>' + (r.timeIn ? esc(r.timeIn) + ' น. ' + lateTag : '—') + '</span></div><div><span>ออกงาน</span><span>' + (r.timeOut ? esc(r.timeOut) + ' น.' + earlyTag : '—') + '</span></div></div>'
+      + '<div class="gps" id="gps">📍<div>กำลังตรวจตำแหน่ง…<small>เปิด GPS และอนุญาตให้ LINE ใช้ตำแหน่ง</small></div></div>'
+      + '<button class="btn ' + (stage === 'in' ? '' : stage === 'out' ? 'out' : 'sec') + '" id="go" disabled>📷 ' + (stage === 'in' ? 'สแกนหน้า เข้างาน' : stage === 'out' ? 'สแกนหน้า ออกงาน' : 'สแกนออกงานใหม่') + '</button>'
+      + '<div class="hint" id="goHint"></div>'
+      + (d.leaveUrl ? '<a class="btn sec" href="' + esc(d.leaveUrl) + '" style="text-decoration:none">📝 ขอลา / ดูวันลาคงเหลือ</a>' : '')
       + '</div>');
+    S.stage = stage;
     tick();
     $('go').onclick = function () { scan(stage === 'in' ? 'in' : 'out'); };
-    $('regps').onclick = function () { checkGps(true); };
     checkGps();
   }
   function tick() {
@@ -219,7 +229,15 @@
   function meters(a, b, c, d) { var R = 6371000, r = Math.PI / 180, x = Math.sin((c - a) * r / 2), y = Math.sin((d - b) * r / 2); var h = x * x + Math.cos(a * r) * Math.cos(c * r) * y * y; return Math.round(R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h))); }
   function checkGps(restart) {
     var g = S.d.geo, box = $('gps'), go = $('go');
-    var set = function (cls, t, sub, ok) { if (!$('gps')) return; box.className = 'gps ' + cls; box.innerHTML = '📍<div>' + t + '<small>' + sub + '</small></div>'; go.disabled = !ok; };
+    var timeHint = S.stage === 'in' ? 'เวลาเข้างานนับตอนกดเมนู "ลงเวลา" (ถ้าสแกนเสร็จใน 3 นาที) — หน้าโหลดช้าไม่ทำให้สาย' : 'เวลาออกงาน = เวลาที่กดปุ่มสแกน';
+    var set = function (cls, t, sub, ok) {
+      if (!$('gps')) return;
+      var retry = cls === 'bad' && g.set && G.err !== 'nogeo';
+      box.className = 'gps ' + cls; box.innerHTML = '📍<div style="flex:1">' + t + '<small>' + sub + '</small>' + (retry ? '<button type="button" class="rg" id="regps">↻ ตรวจตำแหน่งอีกครั้ง</button>' : '') + '</div>';
+      if (retry) $('regps').onclick = function () { checkGps(true); };
+      go.disabled = !ok;
+      var h = $('goHint'); if (h) { h.className = 'hint' + (ok ? '' : ' wait'); h.textContent = ok ? timeHint : (cls === 'bad' ? '🔒 กดสแกนได้เมื่ออยู่ในพื้นที่บริษัท' : '⏳ รอตรวจตำแหน่งสักครู่ แล้วปุ่มจะกดได้เอง'); }
+    };
     S.pos = null; clearTimeout(G.to);
     if (!g.set) return set('bad', 'ฝ่ายบุคคลยังไม่ได้ตั้งจุดลงเวลา ✕', 'แจ้งฝ่ายบุคคล', false);
     if (G.err === 'nogeo') return set('bad', 'มือถือนี้ใช้ตำแหน่งไม่ได้ ✕', 'อัปเดตแอป LINE แล้วลองใหม่', false);
@@ -277,7 +295,7 @@
         var photo = snap(480), desc = Array.from(x.f.descriptor);
         closeCam(); busy(kind === 'in' ? 'กำลังบันทึกเวลาเข้างาน…' : 'กำลังบันทึกเวลาออกงาน…');
         stampP.then(function (st) { return call('hrClockPunch', [S.tok, kind, desc, photo, pos, true, st]); }).then(function (r) { unbusy(); result(!!(r && r.ok), kind, r || {}); })
-          .catch(function (e) { unbusy(); result(false, kind, { error: 'เชื่อมต่อไม่ได้ — ตรวจอินเทอร์เน็ตแล้วลองใหม่ (' + (e.message || e) + ')' }); });
+          .catch(function (e) { unbusy(); result(false, kind, { error: nice(e) }); });
       };
       loop();
     }).catch(function (e) { var m = camErr(e); home('<div class="msg err"><b>สแกนหน้าไม่ได้</b>' + esc(m) + '</div>'); });
@@ -310,8 +328,12 @@
       }).join('') || '<div class="msg info">ไม่พบชื่อนี้ — ถ้าไม่มีชื่อของคุณ ติดต่อฝ่ายบุคคล</div>';
       Array.prototype.forEach.call(document.querySelectorAll('.pp'), function (b) { b.onclick = function () { sel = b.getAttribute('data-id'); draw(); upd(); }; });
     };
-    var upd = function () { $('start').disabled = !(sel && $('ok').checked); };
-    $('q').oninput = draw; $('ok').onchange = upd; draw();
+    var upd = function () {
+      var p = sel && d.people.filter(function (x) { return x.id === sel; })[0], b = $('start');
+      b.disabled = !(p && $('ok').checked);
+      b.textContent = !p ? 'เลือกชื่อของคุณก่อน (ข้อ 1)' : !$('ok').checked ? 'ติ๊กยินยอมก่อน (ข้อ 2)' : '📷 เริ่มถ่ายหน้า · ' + (p.nick || p.name);
+    };
+    $('q').oninput = draw; $('ok').onchange = upd; draw(); upd();
     $('start').onclick = function () { enroll(d.people.filter(function (p) { return p.id === sel; })[0]); };
   }
   // ถ่ายหลายมุมจนระบบมั่นใจ: 6 รูป แต่ละรูปต้องเป็นหน้าเดียวกัน (ระยะห่างรหัสใบหน้า ≤ 0.45) ตาเปิด หน้าใหญ่พอ
