@@ -39,7 +39,16 @@
   // ---------- ตัวช่วย ----------
   function pad(n) { return ('0' + n).slice(-2); }
   function addDays(iso, n) { var p = iso.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2] + n); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
-  function dd(iso) { if (!iso) return '-'; var p = String(iso).slice(0, 10).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : esc(iso); }
+  function dd(iso) { if (!iso) return '-'; var p = String(iso).slice(0, 10).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + (+p[0] + 543) : esc(iso); }   // พ.ศ. (UX 28/11/69: เดิมแสดง ค.ศ.)
+  var MONTH_TH = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+  // ตัวเลือกเดือนภาษาไทย พ.ศ. (เดิม input type=month แสดงอังกฤษ / ค.ศ. ตามเครื่อง): 24 เดือนย้อนหลัง – 6 เดือนข้างหน้า
+  function monthSel(id, cur) {
+    var p = H.data.today.split('-'), y = +p[0], m = +p[1] + 6, out = [];
+    while (m > 12) { m -= 12; y++; }
+    for (var i = 0; i < 31; i++) { out.push(y + '-' + ('0' + m).slice(-2)); if (--m < 1) { m = 12; y--; } }
+    if (cur && out.indexOf(cur) < 0) out.push(cur);
+    return '<select id="' + id + '" class="hsel" aria-label="เลือกเดือน">' + out.map(function (k) { return '<option value="' + k + '"' + (k === cur ? ' selected' : '') + '>' + MONTH_TH[+k.slice(5) - 1] + ' ' + (+k.slice(0, 4) + 543) + '</option>'; }).join('') + '</select>';
+  }
   function thDate(iso) { if (!iso) return '-'; var p = String(iso).split('-'); return +p[2] + ' ' + MONTHS[+p[1] - 1] + ' ' + (+p[0] + 543); }
   function days(a, b) { var p = a.split('-'), q = b.split('-'); return Math.round((new Date(+q[0], +q[1] - 1, +q[2]) - new Date(+p[0], +p[1] - 1, +p[2])) / 864e5); }
   function yrs(a) { if (!a) return ''; var n = days(a, H.data.today) / 365.25; return n < 1 ? Math.max(0, Math.round(n * 12)) + ' เดือน' : (Math.floor(n * 10) / 10) + ' ปี'; }
@@ -684,7 +693,7 @@
       + (over.length ? '<div class="panel sins" style="margin-bottom:12px"><div class="sin bad">ลาเกินสิทธิ์ปี ' + (+y + 543) + ': ' + over.map(function (id) { return esc((emp(id) || {}).fullName || id); }).join(', ') + '</div></div>' : '')
       + pendingBox()
       + leaveTabs()
-      + '<div class="pbar"><label class="pchk">เดือน <input type="month" id="lM" value="' + esc(q.lm) + '"></label><select id="lT"><option value="">ทุกประเภท</option>' + Object.keys(LT).map(function (k) { return '<option value="' + k + '"' + (q.lt === k ? ' selected' : '') + '>' + LT[k] + '</option>'; }).join('') + '</select>'
+      + '<div class="pbar hlvbar"><label class="pchk">เดือน ' + monthSel('lM', q.lm) + '</label><select id="lT" class="hsel"><option value="">ทุกประเภท</option>' + Object.keys(LT).map(function (k) { return '<option value="' + k + '"' + (q.lt === k ? ' selected' : '') + '>' + LT[k] + '</option>'; }).join('') + '</select>'
       + '<b style="flex:1">' + rows.length + ' รายการ</b><button class="btn btn-sm btn-line" id="lXls">' + icon('dl', 16) + ' ตารางสรุปเดือนนี้ (Excel)</button><button class="btn btn-sm btn-primary" id="lNew">' + icon('plus', 16) + ' บันทึกการลา</button></div>'
       + '<div class="plist hlvgrid">' + (rows.map(function (l) {
         var e = emp(l.empId) || { fullName: '(ไม่พบพนักงาน)' };
@@ -715,11 +724,23 @@
       var r = r2(qq - u);
       return '<td class="c"><b class="' + (r < 0 ? 'neg' : r <= stdH() && qq ? 'warn' : '') + '">' + (r < 0 ? 'เกิน ' + fh(-r) : fh(r)) + '</b><small>ใช้ ' + r2(u) + '/' + r2(qq) + ' ชม.</small></td>';
     };
+    var card = function (e) {   // มือถือ: การ์ดต่อคน (ตาราง 6 คอลัมน์อ่านยากบนจอแคบ · UX 28/11/69)
+      var box = function (k) {
+        var u = usedOf(e.id, k, y), qq = quotaOf(e, k, y);
+        if (qq == null) return '<div><span>' + LT[k] + '</span><b>' + (u ? 'ใช้ ' + fh(u) : '—') + '</b><small>ไม่จำกัดสิทธิ์</small></div>';
+        var r = r2(qq - u);
+        return '<div class="' + (r < 0 ? 'neg' : r <= stdH() && qq ? 'warn' : '') + '"><span>' + LT[k] + '</span><b>' + (r < 0 ? 'เกิน ' + fh(-r) : fh(r)) + '</b><small>ใช้ ' + r2(u) + ' / ' + r2(qq) + ' ชม.</small></div>';
+      };
+      var ab = usedOf(e.id, 'absent', y), lt = usedOf(e.id, 'late', y);
+      return '<button class="hbc" data-emp="' + e.id + '"><b>' + esc(e.fullName) + (e.nickname ? ' <small>(' + esc(e.nickname) + ')</small>' : '') + '</b><div class="hbcg">' + ks.map(box).join('') + '</div>'
+        + (ab || lt ? '<div class="hbcx">' + (ab ? '<span class="neg">✕ ขาดงาน ' + fh(ab) + '</span>' : '') + (lt ? '<span class="warn">⏰ มาสาย ' + lt + ' ครั้ง</span>' : '') + '</div>' : '') + '</button>';
+    };
     $('main').innerHTML = '<h3>การลา / ขาดงาน / มาสาย</h3><p class="lead">สิทธิ์คงเหลือ = สิทธิ์ต่อปี − วันที่ลาไปแล้วในปีนั้น (ไม่นับรายการ "ไม่อนุมัติ") · ขึ้นปีใหม่ระบบเริ่มนับใหม่ให้เอง</p>'
       + leaveTabs()
-      + '<div class="pbar"><select id="bY">' + years.map(function (x) { return '<option value="' + x + '"' + (x === y ? ' selected' : '') + '>ปี ' + (+x + 543) + '</option>'; }).join('') + '</select>'
+      + '<div class="pbar hlvbar"><select id="bY" class="hsel" aria-label="เลือกปี">' + years.map(function (x) { return '<option value="' + x + '"' + (x === y ? ' selected' : '') + '>ปี ' + (+x + 543) + '</option>'; }).join('') + '</select>'
       + '<div class="psearch">' + icon('search', 18) + '<input id="bq" type="search" placeholder="ค้นหาชื่อ" value="' + esc(q.bq || '') + '"></div></div>'
-      + '<div class="ptable-wrap"><table class="ptable hbal"><thead><tr><th>พนักงาน</th>' + ks.map(function (k) { return '<th class="c">' + LT[k] + '<br><small>คงเหลือ (ชม.)</small></th>'; }).join('') + '<th class="c">ขาดงาน<br><small>ชม.</small></th><th class="c">มาสาย<br><small>ครั้ง</small></th></tr></thead><tbody>'
+      + '<div class="hbcards">' + rows.map(card).join('') + (rows.length ? '' : '<div class="panel muted">ไม่พบชื่อนี้</div>') + '</div>'
+      + '<div class="ptable-wrap hbalw"><table class="ptable hbal"><thead><tr><th>พนักงาน</th>' + ks.map(function (k) { return '<th class="c">' + LT[k] + '<br><small>คงเหลือ (ชม.)</small></th>'; }).join('') + '<th class="c">ขาดงาน<br><small>ชม.</small></th><th class="c">มาสาย<br><small>ครั้ง</small></th></tr></thead><tbody>'
       + rows.map(function (e) { return '<tr data-emp="' + e.id + '"><td>' + esc(e.fullName) + (e.nickname ? ' <small>(' + esc(e.nickname) + ')</small>' : '') + '</td>' + ks.map(function (k) { return cell(e, k); }).join('')
         + '<td class="c">' + (usedOf(e.id, 'absent', y) ? fh(usedOf(e.id, 'absent', y)) : '') + '</td><td class="c">' + (usedOf(e.id, 'late', y) || '') + '</td></tr>'; }).join('') + '</tbody></table></div>';
     bindLeaveTabs();
@@ -1364,6 +1385,11 @@
   // ---------- CSS ของโมดูล ----------
   var css = document.createElement('style');
   css.textContent = [
+    '.hsel{min-height:42px;padding:6px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit;background:#fff;color:inherit}.hlvbar .pchk{display:flex;align-items:center;gap:6px;font-weight:600}',
+    '.hbcards{display:none}.hbc{display:block;width:100%;text-align:left;font:inherit;color:inherit;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;margin:0 0 10px;cursor:pointer}.hbc>b{font-size:15.5px}',
+    '.hbcg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}.hbcg div{background:#f0fdf4;border-radius:10px;padding:6px 8px}.hbcg div.warn{background:#fffbeb}.hbcg div.neg{background:#fef2f2}.hbcg span{display:block;font-size:13px;color:#475569;font-weight:600}.hbcg b{display:block;font-size:14.5px}.hbcg small{font-size:12px;color:#64748b}',
+    '.hbcx{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px;font-size:14px;font-weight:600}.hbcx .neg{color:#b91c1c}.hbcx .warn{color:#c2410c}',
+    '@media (max-width:700px){.hbcards{display:block}.hbalw{display:none}}',
     '.ckemp{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px 10px;margin:6px 0}.ckg{padding:6px 0;border-bottom:1px solid #eef2f7}.ckg:last-child{border-bottom:0}.ckgh{display:flex;gap:8px;align-items:center;min-height:36px;cursor:pointer}.cke{display:flex;gap:8px;align-items:center;min-height:36px;padding-left:26px;cursor:pointer;font-size:14.5px;flex-wrap:wrap}.ckg input{width:18px;height:18px}.cktag{background:#dcfce7;color:#166534;border-radius:6px;padding:0 6px;font-size:12px;font-weight:700}.ckfaces{display:flex;flex-direction:column;gap:8px;margin:6px 0}.ckf{display:flex;gap:10px;justify-content:space-between;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:8px 10px;flex-wrap:wrap}.ckf small{display:block}.ckfb{display:flex;gap:6px;flex-wrap:wrap}.ckimg{width:120px;border-radius:10px;margin-top:6px;display:block}',
     '.hnew{display:inline-flex;align-items:center;gap:4px;background:#dc2626;color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;margin-top:4px;white-space:nowrap;animation:hnewp 1.2s ease-in-out infinite}.hnew.seen{background:#2563eb;animation:none}',
     '.pinfo .hnew{align-self:flex-start;margin-top:6px}.hnewbox{background:#fef2f2;border:1.5px solid #fca5a5;border-radius:14px;padding:10px 12px;margin:0 0 14px}.hnewbox>b{display:block;color:#b91c1c;margin-bottom:6px}',
