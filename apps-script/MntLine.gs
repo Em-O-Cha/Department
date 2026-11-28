@@ -12,6 +12,11 @@ function mntSign_(text) {
   var secret = hrProp_('MNT_SIGN_SECRET', function () { return hrRand_(32); });
   return Utilities.computeHmacSha256Signature(String(text), secret).slice(0, 8).map(function (b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('');
 }
+// ช่างที่มีสิทธิ์กดรับงานใน LINE (ผู้ใช้ขอ 28/11/69): [{userId, name, addedAt}] · ว่าง = ทุกคนในกลุ่มช่างกดได้
+function mntTechs_() { try { var a = JSON.parse(props_().getProperty('MNT_LINE_TECHS') || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+function mntTechOf_(uid) { return uid ? mntTechs_().filter(function (t) { return t.userId === uid; })[0] || null : null; }
+// ลิงก์ฟอร์มแจ้งซ่อม: ปุ่มเมนู LINE (LIFF) ถ้าตั้งไว้ = รู้ว่าใครแจ้ง · ไม่งั้นลิงก์ QR
+function mntFormLink_(extra) { var L = mntLiffId_(); return L ? 'https://liff.line.me/' + L + (extra ? '?' + extra : '') : MNT_PAGE_ + '?k=' + mntFormKey_() + (extra ? '&' + extra : ''); }
 function mntTechUrl_(id) { return MNT_PAGE_ + '?id=' + encodeURIComponent(id) + '&t=' + mntSign_('mt|' + id); }
 function mntFormCheck_(key) {
   if (!key || String(key) !== mntFormKey_()) throw new Error('ลิงก์แจ้งซ่อมไม่ถูกต้อง หรือฝ่ายช่างเปลี่ยนลิงก์แล้ว — สแกน QR ใหม่');
@@ -135,15 +140,42 @@ function mntConfirmFlex_(r) {
       { type: 'button', style: 'secondary', height: 'sm', action: { type: 'postback', label: '✕ ยังไม่หาย', data: 'mnt|' + r.id + '|no', displayText: 'ยังไม่หาย' } },
       { type: 'button', style: 'primary', color: '#16A34A', height: 'sm', action: { type: 'postback', label: '✓ ใช้ได้แล้ว', data: 'mnt|' + r.id + '|ok', displayText: 'ใช้งานได้แล้ว' } }] } } };
 }
+var MNT_STC_ = { 'new': '#C2410C', accepted: '#2563EB', doing: '#1D4ED8', wait: '#B45309', done: '#16A34A', closed: '#475569', cancel: '#64748B' };
+// อัปเดตงานเข้ากลุ่มช่าง (ผู้ใช้ขอ 28/11/69): เปลี่ยนสถานะ / แนบรูป → การ์ดสรุป + รูปที่แนบรอบนี้
+function mntUpdateMsgs_(r, was, added, by) {
+  var col = MNT_STC_[r.status] || '#475569', rows = [
+    mntRow_('สถานะ', (was && was !== r.status ? (MNT_ST_[was] || was) + ' → ' : '') + MNT_ST_[r.status], col, true),
+    mntRow_('ช่าง', r.assignee || by)];
+  if (r.status === 'wait' && r.waitReason) rows.push(mntRow_('รออะไร', r.waitReason, '#B45309', true));
+  if (r.cause) rows.push(mntRow_('สาเหตุ', r.cause));
+  if (r.fix) rows.push(mntRow_('วิธีแก้', r.fix));
+  if (r.note) rows.push(mntRow_('หมายเหตุ', r.note));
+  if (added && added.length) rows.push(mntRow_('รูป', '📷 แนบ ' + added.length + ' รูป'));
+  var bubble = { type: 'bubble', size: 'mega',
+    header: { type: 'box', layout: 'vertical', backgroundColor: col, paddingAll: '14px', contents: [
+      { type: 'text', text: '🔄 อัปเดตงานซ่อม · ' + MNT_ST_[r.status], color: '#FFFFFF', weight: 'bold', size: 'md', wrap: true },
+      { type: 'text', text: (r.code || '') + ' · ' + String(r.machineName || r.location || '').slice(0, 60), color: '#FFFFFFDD', size: 'xs', margin: 'xs', wrap: true }] },
+    body: { type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'xs', contents: rows },
+    footer: { type: 'box', layout: 'vertical', paddingAll: '12px', contents: [{ type: 'button', style: 'secondary', height: 'sm', action: { type: 'uri', label: '🔧 ดู / อัปเดตงาน', uri: mntTechUrl_(r.id) } }] } };
+  if (added && added.length) bubble.hero = { type: 'image', url: added[0].url, size: 'full', aspectRatio: '4:3', aspectMode: 'cover', action: { type: 'uri', uri: added[0].url } };
+  var msgs = [{ type: 'flex', altText: '🔄 ' + (r.code || '') + ' ' + MNT_ST_[r.status] + (r.assignee ? ' · ' + r.assignee : ''), contents: bubble }];
+  (added || []).slice(1, 5).forEach(function (f) { msgs.push({ type: 'image', originalContentUrl: f.url, previewImageUrl: f.url }); });
+  return msgs;
+}
 // หลังบันทึก: ใบใหม่ → การ์ดเข้ากลุ่มช่าง · เพิ่งซ่อมเสร็จ → แจ้งผู้แจ้ง (+ กลุ่ม ถ้าตั้งไว้) · คืนข้อความผิดพลาด (ว่าง = ปกติ / ไม่ต้องส่ง)
-function mntAfterChange_(row, wasStatus, isNew) {
-  if (!mntTok_()) return isNew ? 'ยังไม่ได้ตั้งค่า LINE ของฝ่ายช่าง — ใบแจ้งซ่อมบันทึกแล้วแต่ยังไม่ส่งเข้ากลุ่ม' : '';
-  var errs = [];
+// opt = {notify: ส่งอัปเดตเข้ากลุ่ม, added: รูปที่แนบรอบนี้, by}
+function mntAfterChange_(row, wasStatus, isNew, opt) {
+  opt = opt || {};
+  if (!mntTok_()) return isNew || opt.notify ? 'ยังไม่ได้ตั้งค่า LINE ของฝ่ายช่าง — บันทึกแล้วแต่ยังไม่ส่งเข้ากลุ่ม' : '';
+  var errs = [], sentUpd = false;
   if (isNew) { var r1 = mntPush_(mntGroup_(), [mntRepairFlex_(row, 'new')]); if (!r1.ok) errs.push(r1.error); }
+  else if (opt.notify && (wasStatus !== row.status || (opt.added && opt.added.length))) {
+    var ru = mntPush_(mntGroup_(), mntUpdateMsgs_(row, wasStatus, opt.added || [], opt.by)); if (!ru.ok) errs.push(ru.error); else sentUpd = true;
+  }
   if (row.status === 'done' && wasStatus !== 'done' && wasStatus !== 'closed') {
     var st = mntSettings_(mntReadBook_(mntDept_()));
     if (row.lineUserId && st.notifyReporter) { var r2 = mntPush_(row.lineUserId, [mntConfirmFlex_(row)]); if (!r2.ok) errs.push('แจ้งผู้แจ้ง: ' + r2.error); }
-    if (st.notifyGroupDone) { var r3 = mntPush_(mntGroup_(), [mntRepairFlex_(row, 'done')]); if (!r3.ok) errs.push(r3.error); }
+    if (st.notifyGroupDone && !sentUpd) { var r3 = mntPush_(mntGroup_(), [mntRepairFlex_(row, 'done')]); if (!r3.ok) errs.push(r3.error); }
   }
   return errs.join(' · ');
 }
@@ -167,9 +199,25 @@ function mntLineWebhook_(events) {
         props_().setProperty('MNT_LINE_SETUP', hrSetupCode_());
         return mntReply_(ev.replyToken, [mntText_L_('✅ ตั้งกลุ่มนี้เป็นกลุ่มรับงานแจ้งซ่อมของฝ่ายช่างแล้ว\nพิมพ์ "งานค้าง" เพื่อดูงานที่ยังไม่เสร็จ · "PM" เพื่อดูงานบำรุงรักษาที่ใกล้ถึงกำหนด')]);
       }
+      if ((m = text.match(/^ขอสิทธิ์รับงาน\s*([A-Z0-9]{6})$/i))) {
+        if (!gid || gid !== bound) return mntReply_(ev.replyToken, [mntText_L_('พิมพ์คำสั่งนี้ในกลุ่มช่างที่ผูกไว้')]);
+        hrRate_('mnttechcode', 20, 3600);
+        var c = null; try { c = JSON.parse(props_().getProperty('MNT_TECH_CODE') || 'null'); } catch (e) {}
+        if (!c || c.exp < Date.now() || m[1].toUpperCase() !== c.code) return mntReply_(ev.replyToken, [mntText_L_('รหัสหมดอายุหรือไม่ถูกต้อง — ให้ฝ่ายช่างกด "+ เพิ่มช่างที่กดรับงานได้" เพื่อขอรหัสใหม่ (ใช้ได้ 5 นาที)')]);
+        props_().deleteProperty('MNT_TECH_CODE');
+        var uid0 = src.userId || '', nm = mntMemberName_(gid, uid0) || 'ช่าง';
+        if (!uid0) return mntReply_(ev.replyToken, [mntText_L_('อ่านบัญชี LINE ไม่ได้ — ลองใหม่อีกครั้ง')]);
+        var list = mntTechs_().filter(function (t) { return t.userId !== uid0; });
+        list.push({ userId: uid0, name: nm, addedAt: purNow_() });
+        props_().setProperty('MNT_LINE_TECHS', JSON.stringify(list));
+        try { purLogWrite_(mntBook_(mntDept_()), 'เพิ่มช่างที่กดรับงานได้', 'mnt_settings', '', nm); } catch (e) {}
+        return mntReply_(ev.replyToken, [mntText_L_('✅ ' + nm + ' กด "✋ รับงาน" ในกลุ่มนี้ได้แล้ว')]);
+      }
+      // เมนูแจ้งซ่อม / ติดตามงานซ่อม (ผู้ใช้ขอ 28/11/69) — พิมพ์ได้ทั้งแชทกับบอทและในกลุ่ม · ตอบกลับฟรี (ไม่เสียโควตา)
+      if (/^(เมนู\s*)?แจ้งซ่อม$/.test(text)) return mntReply_(ev.replyToken, [mntMenuFlex_()]);
+      if (/^ติดตาม\s*(งาน)?\s*(แจ้ง)?ซ่อม/.test(text)) return mntReply_(ev.replyToken, mntTrackMsgs_(src.userId || '', gid));
       if (gid && gid === bound && /^งานค้าง$/.test(text)) return mntReply_(ev.replyToken, [mntText_L_(mntOpenText_())]);
       if (gid && gid === bound && /^PM$/i.test(text)) return mntReply_(ev.replyToken, [mntText_L_(mntPmText_())]);
-      if (!gid && /แจ้งซ่อม/.test(text)) return mntReply_(ev.replyToken, [mntText_L_('🔧 แจ้งซ่อมได้ที่ลิงก์นี้\n' + MNT_PAGE_ + '?k=' + mntFormKey_())]);
     } catch (err) { Logger.log('mntLineWebhook_ ' + err); }
   });
 }
@@ -179,7 +227,9 @@ function mntPostback_(ev, gid, bound) {
   var uid = (ev.source || {}).userId || '', dept = mntDept_(), act = p[2];
   if (act === 'take') {
     if (!gid || gid !== bound) return mntReply_(ev.replyToken, [mntText_L_('ปุ่มนี้ใช้ได้ในกลุ่มช่างที่ผูกไว้เท่านั้น')]);
-    var name = mntMemberName_(gid, uid) || 'ช่าง';
+    var techs = mntTechs_(), me = mntTechOf_(uid);
+    if (techs.length && !me) return mntReply_(ev.replyToken, [mntText_L_('⛔ ' + (mntMemberName_(gid, uid) || 'คุณ') + ' ยังไม่มีสิทธิ์รับงาน — ให้ฝ่ายช่างเพิ่มสิทธิ์ในหน้า "ตั้งค่า & LINE แจ้งซ่อม" ก่อน · งานยังรอรับอยู่')]);
+    var name = (me && me.name) || mntMemberName_(gid, uid) || 'ช่าง';
     var res = purLocked_(function () {
       var ss = mntBook_(dept), o = purRead_(ss, 'mnt_repairs').filter(function (x) { return x.id === p[1]; })[0];
       if (!o) return 'ใบแจ้งซ่อมนี้ถูกลบออกจากระบบแล้ว';
@@ -188,7 +238,7 @@ function mntPostback_(ev, gid, bound) {
       o.assignee = name; mntApplyStatus_(o, 'accepted', name); o.updatedAt = purNow_();
       purWrite_(ss, 'mnt_repairs', o);
       purLogWrite_(ss, 'รับงานทาง LINE', 'mnt_repairs', o.id, o.code + ' · ' + name);
-      return '✅ ' + name + ' รับงาน ' + o.code + ' แล้ว\n' + String(o.machineName || o.location || '') + '\nอัปเดตงาน / ปิดงาน: กดปุ่ม 🔧 ในการ์ด';
+      return '✅ ' + name + ' รับงาน ' + o.code + ' แล้ว\n' + String(o.machineName || o.location || '') + '\n\n👉 กดปุ่ม 🔧 ในการ์ด แล้วกรอกช่องสีส้ม:\n• เริ่มซ่อม → เลือก "กำลังซ่อม"\n• ต้องรอ → เลือก "รอ…" + เหตุผล + รูป\n• ซ่อมเสร็จ → สาเหตุ + วิธีแก้ + รูปหลังซ่อม';
     });
     return mntReply_(ev.replyToken, [mntText_L_(res)]);
   }
@@ -326,7 +376,8 @@ function mntTechView(id, t) {
   if (!r) return { ok: false, error: 'ใบแจ้งซ่อมนี้ถูกลบออกจากระบบแล้ว' };
   var parts = mntPartsOut_(purRead_(ss, 'mnt_parts'), purRead_(ss, 'mnt_moves')).filter(function (p) { return p.active !== 'off'; })
     .map(function (p) { return { id: p.id, name: p.name, unit: p.unit, price: p.price, balance: p.balance }; });
-  return { ok: true, repair: mntRepairOut_(r), statuses: MNT_ST_, urgency: MNT_URG_, techs: mntList_(st.techs), parts: parts, now: purNow_() };
+  var names = mntList_(st.techs); mntTechs_().forEach(function (t) { if (t.name && names.indexOf(t.name) < 0) names.push(t.name); });
+  return { ok: true, repair: mntRepairOut_(r), statuses: MNT_ST_, urgency: MNT_URG_, techs: names, parts: parts, now: purNow_() };
 }
 // upd = {status, assignee, cause, fix, downtimeMin, outsideCost, outsideVendor, partsUsed, note} · photos = รูปหลังซ่อม [{name, mime, b64}]
 function mntTechUpdate(id, t, upd, photos) {
@@ -336,17 +387,20 @@ function mntTechUpdate(id, t, upd, photos) {
   var by = purClean_(upd.assignee, 80);
   if (upd.status === 'done' && !mntText_(upd.fix, 10)) return { ok: false, error: 'ใส่วิธีแก้ไข ก่อนปิดเป็น "ซ่อมเสร็จ"' };
   if ((upd.status === 'done' || upd.status === 'doing' || upd.status === 'wait') && !by) return { ok: false, error: 'เลือกชื่อช่างผู้ซ่อม' };
+  if (upd.status === 'done' && !mntText_(upd.cause, 10)) return { ok: false, error: 'ใส่สาเหตุ ก่อนปิดเป็น "ซ่อมเสร็จ"' };
+  if (upd.status === 'wait' && !mntText_(upd.waitReason, 10)) return { ok: false, error: 'ใส่เหตุผลที่ต้องรอ (รออะไร)' };
   var res = purLocked_(function () {
     var ss = mntBook_(dept), o = purRead_(ss, 'mnt_repairs').filter(function (x) { return x.id === id; })[0];
     if (!o) return { ok: false, error: 'ใบแจ้งซ่อมนี้ถูกลบออกจากระบบแล้ว' };
     if (o.status === 'closed' || o.status === 'cancel') return { ok: false, error: o.code + ' ' + MNT_ST_[o.status] + ' — แก้ได้ในระบบฝ่ายช่างเท่านั้น' };
     var was = o.status;
     if (by) o.assignee = by;
-    ['cause', 'fix', 'note'].forEach(function (k) { if (upd[k] !== undefined) o[k] = mntText_(upd[k], 2000); });
+    ['cause', 'fix', 'note', 'waitReason'].forEach(function (k) { if (upd[k] !== undefined) o[k] = mntText_(upd[k], 2000); });
     if (upd.outsideVendor !== undefined) o.outsideVendor = purClean_(upd.outsideVendor, 120);
     if (upd.outsideCost !== undefined) o.outsideCost = upd.outsideCost;
     if (upd.downtimeMin !== undefined) { var dm = purNum_(upd.downtimeMin); o.downtimeMin = dm === '' || dm < 0 ? '' : Math.round(dm); }
     if (upd.status && { accepted: 1, doing: 1, wait: 1, done: 1 }[upd.status]) mntApplyStatus_(o, upd.status, by || o.assignee);
+    if (o.status === 'wait' && upd.waitReason && was !== 'wait') mntAddTimeline_(o, 'รอ: ' + mntText_(upd.waitReason, 200), by);
     var used = upd.partsUsed !== undefined ? mntCleanParts_(upd.partsUsed, purRead_(ss, 'mnt_parts')) : mntJson_(o.partsUsed, []);
     // เบิกเกินคงเหลือไม่ได้ (นับคืนของเดิมของใบนี้ก่อน)
     var bal = mntStock_(purRead_(ss, 'mnt_moves').filter(function (m) { return m.repairId !== o.id; })), need = {};
@@ -371,8 +425,8 @@ function mntTechUpdate(id, t, upd, photos) {
       if (o) { o.afterPhotos = JSON.stringify(purParseFiles_(o.afterPhotos).concat(added)); purWrite_(ss, 'mnt_repairs', o); res.row.afterPhotos = o.afterPhotos; }
     });
   }
-  var line = ''; try { line = mntAfterChange_(res.row, res.was, false); } catch (e) { line = String(e.message || e); }
-  return { ok: true, status: res.row.status, line: line };
+  var line = ''; try { line = mntAfterChange_(res.row, res.was, false, { notify: upd.notify !== false, added: added, by: by }); } catch (e) { line = String(e.message || e); }
+  return { ok: true, status: res.row.status, line: line, sent: upd.notify !== false && !line && (res.was !== res.row.status || added.length > 0) };
 }
 
 // ---------- หน้าตั้งค่า LINE / ลิงก์แจ้งซ่อม (ต้องล็อกอินฝ่ายช่าง) ----------
@@ -382,6 +436,8 @@ function mntLineInfo(token) {
   var gid = mntGroup_(), L = mntLiffId_(), key = mntFormKey_();
   return { ok: true, hasToken: !!tok, tokenOk: !!bot, botName: bot ? bot.name : '', webhookUrl: ScriptApp.getService().getUrl(),
     group: !!gid, groupName: gid ? mntGroupName_(gid) : '', seen: mntSeenGroups_(gid), bindCmd: 'ตั้งค่ากลุ่ม ช่าง ' + hrProp_('MNT_LINE_SETUP', hrSetupCode_),
+    techs: mntTechs_().map(function (t) { return { userId: t.userId, name: t.name, addedAt: t.addedAt }; }),
+    techCode: (function () { var c = null; try { c = JSON.parse(props_().getProperty('MNT_TECH_CODE') || 'null'); } catch (e) {} return c && c.exp > Date.now() ? { cmd: 'ขอสิทธิ์รับงาน ' + c.code, left: Math.round((c.exp - Date.now()) / 1000) } : null; })(),
     formUrl: MNT_PAGE_ + '?k=' + key, liffId: L, liffUrl: L ? 'https://liff.line.me/' + L : '', endpoint: MNT_PAGE_ + '?k=' + key + (L ? '&l=' + L : '') };
 }
 function mntSetToken(token, newTok) {
@@ -442,4 +498,68 @@ function mntResendLine(token, id) {
 function mntSendPmDue(token) {
   requireMnt_(token);
   return mntPush_(mntGroup_(), [mntText_L_(mntPmText_())]);
+}
+
+// ---------- สิทธิ์กดรับงาน (ผู้ใช้ขอ 28/11/69) ----------
+function mntTechCode(token) {
+  requireMnt_(token);
+  var c = ''; for (var i = 0; i < 6; i++) c += 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'.charAt(Math.floor(Math.random() * 32));
+  props_().setProperty('MNT_TECH_CODE', JSON.stringify({ code: c, exp: Date.now() + 5 * 60000 }));
+  return { ok: true, cmd: 'ขอสิทธิ์รับงาน ' + c, left: 300 };
+}
+function mntRemoveTech(token, userId) {
+  var dept = requireMnt_(token), t = mntTechOf_(userId);
+  props_().setProperty('MNT_LINE_TECHS', JSON.stringify(mntTechs_().filter(function (x) { return x.userId !== userId; })));
+  if (t) purLogWrite_(mntBook_(dept), 'ลบสิทธิ์รับงาน', 'mnt_settings', '', t.name);
+  return { ok: true, techs: mntTechs_() };
+}
+
+// ---------- เมนูแจ้งซ่อม / ติดตามงานซ่อม ทางแชท ----------
+function mntMenuFlex_() {
+  return { type: 'flex', altText: '🔧 เมนูแจ้งซ่อม', contents: { type: 'bubble',
+    header: { type: 'box', layout: 'vertical', backgroundColor: '#334155', paddingAll: '14px', contents: [
+      { type: 'text', text: '🔧 แจ้งซ่อม · ฝ่ายช่าง', color: '#FFFFFF', weight: 'bold', size: 'md' },
+      { type: 'text', text: 'เลือกเมนูด้านล่าง', color: '#FFFFFFCC', size: 'xs', margin: 'xs' }] },
+    body: { type: 'box', layout: 'vertical', paddingAll: '14px', spacing: 'sm', contents: [
+      { type: 'button', style: 'primary', color: '#334155', action: { type: 'uri', label: '📝 แจ้งซ่อมใหม่', uri: mntFormLink_() } },
+      { type: 'button', style: 'secondary', action: { type: 'message', label: '📋 ติดตามงานซ่อมของฉัน', text: 'ติดตามงานซ่อม' } },
+      { type: 'text', text: 'แจ้งผ่านปุ่มเมนู LINE แล้ว ระบบจะแจ้งกลับเมื่อซ่อมเสร็จ และพิมพ์ "ติดตามงานซ่อม" ดูสถานะได้ทุกเมื่อ', size: 'xs', color: '#64748B', wrap: true, margin: 'md' }] } } };
+}
+// งานของคนที่พิมพ์: ที่แจ้ง (LINE เดียวกัน) + ที่รับงานไว้ (ถ้าเป็นช่างที่มีสิทธิ์)
+function mntTrackMsgs_(uid, gid) {
+  var ss = mntReadBook_(mntDept_()), all = purRead_(ss, 'mnt_repairs'), me = mntTechOf_(uid);
+  var mine = uid ? all.filter(function (r) { return r.lineUserId === uid; }).sort(function (a, b) { return String(b.reportAt).localeCompare(String(a.reportAt)); }).slice(0, 8) : [];
+  var jobs = me ? all.filter(function (r) { return r.assignee === me.name && (MNT_OPEN_[r.status] || r.status === 'done'); }).slice(0, 8) : [];
+  var link = mntFormLink_('mine=1');
+  if (!mine.length && !jobs.length) return [{ type: 'flex', altText: 'ติดตามงานซ่อม', contents: { type: 'bubble', body: { type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'sm', contents: [
+    { type: 'text', text: '📋 ยังไม่พบงานแจ้งซ่อมจาก LINE นี้', weight: 'bold', wrap: true },
+    { type: 'text', text: 'ติดตามงานซ่อมได้ 3 ทาง:\n1) พิมพ์ "ติดตามงานซ่อม" ในแชทนี้ — เห็นงานที่แจ้งผ่านปุ่มเมนู LINE\n2) ปุ่มเมนู "แจ้งซ่อม" → ส่วน "งานแจ้งซ่อมของฉัน"\n3) มือถือเครื่องที่สแกน QR แจ้ง → เปิดลิงก์เดิมจะเห็นรายการที่แจ้งจากเครื่องนั้น', size: 'sm', color: '#334155', wrap: true }] },
+    footer: { type: 'box', layout: 'vertical', paddingAll: '12px', contents: [{ type: 'button', style: 'primary', color: '#334155', height: 'sm', action: { type: 'uri', label: '📝 แจ้งซ่อมใหม่', uri: mntFormLink_() } }] } } }];
+  var row = function (r, tech) {
+    var col = MNT_STC_[r.status] || '#475569';
+    var box = { type: 'box', layout: 'vertical', paddingTop: '8px', paddingBottom: '8px', contents: [
+      { type: 'box', layout: 'baseline', contents: [
+        { type: 'text', text: String(r.machineName || r.location || '-').slice(0, 50), weight: 'bold', size: 'sm', flex: 6, wrap: true },
+        { type: 'text', text: MNT_ST_[r.status], size: 'xs', color: col, weight: 'bold', flex: 4, align: 'end', wrap: true }] },
+      { type: 'text', text: r.code + ' · แจ้ง ' + mntDay_(r.reportAt) + (r.assignee && !tech ? ' · ช่าง ' + r.assignee : '') + (r.status === 'wait' && r.waitReason ? ' · รอ: ' + r.waitReason : ''), size: 'xs', color: '#64748B', wrap: true }] };
+    if (tech) box.action = { type: 'uri', label: 'อัปเดต', uri: mntTechUrl_(r.id) };
+    return box;
+  };
+  var body = [];
+  if (mine.length) { body.push({ type: 'text', text: '🙋 งานที่ฉันแจ้ง', weight: 'bold', size: 'md', color: '#334155' }); mine.forEach(function (r, i) { if (i) body.push({ type: 'separator' }); body.push(row(r, false)); }); }
+  if (jobs.length) { body.push({ type: 'text', text: '🔧 งานที่ฉันรับ (แตะเพื่ออัปเดต)', weight: 'bold', size: 'md', color: '#1D4ED8', margin: mine.length ? 'xl' : 'none' }); jobs.forEach(function (r, i) { if (i) body.push({ type: 'separator' }); body.push(row(r, true)); }); }
+  return [{ type: 'flex', altText: '📋 ติดตามงานซ่อม', contents: { type: 'bubble', size: 'mega',
+    header: { type: 'box', layout: 'vertical', backgroundColor: '#334155', paddingAll: '14px', contents: [{ type: 'text', text: '📋 ติดตามงานซ่อม', color: '#FFFFFF', weight: 'bold' }] },
+    body: { type: 'box', layout: 'vertical', paddingAll: '16px', contents: body },
+    footer: { type: 'box', layout: 'vertical', paddingAll: '12px', spacing: 'sm', contents: [
+      { type: 'button', style: 'secondary', height: 'sm', action: { type: 'uri', label: 'เปิดหน้างานแจ้งซ่อมของฉัน', uri: link } },
+      { type: 'button', style: 'primary', color: '#334155', height: 'sm', action: { type: 'uri', label: '📝 แจ้งซ่อมใหม่', uri: mntFormLink_() } }] } } }];
+}
+// หน้าแจ้งซ่อมที่เปิดจาก LINE (LIFF): งานที่บัญชี LINE นี้แจ้งไว้ (ทุกเครื่อง)
+function mntFormMineLine(idToken) {
+  mntOpenDept_();
+  var u = null; try { u = mntLiffUser_(idToken); } catch (e) {}
+  if (!u) return { ok: true, list: [] };
+  var ss = mntReadBook_(mntDept_());
+  return { ok: true, list: purRead_(ss, 'mnt_repairs').filter(function (r) { return r.lineUserId === u.userId; }).map(function (r) { return { id: r.id, s: mntSign_('mr|' + r.id) }; }).slice(-20) };
 }

@@ -12,7 +12,7 @@ var MNT_TABLES_ = {
     ['building', 'อาคาร'], ['location', 'จุด / ตำแหน่ง'], ['machineId', 'รหัสเครื่องจักร'], ['machineName', 'เครื่องจักร / อุปกรณ์'], ['category', 'ประเภทงาน'],
     ['problem', 'อาการ / ปัญหา'], ['urgency', 'ความเร่งด่วน'], ['stopLine', 'กระทบการผลิต'], ['photos', 'รูปก่อนซ่อม'], ['status', 'สถานะ'],
     ['assignee', 'ช่างผู้รับผิดชอบ'], ['acceptedAt', 'รับงานเมื่อ'], ['startAt', 'เริ่มซ่อมเมื่อ'], ['doneAt', 'ซ่อมเสร็จเมื่อ'], ['closedAt', 'ปิดงานเมื่อ'],
-    ['cause', 'สาเหตุ'], ['fix', 'วิธีแก้ไข'], ['afterPhotos', 'รูปหลังซ่อม'], ['downtimeMin', 'เวลาหยุดเครื่อง (นาที)'], ['partsUsed', 'อะไหล่ที่ใช้'],
+    ['cause', 'สาเหตุ'], ['fix', 'วิธีแก้ไข'], ['waitReason', 'เหตุผลที่รอ'], ['afterPhotos', 'รูปหลังซ่อม'], ['downtimeMin', 'เวลาหยุดเครื่อง (นาที)'], ['partsUsed', 'อะไหล่ที่ใช้'],
     ['partsCost', 'ค่าอะไหล่'], ['outsideCost', 'ค่าจ้างภายนอก'], ['outsideVendor', 'ผู้รับเหมา / ร้าน'], ['totalCost', 'ค่าใช้จ่ายรวม'],
     ['confirm', 'ผลตรวจรับ'], ['confirmBy', 'ผู้ตรวจรับ'], ['confirmNote', 'หมายเหตุตรวจรับ'], ['timeline', 'ประวัติงาน'], ['note', 'หมายเหตุ'],
     ['createdAt', 'สร้างเมื่อ'], ['updatedAt', 'แก้ไขล่าสุด']] },
@@ -35,7 +35,7 @@ var MNT_TABLES_ = {
     ['amount', 'มูลค่า'], ['repairId', 'ใบแจ้งซ่อม'], ['ref', 'อ้างอิง'], ['note', 'หมายเหตุ'], ['by', 'ผู้บันทึก'], ['createdAt', 'บันทึกเมื่อ']] },
   mnt_settings: { tab: 'ตั้งค่า', cols: [['id', 'รายการ'], ['value', 'ค่า']] }
 };
-var MNT_ST_ = { 'new': 'รอรับงาน', accepted: 'รับงานแล้ว', doing: 'กำลังซ่อม', wait: 'รออะไหล่ / รอช่างนอก', done: 'ซ่อมเสร็จ รอตรวจรับ', closed: 'ปิดงานแล้ว', cancel: 'ยกเลิก' };
+var MNT_ST_ = { 'new': 'รอรับงาน', accepted: 'รับงานแล้ว', doing: 'กำลังซ่อม', wait: 'รอ (อะไหล่ / ช่างนอก / อื่น ๆ)', done: 'ซ่อมเสร็จ รอตรวจรับ', closed: 'ปิดงานแล้ว', cancel: 'ยกเลิก' };
 var MNT_OPEN_ = { 'new': 1, accepted: 1, doing: 1, wait: 1 };
 var MNT_URG_ = { low: 'ไม่เร่ง', normal: 'ปกติ', high: 'ด่วน', urgent: 'ด่วนมาก (หยุดผลิต)' };
 var MNT_UNITS_ = { day: 'วัน', week: 'สัปดาห์', month: 'เดือน', year: 'ปี' };
@@ -232,6 +232,7 @@ function mntSaveRepair(token, r) {
   var problem = mntText_(r.problem, 2000);
   if (!problem) return { ok: false, error: 'ใส่อาการ / ปัญหาที่พบ' };
   if (!purClean_(r.machineName, 150) && !purClean_(r.location, 150)) return { ok: false, error: 'ใส่เครื่องจักร / อุปกรณ์ หรือจุดที่เสีย' };
+  if (r.status === 'wait' && !mntText_(r.waitReason, 10)) return { ok: false, error: 'ใส่เหตุผลที่ต้องรอ (รออะไร)' };
   var res = purLocked_(function () {
     var ss = mntBook_(dept), list = purRead_(ss, 'mnt_repairs'), now = purNow_(), by = purClean_(r.by, 60) || 'ฝ่ายช่าง';
     var old = r.id ? list.filter(function (x) { return x.id === r.id; })[0] : null;
@@ -241,7 +242,7 @@ function mntSaveRepair(token, r) {
     if (r.reportAt && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(r.reportAt)) { o.reportAt = String(r.reportAt).replace('T', ' ').slice(0, 16) + ':00'; o.reportDate = o.reportAt.slice(0, 10); }
     ['reporter', 'reporterDept', 'phone', 'building', 'location', 'machineName', 'category', 'assignee', 'outsideVendor', 'confirmBy'].forEach(function (k) { if (r[k] !== undefined) o[k] = purClean_(r[k], k === 'machineName' || k === 'location' ? 150 : 80); });
     o.problem = problem;
-    ['cause', 'fix', 'note', 'confirmNote'].forEach(function (k) { if (r[k] !== undefined) o[k] = mntText_(r[k], 2000); });
+    ['cause', 'fix', 'note', 'confirmNote', 'waitReason'].forEach(function (k) { if (r[k] !== undefined) o[k] = mntText_(r[k], 2000); });
     if (r.machineId !== undefined) o.machineId = purClean_(r.machineId, 40);
     if (MNT_URG_[r.urgency]) o.urgency = r.urgency;
     if (r.stopLine !== undefined) o.stopLine = r.stopLine === 'yes' || r.stopLine === true ? 'yes' : '';
@@ -260,7 +261,7 @@ function mntSaveRepair(token, r) {
   });
   if (!res.ok) return res;
   var line = '';
-  try { line = mntAfterChange_(res.repair, res.wasStatus, res.isNew); } catch (e) { line = 'ส่ง LINE ไม่สำเร็จ: ' + e.message; }
+  try { line = mntAfterChange_(res.repair, res.wasStatus, res.isNew, { notify: !!r.notify, by: purClean_(r.by, 60) }); } catch (e) { line = 'ส่ง LINE ไม่สำเร็จ: ' + e.message; }
   return { ok: true, repair: mntRepairOut_(res.repair), line: line };
 }
 function mntDeleteRepair(token, id) {

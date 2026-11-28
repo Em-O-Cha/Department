@@ -141,11 +141,13 @@ function dbBookRead_(ss, name) {
   var d = ss.__db;
   if (!d.cache[name]) {
     var c = CacheService.getScriptCache(), k = 'DBT_' + d.dept + '_' + d.book + '_' + name + (/^hr_(emps|jobs)$/.test(name) ? '_v2' : '');   // _v2 = คัดลอกใหม่ครั้งเดียวเพื่อลบรูปที่เคยขึ้นไปแล้ว
-    var kv = String(c.get(k) || '').split('|'), ts = Number(kv[0] || 0), known = kv.length > 1 ? Number(kv[1]) : -1, dirty = Number(c.get('DBD_' + d.dept) || 0), now = Date.now(), rows = null;
+    // ผู้ใช้แจ้ง 28/11/69 ว่า Dashboard ยังช้า: เวลาที่คัดลอก (DBT_) อยู่ใน CacheService แค่ 6 ชม. → เช้าวันใหม่ทุกแท็บต้องอ่านชีต + อัปโหลดใหม่ (ฝ่ายบัญชี 40–50 วิ)
+    // ตอนนี้จำไว้ถาวรใน Script Properties ด้วย (dbCopyGet_ / dbMarks_) · CacheService ยังเป็นทางเร็ว
+    var kv = String(c.get(k) || dbCopyGet_(d, k) || '').split('|'), ts = Number(kv[0] || 0), known = kv.length > 1 ? Number(kv[1]) : -1, dirty = Number(c.get('DBD_' + d.dept) || 0), now = Date.now(), rows = null;
     // ผู้ใช้แจ้ง 27/11/69 ว่ายังช้า 40 วิ: เดิมเชื่อสำเนาแค่ 30 นาที → เกินแล้วต้องอ่านชีต + อัปโหลดใหม่ทุกครั้ง (ช้ากว่าไม่มีฐานข้อมูล)
     // ตอนนี้: ใช้สำเนาได้ตราบใดที่ชีตยังไม่ถูกแก้ (เวลาแก้ไขล่าสุดของไฟล์ใน Drive ≤ เวลาที่คัดลอก) และระบบไม่ได้บันทึกอะไรหลังจากนั้น
     // แยกทีละแท็บ (ผู้ใช้ขอ 27/11/69): บันทึกแท็บไหน → อ่านใหม่จากชีตเฉพาะแท็บนั้น แท็บอื่นยังใช้สำเนา
-    var tab = (PUR_TABLES_[name] || {}).tab || name, tabDirty = d.sheetId ? Number(c.get('DBW_' + d.sheetId + '_' + tab) || 0) : 0;
+    var tab = (PUR_TABLES_[name] || {}).tab || name, tabDirty = d.sheetId ? Math.max(Number(c.get('DBW_' + d.sheetId + '_' + tab) || 0), Number((dbMarks_(d.sheetId).w || {})[tab] || 0)) : 0;
     var fresh = ts && ts > dirty && ts > tabDirty && (now - ts < DB_STALE_MS_ || dbSheetEdited_(d) <= Math.max(ts, dbSysWrite_(d) + 120000));
     if (fresh) { try { rows = dbReadTab_(d.cfg, d.dept, d.book, name, known); perfNote_('db'); } catch (e) { rows = null; } }
     if (!rows) {
@@ -153,7 +155,15 @@ function dbBookRead_(ss, name) {
       rows = purRead_(d.realFn(), name);   // ชีตจริง (ไม่มี __db)
       var full = rows; rows = dbNoImg_(rows);   // ให้ผลเหมือนอ่านจากฐานข้อมูล (ไม่มีรูป) ทุกครั้ง
       perfNote_('sheet'); if (PERF_) PERF_.sheetMs = (PERF_.sheetMs || 0) + Date.now() - t1;
-      try { dbReplaceTab_(d.cfg, d.dept, d.book, name, full); c.put(k, now + '|' + rows.length, 21600); } catch (e) {}
+      // แท็บเดียวกันกำลังถูกคัดลอกโดยอีกคำสั่ง (เปิดหลายส่วนพร้อมกัน) → ไม่อัปโหลดซ้ำ
+      var lk = 'DBL_' + k;
+      if (!c.get(lk)) {
+        c.put(lk, '1', 90);
+        var t2 = Date.now();
+        try { dbReplaceTab_(d.cfg, d.dept, d.book, name, full); c.put(k, now + '|' + rows.length, 21600); dbCopyPut_(d, k, now + '|' + rows.length); } catch (e) {}
+        if (PERF_) PERF_.upMs = (PERF_.upMs || 0) + Date.now() - t2;
+        c.remove(lk);
+      }
     }
     d.cache[name] = rows;
   }
@@ -168,7 +178,34 @@ function dbStampTab_(sheetId, tab) {
     var c = CacheService.getScriptCache(), now = String(Date.now());
     c.putAll(function () { var o = {}; o['DBW_' + sheetId + '_' + tab] = now; o['DBS_' + sheetId] = now; return o; }(), 21600);
   } catch (e) {}
+  // ถาวร (Script Properties): เวลาที่ระบบบันทึกแต่ละแท็บ + ทั้งไฟล์ — ใช้ตัดสินว่าสำเนาในฐานข้อมูลยังสดหลัง 6 ชม.
+  try {
+    var key = 'DBM_' + sheetId, m = dbMarks_(sheetId, true), t = Date.now();
+    m.s = t; m.w = m.w || {}; m.w[tab] = t;
+    props_().setProperty(key, JSON.stringify(m));
+    DB_MARKS_[sheetId] = m;
+  } catch (e) {}
   if (DB_TRACK_) DB_TRACK_[sheetId + '\u0001' + tab] = 1;
+}
+// เวลาที่ระบบบันทึกล่าสุด {s: ทั้งไฟล์, w: {แท็บ: เวลา}} (อ่านครั้งเดียวต่อการทำงาน; fresh = อ่านใหม่จาก Properties ก่อนเขียน)
+var DB_MARKS_ = {};
+function dbMarks_(sheetId, fresh) {
+  if (!sheetId) return {};
+  if (!fresh && DB_MARKS_[sheetId]) return DB_MARKS_[sheetId];
+  var m = {}; try { m = JSON.parse(props_().getProperty('DBM_' + sheetId) || '{}') || {}; } catch (e) { m = {}; }
+  DB_MARKS_[sheetId] = m;
+  return m;
+}
+// เวลาที่คัดลอกแต่ละแท็บขึ้นฐานข้อมูล (ถาวร) — 1 Property ต่อฝ่าย + สมุด
+function dbCopyMap_(d, fresh) {
+  if (!fresh && d.copies) return d.copies;
+  var m = {}; try { m = JSON.parse(props_().getProperty('DBC_' + d.dept + '_' + d.book) || '{}') || {}; } catch (e) { m = {}; }
+  d.copies = m;
+  return m;
+}
+function dbCopyGet_(d, k) { return dbCopyMap_(d)[k] || ''; }
+function dbCopyPut_(d, k, v) {
+  try { var m = dbCopyMap_(d, true); m[k] = v; props_().setProperty('DBC_' + d.dept + '_' + d.book, JSON.stringify(m)); } catch (e) {}
 }
 // เรียกจาก purSheet_ (ชีตจริง) เมื่อไม่ใช่การอ่าน · ไม่รู้ว่าเป็นไฟล์ไหน = ข้าม
 function dbMarkTab_(ss, tab) {
@@ -199,7 +236,7 @@ function dbTrackEnd_() {
   Object.keys(t).forEach(function (k) { var p = k.split('\u0001'); dbStampTab_(p[0], p[1]); });
 }
 // เวลาที่ระบบบันทึกลงไฟล์นี้ล่าสุด (ใช้แยกว่าไฟล์เปลี่ยนเพราะระบบ ไม่ใช่มีคนแก้ในชีตเอง)
-function dbSysWrite_(d) { return d.sheetId ? Number(CacheService.getScriptCache().get('DBS_' + d.sheetId) || 0) : 0; }
+function dbSysWrite_(d) { return d.sheetId ? Math.max(Number(CacheService.getScriptCache().get('DBS_' + d.sheetId) || 0), Number(dbMarks_(d.sheetId).s || 0)) : 0; }
 // เวลาแก้ไขล่าสุดของไฟล์ชีต (ms) — เก็บไว้ 60 วิ ต่อไฟล์ · อ่านไม่ได้ = ถือว่าเพิ่งแก้ (อ่านชีต)
 function dbSheetEdited_(d) {
   if (!d.sheetId) return Infinity;
@@ -217,7 +254,7 @@ function perfEnd_() {
   if (!PERF_) return;
   try {
     var c = CacheService.getScriptCache(), list = JSON.parse(c.get('PERF_LOG') || '[]');
-    list.unshift({ at: Utilities.formatDate(new Date(), PUR_TZ_, 'dd/MM HH:mm:ss'), fn: PERF_.fn, ms: Date.now() - PERF_.t0, cache: PERF_.rc, dbTabs: PERF_.db, sheetTabs: PERF_.sheet, dbMs: PERF_.dbMs || 0, rows: PERF_.rows || 0, sheetMs: PERF_.sheetMs || 0 });
+    list.unshift({ at: Utilities.formatDate(new Date(), PUR_TZ_, 'dd/MM HH:mm:ss'), fn: PERF_.fn, ms: Date.now() - PERF_.t0, cache: PERF_.rc, dbTabs: PERF_.db, sheetTabs: PERF_.sheet, dbMs: PERF_.dbMs || 0, rows: PERF_.rows || 0, sheetMs: PERF_.sheetMs || 0, upMs: PERF_.upMs || 0 });
     c.put('PERF_LOG', JSON.stringify(list.slice(0, 60)), 21600);
   } catch (e) {}
   PERF_ = null;

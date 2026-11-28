@@ -21,7 +21,7 @@
     { id: 'mt_set', label: 'ตั้งค่า & LINE แจ้งซ่อม', ic: 'gear' },
     { id: 'mt_log', label: 'ประวัติการแก้ไข', ic: 'clock' }
   ];
-  var ST = { 'new': 'รอรับงาน', accepted: 'รับงานแล้ว', doing: 'กำลังซ่อม', wait: 'รออะไหล่ / ช่างนอก', done: 'ซ่อมเสร็จ รอตรวจรับ', closed: 'ปิดงานแล้ว', cancel: 'ยกเลิก' };
+  var ST = { 'new': 'รอรับงาน', accepted: 'รับงานแล้ว', doing: 'กำลังซ่อม', wait: 'รอ (อะไหล่ / ช่างนอก / อื่น ๆ)', done: 'ซ่อมเสร็จ รอตรวจรับ', closed: 'ปิดงานแล้ว', cancel: 'ยกเลิก' };
   var STC = { 'new': '#c2410c', accepted: '#1d4ed8', doing: '#1d4ed8', wait: '#a16207', done: '#15803d', closed: '#475569', cancel: '#94a3b8' };
   var URG = { low: 'ไม่เร่ง', normal: 'ปกติ', high: 'ด่วน', urgent: 'ด่วนมาก' }, URGC = { low: '#64748b', normal: '#475569', high: '#ea580c', urgent: '#dc2626' };
   var UNITS = { day: 'วัน', week: 'สัปดาห์', month: 'เดือน', year: 'ปี' };
@@ -224,6 +224,7 @@
       + (isNew ? F('rAt', 'วันเวลาที่แจ้ง', '<input id="rAt" type="datetime-local" value="' + d.today + 'T' + pad(new Date().getHours()) + ':' + pad(new Date().getMinutes()) + '">') : '')
       + '<div class="pf full mtsec">การซ่อม</div>'
       + F('rSt', 'สถานะ', '<select id="rSt">' + Object.keys(ST).map(function (k) { return '<option value="' + k + '"' + (x.status === k ? ' selected' : '') + '>' + ST[k] + '</option>'; }).join('') + '</select>')
+      + F('rWait', 'เหตุผลที่รอ / รออะไร', '<input id="rWait" list="rWaitL" value="' + esc(x.waitReason || '') + '" placeholder="เช่น รออะไหล่ลูกปืน"><datalist id="rWaitL"><option value="รออะไหล่"><option value="รอช่างภายนอก"><option value="รอหยุดเครื่อง / ไลน์ว่าง"><option value="รออนุมัติซื้อ"></datalist>')
       + F('rAs', 'ช่างผู้รับผิดชอบ', '<input id="rAs" list="rAsL" value="' + esc(x.assignee || '') + '"><datalist id="rAsL">' + list(s.techs).map(function (v) { return '<option value="' + esc(v) + '">'; }).join('') + '</datalist>')
       + F('rCause', 'สาเหตุ', ta('rCause', x.cause)) + F('rFix', 'วิธีแก้ไข', ta('rFix', x.fix))
       + F('rDown', 'เวลาหยุดเครื่อง (นาที)', inp('rDown', x.downtimeMin, ' inputmode="numeric" placeholder="' + (x.stopLine ? 'ไม่ใส่ = นับจากแจ้งถึงซ่อมเสร็จ' : '') + '"'))
@@ -235,6 +236,7 @@
         + F('rCf', 'ผลตรวจรับ', '<select id="rCf"><option value="">ยังไม่ตรวจรับ</option><option value="ok"' + (x.confirm === 'ok' ? ' selected' : '') + '>✓ ใช้งานได้</option><option value="no"' + (x.confirm === 'no' ? ' selected' : '') + '>✕ ยังไม่หาย</option></select>')
         + F('rCfBy', 'ผู้ตรวจรับ', inp('rCfBy', x.confirmBy)) + F('rCfN', 'หมายเหตุตรวจรับ', inp('rCfN', x.confirmNote), true))
       + F('rNote', 'หมายเหตุ', ta('rNote', x.note), true)
+      + (isNew ? '' : '<div class="pf full"><label class="mtcheck"><input type="checkbox" id="rNotify" checked> 📤 ส่งอัปเดตเข้ากลุ่ม LINE ช่าง (เมื่อเปลี่ยนสถานะ)</label></div>')
       + (isNew ? '' : '<div class="pf full"><label>รูปก่อนซ่อม</label>' + gal('photos') + '</div><div class="pf full"><label>รูปหลังซ่อม</label>' + gal('afterPhotos') + '</div>'
         + (x.timeline.length ? '<div class="pf full"><label>ประวัติงาน</label><div class="mttl">' + x.timeline.slice().reverse().map(function (t) { return '<div>' + esc(t.t) + ' <small>· ' + dt(t.at) + (t.by ? ' · ' + esc(t.by) : '') + '</small></div>'; }).join('') + '</div></div>' : ''))
       + '</div>';
@@ -253,6 +255,15 @@
           on('[data-rmp]', 'click', function (b) { U.parts.splice(+b.getAttribute('data-rmp'), 1); draw(); });
         };
         draw();
+        // ช่องที่ต้องกรอกตามสถานะ = สีส้ม (ผู้ใช้ขอ 28/11/69)
+        var NEED = { accepted: ['rAs'], doing: ['rAs'], wait: ['rAs', 'rWait'], done: ['rAs', 'rCause', 'rFix'] };
+        var need = function () {
+          var st = $('rSt').value, req = NEED[st] || [];
+          ['rAs', 'rWait', 'rCause', 'rFix'].forEach(function (id) { var pf = $(id).closest('.pf'), on = req.indexOf(id) >= 0; pf.classList.toggle('mtmust', on && !$(id).value.trim()); pf.classList.toggle('mtreq', on); });
+          $('rWait').closest('.pf').style.display = st === 'wait' || $('rWait').value ? '' : 'none';
+        };
+        ['rSt', 'rAs', 'rWait', 'rCause', 'rFix'].forEach(function (id) { $(id).addEventListener(id === 'rSt' ? 'change' : 'input', need); });
+        need();
         $('rOut').addEventListener('input', sum);
         $('pAdd').addEventListener('click', function () { U.parts.push({ partId: '', name: '', qty: 1, price: '', stock: 1 }); draw(); });
         $('pOther').addEventListener('click', function () { U.parts.push({ partId: '', name: '', qty: 1, price: '' }); draw(); });
@@ -291,6 +302,8 @@
       check: function () {
         if (!$('rProb').value.trim()) return 'ใส่อาการ / ปัญหา';
         if (!$('rMac').value.trim() && !$('rLoc').value.trim()) return 'ใส่เครื่องจักร / อุปกรณ์ หรือจุดที่เสีย';
+        if ($('rSt').value === 'wait' && !$('rWait').value.trim()) return 'ใส่เหตุผลที่ต้องรอ (รออะไร)';
+        if ($('rSt').value === 'done' && !$('rCause').value.trim()) return 'ใส่สาเหตุ ก่อนบันทึกว่าซ่อมเสร็จ';
         if ($('rSt').value === 'done' && !$('rFix').value.trim()) return 'ใส่วิธีแก้ไข ก่อนบันทึกว่าซ่อมเสร็จ';
         if (U.parts.some(function (u) { return (u.partId || String(u.name || '').trim()) && !(Number(u.qty) > 0); })) return 'ใส่จำนวนอะไหล่ที่ใช้';
         return '';
@@ -299,7 +312,7 @@
         var m = d.machines.filter(function (y) { return y.name === $('rMac').value.trim(); })[0];
         var o = { id: x.id || '', machineId: m ? m.id : (x.machineName === $('rMac').value.trim() ? x.machineId : ''), machineName: $('rMac').value, location: $('rLoc').value, building: $('rBld').value, category: $('rCat').value,
           problem: $('rProb').value, urgency: $('rUrg').value, stopLine: $('rStop').checked ? 'yes' : '', reporter: $('rRep').value, reporterDept: $('rDept').value,
-          status: $('rSt').value, assignee: $('rAs').value, cause: $('rCause').value, fix: $('rFix').value, downtimeMin: $('rDown').value, outsideCost: $('rOut').value, outsideVendor: $('rVen').value, note: $('rNote').value,
+          status: $('rSt').value, assignee: $('rAs').value, cause: $('rCause').value, fix: $('rFix').value, downtimeMin: $('rDown').value, outsideCost: $('rOut').value, outsideVendor: $('rVen').value, note: $('rNote').value, waitReason: $('rWait').value, notify: !!($('rNotify') && $('rNotify').checked),
           partsUsed: U.parts.filter(function (u) { return u.partId || String(u.name || '').trim(); }), by: state.dept.name };
         if (isNew) o.reportAt = $('rAt').value;
         else { o.confirm = $('rCf').value; o.confirmBy = $('rCfBy').value; o.confirmNote = $('rCfN').value; }
@@ -573,12 +586,15 @@
         + step(3, r.group, 'ผูกกลุ่ม LINE ของช่าง', (r.group ? '<p>ส่งงานเข้ากลุ่ม <b>' + esc(r.groupName || '(อ่านชื่อกลุ่มไม่ได้)') + '</b> · <button type="button" class="btn btn-sm btn-line" id="lnTest">ส่งข้อความทดสอบ</button></p>' : '')
           + '<p class="muted">เชิญบอทเข้ากลุ่มช่าง แล้วพิมพ์คำสั่งนี้ในกลุ่ม (ใช้ได้ครั้งเดียว)</p>' + cp(r.bindCmd, 'lnCmd') + '<div class="mtrow2"><button type="button" class="btn btn-sm btn-line" id="lnNew">ขอรหัสใหม่</button><button type="button" class="btn btn-sm btn-line" id="lnRe">↻ ตรวจสอบว่าผูกแล้ว</button></div>'
           + (r.seen.filter(function (g) { return !g.current; }).length ? '<div class="xsub2">หรือเลือกกลุ่มที่บอทอยู่แล้ว</div>' + r.seen.filter(function (g) { return !g.current; }).map(function (g) { return '<div class="li"><span>' + esc(g.name) + '</span><b><button type="button" class="btn btn-sm btn-line" data-use="' + esc(g.id) + '">ใช้กลุ่มนี้</button></b></div>'; }).join('') : ''))
+        + step('3.1', !!r.techs.length, 'ช่างที่มีสิทธิ์กด "✋ รับงาน" ในกลุ่ม', (r.techs.length ? r.techs.map(function (t) { return '<div class="li"><span>👷 ' + esc(t.name) + '<small>เพิ่มเมื่อ ' + dt(t.addedAt) + '</small></span><b><button type="button" class="btn btn-sm btn-line mtdel" data-rmt="' + esc(t.userId) + '" data-nm="' + esc(t.name) + '">ลบสิทธิ์</button></b></div>'; }).join('') : '<p class="mtwarn">⚠ ยังไม่ได้กำหนด — ตอนนี้ทุกคนในกลุ่มกดรับงานได้</p>')
+          + (r.techCode ? '<p>ให้ช่างพิมพ์คำสั่งนี้ในกลุ่มช่าง (ใช้ได้ 5 นาที · ครั้งเดียว):</p>' + cp(r.techCode.cmd, 'lnTc') : '')
+          + '<div class="mtrow2"><button type="button" class="btn btn-sm btn-primary" id="lnTech" style="width:auto">+ เพิ่มช่างที่กดรับงานได้</button></div><p class="muted">ช่างพิมพ์ "ติดตามงานซ่อม" ในแชท → เห็นงานที่ตัวเองรับ แตะเพื่ออัปเดตได้</p>')
         + step(4, true, 'ลิงก์ / QR แจ้งซ่อม (พิมพ์ติดหน้างาน — สแกนแล้วแจ้งได้เลย ไม่ต้องมี LINE)', cp(r.formUrl, 'lnForm') + '<div id="lnQr" class="mtqr"></div><div class="mtrow2"><a class="btn btn-sm btn-line" href="' + esc(r.formUrl) + '" target="_blank" rel="noopener">เปิดดูฟอร์ม</a><button type="button" class="btn btn-sm btn-line" id="lnPoster">' + icon('print', 15) + ' ป้าย QR (A4)</button><button type="button" class="btn btn-sm btn-line mtdel" id="lnRot">เปลี่ยนลิงก์ (ลิงก์เดิมใช้ไม่ได้)</button></div>')
         + step(5, !!r.liffId, 'ปุ่ม "แจ้งซ่อม" ในเมนู LINE (Rich menu) — รู้ว่าใครแจ้ง และแจ้งกลับเมื่อซ่อมเสร็จ',
           '<p class="muted">LINE Developers → สร้าง LINE Login channel (Provider เดียวกับ OA ฝ่ายช่าง) → LIFF → Add: Size <b>Full</b>, Scope <b>openid + profile</b>, Endpoint URL ใส่ลิงก์ด้านล่าง → คัดลอก LIFF ID มาวาง</p>'
           + cp(r.endpoint, 'lnEp') + '<div class="mtcp"><input id="lnLiff" value="' + esc(r.liffId) + '" placeholder="LIFF ID เช่น 1234567890-AbCdEfGh"><button type="button" class="btn btn-sm btn-primary" id="lnLiffSave">บันทึก</button></div>'
           + (r.liffUrl ? '<p>ลิงก์สำหรับปุ่ม Rich menu ใน LINE Official Account Manager (Action: Link):</p>' + cp(r.liffUrl, 'lnRich') + '<p class="muted">หลังบันทึก LIFF ID แล้ว Endpoint URL จะมี &amp;l=… ต่อท้าย — คัดลอกไปใส่ใน LIFF อีกครั้ง</p>' : ''))
-        + '<p class="muted" style="margin:10px 0 0">ในกลุ่มช่างพิมพ์ "งานค้าง" ดูงานที่ยังไม่เสร็จ · "PM" ดูงานบำรุงรักษาที่ใกล้ถึงกำหนด (บอทตอบกลับ ไม่เสียโควตาข้อความ)</p>';
+        + '<p class="muted" style="margin:10px 0 0">คำสั่งในแชท (บอทตอบกลับ ไม่เสียโควตาข้อความ): "แจ้งซ่อม" = เมนูแจ้งซ่อม · "ติดตามงานซ่อม" = งานที่ฉันแจ้ง / งานที่ฉันรับ · ในกลุ่มช่าง "งานค้าง" / "PM"</p>';
       on('[data-cp]', 'click', function (b) { copy($(b.getAttribute('data-cp')).textContent); }, $('lnBox'));
       loadQr(function () { if (window.QRCode && $('lnQr')) new window.QRCode($('lnQr'), { text: r.formUrl, width: 150, height: 150, correctLevel: window.QRCode.CorrectLevel.M }); });
       var busy = function (b, p, okMsg) { b.disabled = true; p.then(function (x) { b.disabled = false; if (x && x.ok === false) return toast(x.error); if (okMsg) toast(okMsg); lineBox(); }).catch(function (e) { b.disabled = false; onServerError(e); }); };
@@ -587,6 +603,8 @@
       if ($('lnTest')) $('lnTest').addEventListener('click', function () { busy(this, call('mntLineTest', state.token), 'ส่งข้อความทดสอบแล้ว — ดูในกลุ่ม LINE'); });
       $('lnNew').addEventListener('click', function () { busy(this, call('mntNewCode', state.token), 'ได้รหัสใหม่แล้ว'); });
       $('lnRe').addEventListener('click', lineBox);
+      $('lnTech').addEventListener('click', function () { busy(this, call('mntTechCode', state.token), 'ได้รหัสแล้ว — ให้ช่างพิมพ์ในกลุ่มภายใน 5 นาที'); });
+      on('[data-rmt]', 'click', function (b) { ask({ title: 'ลบสิทธิ์รับงานของ ' + b.getAttribute('data-nm') + '?', tone: 'danger', ok: 'ลบสิทธิ์' }).then(function (ok) { if (ok) busy(b, call('mntRemoveTech', state.token, b.getAttribute('data-rmt')), 'ลบสิทธิ์แล้ว'); }); }, $('lnBox'));
       on('[data-use]', 'click', function (b) { busy(b, call('mntUseGroup', state.token, b.getAttribute('data-use')), 'เปลี่ยนกลุ่มแล้ว'); }, $('lnBox'));
       $('lnRot').addEventListener('click', function () { var b = this; ask({ title: 'เปลี่ยนลิงก์แจ้งซ่อม?', text: 'QR / ลิงก์เดิมที่พิมพ์ติดไว้และปุ่มเมนู LINE จะใช้ไม่ได้ ต้องพิมพ์ QR ใหม่และแก้ Endpoint URL ของ LIFF', tone: 'danger', ok: 'เปลี่ยนลิงก์' }).then(function (ok) { if (ok) busy(b, call('mntNewFormKey', state.token), 'เปลี่ยนลิงก์แล้ว'); }); });
       $('lnLiffSave').addEventListener('click', function () { busy(this, call('mntSetLiff', state.token, $('lnLiff').value.trim()), 'บันทึก LIFF แล้ว'); });
@@ -620,6 +638,7 @@
     '.mttool{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin:0 0 12px}.mttool .btn{width:auto;flex:0 0 auto;min-height:44px;padding:0 18px;font-size:15px}',
     '.mtchips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.mtchips .chip{white-space:nowrap}',
     '.mtbar{display:grid!important;grid-template-columns:minmax(0,1fr) 200px;gap:10px;align-items:center}.mtbar.r1{grid-template-columns:minmax(0,1fr) auto auto}.mtbar select{width:100%;height:44px;margin:0;border:1.5px solid var(--line);border-radius:10px;padding:0 10px;background:#fff;font:inherit;font-size:14px;color:inherit}.mtbar .psearch{min-width:0;margin:0}',
+    '.pf.mtreq>label::after{content:" *";color:#c2410c}.pf.mtmust input,.pf.mtmust select,.pf.mtmust textarea{border:2px solid #f97316!important;background:#fff7ed!important}.pf.mtmust>label{color:#c2410c!important;font-weight:700}.mtwarn{color:#b45309;font-weight:600}',
     '.mtcheck{display:flex!important;align-items:center;gap:8px;font-size:14px;color:var(--ink)!important;margin:4px 0;cursor:pointer;white-space:nowrap}.mtcheck input{width:20px;height:20px;flex:none}',
     '.mtst{display:inline-block;font-size:12px;font-weight:700;padding:2px 9px;border-radius:99px;background:color-mix(in srgb,var(--s) 12%,white);color:var(--s);white-space:nowrap;line-height:1.5}',
     '.mtcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px;margin-bottom:8px}',

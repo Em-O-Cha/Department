@@ -85,6 +85,12 @@
   .tl { font-size: 13.5px; color: #475569; border-left: 3px solid var(--line); padding-left: 10px; margin-top: 8px; } .tl div { padding: 3px 0; } .tl small { color: var(--muted); }
   .sumc { margin-top: 10px; padding: 10px 12px; background: #f8fafc; border-radius: 10px; font-size: 15px; }
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; } .row2 > div { min-width: 0; }
+  .ntag { display: none; font-size: 11.5px; font-weight: 700; border-radius: 99px; padding: 1px 8px; margin-left: 4px; vertical-align: 1px; }
+  .fld.must .ntag, .fld.okf .ntag { display: inline-block; } .fld.must .ntag { background: #f97316; color: #fff; } .fld.okf .ntag { background: #dcfce7; color: #15803d; } .fld.okf .ntag::before { content: '✓ '; }
+  .fld.must input, .fld.must select, .fld.must textarea { border: 2px solid #f97316; background: #fff7ed; }
+  .fld.must label { color: #c2410c; } .fld[data-need="photo"].must .fbtn { border-color: #f97316; background: #fff7ed; color: #c2410c; }
+  .needbox:not(:empty) { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: #fff7ed; border: 1.5px solid #fdba74; color: #9a3412; font-size: 14.5px; } .needbox.ok:not(:empty) { background: #f0fdf4; border-color: #86efac; color: #166534; }
+  .stop.on2 { border-color: #16a34a; background: #f0fdf4; color: #166534; } .stop input#uNotify { accent-color: #16a34a; }
   .note { font-size: 13.5px; color: #475569; background: #f8fafc; border-radius: 10px; padding: 8px 10px; margin-top: 8px; }
 </style>
 </head>
@@ -280,12 +286,30 @@
       var ids = S.mine.map(function (x) { return x.id; }); jset('mine', m.filter(function (x) { return ids.indexOf(x.id) >= 0; }));   // ใบที่ถูกลบไม่ต้องจำ
       var a = document.activeElement; if (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) { var c = $('mineCard'); if (c) { c.outerHTML = mineHtml(); bindMine(); } return; }   // กำลังพิมพ์ → อัปเดตเฉพาะกล่องนี้
       var y = window.scrollY; render(); window.scrollTo(0, y);
+      if (WANT_MINE && $('mineCard')) { WANT_MINE = false; $('mineCard').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
     }).catch(function () {});
   }
+  var WANT_MINE = /[?&]mine=1|mine%3D1/.test(location.href);
 
   // ==================== หน้าช่าง (ลิงก์จากการ์ดในกลุ่ม LINE) ====================
-  var TST = [['accepted', 'รับงานแล้ว', '#2563eb'], ['doing', 'กำลังซ่อม', '#1d4ed8'], ['wait', 'รออะไหล่ / ช่างนอก', '#a16207'], ['done', 'ซ่อมเสร็จ', '#16a34a']];
+  var TST = [['accepted', 'รับงานแล้ว', '#2563eb'], ['doing', 'กำลังซ่อม', '#1d4ed8'], ['wait', 'รอ (อะไหล่ / อื่น ๆ)', '#a16207'], ['done', 'ซ่อมเสร็จ', '#16a34a']];
   var STC = { 'new': ['#fff7ed', '#c2410c'], accepted: ['#eff6ff', '#1d4ed8'], doing: ['#eff6ff', '#1d4ed8'], wait: ['#fefce8', '#a16207'], done: ['#f0fdf4', '#15803d'], closed: ['#f1f5f9', '#475569'], cancel: ['#f1f5f9', '#94a3b8'] };
+  // ช่องที่ต้องกรอกตามสถานะ (ผู้ใช้ขอ 28/11/69: รับงานแล้วให้เห็นเป็นช่องสีส้มว่าต้องกรอกช่องไหน)
+  var NEED = { accepted: ['by'], doing: ['by'], wait: ['by', 'wait', 'photo'], done: ['by', 'cause', 'fix', 'photo'] };
+  var NEEDTXT = { by: 'ชื่อช่าง', wait: 'เหตุผลที่รอ', cause: 'สาเหตุ', fix: 'วิธีแก้ไข', photo: 'รูป (แนะนำ)' };
+  var WAITR = ['รออะไหล่', 'รอช่างภายนอก', 'รอหยุดเครื่อง / ไลน์ว่าง', 'รออนุมัติซื้อ'];
+  function needOf(U) { return NEED[U.status] || []; }
+  function filled(k, U, r) { if (k === 'photo') return U.photos.length > 0 || ((r && r.afterPhotos) || []).length > 0; return k === 'by' ? !!String(U.assignee || '').trim() : k === 'wait' ? !!String(U.waitReason || '').trim() : k === 'cause' ? !!String(U.cause || '').trim() : k === 'fix' ? !!String(U.fix || '').trim() : k === 'photo' ? U.photos.length > 0 : true; }
+  function markNeed() {   // ทาสีส้มช่องที่ยังไม่กรอก (อัปเดตทันทีที่พิมพ์)
+    var T = S.tech; if (!T) return; var U = T.u, r = T.repair, need = needOf(U), left = [];
+    Array.prototype.forEach.call(document.querySelectorAll('[data-need]'), function (el) {
+      var k = el.getAttribute('data-need'), req = need.indexOf(k) >= 0, ok = filled(k, U, r);
+      el.classList.toggle('must', req && !ok); el.classList.toggle('okf', req && ok); var tg = el.querySelector('.ntag'); if (tg) tg.textContent = ok ? 'กรอกแล้ว' : k === 'photo' ? 'แนะนำ' : 'ต้องกรอก';
+      if (req && !ok && k !== 'photo') left.push(NEEDTXT[k]);
+    });
+    var b = $('needBox'); if (b) b.innerHTML = need.length ? (left.length ? '🟧 กรอกช่องสีส้มก่อนบันทึก: <b>' + left.join(' · ') + '</b>' : '✅ กรอกช่องที่ต้องกรอกครบแล้ว') : '';
+    if (b) b.className = 'needbox' + (left.length ? '' : ' ok');
+  }
   function techView() {
     var T = S.tech; if (!T) return;
     var r = T.repair, U = T.u, lock = r.status === 'closed' || r.status === 'cancel', c = STC[r.status] || STC['new'];
@@ -303,10 +327,13 @@
       $('app').innerHTML = html; return;
     }
     html += '<div class="card"><h2>อัปเดตงาน</h2>'
-      + '<label for="uBy">ช่างผู้ซ่อม <span class="req">*</span></label>' + (T.techs.length ? '<select id="uBy"><option value="">— เลือกชื่อ —</option>' + T.techs.concat(U.assignee && T.techs.indexOf(U.assignee) < 0 ? [U.assignee] : []).map(function (x) { return '<option' + (U.assignee === x ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select>' : '<input type="text" id="uBy" value="' + esc(U.assignee) + '">')
       + '<label>สถานะ</label><div class="sts" id="uSt">' + TST.map(function (s) { return '<button type="button" data-st="' + s[0] + '" style="--u:' + s[2] + '"' + (U.status === s[0] ? ' class="on"' : '') + '>' + s[1] + '</button>'; }).join('') + '</div>'
-      + '<label for="uCause">สาเหตุ</label><textarea id="uCause" rows="2" placeholder="เช่น ลูกปืนแตก สายไฟหลวม">' + esc(U.cause) + '</textarea>'
-      + '<label for="uFix">วิธีแก้ไข' + (U.status === 'done' ? ' <span class="req">*</span>' : '') + '</label><textarea id="uFix" rows="2" placeholder="เช่น เปลี่ยนลูกปืน ขันขั้วสายไฟใหม่">' + esc(U.fix) + '</textarea>'
+      + '<div class="needbox" id="needBox" role="status"></div>'
+      + '<div class="fld" data-need="by"><label for="uBy">ช่างผู้ซ่อม <span class="ntag">ต้องกรอก</span></label>' + (T.techs.length ? '<select id="uBy"><option value="">— เลือกชื่อ —</option>' + T.techs.concat(U.assignee && T.techs.indexOf(U.assignee) < 0 ? [U.assignee] : []).map(function (x) { return '<option' + (U.assignee === x ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select>' : '<input type="text" id="uBy" value="' + esc(U.assignee) + '">') + '</div>'
+      + (U.status === 'wait' ? '<div class="fld" data-need="wait"><label for="uWait">เหตุผลที่ต้องรอ / รออะไร <span class="ntag">ต้องกรอก</span></label><div class="chips" style="margin-bottom:8px">' + WAITR.concat(['อื่น ๆ (ระบุ)']).map(function (w) { var on = w === 'อื่น ๆ (ระบุ)' ? U.waitReason && WAITR.indexOf(U.waitReason) < 0 && U.waitOther : U.waitReason === w; return '<button type="button" data-wr="' + esc(w) + '"' + (on ? ' class="on"' : '') + '>' + esc(w) + '</button>'; }).join('') + '</div>'
+        + '<input type="text" id="uWait" value="' + esc(U.waitReason) + '" placeholder="เช่น รออะไหล่ลูกปืน 6204 ส่งพรุ่งนี้"></div>' : '')
+      + '<div class="fld" data-need="cause"><label for="uCause">สาเหตุ <span class="ntag">ต้องกรอก</span></label><textarea id="uCause" rows="2" placeholder="เช่น ลูกปืนแตก สายไฟหลวม">' + esc(U.cause) + '</textarea></div>'
+      + '<div class="fld" data-need="fix"><label for="uFix">วิธีแก้ไข <span class="ntag">ต้องกรอก</span></label><textarea id="uFix" rows="2" placeholder="เช่น เปลี่ยนลูกปืน ขันขั้วสายไฟใหม่">' + esc(U.fix) + '</textarea></div>'
       + '<label for="uDown">เวลาหยุดเครื่อง (นาที)</label><input type="number" id="uDown" inputmode="numeric" min="0" value="' + esc(U.downtimeMin) + '" placeholder="' + (r.stopLine ? 'ไม่ใส่ = นับจากเวลาแจ้งถึงซ่อมเสร็จ' : 'ถ้าเครื่องหยุด') + '">'
       + '<label>อะไหล่ / วัสดุที่ใช้</label><div id="uParts">' + U.parts.map(function (x, i) {
         var other = !x.partId && !x.stock;
@@ -316,13 +343,17 @@
       }).join('') + '</div><div class="row2" style="margin-top:8px"><button type="button" class="btn2" id="aPart">+ อะไหล่ในสต๊อก</button><button type="button" class="btn2" id="aOther">+ ซื้อมาใช้เลย</button></div>'
       + '<div class="row2"><div><label for="uOut">ค่าจ้างภายนอก (บาท)</label><input type="number" id="uOut" inputmode="decimal" min="0" step="any" value="' + esc(U.outsideCost) + '"></div><div><label for="uVen">ร้าน / ผู้รับเหมา</label><input type="text" id="uVen" value="' + esc(U.outsideVendor) + '"></div></div>'
       + (cost ? '<div class="sumc">ค่าใช้จ่ายรวม <b>' + cost.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' บาท</b></div>' : '')
-      + '<label>รูปหลังซ่อม</label><div class="files">' + (r.afterPhotos || []).map(function (f) { return '<span><img src="' + esc(f.url) + '=w200" alt=""></span>'; }).join('') + U.photos.map(function (p, i) { return '<span><img src="' + p.url + '" alt=""><button type="button" class="x" data-rmf="' + i + '" aria-label="ลบรูป">✕</button></span>'; }).join('')
-      + ((r.afterPhotos || []).length + U.photos.length < 8 ? '<button type="button" class="fbtn" data-tp="cam">📷<br>ถ่ายรูป</button><button type="button" class="fbtn" data-tp="lib">🖼️<br>เลือกรูป</button>' : '') + '</div>'
+      + '<div class="fld" data-need="photo"><label>' + (U.status === 'wait' ? 'รูปประกอบ (เช่น อะไหล่ที่เสีย / สิ่งที่รอ)' : U.status === 'done' ? 'รูปหลังซ่อม' : 'รูปประกอบ') + ' <span class="ntag">แนะนำ</span></label><div class="files">' + (r.afterPhotos || []).map(function (f) { return '<span><img src="' + esc(f.url) + '=w200" alt=""></span>'; }).join('') + U.photos.map(function (p, i) { return '<span><img src="' + p.url + '" alt=""><button type="button" class="x" data-rmf="' + i + '" aria-label="ลบรูป">✕</button></span>'; }).join('')
+      + ((r.afterPhotos || []).length + U.photos.length < 8 ? '<button type="button" class="fbtn" data-tp="cam">📷<br>ถ่ายรูป</button><button type="button" class="fbtn" data-tp="lib">🖼️<br>เลือกรูป</button>' : '') + '</div></div>'
       + '<label for="uNote">หมายเหตุ</label><textarea id="uNote" rows="2">' + esc(U.note) + '</textarea>'
+      + '<label class="stop' + (U.notify ? ' on2' : '') + '" id="nfL"><input type="checkbox" id="uNotify"' + (U.notify ? ' checked' : '') + '>📤 ส่งอัปเดต + รูปเข้ากลุ่ม LINE ช่าง เมื่อบันทึก</label>'
       + '<div class="err" id="err" role="alert"></div><button type="button" class="send' + (U.status === 'done' ? ' ok' : '') + '" id="uSave">' + (U.status === 'done' ? '✅ บันทึก · ซ่อมเสร็จ' : '💾 บันทึก') + '</button></div>';
     $('app').innerHTML = html;
     var bind = function (id, k) { var el = $(id); if (el) el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', function () { U[k] = el.value; if (k === 'assignee') set('tech', el.value); if (k === 'outsideCost') techView(); }); };
-    bind('uBy', 'assignee'); bind('uCause', 'cause'); bind('uFix', 'fix'); bind('uDown', 'downtimeMin'); bind('uVen', 'outsideVendor'); bind('uNote', 'note');
+    bind('uBy', 'assignee'); bind('uCause', 'cause'); bind('uFix', 'fix'); bind('uWait', 'waitReason');
+    ['uBy', 'uCause', 'uFix', 'uWait'].forEach(function (id) { var el = $(id); if (el) el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', markNeed); });
+    on('[data-wr]', 'click', function (b) { var w = b.getAttribute('data-wr'); if (w === 'อื่น ๆ (ระบุ)') { U.waitOther = true; U.waitReason = ''; techView(); setTimeout(function () { $('uWait').focus(); }, 50); } else { U.waitOther = false; U.waitReason = w; techView(); } });
+    $('uNotify').addEventListener('change', function () { U.notify = this.checked; }); bind('uDown', 'downtimeMin'); bind('uVen', 'outsideVendor'); bind('uNote', 'note');
     $('uOut').addEventListener('change', function () { U.outsideCost = this.value; techView(); });
     on('[data-st]', 'click', function (b) { U.status = b.getAttribute('data-st'); techView(); });
     on('#uParts [data-k]', 'change', function (el) {
@@ -338,20 +369,23 @@
     on('[data-rmf]', 'click', function (b) { U.photos.splice(+b.getAttribute('data-rmf'), 1); techView(); });
     on('[data-tp]', 'click', function (b) { pickPhotos(b.getAttribute('data-tp') === 'cam', 8 - (r.afterPhotos || []).length - U.photos.length, function (a) { U.photos = U.photos.concat(a); techView(); }); });
     $('uSave').addEventListener('click', techSave);
+    markNeed();
   }
   function techSave() {
     var T = S.tech, U = T.u, btn = $('uSave');
     var fail2 = function (m, sel) { fail(m, sel); };
     if ((U.status === 'doing' || U.status === 'wait' || U.status === 'done') && !String(U.assignee).trim()) return fail2('เลือกชื่อช่างผู้ซ่อม', '#uBy');
+    if (U.status === 'wait' && !String(U.waitReason).trim()) return fail2('ใส่เหตุผลที่ต้องรอ (รออะไร)', '#uWait');
+    if (U.status === 'done' && !String(U.cause).trim()) return fail2('ใส่สาเหตุ ก่อนบันทึกว่าซ่อมเสร็จ', '#uCause');
     if (U.status === 'done' && !String(U.fix).trim()) return fail2('ใส่วิธีแก้ไข ก่อนบันทึกว่าซ่อมเสร็จ', '#uFix');
     var bad = U.parts.filter(function (x) { return (x.partId || x.name) && !(Number(x.qty) > 0); })[0];
     if (bad) return fail2('ใส่จำนวนอะไหล่ที่ใช้', '#uParts');
     btn.disabled = true; btn.innerHTML = '<span class="spin" style="border-top-color:#fff"></span> กำลังบันทึก…'; $('err').textContent = '';
     var used = U.parts.filter(function (x) { return x.partId || String(x.name || '').trim(); }).map(function (x) { return { partId: x.partId, name: x.name, qty: x.qty, unit: x.unit, price: x.price }; });
-    call('mntTechUpdate', RID, TSIG, { status: U.status, assignee: U.assignee, cause: U.cause, fix: U.fix, downtimeMin: U.downtimeMin, outsideCost: U.outsideCost, outsideVendor: U.outsideVendor, partsUsed: used, note: U.note },
+    call('mntTechUpdate', RID, TSIG, { status: U.status, assignee: U.assignee, cause: U.cause, fix: U.fix, downtimeMin: U.downtimeMin, outsideCost: U.outsideCost, outsideVendor: U.outsideVendor, partsUsed: used, note: U.note, waitReason: U.status === 'wait' ? U.waitReason : undefined, notify: !!U.notify },
       U.photos.map(function (p) { return { name: p.name, mime: p.mime, b64: p.b64 }; })).then(function (r) {
       if (!r.ok) throw new Error(r.error);
-      toast(r.status === 'done' ? '✅ บันทึกแล้ว · แจ้งผู้แจ้งให้ตรวจรับ' : '✅ บันทึกแล้ว');
+      toast((r.status === 'done' ? '✅ บันทึกแล้ว · แจ้งผู้แจ้งให้ตรวจรับ' : '✅ บันทึกแล้ว') + (r.sent ? ' · ส่งเข้ากลุ่ม LINE แล้ว' : ''));
       if (r.line) toast('LINE: ' + r.line, true);
       loadTech();
     }).catch(function (e) { btn.disabled = false; btn.textContent = '💾 บันทึก'; fail2(nice(e)); });
@@ -361,7 +395,7 @@
       if (!r.ok) throw new Error(r.error);
       var x = r.repair;
       r.u = { status: x.status === 'new' ? 'accepted' : x.status, assignee: x.assignee || get('tech'), cause: x.cause || '', fix: x.fix || '', downtimeMin: x.downtimeMin === '' || x.downtimeMin == null ? '' : x.downtimeMin,
-        outsideCost: x.outsideCost || '', outsideVendor: x.outsideVendor || '', note: x.note || '', photos: [], parts: (x.partsUsed || []).map(function (p) { return { partId: p.partId, name: p.name, qty: p.qty, unit: p.unit, price: p.price }; }) };
+        outsideCost: x.outsideCost || '', outsideVendor: x.outsideVendor || '', note: x.note || '', photos: [], waitReason: x.waitReason || '', waitOther: !!(x.waitReason && WAITR.indexOf(x.waitReason) < 0), notify: true, parts: (x.partsUsed || []).map(function (p) { return { partId: p.partId, name: p.name, qty: p.qty, unit: p.unit, price: p.price }; }) };
       S.tech = r; techView(); window.scrollTo(0, 0);
     }).catch(function (e) { $('app').innerHTML = '<div class="msg">' + esc(nice(e)) + '<br><button class="send" style="margin-top:12px" onclick="location.reload()">↻</button></div>'; });
   }
@@ -379,7 +413,10 @@
           if (!window.liff.isLoggedIn()) { if (window.liff.isInClient()) window.liff.login(); return res(''); }
           var d = window.liff.getDecodedIDToken() || {};
           if (d.name) { S.lineName = d.name; if (!S.f.reporter) S.f.reporter = d.name; if (S.data && !S.done && !document.activeElement.matches('input,textarea')) render(); }
-          res(window.liff.getIDToken() || '');
+          var tk = window.liff.getIDToken() || '';
+          res(tk);
+          // งานที่บัญชี LINE นี้แจ้งไว้ (ทุกเครื่อง) → รวมเข้า "งานแจ้งซ่อมของฉัน" (ผู้ใช้ขอ 28/11/69)
+          if (tk) call('mntFormMineLine', tk).then(function (r) { var m = jget('mine', []), ids = m.map(function (x) { return x.id; }), add = (r.list || []).filter(function (x) { return ids.indexOf(x.id) < 0; }); if (add.length) { jset('mine', add.concat(m).slice(0, 20)); loadMine(); } }).catch(function () {});
         }).catch(function () { res(''); });
       };
       sc.onerror = function () { res(''); };
