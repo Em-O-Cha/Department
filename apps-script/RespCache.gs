@@ -75,11 +75,24 @@ function rcPut_(key, val, stamp) {
     CacheService.getScriptCache().putAll(map, RC_TTL_);
   } catch (e) {}
 }
+// แก้ในชีตด้วยมือ (ไม่ผ่านระบบ) → ผลที่เก็บไว้หมดอายุภายใน ~1 นาที (เดิม 30 นาที; ผู้ใช้ถาม 28/11/69 เรื่องอัปเดตแบบ real time)
+// ใช้เวลาแก้ไขล่าสุดของไฟล์ชีตหลักของฝ่าย (Drive · เก็บ 60 วิ ใช้คีย์เดียวกับ DeptDb dbSheetEdited_)
+function rcSheetEd_(key) {
+  try {
+    var id = deptConfig_(key).sheetId; if (!id) return '';
+    var c = CacheService.getScriptCache(), v = c.get('DBE_' + id);
+    if (v) return v;
+    v = String(DriveApp.getFileById(id).getLastUpdated().getTime()); c.put('DBE_' + id, v, 60);
+    return v;
+  } catch (e) { return ''; }
+}
 function respCall_(fn, f, args) {
   var kind = RC_READ_[fn];
   if (!kind) return f.apply(null, args);
   var dept = requireDept_(args[0]);   // ตรวจสิทธิ์ก่อนเสมอ · คีย์แยกตามแผนก จึงไม่เห็นผลของแผนกอื่น
-  var key = rcKey_(fn, dept.key, args), stamp = rcStamp_(kind, dept.key, String(args[1] || '').toUpperCase().replace(/[^A-Z_]/g, '')), hit = rcGet_(key, stamp);
+  var tgt = String(args[1] || '').toUpperCase().replace(/[^A-Z_]/g, ''), key = rcKey_(fn, dept.key, args), stamp = rcStamp_(kind, dept.key, tgt);
+  if (kind === 'own' || (kind === 'target' && tgt)) stamp += '.' + rcSheetEd_(kind === 'own' ? dept.key : tgt);
+  var hit = rcGet_(key, stamp);
   if (hit !== undefined) { if (typeof PERF_ !== 'undefined' && PERF_) PERF_.rc = 'hit'; return hit; }
   if (typeof PERF_ !== 'undefined' && PERF_) PERF_.rc = 'miss';
   var val = f.apply(null, args);

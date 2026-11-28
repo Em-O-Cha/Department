@@ -137,19 +137,60 @@ function dbBook_(deptKey, book, cfg, opener, sheetId) {
     getUrl: function () { return sheetId ? 'https://docs.google.com/spreadsheets/d/' + sheetId + '/edit' : real().getUrl(); },
     getName: function () { return CacheService.getScriptCache().get('DBN_' + deptKey + '_' + book) || real().getName(); } };
 }
+// คีย์ / ความสดของสำเนาแท็บ (ใช้ทั้งอ่านทีละแท็บและอ่านล่วงหน้า)
+function dbTabKey_(d, name) { return 'DBT_' + d.dept + '_' + d.book + '_' + name + (/^hr_(emps|jobs)$/.test(name) ? '_v2' : ''); }   // _v2 = คัดลอกใหม่ครั้งเดียวเพื่อลบรูปที่เคยขึ้นไปแล้ว
+function dbFreshInfo_(d, name) {
+  var c = CacheService.getScriptCache(), k = dbTabKey_(d, name);
+  // ผู้ใช้แจ้ง 28/11/69 ว่า Dashboard ยังช้า: เวลาที่คัดลอก (DBT_) อยู่ใน CacheService แค่ 6 ชม. → เช้าวันใหม่ทุกแท็บต้องอ่านชีต + อัปโหลดใหม่ (ฝ่ายบัญชี 40–50 วิ)
+  // ตอนนี้จำไว้ถาวรใน Script Properties ด้วย (dbCopyGet_ / dbMarks_) · CacheService ยังเป็นทางเร็ว
+  var kv = String(c.get(k) || dbCopyGet_(d, k) || '').split('|'), ts = Number(kv[0] || 0), known = kv.length > 1 ? Number(kv[1]) : -1, dirty = Number(c.get('DBD_' + d.dept) || 0), now = Date.now();
+  // ใช้สำเนาได้ตราบใดที่ชีตยังไม่ถูกแก้ (เวลาแก้ไขล่าสุดของไฟล์ใน Drive ≤ เวลาที่คัดลอก) และระบบไม่ได้บันทึกแท็บนั้นหลังจากนั้น (แยกทีละแท็บ)
+  var tab = (PUR_TABLES_[name] || {}).tab || name, tabDirty = d.sheetId ? Math.max(Number(c.get('DBW_' + d.sheetId + '_' + tab) || 0), Number((dbMarks_(d.sheetId).w || {})[tab] || 0)) : 0;
+  var fresh = !!(ts && ts > dirty && ts > tabDirty && (now - ts < DB_STALE_MS_ || dbSheetEdited_(d) <= Math.max(ts, dbSysWrite_(d) + 120000)));
+  return { k: k, ts: ts, known: known, fresh: fresh };
+}
+// อ่านล่วงหน้า (ผู้ใช้ขอ 28/11/69 ให้เร็วขึ้นอีก): เดิมอ่านจากฐานข้อมูลทีละแท็บ ต่อกัน (~0.6 วิ / แท็บ → Dashboard ฝ่ายบุคคล 7 แท็บ ≈ 4 วิ)
+// จำว่าคำสั่งนี้ใช้แท็บไหนบ้าง (Script Property DBP_<ฝ่าย>_<สมุด> = {คำสั่ง: [แท็บ]}) → ครั้งต่อไปดึงทุกแท็บที่ยังสดพร้อมกันในรอบเดียว (fetchAll)
+function dbPrefetch_(d) {
+  if (d.pre) return; d.pre = true;
+  var fn = PERF_ && PERF_.fn; if (!fn) return;
+  var map = {}; try { map = JSON.parse(props_().getProperty('DBP_' + d.dept + '_' + d.book) || '{}') || {}; } catch (e) { map = {}; }
+  d.preMap = map; d.preFn = fn;
+  var names = (map[fn] || []).filter(function (n) { return PUR_TABLES_[n] && !d.cache[n]; }), size = 1000, reqs = [], idx = [];
+  names.forEach(function (n) {
+    var f = dbFreshInfo_(d, n); if (!f.fresh || f.known < 0) return;
+    var base = d.cfg.url + '/rest/v1/dept_rows?select=data&dept=eq.' + encodeURIComponent(d.dept) + '&book=eq.' + encodeURIComponent(d.book) + '&tab=eq.' + encodeURIComponent(n) + '&order=row_no.asc&limit=' + size + '&offset=';
+    for (var off = 0; off < Math.max(f.known, 1); off += size) { reqs.push({ url: base + off, method: 'get', headers: deptDbHeaders_(d.cfg.key), muteHttpExceptions: true }); idx.push(n); }
+    d.preKnown = d.preKnown || {}; d.preKnown[n] = f.known;
+  });
+  if (!reqs.length) return;
+  var t0 = Date.now(), got = {}, bad = {};
+  try {
+    UrlFetchApp.fetchAll(reqs).forEach(function (r, i) {
+      var n = idx[i], c = r.getResponseCode();
+      if (c < 200 || c >= 300) { bad[n] = 1; return; }
+      var a = got[n] = got[n] || []; JSON.parse(r.getContentText() || '[]').forEach(function (x) { a.push(x.data); });
+    });
+  } catch (e) { return; }
+  Object.keys(got).forEach(function (n) {
+    if (bad[n] || got[n].length !== d.preKnown[n]) return;   // ไม่ครบ → อ่านทีละแท็บตามปกติ
+    d.cache[n] = got[n]; perfNote_('db'); if (PERF_) PERF_.rows = (PERF_.rows || 0) + got[n].length;
+  });
+  if (PERF_) { PERF_.dbMs = (PERF_.dbMs || 0) + Date.now() - t0; PERF_.pre = (PERF_.pre || 0) + Object.keys(got).length; }
+}
+function dbPreNote_(d, name) {
+  if (!d.preFn || !d.preMap) return;
+  var a = d.preMap[d.preFn] = d.preMap[d.preFn] || [];
+  if (a.indexOf(name) >= 0) return;
+  a.push(name);
+  try { props_().setProperty('DBP_' + d.dept + '_' + d.book, JSON.stringify(d.preMap)); } catch (e) {}
+}
 function dbBookRead_(ss, name) {
   var d = ss.__db;
+  dbPrefetch_(d);
   if (!d.cache[name]) {
-    var c = CacheService.getScriptCache(), k = 'DBT_' + d.dept + '_' + d.book + '_' + name + (/^hr_(emps|jobs)$/.test(name) ? '_v2' : '');   // _v2 = คัดลอกใหม่ครั้งเดียวเพื่อลบรูปที่เคยขึ้นไปแล้ว
-    // ผู้ใช้แจ้ง 28/11/69 ว่า Dashboard ยังช้า: เวลาที่คัดลอก (DBT_) อยู่ใน CacheService แค่ 6 ชม. → เช้าวันใหม่ทุกแท็บต้องอ่านชีต + อัปโหลดใหม่ (ฝ่ายบัญชี 40–50 วิ)
-    // ตอนนี้จำไว้ถาวรใน Script Properties ด้วย (dbCopyGet_ / dbMarks_) · CacheService ยังเป็นทางเร็ว
-    var kv = String(c.get(k) || dbCopyGet_(d, k) || '').split('|'), ts = Number(kv[0] || 0), known = kv.length > 1 ? Number(kv[1]) : -1, dirty = Number(c.get('DBD_' + d.dept) || 0), now = Date.now(), rows = null;
-    // ผู้ใช้แจ้ง 27/11/69 ว่ายังช้า 40 วิ: เดิมเชื่อสำเนาแค่ 30 นาที → เกินแล้วต้องอ่านชีต + อัปโหลดใหม่ทุกครั้ง (ช้ากว่าไม่มีฐานข้อมูล)
-    // ตอนนี้: ใช้สำเนาได้ตราบใดที่ชีตยังไม่ถูกแก้ (เวลาแก้ไขล่าสุดของไฟล์ใน Drive ≤ เวลาที่คัดลอก) และระบบไม่ได้บันทึกอะไรหลังจากนั้น
-    // แยกทีละแท็บ (ผู้ใช้ขอ 27/11/69): บันทึกแท็บไหน → อ่านใหม่จากชีตเฉพาะแท็บนั้น แท็บอื่นยังใช้สำเนา
-    var tab = (PUR_TABLES_[name] || {}).tab || name, tabDirty = d.sheetId ? Math.max(Number(c.get('DBW_' + d.sheetId + '_' + tab) || 0), Number((dbMarks_(d.sheetId).w || {})[tab] || 0)) : 0;
-    var fresh = ts && ts > dirty && ts > tabDirty && (now - ts < DB_STALE_MS_ || dbSheetEdited_(d) <= Math.max(ts, dbSysWrite_(d) + 120000));
-    if (fresh) { try { rows = dbReadTab_(d.cfg, d.dept, d.book, name, known); perfNote_('db'); } catch (e) { rows = null; } }
+    var c = CacheService.getScriptCache(), f = dbFreshInfo_(d, name), k = f.k, now = Date.now(), rows = null;
+    if (f.fresh) { try { rows = dbReadTab_(d.cfg, d.dept, d.book, name, f.known); perfNote_('db'); } catch (e) { rows = null; } }
     if (!rows) {
       var t1 = Date.now();
       rows = purRead_(d.realFn(), name);   // ชีตจริง (ไม่มี __db)
@@ -167,6 +208,7 @@ function dbBookRead_(ss, name) {
     }
     d.cache[name] = rows;
   }
+  dbPreNote_(d, name);
   return JSON.parse(JSON.stringify(d.cache[name]));
 }
 // ---------- แท็บไหนถูกแก้ (แยกทีละแท็บ) ----------
@@ -254,7 +296,7 @@ function perfEnd_() {
   if (!PERF_) return;
   try {
     var c = CacheService.getScriptCache(), list = JSON.parse(c.get('PERF_LOG') || '[]');
-    list.unshift({ at: Utilities.formatDate(new Date(), PUR_TZ_, 'dd/MM HH:mm:ss'), fn: PERF_.fn, ms: Date.now() - PERF_.t0, cache: PERF_.rc, dbTabs: PERF_.db, sheetTabs: PERF_.sheet, dbMs: PERF_.dbMs || 0, rows: PERF_.rows || 0, sheetMs: PERF_.sheetMs || 0, upMs: PERF_.upMs || 0 });
+    list.unshift({ at: Utilities.formatDate(new Date(), PUR_TZ_, 'dd/MM HH:mm:ss'), fn: PERF_.fn, ms: Date.now() - PERF_.t0, cache: PERF_.rc, dbTabs: PERF_.db, sheetTabs: PERF_.sheet, dbMs: PERF_.dbMs || 0, rows: PERF_.rows || 0, sheetMs: PERF_.sheetMs || 0, upMs: PERF_.upMs || 0, pre: PERF_.pre || 0 });
     c.put('PERF_LOG', JSON.stringify(list.slice(0, 60)), 21600);
   } catch (e) {}
   PERF_ = null;
