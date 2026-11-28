@@ -272,8 +272,10 @@
       var retry = cls === 'bad' && g.set && G.err !== 'nogeo';
       box.className = 'gps ' + cls; box.innerHTML = '📍<div style="flex:1">' + t + '<small>' + sub + '</small>' + (retry ? '<button type="button" class="rg" id="regps">↻ ตรวจตำแหน่งอีกครั้ง</button>' : '') + '</div>';
       if (retry) $('regps').onclick = function () { checkGps(true); };
-      go.disabled = !ok;
-      var h = $('goHint'); if (h) { h.className = 'hint' + (ok ? '' : ' wait'); h.textContent = ok ? timeHint : (cls === 'bad' ? '🔒 กดสแกนได้เมื่ออยู่ในพื้นที่บริษัท' : '⏳ รอตรวจตำแหน่งสักครู่ แล้วปุ่มจะกดได้เอง'); }
+      // ผู้ใช้ขอให้เข้าลงเวลาเร็ว (28/11/69): ระหว่างรอ GPS กดสแกนได้เลย — ตรวจตำแหน่งต่อไปพร้อมกับสแกนหน้า · ปิดปุ่มเฉพาะเมื่อตำแหน่งไม่ผ่านแน่ ๆ
+      var pending = cls === '';
+      go.disabled = !(ok || pending);
+      var h = $('goHint'); if (h) { h.className = 'hint' + (ok || pending ? '' : ' wait'); h.textContent = ok ? timeHint : pending ? '📍 กดสแกนได้เลย — ระบบตรวจตำแหน่งไปพร้อมกัน' : '🔒 กดสแกนได้เมื่ออยู่ในพื้นที่บริษัท'; }
     };
     S.pos = null; clearTimeout(G.to);
     if (!g.set) return set('bad', 'ฝ่ายบุคคลยังไม่ได้ตั้งจุดลงเวลา ✕', 'แจ้งฝ่ายบุคคล', false);
@@ -302,7 +304,19 @@
   }
   // ---------- สแกนหน้าลงเวลา (กะพริบตา 1 ครั้ง = คนจริง) ----------
   function scan(kind) {
-    var run = ++S.run, pos = S.pos;
+    var run = ++S.run;
+    // รอตำแหน่งที่ผ่าน (ถ้ายังไม่ได้ตอนกด) ไปพร้อมกับการสแกนหน้า · ไม่ผ่านแน่ / เกิน 25 วินาที = แจ้งเหตุผล
+    var posP = new Promise(function (ok, no) {
+      var t0 = Date.now();
+      (function chk() {
+        if (S.pos) return ok(S.pos);
+        var b = $('gps');
+        if (b && /\bbad\b/.test(b.className)) return no(new Error((b.querySelector('div') || b).firstChild.textContent.replace(/\s*✕\s*$/, '') + ' — ' + ((b.querySelector('small') || {}).textContent || '')));
+        if (Date.now() - t0 > 25000) return no(new Error('ยังไม่ได้ตำแหน่งที่แม่นพอ — ออกไปที่โล่ง / เปิด GPS แล้วลองใหม่'));
+        setTimeout(chk, 250);
+      })();
+    });
+    posP.catch(function () {});
     // เวลาที่บันทึก = เวลาที่กดปุ่มนี้ (เวลาของเซิร์ฟเวอร์) ไม่ใช่เวลาที่ส่งผลเสร็จ — โหลดกล้องช้าก็ไม่ทำให้สาย
     var pressP = call('hrClockStamp').catch(function () { return null; });
     var stampP = kind === 'in' && Date.now() - S.openAt < 170000 ? S.openStamp.then(function (st) { return st || pressP; }) : pressP;   // ออกงาน = เวลาที่กดปุ่มสแกน
@@ -331,7 +345,8 @@
       var send = function (x) {
         var photo = snap(480), desc = Array.from(x.f.descriptor);
         closeCam(); busy(kind === 'in' ? 'กำลังบันทึกเวลาเข้างาน…' : 'กำลังบันทึกเวลาออกงาน…');
-        Promise.all([stampP, S.tokP]).then(function (a) { return call('hrClockPunch', [a[1], kind, desc, photo, pos, true, a[0]]); }).then(function (r) { unbusy(); result(!!(r && r.ok), kind, r || {}); })
+        if (!S.pos) $('busyT').textContent = 'กำลังรอตำแหน่ง GPS…';
+        Promise.all([stampP, S.tokP, posP]).then(function (a) { $('busyT').textContent = kind === 'in' ? 'กำลังบันทึกเวลาเข้างาน…' : 'กำลังบันทึกเวลาออกงาน…'; return call('hrClockPunch', [a[1], kind, desc, photo, a[2], true, a[0]]); }).then(function (r) { unbusy(); result(!!(r && r.ok), kind, r || {}); })
           .catch(function (e) { unbusy(); result(false, kind, { error: nice(e) }); });
       };
       loop();
