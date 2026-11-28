@@ -190,7 +190,12 @@
     var q = new URLSearchParams(location.search), lid = q.get('l') || (lsGet('clk_lid') || '');
     // ปุ่ม "ขอลา" ในเมนู LINE = ลิงก์ LIFF เดียวกัน + ?go=leave → ไปหน้าขอลาเลย (ไม่หาตำแหน่ง / ไม่โหลดระบบตรวจหน้า)
     S.goLeave = q.get('go') === 'leave' || /go=leave/.test(q.get('liff.state') || '');
-    if (S.goLeave) { var lt = document.querySelector('#vLoad b'); if (lt) lt.textContent = 'กำลังเปิดหน้าขอลา…'; }
+    if (S.goLeave) {
+      document.title = 'ขอลา';   // หัวหน้าต่างใน LINE ไม่ขึ้น "ลงเวลา" ตอนกดปุ่มขอลา (ผู้ใช้ถาม 28/11/69)
+      var lt = document.querySelector('#vLoad b'); if (lt) lt.textContent = 'กำลังเปิดหน้าขอลา…';
+      var lu = lsGet('clk_leave');   // เคยเปิดแล้ว = ไปหน้าขอลาทันที ไม่ต้องรอระบบ
+      if (lu && /^https:\/\/em-o-cha\.github\.io\//.test(lu)) { location.replace(lu); return; }
+    }
     if (!S.goLeave) { gpsStart(); loadFace().catch(function () {}); }   // ตำแหน่ง + โมเดลใบหน้าเริ่มโหลดทันทีที่เปิดหน้า
     var cache = !S.goLeave && lsGet('clk_d');
     if (cache && cache.registered && !cache.blocked) { S.d = fromCache(cache); home(); }
@@ -208,6 +213,7 @@
       return call('hrClockInit', [S.tok]);
     }).then(function (d) {
       if (!d || !d.ok) throw new Error((d && d.error) || 'โหลดข้อมูลไม่สำเร็จ');
+      if (d.leaveUrl) lsSet('clk_leave', d.leaveUrl);
       if (S.goLeave && d.leaveUrl) { location.replace(d.leaveUrl); return; }
       var was = S.d;
       if (d.registered && !d.blocked) lsSet('clk_d', d); else lsSet('clk_d', null);
