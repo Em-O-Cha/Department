@@ -188,7 +188,7 @@
   function rowCls(r) { return r.dayStatus === 'วันหยุด' && !r.kind ? 'off' : isAbsent(r) ? 'abs' : isLeave(r) ? 'lv' : r.lateMin > 0 ? 'late' : isMiss(r) || r.earlyMin > 0 ? 'mis' : ''; }
   // กล่องสิ่งที่ HR ต้องทำ (เด่นด้านบนตาราง) · UX 28/11/69: เดิมเป็นตัวเทาเล็กท้ายตาราง
   function notices(all) {
-    var nm = all.filter(function (r) { return !r.empId; }).length, ud = all.filter(undecided).length, h = '';
+    var nm = all.filter(function (r) { return !r.empId; }).map(function (r) { return r.machineId; }).filter(function (x, i, a) { return a.indexOf(x) === i; }).length, ud = all.filter(undecided).length, h = '';
     if (nm) h += '<div class="htnote warn"><span>🔗 มี <b>' + nm + ' คน</b> ยังไม่จับคู่กับทะเบียน — มาสายของคนกลุ่มนี้ยังไม่ลงหน้าการลา</span><button class="btn btn-sm" id="htRemap">จับคู่รายชื่อ</button></div>';
     if (ud) h += '<div class="htnote wait"><span>⏳ <b>' + ud + ' คน</b> ไม่มีเวลาสแกนวันนี้ (ไฟล์เขียนว่าขาดงาน) — ระบบยังไม่ลงให้ แตะแถวเพื่อเลือก ขาดงาน / ลา / มาทำงาน</span>' + (T.f !== 'absent' ? '<button class="btn btn-sm" data-f="absent">ดูเฉพาะรายการนี้</button>' : '') + '</div>';
     return h;
@@ -333,7 +333,14 @@
   // จับคู่: แสดงเฉพาะรหัสที่ยังไม่เคยจับคู่ (เดาจากชื่อ / ชื่อเล่นในวงเล็บให้ก่อน) · remap = เปิดจากหน้าหลักเพื่อจับคู่ที่ค้าง
   function mapRows(rows) {
     var seen = {}, out = [];
-    rows.forEach(function (r) { if (seen[r.machineId] || r.dayStatus === 'วันหยุด' && !r.timeIn) return; seen[r.machineId] = 1; if (!T.init.map[r.machineId]) out.push({ machineId: r.machineId, name: r.name, dept: r.dept, guess: guess(r) }); });
+    // รวมวันหยุดด้วย (เดิมข้ามแถววันหยุดที่ไม่มีเวลา → หน้าหลักบอก "ยังไม่จับคู่ n คน" แต่กดแล้วขึ้นว่าไม่มีรายชื่อ — ผู้ใช้แจ้ง 28/11/69)
+    // ต้องจับคู่ = ยังไม่มีในตารางจับคู่ หรือแถวที่บันทึกแล้วแต่ยังไม่มีพนักงาน (เช่นคนในทะเบียนลาออก / ถูกลบ)
+    rows.forEach(function (r) {
+      if (seen[r.machineId]) return;
+      var m = T.init.map[r.machineId], ok = m && !(r.id && !r.empId) && person(m);
+      if (ok) return;
+      seen[r.machineId] = 1; out.push({ machineId: r.machineId, name: r.name, dept: r.dept, guess: (m && person(m) ? m : '') || guess(r) });
+    });
     return out;
   }
   // จับคู่: ช่องค้นหาชื่อ / ชื่อเล่น ต่อแถว (ผู้ใช้ขอ 28/11/69 — รายชื่อยาว เลื่อนหาใน select ไม่ไหว) · ค่าที่เลือกอยู่ใน input hidden data-mi

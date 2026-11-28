@@ -1134,6 +1134,7 @@
     });
   }
   // ลงเวลาด้วยใบหน้า + GPS ผ่าน LINE (ผู้ใช้ขอ 27/11/69, HrClock.gs + clock.html)
+  function ckNorm(x) { return String(x || '').toLowerCase().replace(/[\s.()\-·]/g, '').replace(/[\u0E48-\u0E4C]/g, ''); }
   function clockSettings() {
     call('hrClockAdmin', state.token).then(function (r) {
       var box = $('clockBox'); if (!box || !r.ok) return;
@@ -1159,15 +1160,16 @@
         + '<div class="ok">3. เวลาเข้า-ออกงาน (นับสาย / ออกก่อน)</div><div class="pform">' + inp('ckIn', 'เข้างาน (ทุกวัน)', c.inTime, 'time') + inp('ckOutMT', 'ออกงาน จันทร์–พฤหัส', c.outMonThu, 'time') + inp('ckOutF', 'ออกงาน วันศุกร์', c.outFri, 'time') + '</div>'
         + '<p class="muted" style="margin:2px 0 6px;font-size:13.5px">เสาร์–อาทิตย์ลงเวลาได้ แต่ไม่นับสาย · มาสายลงหน้าการลา "มาสาย" อัตโนมัติเหมือนเครื่องสแกน</p>'
         + '<div class="' + ((c.emps || []).length ? 'ok' : '') + '">4. พนักงานที่ใช้ลงเวลาด้วยใบหน้า <span id="ckCnt"></span></div>'
-        + '<div class="pfoot"><input id="ckQ" placeholder="ค้นหาชื่อ" aria-label="ค้นหาชื่อพนักงาน" style="flex:1;min-width:160px;padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit"></div>'
+        + '<div class="ckqbar"><input type="search" id="ckQ" class="ckq" placeholder="🔍 ค้นหาชื่อ / ชื่อเล่น / แผนก" aria-label="ค้นหาพนักงาน" autocomplete="off"><label class="ckonly"><input type="checkbox" id="ckOnly"> แสดงเฉพาะที่เลือกไว้</label></div><div class="ckqres muted" id="ckQRes"></div>'
         + '<div class="ckemp" id="ckEmp">' + gk.map(function (g) {
-            return '<div class="ckg"><label class="ckgh"><input type="checkbox" data-grp="' + esc(g) + '"> <b>' + esc(g) + '</b> <small class="muted">(' + groups[g].length + ')</small></label>'
-              + groups[g].map(function (p) { return '<label class="cke" data-q="' + esc((p.name + ' ' + p.nick).toLowerCase()) + '"><input type="checkbox" data-emp="' + esc(p.id) + '" data-g="' + esc(g) + '"' + (sel[p.id] ? ' checked' : '') + '> ' + esc(p.nick ? p.nick + ' · ' + p.name : p.name) + (faced[p.id] ? ' <span class="cktag">✓ ลงทะเบียนหน้าแล้ว</span>' : '') + '</label>'; }).join('') + '</div>';
+            return '<div class="ckg" data-gq="' + esc(g) + '"><label class="ckgh"><input type="checkbox" data-grp="' + esc(g) + '"> <b>' + esc(g) + '</b> <small class="muted">(' + groups[g].length + ')</small></label>'
+              + groups[g].map(function (p) { return '<label class="cke" data-q="' + esc(ckNorm(p.name + ' ' + p.nick + ' ' + g)) + '"><input type="checkbox" data-emp="' + esc(p.id) + '" data-g="' + esc(g) + '"' + (sel[p.id] ? ' checked' : '') + '> ' + esc(p.nick ? p.nick + ' · ' + p.name : p.name) + (faced[p.id] ? ' <span class="cktag">✓ ลงทะเบียนหน้าแล้ว</span>' : '') + '</label>'; }).join('') + '</div>';
           }).join('') + '</div>'
         + '<div class="pfoot"><button class="btn btn-primary" id="ckSave">บันทึกการตั้งค่าลงเวลา</button></div>'
         + '<div class="ok">5. ลงทะเบียนใบหน้าแล้ว ' + (r.faces || []).length + ' คน</div>'
+        + ((r.faces || []).length > 3 ? '<div class="ckqbar"><input type="search" id="ckFQ" class="ckq" placeholder="🔍 ค้นหาคนที่ลงทะเบียนหน้าแล้ว (ชื่อ / ชื่อ LINE)" aria-label="ค้นหาคนที่ลงทะเบียนใบหน้า" autocomplete="off"></div><div class="ckqres muted" id="ckFQRes"></div>' : '')
         + ((r.faces || []).length ? '<div class="ckfaces">' + r.faces.map(function (f) {
-            return '<div class="ckf"><div><b>' + esc(f.name) + '</b><small class="muted">LINE: ' + esc(f.lineName || '-') + ' · ลงทะเบียน ' + dd(f.enrolledAt) + (f.lastUsedAt ? ' · ใช้ล่าสุด ' + dd(f.lastUsedAt) + ' ' + esc(f.lastUsedAt.slice(11, 16)) : '') + '</small><div data-ckimg="' + esc(f.photo) + '"></div></div>'
+            return '<div class="ckf" data-q="' + esc(ckNorm(f.name + ' ' + (f.lineName || ''))) + '"><div><b>' + esc(f.name) + '</b><small class="muted">LINE: ' + esc(f.lineName || '-') + ' · ลงทะเบียน ' + dd(f.enrolledAt) + (f.lastUsedAt ? ' · ใช้ล่าสุด ' + dd(f.lastUsedAt) + ' ' + esc(f.lastUsedAt.slice(11, 16)) : '') + '</small><div data-ckimg="' + esc(f.photo) + '"></div></div>'
               + '<div class="ckfb">' + (f.photo ? '<button class="btn btn-sm btn-line" data-ckph="' + esc(f.photo) + '">ดูรูป</button>' : '') + '<button class="btn btn-sm btn-line" data-ckdel="' + esc(f.empId) + '" data-nm="' + esc(f.name) + '">ล้างข้อมูลใบหน้า</button></div></div>';
           }).join('') + '</div>' : '<p class="muted" style="margin:2px 0">ยังไม่มี — พนักงานกดปุ่ม "ลงเวลา" ในเมนู LINE ครั้งแรกแล้วลงทะเบียนเอง</p>')
         + '<small class="muted">ล้างข้อมูลใบหน้า = ลบรหัสใบหน้า + รูปลงทะเบียน คนนั้นต้องลงทะเบียนใหม่ (ใช้เมื่อเปลี่ยนมือถือ / บัญชี LINE หรือพนักงานขอลบตาม PDPA) · ประวัติลงเวลาเดิมยังอยู่</small></div>';
@@ -1204,7 +1206,22 @@
       Array.prototype.forEach.call(document.querySelectorAll('[data-grp]'), function (g) { g.addEventListener('change', function () { Array.prototype.forEach.call(document.querySelectorAll('[data-emp][data-g="' + g.getAttribute('data-grp').replace(/"/g, '\\"') + '"]'), function (x) { x.checked = g.checked; }); grpSync(); }); });
       Array.prototype.forEach.call(document.querySelectorAll('[data-emp]'), function (x) { x.addEventListener('change', grpSync); });
       grpSync();
-      $('ckQ').addEventListener('input', function () { var q = this.value.trim().toLowerCase(); Array.prototype.forEach.call(document.querySelectorAll('.cke'), function (l) { l.style.display = !q || l.getAttribute('data-q').indexOf(q) >= 0 ? '' : 'none'; }); });
+      // ค้นหาพนักงาน (ผู้ใช้ขอ 28/11/69): ไม่สนเว้นวรรค / วรรณยุกต์ · ค้นแผนกได้ · ซ่อนแผนกที่ไม่มีคนตรง · บอกจำนวนที่เจอ
+      var ckFilter = function () {
+        var q = ckNorm($('ckQ').value), only = $('ckOnly').checked, n = 0, tot = 0;
+        Array.prototype.forEach.call(document.querySelectorAll('.ckg'), function (g) {
+          var vis = 0;
+          Array.prototype.forEach.call(g.querySelectorAll('.cke'), function (l) { tot++; var on = (!q || l.getAttribute('data-q').indexOf(q) >= 0) && (!only || l.querySelector('input').checked); l.style.display = on ? '' : 'none'; if (on) vis++; });
+          g.style.display = vis ? '' : 'none'; n += vis;
+        });
+        $('ckQRes').innerHTML = q || only ? (n ? 'พบ ' + n + ' คน จาก ' + tot + ' คน' : '<b style="color:#b45309">ไม่พบ' + (q ? ' "' + esc($('ckQ').value.trim()) + '"' : 'คนที่เลือกไว้') + '</b> — ลองพิมพ์ชื่อเล่น หรือบางส่วนของชื่อ') : '';
+      };
+      $('ckQ').addEventListener('input', ckFilter); $('ckOnly').addEventListener('change', ckFilter);
+      if ($('ckFQ')) $('ckFQ').addEventListener('input', function () {
+        var q = ckNorm(this.value), n = 0;
+        Array.prototype.forEach.call(document.querySelectorAll('.ckf'), function (f) { var on = !q || f.getAttribute('data-q').indexOf(q) >= 0; f.style.display = on ? '' : 'none'; if (on) n++; });
+        $('ckFQRes').innerHTML = q ? (n ? 'พบ ' + n + ' คน' : '<b style="color:#b45309">ไม่พบ "' + esc(this.value.trim()) + '"</b>') : '';
+      });
       $('ckSave').addEventListener('click', function () {
         var b = this, lat = $('ckLat').value.trim(), lng = $('ckLng').value.trim();
         if ((lat === '') !== (lng === '')) return toast('ใส่ละติจูดและลองจิจูดให้ครบทั้งสองช่อง');
@@ -1396,7 +1413,7 @@
     '.hbcg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}.hbcg div{background:#f0fdf4;border-radius:10px;padding:6px 8px}.hbcg div.warn{background:#fffbeb}.hbcg div.neg{background:#fef2f2}.hbcg span{display:block;font-size:13px;color:#475569;font-weight:600}.hbcg b{display:block;font-size:14.5px}.hbcg small{font-size:12px;color:#64748b}',
     '.hbcx{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px;font-size:14px;font-weight:600}.hbcx .neg{color:#b91c1c}.hbcx .warn{color:#c2410c}',
     '@media (max-width:700px){.hbcards{display:block}.hbalw{display:none}}',
-    '.ckemp{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px 10px;margin:6px 0}.ckg{padding:6px 0;border-bottom:1px solid #eef2f7}.ckg:last-child{border-bottom:0}.ckgh{display:flex;gap:8px;align-items:center;min-height:36px;cursor:pointer}.cke{display:flex;gap:8px;align-items:center;min-height:36px;padding-left:26px;cursor:pointer;font-size:14.5px;flex-wrap:wrap}.ckg input{width:18px;height:18px}.cktag{background:#dcfce7;color:#166534;border-radius:6px;padding:0 6px;font-size:12px;font-weight:700}.ckfaces{display:flex;flex-direction:column;gap:8px;margin:6px 0}.ckf{display:flex;gap:10px;justify-content:space-between;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:8px 10px;flex-wrap:wrap}.ckf small{display:block}.ckfb{display:flex;gap:6px;flex-wrap:wrap}.ckimg{width:120px;border-radius:10px;margin-top:6px;display:block}',
+    '.ckqbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0 0}.ckq{flex:1 1 240px;min-height:42px;padding:8px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;background:#fff}.ckq:focus{outline:none;border-color:var(--c)}.ckonly{display:flex;gap:6px;align-items:center;font-size:14px;min-height:42px;cursor:pointer}.ckonly input{width:18px;height:18px}.ckqres{font-size:13.5px;margin:4px 0 0;min-height:0}.ckemp{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px 10px;margin:6px 0}.ckg{padding:6px 0;border-bottom:1px solid #eef2f7}.ckg:last-child{border-bottom:0}.ckgh{display:flex;gap:8px;align-items:center;min-height:36px;cursor:pointer}.cke{display:flex;gap:8px;align-items:center;min-height:36px;padding-left:26px;cursor:pointer;font-size:14.5px;flex-wrap:wrap}.ckg input{width:18px;height:18px}.cktag{background:#dcfce7;color:#166534;border-radius:6px;padding:0 6px;font-size:12px;font-weight:700}.ckfaces{display:flex;flex-direction:column;gap:8px;margin:6px 0}.ckf{display:flex;gap:10px;justify-content:space-between;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:8px 10px;flex-wrap:wrap}.ckf small{display:block}.ckfb{display:flex;gap:6px;flex-wrap:wrap}.ckimg{width:120px;border-radius:10px;margin-top:6px;display:block}',
     '.hnew{display:inline-flex;align-items:center;gap:4px;background:#dc2626;color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;margin-top:4px;white-space:nowrap;animation:hnewp 1.2s ease-in-out infinite}.hnew.seen{background:#2563eb;animation:none}',
     '.pinfo .hnew{align-self:flex-start;margin-top:6px}.hnewbox{background:#fef2f2;border:1.5px solid #fca5a5;border-radius:14px;padding:10px 12px;margin:0 0 14px}.hnewbox>b{display:block;color:#b91c1c;margin-bottom:6px}',
     '@keyframes hnewp{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.55);opacity:1}50%{box-shadow:0 0 0 6px rgba(220,38,38,0);opacity:.75}}',
