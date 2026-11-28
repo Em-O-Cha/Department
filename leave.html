@@ -106,6 +106,21 @@
   (function () { var e = new URLSearchParams(location.search).get('e'); if (e) { S.me = e; set('me', e); } })();
   function get(k) { try { return localStorage.getItem('leave_' + k) || ''; } catch (e) { return ''; } }
   function set(k, v) { try { localStorage.setItem('leave_' + k, v); } catch (e) {} }
+  // ข้อมูลครั้งก่อน (แยกตามลิงก์แบบฟอร์ม) · เปิดในโหมดส่วนตัว / ที่เก็บเต็ม → ไม่มีแคช ทำงานแบบเดิม
+  function cGet(k) { try { var v = JSON.parse(localStorage.getItem('leave_c_' + k) || 'null'); return v && v.k === KEY ? v.d : null; } catch (e) { return null; } }
+  function cPut(k, d) { try { localStorage.setItem('leave_c_' + k, JSON.stringify({ k: KEY, d: d })); } catch (e) {} }
+  function sig(o) { try { return JSON.stringify(o, function (k, v) { return k === 'today' ? undefined : v; }); } catch (e) { return ''; } }
+  function localToday() { var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; }; return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); }
+  // วาดหน้าใหม่ตอนข้อมูลจากเซิร์ฟเวอร์มาถึง — ถ้ากำลังพิมพ์ / เลือกอยู่ รอให้ออกจากช่องก่อน (ไม่ให้เคอร์เซอร์หลุด)
+  var rdWait = false;
+  function redraw() {
+    var a = document.activeElement;
+    if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && $('app').contains(a)) {
+      if (!rdWait) { rdWait = true; a.addEventListener('blur', function () { setTimeout(function () { rdWait = false; redraw(); }, 50); }, { once: true }); }
+      return;
+    }
+    var y = window.scrollY; render(); window.scrollTo(0, y);
+  }
   function t(k) { return TX[S.lang][k]; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function $(id) { return document.getElementById(id); }
@@ -148,8 +163,11 @@
   }
   // ชื่อที่จำไว้ในเครื่อง: ดึงข้อมูลคนนี้คนเดียว (ไม่โหลดรายชื่อทุกคน)
   function loadMe() {
+    var c = cGet('bal_' + S.me);
+    if (c && c.emp) { S.emp = c.emp; S.bal = c; render(); return; }   // ข้อมูลครั้งก่อนในเครื่อง → ขึ้นทันที (fresh() เช็กซ้ำอยู่แล้ว)
     $('app').innerHTML = '<div class="msg"><span class="spin"></span></div>';
-    call('hrFormBalance', KEY, S.me).then(function (r) {
+    (S.balP && S.balFor === S.me ? S.balP : call('hrFormBalance', KEY, S.me)).then(function (r) {
+      if (r.ok && r.emp) cPut('bal_' + S.me, r);
       if (!r.ok || !r.emp) { S.me = ''; set('me', ''); S.emp = null; render(); return; }
       S.emp = r.emp; S.bal = r; render();
     }).catch(function (e) { $('app').innerHTML = '<div class="msg">' + esc(nice(e)) + '<br><button class="send" style="margin-top:12px" onclick="location.reload()">↻</button></div>'; });
@@ -189,7 +207,11 @@
   function formView() {
     var e = me(), F = S.f, today = S.data.today;
     if (!F.from) { F.from = today; F.to = today; }
-    if (!S.bal) { S.bal = 'loading'; call('hrFormBalance', KEY, e.id).then(function (r) { S.bal = r.ok ? r : null; if (r.emp) S.emp = r.emp; if (!S.done) formView(); }).catch(function () { S.bal = null; }); }
+    if (!S.bal) {
+      var cb = cGet('bal_' + e.id);   // ชื่อที่เคยเลือกในเครื่องนี้ → สิทธิ์คงเหลือครั้งก่อนขึ้นทันที แล้วเช็กใหม่เงียบ ๆ
+      S.bal = cb || 'loading';
+      call('hrFormBalance', KEY, e.id).then(function (r) { if (r.ok) cPut('bal_' + e.id, r); if (S.me !== e.id) return; var was = sig(S.bal); S.bal = r.ok ? r : null; if (r.emp) S.emp = r.emp; if (!S.done && was !== sig(S.bal)) redraw(); }).catch(function () { if (S.bal === 'loading') S.bal = null; });
+    }
     var B = S.bal && S.bal.balance;
     if ((F.from !== F.to || CAL[F.type]) && F.mode !== 'full') F.mode = 'full';
     F.half = F.mode === 'half';
@@ -315,7 +337,7 @@
         S.done = { days: r.days, hours: r.hours, mins: hours ? hourMins(F) : 0, type: F.type, from: F.from, to: F.to || F.from, reason: F.reason };
         S.f = { type: '', from: '', to: '', half: false, mode: 'full', tf: '', tt: '', reason: '', files: [], sup: F.sup, by: F.by }; S.bal = 'loading'; render(); window.scrollTo(0, 0);
         // ดึงสิทธิ์คงเหลือ + คำขอล่าสุดทันที (ไม่ต้องรีเฟรชหน้า)
-        call('hrFormBalance', KEY, S.me).then(function (b) { S.bal = b.ok ? b : null; render(); }).catch(function () { S.bal = null; render(); });
+        call('hrFormBalance', KEY, S.me).then(function (b) { if (b.ok) cPut('bal_' + S.me, b); S.bal = b.ok ? b : null; render(); }).catch(function () { S.bal = null; render(); });
       });
     }).catch(function (e) { btn.disabled = false; btn.textContent = t('send'); err.textContent = '⚠ ' + nice(e); });
   }
@@ -332,10 +354,25 @@
 
   texts();
   if (!KEY) { $('app').innerHTML = '<div class="msg">' + t('badLink') + '</div>'; return; }
+  // เปิดเร็ว (ผู้ใช้ขอ 28/11/69): ใช้ข้อมูลครั้งก่อนในเครื่องวาดหน้าทันที แล้วดึงข้อมูลใหม่พร้อมกันทุกอย่าง (รายชื่อ / สิทธิ์คงเหลือ / รูป)
+  // วาดใหม่เฉพาะเมื่อข้อมูลเปลี่ยน · ระหว่างพิมพ์อยู่จะรอให้ออกจากช่องก่อน · การส่งใบลาตรวจที่เซิร์ฟเวอร์เสมอ
+  var ci = cGet('init');
+  if (ci && ci.emps) { ci.today = localToday(); S.data = ci; S.photos = cGet('ph') || {}; render(); }
+  if (S.me) { S.balFor = S.me; S.balP = call('hrFormBalance', KEY, S.me); S.balP.then(function (r) {
+    if (r.ok && r.emp) cPut('bal_' + S.balFor, r);
+    if (S.me !== S.balFor || !S.data) return;
+    if (!r.ok || !r.emp) { if (S.emp && S.emp.id === S.balFor && !S.done) { S.me = ''; set('me', ''); S.emp = null; S.bal = null; render(); } return; }
+    var was = sig(S.bal); S.emp = r.emp; S.bal = r; if (!S.done && was !== sig(r)) redraw();
+  }).catch(function () {}); }
   call('hrFormInit', KEY).then(function (d) {
-    S.data = d; d.emps = d.emps || []; render();
-    call('hrFormPhotos', KEY).then(function (p) { S.photos = p.photos || {}; if (!S.done && !S.emp) render(); else if (S.emp && !S.done) formView(); }).catch(function () {});
-  }).catch(function (e) { $('app').innerHTML = '<div class="msg">' + esc(nice(e)) + '<br><button class="send" style="margin-top:12px" onclick="location.reload()">↻</button></div>'; });
+    d.emps = d.emps || []; cPut('init', d);
+    var first = !S.data, was = sig(S.data); S.data = d;
+    if (first) render(); else if (was !== sig(d) && !S.emp && !S.done) redraw();
+  }).catch(function (e) { if (!S.data) $('app').innerHTML = '<div class="msg">' + esc(nice(e)) + '<br><button class="send" style="margin-top:12px" onclick="location.reload()">↻</button></div>'; });
+  call('hrFormPhotos', KEY).then(function (p) {
+    var ph = p.photos || {}, was = sig(S.photos); S.photos = ph; cPut('ph', ph);
+    if (S.data && was !== sig(ph) && !S.done) redraw();
+  }).catch(function () {});
 })();
 </script>
 </body>

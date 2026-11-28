@@ -128,8 +128,22 @@ function hrLineTest(token) {
 // ---------- หน้าแบบฟอร์มพนักงาน (เรียกด้วยรหัสแบบฟอร์ม) ----------
 // ไม่ส่งรายชื่อพนักงานทั้งหมดให้หน้าฟอร์มแล้ว (19/11/69: หน้าสแกนขอลาไม่ควรเห็นทุกคน) — ค้นด้วย hrFormFind ทีละชื่อ
 // emps: [] เผื่อหน้าเก่าที่ยังค้างในเครื่อง
+// เก็บผลของหน้าขอลา (leave.html) ไว้ (ผู้ใช้ขอ 28/11/69: เข้าหน้าขอลาต้องเร็ว) · ใช้ตราแก้ไขของฝ่ายบุคคล (RCD_HR) เหมือนหน้าอื่น
+// ฝ่ายบุคคลบันทึกอะไร / มีคนส่งใบลา / อนุมัติ → ตราเปลี่ยน → คำนวณใหม่ · แก้ในชีตด้วยมือ → ไม่เกิน 30 นาที
+function hrfCached_(name, args, fn) {
+  var stamp = rcStamp_('own', 'HR'), key = rcKey_('F_' + name, 'HR', [''].concat(args)), hit = rcGet_(key, stamp);
+  if (hit !== undefined) { if (typeof PERF_ !== 'undefined' && PERF_) PERF_.rc = 'hit'; return hit; }
+  if (typeof PERF_ !== 'undefined' && PERF_) PERF_.rc = 'miss';
+  var v = fn();
+  if (v && v.ok) rcPut_(key, v, stamp);
+  return v;
+}
 function hrFormInit(key) {
-  var dept = hrFormCheck_(key), ss = hrReadBook_(dept, hrPrepJob_), st = hrSettings_(ss);
+  var dept = hrFormCheck_(key);
+  return hrfCached_('init', [], function () { return hrFormInit_(dept); });
+}
+function hrFormInit_(dept) {
+  var ss = hrReadBook_(dept, hrPrepJob_), st = hrSettings_(ss);
   // รายชื่อให้เลือก (พร้อมรูปจาก hrFormPhotos) — กลับมาแสดงรายชื่อตามที่ผู้ใช้ขอ 19/11/69 · รวมพนักงาน Job
   return { ok: true, today: purToday_(), workDays: st.workDays, dayHours: st.dayHours, stdHours: st.stdHours, supervisors: hrSupervisors_(ss),
     emps: hrPeople_(ss).filter(hrActive_).sort(function (a, b) { return (Number(a.seq) || 9999) - (Number(b.seq) || 9999); })
@@ -150,7 +164,11 @@ function hrFormFind(key, q) {
   }).slice(0, 8).map(hrFormEmp_) };
 }
 function hrFormPhotos(key) {   // รูปย่อทุกคน (พนักงาน + Job) สำหรับหน้าเลือกชื่อ
-  var dept = hrFormCheck_(key), ss = hrBook_(dept), out = {};   // รูปอยู่ในชีตเท่านั้น
+  var dept = hrFormCheck_(key);
+  return hrfCached_('photos', [], function () { return hrFormPhotos_(dept); });
+}
+function hrFormPhotos_(dept) {
+  var ss = hrBook_(dept), out = {};   // รูปอยู่ในชีตเท่านั้น
   hrPeople_(ss).forEach(function (e) { if (hrActive_(e) && /^data:image\//.test(String(e.photoThumb))) out[e.id] = e.photoThumb; });
   return { ok: true, photos: out };
 }
@@ -180,7 +198,11 @@ function hrBalance_(ss, e, year) {
   return out;
 }
 function hrFormBalance(key, empId) {
-  var dept = hrFormCheck_(key), ss = hrReadBook_(dept, hrPrepJob_), e = hrById_(hrPeople_(ss), empId), st = hrSettings_(ss);
+  var dept = hrFormCheck_(key);
+  return hrfCached_('bal', [String(empId || '').slice(0, 40)], function () { return hrFormBalance_(dept, empId); });
+}
+function hrFormBalance_(dept, empId) {
+  var ss = hrReadBook_(dept, hrPrepJob_), e = hrById_(hrPeople_(ss), empId), st = hrSettings_(ss);
   if (!e || !hrActive_(e)) return { ok: false, error: 'ไม่พบชื่อพนักงาน' };
   var year = purToday_().slice(0, 4);
   var mine = purRead_(ss, 'hr_leaves').filter(function (l) { return l.empId === e.id; }).sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).slice(0, 8)
