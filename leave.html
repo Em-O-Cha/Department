@@ -36,10 +36,14 @@
   .link { border: 0; background: none; color: var(--c); font: inherit; font-size: 14px; text-decoration: underline; padding: 4px 0; }
   .bal { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
   .bal div { background: #f8fafc; border-radius: 12px; padding: 8px; text-align: center; }
-  .bal span { display: block; font-size: 12.5px; color: var(--muted); } .bal b { font-size: 22px; } .bal small { font-size: 11.5px; color: var(--muted); display: block; }
+  .bal span { display: block; font-size: 13.5px; color: #475569; font-weight: 600; } .bal b { font-size: 22px; } .bal small { font-size: 12.5px; color: #475569; display: block; }
   .types { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .types button { border: 2px solid var(--line); background: #fff; border-radius: 12px; padding: 12px 6px; font: inherit; font-size: 15px; font-weight: 600; min-height: 56px; }
-  .types button.on { border-color: var(--c); background: #eff6ff; color: var(--c); }
+  .types button.on { border-color: var(--c); background: var(--c); color: #fff; }
+  .types button.on::before, .modes button.on::before { content: '✓ '; }
+  .need { outline: 3px solid var(--bad); outline-offset: 3px; border-radius: 12px; animation: shake .3s; }
+  @keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+  .dconf { margin-top: 6px; font-size: 14.5px; font-weight: 600; color: #1e3a8a; background: #eff6ff; border-radius: 10px; padding: 6px 10px; }
   label { display: block; font-size: 14px; color: var(--muted); margin: 12px 0 4px; }
   .modes.by { margin: 0 0 10px; }
   .byme { margin: -4px 0 10px; padding: 10px 12px; border-radius: 12px; background: #f0fdf4; border: 1.5px solid #bbf7d0; font-size: 15px; }
@@ -56,7 +60,8 @@
   .fbtn { border: 2px dashed var(--c); background: #eff6ff; color: var(--c); border-radius: 10px; width: 80px; height: 80px; font: inherit; font-size: 12px; font-weight: 600; }
   .send { width: 100%; border: 0; background: var(--c); color: #fff; border-radius: 14px; padding: 16px; font: inherit; font-size: 18px; font-weight: 700; margin-top: 16px; }
   .send:disabled { opacity: .6; }
-  .err { color: var(--bad); font-size: 14.5px; margin-top: 10px; min-height: 1em; }
+  .err { color: var(--bad); font-size: 15px; font-weight: 600; margin-top: 10px; min-height: 1em; }
+  .err:not(:empty) { background: #fef2f2; border: 1px solid #fca5a5; border-radius: 10px; padding: 8px 12px; }
   .done { text-align: center; padding: 30px 16px; } .done .big { font-size: 64px; } .done b { font-size: 20px; display: block; margin: 8px 0; }
   .attw { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; } .attb { border: 1.5px solid #2563eb; background: #eff6ff; color: #1d4ed8; border-radius: 99px; padding: 5px 12px; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; } .attb:disabled { opacity: .6; } .attn { color: #15803d; font-weight: 600; }
   .toastm { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #166534; color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 14.5px; z-index: 99; max-width: 90vw; box-shadow: 0 8px 24px rgba(0,0,0,.2); } .toastm.bad { background: #b91c1c; }
@@ -120,6 +125,13 @@
   function dmy(iso) { if (!iso) return ''; var p = iso.split('-'); return +p[2] + '/' + +p[1] + '/' + (+p[0] + 543); }
   function ph(e, cls) { var src = e.photo || S.photos[e.id]; return src ? '<img class="ph ' + (cls || '') + '" src="' + src + '" alt="">' : '<span class="ph ' + (cls || '') + '">' + esc(String(e.nick || e.name).replace(/^(นาย|นางสาว|นาง|MISS\.?|MR\.?|MRS\.?)\s*/i, '').slice(0, 1)) + '</span>'; }
   function me() { return S.emp; }
+  // UX 28/11/69: ไม่โชว์ข้อความภาษาอังกฤษจากระบบ (Failed to fetch / Unexpected token …)
+  function nice(e) {
+    var m = String((e && e.message) || e || '');
+    if (/fetch|network|json|token|load failed|timeout|abort|unexpected|syntax|^error$/i.test(m) || !/[ก-๙\u1000-\u109f]/.test(m))
+      return S.lang === 'my' ? 'ချိတ်ဆက်မရပါ — အင်တာနက် စစ်ပြီး ပြန်ကြိုးစားပါ (မရသေးပါက HR ကို ပြောပါ)' : 'เชื่อมต่อระบบไม่ได้ — ตรวจอินเทอร์เน็ต / สัญญาณมือถือ แล้วลองใหม่ (ถ้ายังไม่ได้ แจ้งฝ่ายบุคคล)';
+    return m;
+  }
   function texts() {
     document.body.classList.toggle('my', S.lang === 'my'); document.documentElement.lang = S.lang === 'my' ? 'my' : 'th';
     Array.prototype.forEach.call(document.querySelectorAll('[data-t]'), function (el) { el.textContent = t(el.getAttribute('data-t')); });
@@ -140,7 +152,7 @@
     call('hrFormBalance', KEY, S.me).then(function (r) {
       if (!r.ok || !r.emp) { S.me = ''; set('me', ''); S.emp = null; render(); return; }
       S.emp = r.emp; S.bal = r; render();
-    }).catch(function (e) { $('app').innerHTML = '<div class="msg">' + esc(e.message) + '</div>'; });
+    }).catch(function (e) { $('app').innerHTML = '<div class="msg">' + esc(nice(e)) + '<br><button class="send" style="margin-top:12px" onclick="location.reload()">↻</button></div>'; });
   }
   // เลือกชื่อ: รายชื่อพร้อมรูปให้แตะเลือก (พนักงาน + พนักงาน Job) · ค้นหา / กรองตามอาคารได้ — ผู้ใช้ขอกลับเป็นแบบเดิม 19/11/69
   function pickView() {
@@ -195,6 +207,7 @@
       + balHtml() + '</div>'
       + '<div class="card"><h2>' + t('type') + '</h2><div class="types">' + ['sick', 'personal', 'vacation', 'birthday', 'maternity', 'paternity', 'ordain', 'other'].filter(function (k) { var g = (S.emp && S.emp.gender) || e.gender || ''; return !(k === 'maternity' && g === 'ชาย') && !(k === 'paternity' && g === 'หญิง'); }).map(function (k) { return '<button data-type="' + k + '"' + (F.type === k ? ' class="on"' : '') + '>' + t('types')[k] + '</button>'; }).join('') + '</div>'
       + '<div class="row2"><div><label>' + t('from') + '</label><input type="date" id="fFrom" value="' + F.from + '"></div><div><label>' + t('to') + '</label><input type="date" id="fTo" value="' + F.to + '" min="' + F.from + '"></div></div>'
+      + (F.from ? '<div class="dconf">📅 ' + dmy(F.from) + (F.to && F.to !== F.from ? ' – ' + dmy(F.to) : '') + (ri.n ? ' · ' + ri.n + ' ' + t('days') : '') + '</div>' : '')
       + (F.from === F.to && !CAL[F.type] ? '<div class="modes">' + [['full', t('mFull')], ['half', t('mHalf')], ['hours', t('mHours')]].map(function (m) { return '<button type="button" data-mode="' + m[0] + '"' + (F.mode === m[0] ? ' class="on"' : '') + '>' + m[1] + '</button>'; }).join('') + '</div>'
         + (F.mode === 'hours' ? '<div class="row2"><div><label>' + t('tFrom') + '</label><input type="time" id="fTF" value="' + esc(F.tf) + '"></div><div><label>' + t('tTo') + '</label><input type="time" id="fTT" value="' + esc(F.tt) + '"></div></div>' : '') : '')
       // ใครกรอกใบลานี้ (ผู้ใช้ขอ 20/11/69): กรอกเอง = ชื่อคนนั้น · หัวหน้ากรอกให้ = เลือกชื่อหัวหน้า (จำไว้ในเครื่อง)
@@ -279,13 +292,21 @@
   }
   function submit() {
     var F = S.f, err = $('err'), btn = $('send');
-    if (!F.type) { err.textContent = t('needType'); return; }
-    if (!F.from) { err.textContent = t('needDate'); return; }
+    // UX 28/11/69: บอกข้อที่ขาด + เลื่อนไปที่ช่องนั้นและทำกรอบแดง (เดิมขึ้นแค่ตัวหนังสือแดงเล็ก ๆ ใกล้ปุ่ม)
+    var fail = function (msg, sel) {
+      err.textContent = '⚠ ' + msg;
+      alertBox(msg, true);   // แถบลอยด้านล่าง เห็นได้แม้ช่องที่ขาดอยู่ด้านบน
+      Array.prototype.forEach.call(document.querySelectorAll('.need'), function (x) { x.classList.remove('need'); });
+      var el = sel && document.querySelector(sel);
+      if (el) { el.classList.add('need'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (el.focus && /INPUT|SELECT|TEXTAREA/.test(el.tagName)) setTimeout(function () { el.focus(); }, 350); }
+    };
+    if (!F.type) return fail(t('needType'), '.types');
+    if (!F.from) return fail(t('needDate'), '#fFrom');
     var hours = F.mode === 'hours' && F.from === (F.to || F.from);
-    if (hours && !hourMins(F)) { err.textContent = t('needTime'); return; }
-    if (!F.by) { err.textContent = t('needBy'); return; }
-    if (F.by === 'sup' && !F.sup) { err.textContent = t('needSup'); return; }
-    if (F.type === 'other' && !String(F.reason || '').trim()) { err.textContent = t('needReason'); var fr = $('fReason'); if (fr) fr.focus(); return; }   // ลาอื่น ๆ ต้องมีเหตุผล (ผู้ใช้ขอ 27/11/69)
+    if (hours && !hourMins(F)) return fail(t('needTime'), '#fTF');
+    if (!F.by) return fail(t('needBy'), '.modes.by');
+    if (F.by === 'sup' && !F.sup) return fail(t('needSup'), '#fSup');
+    if (F.type === 'other' && !String(F.reason || '').trim()) return fail(t('needReason'), '#fReason');   // ลาอื่น ๆ ต้องมีเหตุผล (ผู้ใช้ขอ 27/11/69)
     btn.disabled = true; btn.innerHTML = '<span class="spin"></span>'; err.textContent = '';
     call('hrFormSubmit', KEY, { empId: S.me, type: F.type, dateFrom: F.from, dateTo: F.to || F.from, half: F.half && F.from === F.to, timeFrom: hours ? F.tf : '', timeTo: hours ? F.tt : '', filledBy: F.by, supervisorId: F.by === 'sup' ? F.sup : '', reason: F.reason }).then(function (r) {
       var i = 0;
@@ -296,7 +317,7 @@
         // ดึงสิทธิ์คงเหลือ + คำขอล่าสุดทันที (ไม่ต้องรีเฟรชหน้า)
         call('hrFormBalance', KEY, S.me).then(function (b) { S.bal = b.ok ? b : null; render(); }).catch(function () { S.bal = null; render(); });
       });
-    }).catch(function (e) { btn.disabled = false; btn.textContent = t('send'); err.textContent = e.message; });
+    }).catch(function (e) { btn.disabled = false; btn.textContent = t('send'); err.textContent = '⚠ ' + nice(e); });
   }
   function doneView() {
     var d = S.done, e = me();
@@ -314,7 +335,7 @@
   call('hrFormInit', KEY).then(function (d) {
     S.data = d; d.emps = d.emps || []; render();
     call('hrFormPhotos', KEY).then(function (p) { S.photos = p.photos || {}; if (!S.done && !S.emp) render(); else if (S.emp && !S.done) formView(); }).catch(function () {});
-  }).catch(function (e) { $('app').innerHTML = '<div class="msg">' + esc(e.message) + '</div>'; });
+  }).catch(function (e) { $('app').innerHTML = '<div class="msg">' + esc(nice(e)) + '<br><button class="send" style="margin-top:12px" onclick="location.reload()">↻</button></div>'; });
 })();
 </script>
 </body>
