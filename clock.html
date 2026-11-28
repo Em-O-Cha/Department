@@ -167,37 +167,64 @@
     if (!navigator.geolocation) { G.err = 'nogeo'; return; }
     if (G.watch != null) navigator.geolocation.clearWatch(G.watch);
     G.best = null; G.err = null; G.t0 = Date.now();
+    // ตำแหน่งล่าสุดของเครื่อง (ไม่เกิน 1 นาที) ได้ทันที ไม่ต้องรอ GPS จับใหม่ — ยังต้องอยู่ในรัศมีและแม่นพอเหมือนเดิม
+    try { navigator.geolocation.getCurrentPosition(function (p) { var c = { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy) }; if (!G.best || c.acc <= G.best.acc) G.best = c; if (G.cb) G.cb(); }, function () {}, { enableHighAccuracy: true, maximumAge: 60000, timeout: 4000 }); } catch (e) {}
     G.watch = navigator.geolocation.watchPosition(function (p) {
       var c = { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy) };
       if (!G.best || c.acc <= G.best.acc) G.best = c;
       if (G.cb) G.cb();
     }, function (e) { G.err = e && e.code === 1 ? 'deny' : 'fail'; if (G.cb) G.cb(); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
   }
+  // จำข้อมูลไว้ในเครื่อง (ผู้ใช้ขอ 28/11/69: เปิดหน้าลงเวลาต้องไม่เกิน 1–2 วินาที) — แสดงหน้าจากครั้งก่อนทันที แล้วตรวจกับระบบเบื้องหลัง
+  function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function ymd(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  function fromCache(c) {
+    var n = new Date(), t = ymd(n), d = JSON.parse(JSON.stringify(c));
+    d.now = ('0' + n.getHours()).slice(-2) + ':' + ('0' + n.getMinutes()).slice(-2);
+    if (d.today !== t) { d.today = t; d.rec = null; d.day = { unknown: true }; }
+    d.cached = true; return d;
+  }
+  function sig(d) { return JSON.stringify([d.registered, d.blocked || '', d.emp && d.emp.id, d.emp && d.emp.name, d.rec || null, d.day || null, d.geo || null, d.leaveUrl || '']); }
   function boot() {
-    var q = new URLSearchParams(location.search), lid = q.get('l');
+    var q = new URLSearchParams(location.search), lid = q.get('l') || (lsGet('clk_lid') || '');
     // ปุ่ม "ขอลา" ในเมนู LINE = ลิงก์ LIFF เดียวกัน + ?go=leave → ไปหน้าขอลาเลย (ไม่หาตำแหน่ง / ไม่โหลดระบบตรวจหน้า)
     S.goLeave = q.get('go') === 'leave' || /go=leave/.test(q.get('liff.state') || '');
     if (S.goLeave) { var lt = document.querySelector('#vLoad b'); if (lt) lt.textContent = 'กำลังเปิดหน้าขอลา…'; }
-    if (!S.goLeave) gpsStart();
+    if (!S.goLeave) { gpsStart(); loadFace().catch(function () {}); }   // ตำแหน่ง + โมเดลใบหน้าเริ่มโหลดทันทีที่เปิดหน้า
+    var cache = !S.goLeave && lsGet('clk_d');
+    if (cache && cache.registered && !cache.blocked) { S.d = fromCache(cache); home(); }
     // เวลาตอนกดเมนู "ลงเวลา" (เปิดหน้านี้) — ใช้เป็นเวลาเข้างานถ้าสแกนเสร็จภายใน 3 นาที (ผู้ใช้ห่วงว่าเปิดหน้าช้าแล้วจะสาย 27/11/69)
     S.openAt = Date.now(); S.openStamp = S.goLeave ? Promise.resolve(null) : call('hrClockStamp').catch(function () { return null; });
     var getId = lid ? Promise.resolve({ liffId: lid }) : call('hrClockInfo');
+    var tokOk, tokNo; S.tokP = new Promise(function (a, b) { tokOk = a; tokNo = b; }); S.tokP.catch(function () {});
     getId.then(function (i) {
       if (!i || !i.liffId) throw new Error('ฝ่ายบุคคลยังไม่ได้ตั้งค่าหน้าลงเวลา');
+      lsSet('clk_lid', i.liffId);   // ครั้งต่อไปไม่ต้องถามระบบ
       return liff.init({ liffId: i.liffId });
     }).then(function () {
       if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return new Promise(function () {}); }
-      S.tok = liff.getIDToken();
-      if (!S.goLeave) loadFace().catch(function () {});   // โหลดโมเดลใบหน้าไปพร้อมกัน
+      S.tok = liff.getIDToken(); tokOk(S.tok);
       return call('hrClockInit', [S.tok]);
     }).then(function (d) {
       if (!d || !d.ok) throw new Error((d && d.error) || 'โหลดข้อมูลไม่สำเร็จ');
-      S.d = d;
       if (S.goLeave && d.leaveUrl) { location.replace(d.leaveUrl); return; }
+      var was = S.d;
+      if (d.registered && !d.blocked) lsSet('clk_d', d); else lsSet('clk_d', null);
+      S.d = d;
       if (d.blocked) return fatal(d.blocked);
       if (!d.registered) return regPage();
+      // แสดงจากข้อมูลในเครื่องไปแล้ว: วาดใหม่เฉพาะเมื่อข้อมูลต่างกัน และไม่วาดทับตอนกำลังสแกน / แสดงผล
+      if (was && was.cached) {
+        if (sig(was) === sig(d)) return;
+        if (!$('vCam').classList.contains('hidden') || !$('go')) return;   // กำลังสแกน / แสดงผลอยู่ — ไม่วาดทับ
+      }
       home();
-    }).catch(function (e) { fatal('เปิดหน้าลงเวลาไม่ได้', nice(e)); });
+    }).catch(function (e) {
+      tokNo(e);
+      if (S.d && S.d.cached && $('go')) return home('<div class="msg err"><b>ตรวจข้อมูลกับระบบไม่ได้</b>' + esc(nice(e)) + '</div>');
+      fatal('เปิดหน้าลงเวลาไม่ได้', nice(e));
+    });
   }
 
   // ---------- หน้าหลัก ----------
@@ -208,7 +235,7 @@
     var earlyTag = r.timeOut && r.earlyMin > 0 ? ' <span class="pill o">ออกก่อน ' + r.earlyMin + ' นาที</span>' : '';
     show('<div class="top"><small>ลงเวลาเข้า-ออกงาน</small><div class="who"><div class="av">' + esc((e.nick || e.name).slice(0, 1)) + '</div><div><b>' + esc(e.nick ? e.name + ' (' + e.nick + ')' : e.name) + '</b><span>' + esc([e.pos, e.group].filter(Boolean).join(' · ')) + '</span></div></div></div>'
       + '<div class="bd">' + (note || '')
-      + '<div class="clock"><div class="t" id="clk">' + esc(d.now) + '</div><div class="d">' + thDate(d.today) + (day.work ? ' · เข้างาน ' + esc(day.inT) + ' น. · ออก ' + esc(day.outT) + ' น.' : ' · ไม่ใช่วันทำงาน (ไม่นับสาย)') + '</div></div>'
+      + '<div class="clock"><div class="t" id="clk">' + esc(d.now) + '</div><div class="d">' + thDate(d.today) + (day.unknown ? '' : day.work ? ' · เข้างาน ' + esc(day.inT) + ' น. · ออก ' + esc(day.outT) + ' น.' : ' · ไม่ใช่วันทำงาน (ไม่นับสาย)') + '</div></div>'
       + '<div class="today"><b>วันนี้</b><div><span>เข้างาน</span><span>' + (r.timeIn ? esc(r.timeIn) + ' น. ' + lateTag : '<span class="nil">ยังไม่ได้ลง</span>') + '</span></div><div><span>ออกงาน</span><span>' + (r.timeOut ? esc(r.timeOut) + ' น.' + earlyTag : '<span class="nil">ยังไม่ได้ลง</span>') + '</span></div></div>'
       + (stage === 'done' ? '<div class="msg info"><b>วันนี้ลงเวลาครบแล้ว ✓</b>ถ้าออกงานจริงช้ากว่าที่บันทึก กด "สแกนออกงานใหม่" ได้</div>' : '')
       + '<div class="gps" id="gps">📍<div>กำลังตรวจตำแหน่ง…<small>เปิด GPS และอนุญาตให้ LINE ใช้ตำแหน่ง</small></div></div>'
@@ -294,14 +321,14 @@
       var send = function (x) {
         var photo = snap(480), desc = Array.from(x.f.descriptor);
         closeCam(); busy(kind === 'in' ? 'กำลังบันทึกเวลาเข้างาน…' : 'กำลังบันทึกเวลาออกงาน…');
-        stampP.then(function (st) { return call('hrClockPunch', [S.tok, kind, desc, photo, pos, true, st]); }).then(function (r) { unbusy(); result(!!(r && r.ok), kind, r || {}); })
+        Promise.all([stampP, S.tokP]).then(function (a) { return call('hrClockPunch', [a[1], kind, desc, photo, pos, true, a[0]]); }).then(function (r) { unbusy(); result(!!(r && r.ok), kind, r || {}); })
           .catch(function (e) { unbusy(); result(false, kind, { error: nice(e) }); });
       };
       loop();
     }).catch(function (e) { var m = camErr(e); home('<div class="msg err"><b>สแกนหน้าไม่ได้</b>' + esc(m) + '</div>'); });
   }
   function result(ok, kind, r) {
-    if (r && r.rec) S.d.rec = r.rec;
+    if (r && r.rec) { S.d.rec = r.rec; if (!S.d.cached) lsSet('clk_d', S.d); else { var c = lsGet('clk_d'); if (c) { c.rec = r.rec; c.today = r.date || c.today; lsSet('clk_d', c); } } }
     if (!ok) return home('<div class="msg err"><b>ลงเวลาไม่สำเร็จ</b>' + esc(r.error || 'ลองใหม่อีกครั้ง') + '</div>');
     var tag = kind === 'in' ? (!r.work ? '<span class="pill g">วันหยุด · ไม่นับสาย</span>' : r.lateMin > 0 ? '<span class="pill o">⏰ สาย ' + r.lateMin + ' นาที</span>' : '<span class="pill g">✓ ตรงเวลา</span>')
       : (r.work && r.earlyMin > 0 ? '<span class="pill o">ออกก่อนเวลา ' + r.earlyMin + ' นาที</span>' : '<span class="pill g">✓ บันทึกแล้ว</span>');

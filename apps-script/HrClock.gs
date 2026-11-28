@@ -102,16 +102,31 @@ function hrcRowOut_(r) { return r ? { timeIn: r.timeIn || '', timeOut: r.timeOut
 function hrcLeaveUrl_(empId) { return HR_FORM_URL_ + '?k=' + encodeURIComponent(hrFormKey_()) + (empId ? '&e=' + encodeURIComponent(empId) : ''); }
 // ---------- หน้า LIFF (ไม่มีรหัสผ่าน — ยืนยันตัวตนด้วย LINE) ----------
 function hrClockInfo() { return { ok: true, liffId: hrcLiffId_() }; }   // LIFF ID ไม่ใช่ความลับ
+// ทางลัดเปิดหน้า (ผู้ใช้ขอ 28/11/69: เข้าหน้าลงเวลาต้องไม่เกิน 1–2 วินาที): ข้อมูลคน + จุดลงเวลาของคนที่ลงทะเบียนแล้ว จำไว้ใน cache 6 ชม.
+// (ล้างเมื่อ HR แก้ค่าตั้ง / ลงทะเบียน / ล้างใบหน้า = HRC_VER) · เวลาเข้า-ออกวันนี้จำแยก (HRCR_ · เขียนตอนสแกน · HR แก้ / นำเข้าไฟล์ = HRC_RV ใหม่)
+function hrcVer_(k) { return props_().getProperty(k) || '0'; }
+function hrcBump_(k) { try { props_().setProperty(k || 'HRC_VER', String(Date.now())); } catch (e) {} }
+function hrcRecKey_(empId, date) { return 'HRCR_' + empId + '_' + date + '_' + hrcVer_('HRC_RV'); }
+function hrcPutRec_(empId, date, rec) { try { CacheService.getScriptCache().put(hrcRecKey_(empId, date), rec ? JSON.stringify(rec) : '-', 21600); } catch (e) {} }
 function hrClockInit(idToken) {
   try {
-    var u = hrcUser_(idToken), b = hrcBook_(), ss = b.rb(), cfg = hrcCfg_(ss), today = purToday_();
+    var u = hrcUser_(idToken), today = purToday_(), C = CacheService.getScriptCache(), pk = 'HRCP_' + u.id + '_' + hrcVer_('HRC_VER') + '_' + today;
+    var hit = C.get(pk);
+    if (hit) try {
+      var p = JSON.parse(hit), rv = C.get(hrcRecKey_(p.emp.id, today));
+      if (rv != null) { p.rec = rv === '-' ? null : JSON.parse(rv); p.now = purNow_().slice(11, 16); p.fast = true; return p; }
+    } catch (e) {}
+    var b = hrcBook_(), ss = b.rb(), cfg = hrcCfg_(ss);
     var me = purRead_(ss, 'hr_faces').filter(function (f) { return f.lineUserId === u.id; })[0];
     var day = hrcDay_(cfg, today), base = { ok: true, today: today, now: purNow_().slice(11, 16), day: day,
       geo: { set: !!(cfg.lat && cfg.lng), lat: Number(cfg.lat) || 0, lng: Number(cfg.lng) || 0, radius: Number(cfg.radius) || 200, maxAcc: Number(cfg.maxAcc) || 100 } };
     if (me) {
       var emp = hrById_(purRead_(ss, 'hr_emps'), me.empId);
       if (!emp || emp.status === 'ลาออก') return Object.assign(base, { registered: false, blocked: 'บัญชีนี้ไม่ได้อยู่ในรายชื่อพนักงานที่ทำงานอยู่ — ติดต่อฝ่ายบุคคล' });
-      return Object.assign(base, { registered: true, emp: hrcEmpOut_(emp), rec: hrcRowOut_(hrcTodayRow_(ss, emp.id, today)), leaveUrl: hrcLeaveUrl_(emp.id) });
+      var out = Object.assign(base, { registered: true, emp: hrcEmpOut_(emp), leaveUrl: hrcLeaveUrl_(emp.id) }), rec = hrcRowOut_(hrcTodayRow_(ss, emp.id, today));
+      try { C.put(pk, JSON.stringify(out), 21600); } catch (e) {}
+      hrcPutRec_(emp.id, today, rec);
+      return Object.assign(out, { rec: rec });
     }
     var used = {}; purRead_(ss, 'hr_faces').forEach(function (f) { used[f.empId] = 1; });
     var allow = {}; cfg.emps.forEach(function (id) { allow[id] = 1; });
@@ -141,6 +156,7 @@ function hrClockEnroll(idToken, empId, descs, photo) {
       purWrite_(ss, 'hr_faces', { id: emp.id, empId: emp.id, name: emp.fullName, lineUserId: u.id, lineName: purClean_(u.name, 80),
         faces: JSON.stringify(list.map(function (d) { return d.map(function (x) { return Math.round(x * 10000) / 10000; }); })), photo: pid, enrolledAt: now, lastUsedAt: '' });
       purLogWrite_(ss, 'ลงทะเบียนใบหน้าลงเวลา', 'hr_faces', emp.id, (emp.nickname || emp.fullName) + ' · LINE ' + u.name + ' · ' + list.length + ' รูป');
+      hrcBump_('HRC_VER');
       rcTouchDept_('HR');
       return { ok: true, emp: hrcEmpOut_(emp) };
     });
@@ -194,6 +210,7 @@ function hrClockPunch(idToken, kind, desc, photo, geo, live, stamp) {
       }
       purWrite_(ss, 'hr_time', row);
       if (kind === 'in') hrtSyncLeaves_(ss, [row], now);
+      hrcPutRec_(emp.id, date, hrcRowOut_(row));
       rcTouchDept_('HR');
       return { ok: true, kind: kind, time: hm, date: date, work: day.work, lateMin: Number(row.lateMin) || 0, earlyMin: Number(row.earlyMin) || 0,
         dist: m, score: hrcScore_(dist), rec: hrcRowOut_(row) };
@@ -226,6 +243,7 @@ function hrClockSave(token, c) {
     var ss = hrBook_(dept), r = purRead_(ss, 'hr_settings').filter(function (x) { return x.id === 'clockCfg'; })[0];
     purWrite_(ss, 'hr_settings', r ? Object.assign(r, { value: JSON.stringify(cfg) }) : { id: 'clockCfg', value: JSON.stringify(cfg) });
     purLogWrite_(ss, 'ตั้งค่าลงเวลาด้วยใบหน้า', 'hr_settings', 'clockCfg', 'จุด ' + cfg.lat + ',' + cfg.lng + ' รัศมี ' + cfg.radius + ' ม. · ' + cfg.emps.length + ' คน');
+    hrcBump_('HRC_VER');
     return { ok: true, cfg: cfg };
   });
 }
@@ -234,6 +252,7 @@ function hrClockSetLiff(token, liffId) {
   var v = String(liffId || '').trim();
   if (v && !/^\d{10}-[A-Za-z0-9]{8}$/.test(v)) return { ok: false, error: 'LIFF ID ไม่ถูกต้อง (รูปแบบ 1234567890-AbCdEfGh)' };
   if (v) props_().setProperty('HR_CLOCK_LIFF_ID', v); else props_().deleteProperty('HR_CLOCK_LIFF_ID');
+  hrcBump_('HRC_VER');
   return { ok: true, liffId: v, liffUrl: v ? 'https://liff.line.me/' + v : '' };
 }
 // ล้างข้อมูลใบหน้า 1 คน (ลงทะเบียนใหม่ได้ / เปลี่ยนมือถือ)
@@ -246,6 +265,7 @@ function hrClockReset(token, empId) {
     if (row.photo) try { DriveApp.getFileById(row.photo).setTrashed(true); } catch (e) {}
     purSheet_(ss, 'hr_faces').deleteRow(row._row);
     purLogWrite_(ss, 'ล้างข้อมูลใบหน้าลงเวลา', 'hr_faces', row.empId, row.name + ' · LINE ' + row.lineName);
+    hrcBump_('HRC_VER');
     return { ok: true };
   });
 }

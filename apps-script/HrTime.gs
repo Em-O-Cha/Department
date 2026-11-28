@@ -84,6 +84,7 @@ function hrTimeSave(token, rows, map) {
     var res = hrtSyncLeaves_(ss, clean.map(function (r) { return all[r.id]; }), now), nLate = res.late, nAbs = res.absent, unmatched = res.unmatched;
     var days = clean.map(function (r) { return r.date; }).filter(function (x, i, a) { return a.indexOf(x) === i; }).sort();
     purLogWrite_(ss, 'นำเข้าไฟล์ลงเวลา', 'hr_time', '', days[0] + (days.length > 1 ? ' – ' + days[days.length - 1] : '') + ' · ' + clean.length + ' แถว · สาย ' + nLate + ' · ขาด ' + nAbs);
+    hrcBump_('HRC_RV');   // เวลาเข้า-ออกที่หน้าลงเวลาจำไว้ใช้ไม่ได้แล้ว
     return { ok: true, saved: clean.length, days: days, late: nLate, absent: nAbs, unmatched: Object.keys(unmatched).length, map: tm };
   });
 }
@@ -137,6 +138,7 @@ function hrTimeEdit(token, id, x) {
     purWrite_(ss, 'hr_time', row);
     var res = hrtSyncLeaves_(ss, [row], now);
     purLogWrite_(ss, 'แก้ข้อมูลลงเวลา', 'hr_time', row.id, (row.name || '') + ' ' + row.date + ' · ' + before + ' → ' + [row.timeIn, row.timeOut, row.lateMin, row.kind, row.remark].join(' / '));
+    hrcBump_('HRC_RV');
     return { ok: true, row: hrtOut_(row), late: res.late, absent: res.absent };
   });
 }
