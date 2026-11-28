@@ -336,14 +336,61 @@
     rows.forEach(function (r) { if (seen[r.machineId] || r.dayStatus === 'วันหยุด' && !r.timeIn) return; seen[r.machineId] = 1; if (!T.init.map[r.machineId]) out.push({ machineId: r.machineId, name: r.name, dept: r.dept, guess: guess(r) }); });
     return out;
   }
+  // จับคู่: ช่องค้นหาชื่อ / ชื่อเล่น ต่อแถว (ผู้ใช้ขอ 28/11/69 — รายชื่อยาว เลื่อนหาใน select ไม่ไหว) · ค่าที่เลือกอยู่ใน input hidden data-mi
+  function mapOpts() { return T.init.people.filter(function (p) { return !p.out; }).sort(function (a, b) { return (a.job - b.job) || a.name.localeCompare(b.name, 'th'); }); }
   function mapHtml(list) {
     if (!list.length) return '';
-    var opts = T.init.people.filter(function (p) { return !p.out; }).sort(function (a, b) { return (a.job - b.job) || a.name.localeCompare(b.name, 'th'); });
-    return '<h4 style="margin:14px 0 6px">จับคู่รายชื่อในเครื่องสแกนกับทะเบียน (' + list.length + ' คน · ทำครั้งเดียว ระบบจำไว้)</h4><p class="muted" style="margin:0 0 8px">ระบบเดาจากชื่อให้แล้ว — ตรวจคนที่ยังว่าง · ถ้าไม่ใช่พนักงานในทะเบียนให้เว้นว่าง</p>'
+    var byId = {}; mapOpts().forEach(function (p) { byId[p.id] = p; });
+    return '<h4 style="margin:14px 0 6px">จับคู่รายชื่อในเครื่องสแกนกับทะเบียน (' + list.length + ' คน · ทำครั้งเดียว ระบบจำไว้)</h4><p class="muted" style="margin:0 0 8px">ระบบเดาจากชื่อให้แล้ว — แถวสีเหลือง = ยังไม่ได้เลือก · พิมพ์ชื่อหรือชื่อเล่นในช่องเพื่อค้นหา · ถ้าไม่ใช่พนักงานในทะเบียนให้เลือก "ไม่จับคู่"</p>'
       + '<div class="htmap">' + list.map(function (m, i) {
-        return '<div class="htmr' + (m.guess ? '' : ' need') + '"><span><b>' + esc(m.machineId) + '</b> ' + esc(m.name) + ' <small class="muted">' + esc(m.dept) + '</small></span><select data-mi="' + i + '"><option value="">— ไม่จับคู่ —</option>'
-          + opts.map(function (p) { return '<option value="' + p.id + '"' + (p.id === m.guess ? ' selected' : '') + '>' + esc(pLabel(p)) + '</option>'; }).join('') + '</select></div>';
+        var p = m.guess && byId[m.guess];
+        return '<div class="htmr' + (p ? '' : ' need') + '"><span><b>' + esc(m.machineId) + '</b> ' + esc(m.name) + ' <small class="muted">' + esc(m.dept) + '</small></span>'
+          + '<div class="htpk"><input type="hidden" data-mi="' + i + '" value="' + esc(p ? p.id : '') + '">'
+          + '<input type="search" class="htq" data-qi="' + i + '" autocomplete="off" aria-label="ค้นหาชื่อในทะเบียนสำหรับ ' + esc(m.name) + '" placeholder="🔍 พิมพ์ชื่อ / ชื่อเล่น เพื่อค้นหา" value="' + esc(p ? pLabel(p) : '') + '">'
+          + '<div class="htdd" data-di="' + i + '" hidden></div></div></div>';
       }).join('') + '</div>';
+  }
+  function mapBind() {
+    var box = $('mBody'); if (!box || !box.querySelector('.htq')) return;
+    var opts = mapOpts(), byId = {}; opts.forEach(function (p) { byId[p.id] = p; });
+    var norm = function (x) { return String(x || '').toLowerCase().replace(/[\s.()\-·]/g, '').replace(/[\u0E48-\u0E4C]/g, ''); };
+    opts.forEach(function (p) { p._k = norm(p.name + ' ' + (p.nick || '') + ' ' + (p.dept || '') + (p.job ? ' job' : '')); p._n = norm(p.nick); });
+    function find(q) {
+      var n = norm(q); if (!n) return opts.slice(0, 40);
+      var hit = opts.filter(function (p) { return p._k.indexOf(n) >= 0; });
+      hit.sort(function (a, b) { var sa = (a._n === n ? 0 : a._n.indexOf(n) === 0 ? 1 : 2), sb = (b._n === n ? 0 : b._n.indexOf(n) === 0 ? 1 : 2); return sa - sb; });
+      return hit.slice(0, 40);
+    }
+    function draw(i, q) {
+      var dd = box.querySelector('[data-di="' + i + '"]'), cur = box.querySelector('[data-mi="' + i + '"]').value, l = find(q);
+      dd.innerHTML = '<button type="button" class="htop none" data-pi="' + i + '" data-pv="">— ไม่จับคู่ (ไม่ใช่พนักงานในทะเบียน) —</button>'
+        + (l.length ? l.map(function (p) { return '<button type="button" class="htop' + (p.id === cur ? ' on' : '') + '" data-pi="' + i + '" data-pv="' + esc(p.id) + '">' + (p.id === cur ? '✓ ' : '') + esc(pLabel(p)) + '</button>'; }).join('')
+          : '<div class="htnone">ไม่พบชื่อ "' + esc(q) + '" — ลองพิมพ์ชื่อเล่น หรือบางส่วนของชื่อ</div>');
+      dd.hidden = false;
+    }
+    function pick(i, v) {
+      var h = box.querySelector('[data-mi="' + i + '"]'), q = box.querySelector('[data-qi="' + i + '"]'), p = byId[v];
+      h.value = v || ''; q.value = p ? pLabel(p) : '';
+      box.querySelector('[data-di="' + i + '"]').hidden = true;
+      q.closest('.htmr').classList.toggle('need', !p);
+    }
+    function closeAll(except) { box.querySelectorAll('.htdd').forEach(function (d) { if (d.dataset.di !== except) { d.hidden = true; var i = d.dataset.di, h = box.querySelector('[data-mi="' + i + '"]'), q = box.querySelector('[data-qi="' + i + '"]'); q.value = byId[h.value] ? pLabel(byId[h.value]) : ''; } }); }
+    box.querySelectorAll('.htq').forEach(function (q) {
+      var i = q.dataset.qi;
+      q.addEventListener('focus', function () { closeAll(i); q.select(); draw(i, ''); });
+      q.addEventListener('input', function () { draw(i, q.value); });
+      q.addEventListener('keydown', function (e) {
+        var dd = box.querySelector('[data-di="' + i + '"]'), bs = [].slice.call(dd.querySelectorAll('.htop')), k = bs.indexOf(dd.querySelector('.htop.kb'));
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (dd.hidden) draw(i, q.value); bs = [].slice.call(dd.querySelectorAll('.htop')); k = Math.max(0, Math.min(bs.length - 1, k + (e.key === 'ArrowDown' ? 1 : -1))); bs.forEach(function (b, j) { b.classList.toggle('kb', j === k); }); if (bs[k]) bs[k].scrollIntoView({ block: 'nearest' }); }
+        else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); var b = bs[k >= 0 ? k : (bs.length > 1 ? 1 : 0)]; if (b) pick(i, b.dataset.pv); }
+        else if (e.key === 'Escape' && !dd.hidden) { e.preventDefault(); e.stopPropagation(); closeAll(); q.blur(); }
+      });
+    });
+    box.addEventListener('mousedown', function (e) { if (e.target.closest('.htop')) e.preventDefault(); });   // ไม่ให้ช่องค้นหาเสียโฟกัสก่อนกดเลือก
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest('.htop'); if (b) { pick(b.dataset.pi, b.dataset.pv); return; }
+      if (!e.target.closest('.htpk')) closeAll();
+    });
   }
   function readMap(list) { var out = {}; list.forEach(function (m, i) { var el = $('mBody').querySelector('[data-mi="' + i + '"]'); out[m.machineId] = el ? el.value : ''; }); return out; }
   function previewDialog(rows, fname) {
@@ -366,6 +413,7 @@
           T.day = r.days[r.days.length - 1]; loadMonth(T.day.slice(0, 7));
         });
       } });
+    mapBind();
   }
   // จับคู่ที่ค้างจากหน้าหลัก → บันทึกการจับคู่ แล้วส่งแถวของเดือนนี้ไปบันทึกซ้ำ (ให้มาสาย / ขาดงานลงหน้าการลา)
   function mapDialog(rows) {
@@ -378,6 +426,7 @@
           closeModal(); T.init.map = r.map; toast('จับคู่แล้ว · มาสาย ' + r.late); loadMonth(T.ym);
         });
       } });
+    mapBind();
   }
 
   var css = document.createElement('style');
@@ -386,7 +435,7 @@
     '.httab{overflow-x:auto;padding:0}.httab table{width:100%;border-collapse:collapse;font-size:14px}.httab th{background:#f1f5f9;text-align:left;padding:8px;white-space:nowrap;position:sticky;top:0}.httab td{padding:7px 8px;border-top:1px solid var(--line);vertical-align:top}',
     '.httab tr.click{cursor:pointer}.httab tr.click:hover td{background:#eef2ff}.httab tr.click:hover .htec{color:var(--c,#0891b2)}.httab tr.lv td{background:#f5f3ff}.htedit{color:#4338ca;background:#e0e7ff;border-radius:6px;padding:1px 6px}.httab tr.off td{color:#94a3b8}.httab tr.abs td{background:#fef2f2}.httab tr.late td{background:#fff7ed}.httab tr.mis td{background:#fffbeb}.htnomap{color:#b45309;background:#fef3c7;border-radius:6px;padding:1px 6px}.htjob{color:#c2410c}',
     '.htsum{display:grid;grid-template-columns:2fr repeat(4,1fr);gap:8px}.htsum div{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}.htsum b{display:block;font-size:20px}.htsum span{font-size:13px;color:#475569}.htsum .late b{color:#c2410c}.htsum .abs b{color:#dc2626}',
-    '.htmap{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:10px}.htmr{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:7px 10px;border-top:1px solid var(--line)}.htmr:first-child{border-top:0}.htmr.need{background:#fffbeb}.htmr select{max-width:320px;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;font:inherit}',
+    '.htmap{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:10px}.htmr{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:7px 10px;border-top:1px solid var(--line)}.htmr:first-child{border-top:0}.htmr.need{background:#fffbeb}.htpk{flex:1 1 300px;max-width:380px;min-width:220px}.htq{width:100%;min-height:42px;padding:8px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;background:#fff}.htq:focus{outline:none;border-color:var(--c);box-shadow:0 0 0 3px color-mix(in srgb,var(--c) 18%,transparent)}.htmr.need .htq{border-color:#f59e0b}.htdd{margin-top:4px;max-height:260px;overflow:auto;border:1.5px solid var(--line);border-radius:10px;background:#fff;box-shadow:0 6px 18px rgba(0,0,0,.08)}.htop{display:block;width:100%;text-align:left;border:0;border-top:1px solid #f1f5f9;background:#fff;padding:10px 12px;min-height:42px;font:inherit;cursor:pointer;color:inherit}.htop:first-child{border-top:0}.htop:hover,.htop.kb{background:#eff6ff}.htop.on{font-weight:700;color:var(--c)}.htop.none{color:#64748b;font-size:14px}.htnone{padding:10px 12px;color:#64748b;font-size:14px}@media(max-width:560px){.htpk{max-width:none;min-width:0;flex-basis:100%}}',
     '.htface{display:inline-block;background:#dbeafe;color:#1e40af;border-radius:6px;padding:1px 7px;font-size:12.5px;font-weight:700;white-space:nowrap}.htfbox{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px}.htfg{display:grid;grid-template-columns:1fr 1fr;gap:10px}.htfi{display:flex;flex-direction:column;gap:3px;font-size:14px}.htfi .btn{align-self:flex-start;margin-top:4px}.htfimg img{width:100%;max-width:240px;border-radius:10px;margin-top:4px;display:block}@media (max-width:560px){.htfg{grid-template-columns:1fr}}',
     '.htp{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:999px;font-size:13px;font-weight:600;white-space:nowrap;margin:1px 0}.htp.ok{background:#dcfce7;color:#166534}.htp.bad{background:#fee2e2;color:#b91c1c}.htp.lv{background:#ede9fe;color:#5b21b6}.htp.late{background:#ffedd5;color:#c2410c}.htp.warn{background:#fef3c7;color:#92400e}.htp.wait{background:#fff7ed;color:#c2410c;border:1px dashed #fb923c}.htp.off{background:#f1f5f9;color:#475569}.htp.edit{background:#e0e7ff;color:#3730a3}.htrm{color:#475569;font-size:13px}',
     '.htec{width:28px;text-align:center;color:#64748b}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}.hthint{margin:2px 2px 8px;color:#475569;font-size:13px}',
