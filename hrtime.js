@@ -140,10 +140,18 @@
       render();
     }).catch(onServerError);
   }
+  var MONL = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+  function ymLabel(ym) { var p = ym.split('-'); return MONL[+p[1] - 1] + ' ' + (+p[0] + 543); }
+  function monthOpts() {   // 24 เดือนย้อนหลังถึงเดือนนี้ (พ.ศ.) · UX 28/11/69: เดิม input type=month โชว์ภาษาอังกฤษ / ค.ศ. ตามเครื่อง
+    var now = ymNow().split('-'), y = +now[0], m = +now[1], out = [];
+    for (var i = 0; i < 24; i++) { out.push(y + '-' + ('0' + m).slice(-2)); if (--m < 1) { m = 12; y--; } }
+    if (T.ym && out.indexOf(T.ym) < 0) out.unshift(T.ym);
+    return out.map(function (k) { return '<option value="' + k + '"' + (k === T.ym ? ' selected' : '') + '>' + ymLabel(k) + '</option>'; }).join('');
+  }
   function uniqDays() { return (T.rows || []).map(function (r) { return r.date; }).filter(function (x, i, a) { return a.indexOf(x) === i; }).sort(); }
   T.page = function () {
     if (!T.init) {
-      $('main').innerHTML = '<h3>ลงเวลา (เครื่องสแกน)</h3><div class="panel"><span class="spinner dark"></span> กำลังโหลด…</div>';
+      $('main').innerHTML = '<h3>ลงเวลาเข้า-ออก</h3><div class="panel"><span class="spinner dark"></span> กำลังโหลด…</div>';
       return call('hrTimeInit', state.token).then(function (r) { T.init = r; loadMonth(T.ym || ymNow()); }).catch(onServerError);
     }
     render();
@@ -159,37 +167,71 @@
   function pass(r, f) {
     return f === 'all' || (f === 'late' && r.lateMin > 0) || (f === 'absent' && isAbsent(r)) || (f === 'miss' && isMiss(r)) || (f === 'early' && r.earlyMin > 0) || (f === 'nomap' && !r.empId);
   }
+  // ป้ายสถานะ (สี + ไอคอน + คำ · ไม่ใช้สีอย่างเดียว) · UX 28/11/69
+  function pill(cls, t) { return '<span class="htp ' + cls + '">' + t + '</span>'; }
+  function undecided(r) { return !r.kind && /ขาดงาน/.test(r.remark); }
+  function pills(r) {
+    var a = [];
+    if (r.kind) a.push(r.kind === 'ok' ? pill('ok', '✓ มาทำงาน') : r.kind === 'absent' ? pill('bad', '✕ ขาดงาน') : pill('lv', '🗓 ' + esc(kindLabel(r.kind))));
+    else if (r.dayStatus === 'วันหยุด') a.push(pill('off', 'วันหยุด'));
+    else if (undecided(r)) a.push(pill('wait', '⏳ ไม่มีสแกน · รอ HR เลือก ขาด / ลา'));
+    if (Number(r.lateMin) > 0 && !isLeave(r) && r.kind !== 'absent') a.push(pill('late', '⏰ สาย ' + mm(r.lateMin)));
+    if (Number(r.earlyMin) > 0 && !isLeave(r) && r.kind !== 'absent') a.push(pill('warn', '↩ ออกก่อน ' + mm(r.earlyMin)));
+    if (isMiss(r) && !r.kind) a.push(pill('warn', '⚠ ' + esc((r.remark.match(/ไม่สแกน\S*/) || ['ลืมสแกน'])[0])));
+    var rest = String(r.remark || '').replace(/มาสาย|ขาดงาน|ไม่สแกน\S*|ออกก่อน/g, '').replace(/^[\s,·/]+|[\s,·/]+$/g, '');
+    if (rest) a.push('<span class="htrm">' + esc(rest) + '</span>');
+    if (r.editedAt) a.push(pill('edit', '✎ HR แก้แล้ว'));
+    return a.join(' ');
+  }
   function who(r) { var p = r.empId && person(r.empId); return p ? '<b>' + esc(p.name) + '</b>' + (p.nick ? ' <small>(' + esc(p.nick) + ')</small>' : '') + (p.job ? ' <small class="htjob">Job</small>' : '') : '<b>' + esc(r.name) + '</b> <small class="htnomap">ยังไม่จับคู่</small>'; }
+  function mid(r) { return r.machineId === 'ใบหน้า' ? '<span class="htface" title="ลงเวลาด้วยใบหน้าผ่าน LINE">📷 ใบหน้า</span>' : esc(r.machineId); }
+  function rowCls(r) { return r.dayStatus === 'วันหยุด' && !r.kind ? 'off' : isAbsent(r) ? 'abs' : isLeave(r) ? 'lv' : r.lateMin > 0 ? 'late' : isMiss(r) || r.earlyMin > 0 ? 'mis' : ''; }
+  // กล่องสิ่งที่ HR ต้องทำ (เด่นด้านบนตาราง) · UX 28/11/69: เดิมเป็นตัวเทาเล็กท้ายตาราง
+  function notices(all) {
+    var nm = all.filter(function (r) { return !r.empId; }).length, ud = all.filter(undecided).length, h = '';
+    if (nm) h += '<div class="htnote warn"><span>🔗 มี <b>' + nm + ' คน</b> ยังไม่จับคู่กับทะเบียน — มาสายของคนกลุ่มนี้ยังไม่ลงหน้าการลา</span><button class="btn btn-sm" id="htRemap">จับคู่รายชื่อ</button></div>';
+    if (ud) h += '<div class="htnote wait"><span>⏳ <b>' + ud + ' คน</b> ไม่มีเวลาสแกนวันนี้ (ไฟล์เขียนว่าขาดงาน) — ระบบยังไม่ลงให้ แตะแถวเพื่อเลือก ขาดงาน / ลา / มาทำงาน</span>' + (T.f !== 'absent' ? '<button class="btn btn-sm" data-f="absent">ดูเฉพาะรายการนี้</button>' : '') + '</div>';
+    return h;
+  }
   function render() {
     var days = uniqDays(), all = (T.rows || []).filter(function (r) { return r.date === T.day; });
     var cnt = function (f) { return all.filter(function (r) { return pass(r, f); }).length; };
-    var head = '<h3>ลงเวลา (เครื่องสแกน)</h3><p class="lead">นำเข้าไฟล์รายงานจากโปรแกรมเครื่องสแกน (PDF / Excel) · มาสาย และ ขาดงาน ระบบลงในหน้าการลาให้เป็นข้อมูล (ไม่ต้องอนุมัติ)</p>'
+    var shown = all.filter(function (r) { return pass(r, T.f); });
+    var head = '<h3>ลงเวลาเข้า-ออก</h3><p class="lead">นำเข้าไฟล์รายงานจากโปรแกรมเครื่องสแกน (PDF / Excel) · มาสาย และ ขาดงาน ระบบลงในหน้าการลาให้เป็นข้อมูล (ไม่ต้องอนุมัติ)</p>'
       + '<div class="pbar htbar"><button class="btn btn-sm btn-primary" id="htImport">' + icon('sheet', 16) + ' นำเข้าไฟล์ลงเวลา (PDF / Excel)</button>'
-      + '<label class="htlb">เดือน <input type="month" id="htYm" value="' + T.ym + '"></label>'
+      + '<label class="htlb">เดือน <select id="htYm" aria-label="เลือกเดือน">' + monthOpts() + '</select></label>'
       + '<div class="htab"><button class="chip' + (T.tab === 'day' ? ' on' : '') + '" data-tab="day">รายวัน</button><button class="chip' + (T.tab === 'sum' ? ' on' : '') + '" data-tab="sum">สรุปทั้งเดือน</button></div></div>';
     if (!T.rows) { $('main').innerHTML = head + '<div class="panel"><span class="spinner dark"></span> กำลังโหลด…</div>'; bindTop(); return; }
     if (!days.length) { $('main').innerHTML = head + '<div class="panel muted">ยังไม่มีข้อมูลลงเวลาในเดือนนี้ — กด "นำเข้าไฟล์ลงเวลา"</div>'; bindTop(); return; }
     var body = T.tab === 'sum' ? sumHtml() : '<div class="pbar htbar"><label class="htlb">วันที่ <select id="htDay">' + days.map(function (d) { return '<option value="' + d + '"' + (d === T.day ? ' selected' : '') + '>' + th(d) + '</option>'; }).join('') + '</select></label>'
       + '<div class="pchips">' + FILTERS.map(function (f) { var n = cnt(f[0]); return '<button class="chip' + (T.f === f[0] ? ' on' : '') + '" data-f="' + f[0] + '">' + f[1] + ' ' + n + '</button>'; }).join('') + '</div></div>'
-      + '<div class="panel httab"><table><thead><tr><th>รหัส</th><th>ชื่อ</th><th>แผนก</th><th>เข้า</th><th>ออก</th><th>เวลาทำงาน</th><th>สาย</th><th>ออกก่อน</th><th>OT</th><th>หมายเหตุ</th></tr></thead><tbody>'
-      + (all.filter(function (r) { return pass(r, T.f); }).map(function (r) {
-        var cls = r.dayStatus === 'วันหยุด' && !r.kind ? 'off' : isAbsent(r) ? 'abs' : isLeave(r) ? 'lv' : r.lateMin > 0 ? 'late' : isMiss(r) || r.earlyMin > 0 ? 'warn' : '';
-        return '<tr class="' + cls + ' click" data-tid="' + esc(r.id) + '" title="แตะเพื่อแก้ไข"><td>' + (r.machineId === 'ใบหน้า' ? '<span class="htface" title="ลงเวลาด้วยใบหน้าผ่าน LINE">📷 ใบหน้า</span>' : esc(r.machineId)) + '</td><td>' + who(r) + '</td><td>' + esc(r.dept) + '</td><td>' + esc(r.timeIn || '–') + '</td><td>' + esc(r.timeOut || '–') + '</td><td>' + esc(r.workTime || '') + '</td>'
-          + '<td>' + (Number(r.lateMin) ? '<b class="neg">' + mm(r.lateMin) + '</b>' : '') + '</td><td>' + (Number(r.earlyMin) ? mm(r.earlyMin) : '') + '</td><td>' + esc([r.otBefore, r.otAfter].filter(String).join(' / ')) + '</td>'
-          + '<td>' + (r.kind ? '<b class="' + (r.kind === 'ok' ? 'pos' : 'neg') + '">' + esc(kindLabel(r.kind)) + '</b> ' : '') + esc(r.dayStatus === 'วันหยุด' && !r.kind ? 'วันหยุด' : r.remark)
-          + (r.editedAt ? ' <small class="htedit">HR แก้</small>' : '') + '</td></tr>';
-      }).join('') || '<tr><td colspan="10" class="muted">ไม่มีรายการ</td></tr>') + '</tbody></table></div>'
-      + (cnt('nomap') ? '<p class="muted">มี ' + cnt('nomap') + ' คนที่ยังไม่จับคู่กับทะเบียน — มาสายของคนกลุ่มนี้ยังไม่ลงในหน้าการลา · <button class="link-btn" id="htRemap">จับคู่รายชื่อ</button></p>' : '');
+      + notices(all)
+      + '<p class="hthint">แตะแถวเพื่อแก้ไข หรือเลือก ขาดงาน / ลา / มาทำงาน</p>'
+      + '<div class="panel httab htdesk"><table><thead><tr><th>รหัส</th><th>ชื่อ</th><th>แผนก</th><th>เข้า</th><th>ออก</th><th>เวลาทำงาน</th><th>OT</th><th>สถานะ / หมายเหตุ</th><th class="htec"><span class="sr">แก้ไข</span></th></tr></thead><tbody>'
+      + (shown.map(function (r) {
+        return '<tr class="' + rowCls(r) + ' click" data-tid="' + esc(r.id) + '" title="แตะเพื่อแก้ไข"><td>' + mid(r) + '</td><td>' + who(r) + '</td><td>' + esc(r.dept) + '</td><td>' + esc(r.timeIn || '–') + '</td><td>' + esc(r.timeOut || '–') + '</td><td>' + esc(r.workTime || '') + '</td>'
+          + '<td>' + esc([r.otBefore, r.otAfter].filter(String).join(' / ')) + '</td><td>' + pills(r) + '</td><td class="htec">' + (r.empId ? '✎' : '🔗') + '</td></tr>';
+      }).join('') || '<tr><td colspan="9" class="muted">ไม่มีรายการในตัวกรองนี้</td></tr>') + '</tbody></table></div>'
+      + '<div class="htcards">' + (shown.map(function (r) {
+        return '<button class="htc ' + rowCls(r) + '" data-tid="' + esc(r.id) + '"><div class="htch"><span>' + who(r) + '</span><span class="htce" aria-hidden="true">' + (r.empId ? '✎' : '🔗') + '</span></div>'
+          + '<div class="htcm">' + (r.machineId === 'ใบหน้า' ? mid(r) : 'รหัส ' + esc(r.machineId)) + (r.dept ? ' · ' + esc(r.dept) : '') + '</div>'
+          + '<div class="htct"><span>เข้า <b>' + esc(r.timeIn || '–') + '</b></span><span>ออก <b>' + esc(r.timeOut || '–') + '</b></span>' + (r.workTime ? '<span>ทำงาน <b>' + esc(r.workTime) + '</b></span>' : '') + ([r.otBefore, r.otAfter].filter(String).length ? '<span>OT <b>' + esc([r.otBefore, r.otAfter].filter(String).join(' / ')) + '</b></span>' : '') + '</div>'
+          + (pills(r) ? '<div class="htcp">' + pills(r) + '</div>' : '') + '</button>';
+      }).join('') || '<div class="panel muted">ไม่มีรายการในตัวกรองนี้</div>') + '</div>';
     $('main').innerHTML = head + body;
     bindTop();
     if ($('htDay')) $('htDay').addEventListener('change', function () { T.day = this.value; render(); });
     on('[data-f]', 'click', function (el) { T.f = el.getAttribute('data-f'); render(); });
-    on('[data-tid]', 'click', function (el) { editDialog(T.rows.filter(function (r) { return r.id === el.getAttribute('data-tid'); })[0]); });
+    on('[data-tid]', 'click', function (el) {
+      var r = T.rows.filter(function (x) { return x.id === el.getAttribute('data-tid'); })[0];
+      if (r && !r.empId) mapDialog(T.rows.filter(function (x) { return x.machineId === r.machineId; })); else editDialog(r);
+    });
     if ($('htRemap')) $('htRemap').addEventListener('click', function () { mapDialog(T.rows.filter(function (r) { return !r.empId; }), true); });
+    // ตัวกรองที่ใช้อยู่ไม่มีรายการ → แสดงทั้งหมด (กันหน้าว่างแบบงง ๆ)
   }
   function bindTop() {
     $('htImport').addEventListener('click', pickFile);
-    $('htYm').addEventListener('change', function () { if (this.value) loadMonth(this.value); });
+    $('htYm').addEventListener('change', function () { if (this.value) { T.f = 'all'; loadMonth(this.value); } });
     on('[data-tab]', 'click', function (el) { T.tab = el.getAttribute('data-tab'); render(); });
   }
   // สรุปทั้งเดือนต่อคน
@@ -200,16 +242,26 @@
       if (r.dayStatus === 'วันหยุด') return;
       if (r.timeIn || r.timeOut) s.work++;
       if (r.lateMin > 0) { s.late++; s.lateMin += r.lateMin; }
-      if (isAbsent(r)) s.absent++;
+      if (undecided(r)) s.wait = (s.wait || 0) + 1; else if (isAbsent(r)) s.absent++;
       if (isLeave(r)) s.leave = (s.leave || 0) + 1;
       if (isMiss(r)) s.miss++;
       if (r.earlyMin > 0) s.early++;
     });
-    var list = Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) { return (b.absent * 3 + b.late) - (a.absent * 3 + a.late) || (Number(a.r.machineId) - Number(b.r.machineId)); });
-    return '<div class="panel httab"><table><thead><tr><th>รหัส</th><th>ชื่อ</th><th>มาทำงาน (วัน)</th><th>มาสาย</th><th>ขาดงาน</th><th>ลา</th><th>ลืมสแกน</th><th>ออกก่อน</th></tr></thead><tbody>'
+    var list = Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) { return (b.absent * 3 + (b.wait || 0) * 3 + b.late) - (a.absent * 3 + (a.wait || 0) * 3 + a.late) || (b.absent * 3 + b.late) - (a.absent * 3 + a.late) || (Number(a.r.machineId) - Number(b.r.machineId)); });
+    var cards = '<div class="htcards">' + list.map(function (s) {
+      var a = [pill('ok', 'มาทำงาน ' + s.work + ' วัน')];
+      if (s.late) a.push(pill('late', '⏰ สาย ' + s.late + ' ครั้ง · ' + mm(s.lateMin)));
+      if (s.absent) a.push(pill('bad', '✕ ขาด ' + s.absent + ' วัน'));
+      if (s.wait) a.push(pill('wait', '⏳ ไม่มีสแกน ' + s.wait + ' วัน · รอ HR เลือก'));
+      if (s.leave) a.push(pill('lv', '🗓 ลา ' + s.leave + ' วัน'));
+      if (s.miss) a.push(pill('warn', '⚠ ลืมสแกน ' + s.miss + ' ครั้ง'));
+      if (s.early) a.push(pill('warn', '↩ ออกก่อน ' + s.early + ' ครั้ง'));
+      return '<div class="htc ' + (s.absent || s.wait ? 'abs' : s.late ? 'late' : '') + '"><div class="htch"><span>' + who(s.r) + '</span></div><div class="htcm">รหัส ' + esc(s.r.machineId) + '</div><div class="htcp">' + a.join(' ') + '</div></div>';
+    }).join('') + '</div>';
+    return '<p class="hthint">' + ymLabel(T.ym) + ' · เรียงคนที่ขาด / สายมากที่สุดขึ้นก่อน</p>' + cards + '<div class="panel httab htdesk"><table><thead><tr><th>รหัส</th><th>ชื่อ</th><th>มาทำงาน (วัน)</th><th>มาสาย</th><th>ขาดงาน</th><th>ลา</th><th>ลืมสแกน</th><th>ออกก่อน</th></tr></thead><tbody>'
       + list.map(function (s) {
         return '<tr class="' + (s.absent ? 'abs' : s.late ? 'late' : '') + '"><td>' + esc(s.r.machineId) + '</td><td>' + who(s.r) + '</td><td>' + s.work + '</td><td>' + (s.late ? '<b class="neg">' + s.late + ' ครั้ง</b> · ' + mm(s.lateMin) : '') + '</td>'
-          + '<td>' + (s.absent ? '<b class="neg">' + s.absent + ' วัน</b>' : '') + '</td><td>' + (s.leave ? s.leave + ' วัน' : '') + '</td><td>' + (s.miss ? s.miss + ' ครั้ง' : '') + '</td><td>' + (s.early ? s.early + ' ครั้ง' : '') + '</td></tr>';
+          + '<td>' + (s.absent ? '<b class="neg">' + s.absent + ' วัน</b> ' : '') + (s.wait ? pill('wait', '⏳ รอเลือก ' + s.wait + ' วัน') : '') + '</td><td>' + (s.leave ? s.leave + ' วัน' : '') + '</td><td>' + (s.miss ? s.miss + ' ครั้ง' : '') + '</td><td>' + (s.early ? s.early + ' ครั้ง' : '') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
 
@@ -332,11 +384,16 @@
   css.textContent = [
     '.htbar{flex-wrap:wrap;gap:10px;align-items:center}.htlb{display:flex;gap:6px;align-items:center;font-weight:600}.htlb input,.htlb select{padding:7px 10px;border:1.5px solid var(--line);border-radius:10px;font:inherit}.htab{display:flex;gap:6px;margin-left:auto}',
     '.httab{overflow-x:auto;padding:0}.httab table{width:100%;border-collapse:collapse;font-size:14px}.httab th{background:#f1f5f9;text-align:left;padding:8px;white-space:nowrap;position:sticky;top:0}.httab td{padding:7px 8px;border-top:1px solid var(--line);vertical-align:top}',
-    '.httab tr.click{cursor:pointer}.httab tr.click:hover td{background:#eef2ff}.httab tr.lv td{background:#f5f3ff}.htedit{color:#4338ca;background:#e0e7ff;border-radius:6px;padding:1px 6px}.httab tr.off td{color:#94a3b8}.httab tr.abs td{background:#fef2f2}.httab tr.late td{background:#fff7ed}.httab tr.warn td{background:#fffbeb}.htnomap{color:#b45309;background:#fef3c7;border-radius:6px;padding:1px 6px}.htjob{color:#c2410c}',
+    '.httab tr.click{cursor:pointer}.httab tr.click:hover td{background:#eef2ff}.httab tr.click:hover .htec{color:var(--c,#0891b2)}.httab tr.lv td{background:#f5f3ff}.htedit{color:#4338ca;background:#e0e7ff;border-radius:6px;padding:1px 6px}.httab tr.off td{color:#94a3b8}.httab tr.abs td{background:#fef2f2}.httab tr.late td{background:#fff7ed}.httab tr.mis td{background:#fffbeb}.htnomap{color:#b45309;background:#fef3c7;border-radius:6px;padding:1px 6px}.htjob{color:#c2410c}',
     '.htsum{display:grid;grid-template-columns:2fr repeat(4,1fr);gap:8px}.htsum div{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}.htsum b{display:block;font-size:20px}.htsum span{font-size:13px;color:#475569}.htsum .late b{color:#c2410c}.htsum .abs b{color:#dc2626}',
     '.htmap{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:10px}.htmr{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:7px 10px;border-top:1px solid var(--line)}.htmr:first-child{border-top:0}.htmr.need{background:#fffbeb}.htmr select{max-width:320px;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;font:inherit}',
     '.htface{display:inline-block;background:#dbeafe;color:#1e40af;border-radius:6px;padding:1px 7px;font-size:12.5px;font-weight:700;white-space:nowrap}.htfbox{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px}.htfg{display:grid;grid-template-columns:1fr 1fr;gap:10px}.htfi{display:flex;flex-direction:column;gap:3px;font-size:14px}.htfi .btn{align-self:flex-start;margin-top:4px}.htfimg img{width:100%;max-width:240px;border-radius:10px;margin-top:4px;display:block}@media (max-width:560px){.htfg{grid-template-columns:1fr}}',
-    '@media (max-width:700px){.htsum{grid-template-columns:repeat(2,1fr)}.htsum div:first-child{grid-column:1/-1}.htab{margin-left:0}}'
+    '.htp{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:999px;font-size:13px;font-weight:600;white-space:nowrap;margin:1px 0}.htp.ok{background:#dcfce7;color:#166534}.htp.bad{background:#fee2e2;color:#b91c1c}.htp.lv{background:#ede9fe;color:#5b21b6}.htp.late{background:#ffedd5;color:#c2410c}.htp.warn{background:#fef3c7;color:#92400e}.htp.wait{background:#fff7ed;color:#c2410c;border:1px dashed #fb923c}.htp.off{background:#f1f5f9;color:#475569}.htp.edit{background:#e0e7ff;color:#3730a3}.htrm{color:#475569;font-size:13px}',
+    '.htec{width:28px;text-align:center;color:#64748b}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}.hthint{margin:2px 2px 8px;color:#475569;font-size:13px}',
+    '.htnote{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:12px;margin:0 0 10px;font-size:14px}.htnote.warn{background:#fffbeb;border:1px solid #fcd34d;color:#78350f}.htnote.wait{background:#fff7ed;border:1px solid #fdba74;color:#7c2d12}.htnote .btn{min-height:36px}',
+    '.htcards{display:none}.htc{display:block;width:100%;text-align:left;font:inherit;color:inherit;background:#fff;border:1px solid var(--line);border-left:4px solid #cbd5e1;border-radius:12px;padding:10px 12px;margin:0 0 8px;cursor:pointer}.htc.abs{border-left-color:#dc2626}.htc.late{border-left-color:#ea580c}.htc.mis{border-left-color:#d97706}.htc.lv{border-left-color:#7c3aed}.htc.off{border-left-color:#94a3b8;color:#64748b}',
+    '.htch{display:flex;justify-content:space-between;gap:8px;font-size:15px}.htce{color:#64748b;font-size:16px}.htcm{font-size:13px;color:#64748b;margin-top:2px}.htct{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:14px;margin-top:6px}.htcp{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px}',
+    '@media (max-width:700px){.htsum{grid-template-columns:repeat(2,1fr)}.htsum div:first-child{grid-column:1/-1}.htab{margin-left:0}.htdesk{display:none}.htcards{display:block}.htlb select{min-height:44px}.htbar .chip{min-height:40px}}'
   ].join('\n');
   document.head.appendChild(css);
 })();
