@@ -479,6 +479,7 @@
     SHE: '<path d="M2 18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v2z"/><path d="M10 10V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5"/><path d="M4 15v-3a6 6 0 0 1 6-6"/><path d="M14 6a6 6 0 0 1 6 6v3"/>',
     LOG: '<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
     COST: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8v4H8z"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>',
+    MNT: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
     IT: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M7 8l3 3-3 3M12 14h5"/>',
     SALES: '<path d="M3 3h2l2.4 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 1.9-1.4L21 8H6"/><circle cx="10" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/>',
     MKT: '<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>',
@@ -752,7 +753,7 @@
   window.matchMedia('(max-width: 1023px)').addEventListener('change', function () { navClose(); moreToggle(false); });
   function go(page) { state.page = page; renderNav(); renderPage(); window.scrollTo(0, 0); keepSave(); }
   // แผนกที่มีระบบงานแล้ว (โมดูล) — เช่น PUR = purchasing.js
-  function deptModule() { var m = state.dept && state.dept.module; return (m === 'purchasing' && window.PUR) || (m === 'safety' && window.SHE) || (m === 'hr' && window.HRM) || (m === 'accounting' && window.ACC) || (m === 'quality' && window.QAM) || (m === 'production' && window.PRDM) || (m === 'rd' && window.RDM) || (m === 'cost' && window.COSTM) || (m === 'sales' && window.SALESM) || (m === 'it' && window.ITM) || (m === 'executive' && window.EXEC) || null; }
+  function deptModule() { var m = state.dept && state.dept.module; return (m === 'purchasing' && window.PUR) || (m === 'safety' && window.SHE) || (m === 'hr' && window.HRM) || (m === 'accounting' && window.ACC) || (m === 'quality' && window.QAM) || (m === 'production' && window.PRDM) || (m === 'rd' && window.RDM) || (m === 'cost' && window.COSTM) || (m === 'sales' && window.SALESM) || (m === 'it' && window.ITM) || (m === 'maintenance' && window.MNTM) || (m === 'executive' && window.EXEC) || null; }
 
   function renderPage() {
     xpShow();
@@ -830,6 +831,7 @@
     if (window.QAM) window.QAM.reset();
     if (window.PRDM) window.PRDM.reset();
     if (window.RDM) window.RDM.reset();
+    if (window.MNTM) window.MNTM.reset();
     if (window.EXEC) window.EXEC.reset();
     closeModal();
     $('app').classList.add('hidden'); $('home').classList.remove('hidden');
@@ -1399,6 +1401,7 @@
 <script src="rd.js?v=13"></script>
 <script src="sales.js?v=4"></script>
 <script src="it.js?v=5"></script>
-<script src="executive.js?v=29"></script>
+<script src="mnt.js?v=1"></script>
+<script src="executive.js?v=30"></script>
 </body>
 </html>

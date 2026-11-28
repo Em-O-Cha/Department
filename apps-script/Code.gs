@@ -61,6 +61,10 @@ var DEPARTMENTS = [
   { key: 'IT', name: 'ฝ่าย IT', en: 'IT · ระบบจัดการองค์กร', color: '#173B68', noExec: true,
     sheetId: '', ownerEmail: '', appUrl: '',
     menus: [] },
+  // ฝ่ายช่าง (ผู้ใช้ขอ 28/11/69): แจ้งซ่อมผ่าน LINE OA ของฝ่ายช่าง / QR · ทะเบียนเครื่องจักร · แผน PM · อะไหล่ & ค่าใช้จ่าย (Mnt.gs / MntLine.gs)
+  { key: 'MNT', name: 'ฝ่ายช่าง', en: 'Maintenance · ซ่อมบำรุง', color: '#475569',
+    sheetId: '', ownerEmail: '', appUrl: '',
+    menus: ['แจ้งซ่อม', 'ทะเบียนเครื่องจักร', 'แผนบำรุงรักษา (PM)', 'อะไหล่ & ค่าใช้จ่าย'] },
   // ผู้บริหาร: ไม่ใช่แผนก — ดู Dashboard ของทุกฝ่ายได้อย่างเดียว (Executive.gs) · ตั้งรหัสผ่านเองด้วยรหัสตั้งค่าจากผู้ดูแลระบบ
   { key: 'EXEC', name: 'ผู้บริหาร',            en: 'Executive Dashboard', color: '#c62828', exec: true,
     sheetId: '', ownerEmail: '', appUrl: '',
@@ -151,7 +155,7 @@ function findDept_(key) {
 }
 
 // โมดูลที่ทำแล้วของแต่ละแผนก (หน้าเว็บสร้างเมนูตามโมดูล) — ยังไม่มี = เมนูตัวอย่าง
-var DEPT_MODULES_ = { HR: 'hr', ACC: 'accounting', PUR: 'purchasing', QA: 'quality', SHE: 'safety', PROD: 'production', RD: 'rd', COST: 'cost', SALES: 'sales', IT: 'it', EXEC: 'executive' };
+var DEPT_MODULES_ = { HR: 'hr', ACC: 'accounting', PUR: 'purchasing', QA: 'quality', SHE: 'safety', PROD: 'production', RD: 'rd', COST: 'cost', SALES: 'sales', IT: 'it', MNT: 'maintenance', EXEC: 'executive' };
 function deptView_(d) {
   return { key: d.key, name: d.name, en: d.en, color: d.color, menus: d.menus.slice(), ownerEmail: d.ownerEmail || '', module: DEPT_MODULES_[d.key] || '' };
 }

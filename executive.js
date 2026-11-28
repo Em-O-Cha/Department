@@ -85,6 +85,7 @@
     else if (r.kind === 'rd' && window.RDM) $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + dd(r.from) + ' – ' + dd(r.to) + ' · ผลิตภัณฑ์ใหม่ / คู่ค้า</span></div>' + window.RDM.dashHtml(r);
     else if (r.kind === 'cost' && window.COSTM) $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>ข้อมูลปัจจุบัน (ไม่ขึ้นกับช่วงวันที่) · ราคาล่าสุดจากฝ่ายจัดซื้อ</span></div>' + window.COSTM.dashHtml(r);
     else if (r.kind === 'production' && window.PRDM) $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + dd(r.from) + ' – ' + dd(r.to) + ' · Yield / ของเสีย / เสร็จตามกำหนด</span></div>' + window.PRDM.dashHtml(r);
+    else if (r.kind === 'maintenance' && window.MNTM) $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + dd(r.from) + ' – ' + dd(r.to) + ' · แจ้งซ่อม / PM / อะไหล่</span></div>' + window.MNTM.dashHtml(r);
     else if (r.kind === 'safety' && window.SHE) $('xOut').innerHTML = '<div class="xhead" style="--c:' + d.color + '"><span class="xi">' + icon(d.key, 20) + '</span><b>' + esc(d.name) + '</b><span>' + dd(r.from) + ' – ' + dd(r.to) + '</span></div>' + window.SHE.dashHtml(r);
     extras(r);
   }

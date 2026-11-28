@@ -10,11 +10,11 @@ var RC_READ_ = {
   purLoad: 'own', purMoves: 'own', purReport: 'own', purStockReport: 'own', purPriceReport: 'own', purPriceHistory: 'own', purVendorMetrics: 'own', purVendorReport: 'own',
   sheLoad: 'own', sheChecks: 'own', sheMonthReport: 'own', sheFindingReport: 'own', sheDashboard: 'own', sheMonthly: 'own', sheDocs: 'own',
   hrLoad: 'own', hrPhotos: 'own', hrDailyLoad: 'own', hrDashboard: 'own', hrLeaves: 'own', hrTimeList: 'own', hrJobs: 'own',
-  qaLoad: 'own', qaDashboard: 'own', rdLoad: 'own', rdDashboard: 'own', prdLoad: 'own', prdDashboard: 'own',
+  qaLoad: 'own', qaDashboard: 'own', mntLoad: 'own', mntDashboard: 'own', rdLoad: 'own', rdDashboard: 'own', prdLoad: 'own', prdDashboard: 'own',
   costLoad: 'all', execOverview: 'all', execDashboard: 'target', execPart: 'target'
 };
 // คำสั่งที่ไม่แก้ข้อมูล (ไม่ต้องเปลี่ยนตรา) นอกเหนือจาก RC_READ_
-var RC_NOWRITE_ = /^(getDepartments|getDepartmentHome|login|logout|getAdminStatus|adminOverview|adminDbStatus|adminSetDb|deptPerfLog|execVerify|.*Log|.*Info|.*Test|.*Diag|.*Preview|.*Status|.*List|.*Check|costPurPrices|purPoSigs|purPoFile|hrFormInit|hrFormFind|hrFormPhotos|hrFormBalance|hrLiffView|hrLiffLoad|hrLiffStatus|hrLiffInfo|hrClockInit|hrClockStamp|hrClockPhoto|hrClockAdmin|apAiRead)$/;
+var RC_NOWRITE_ = /^(getDepartments|getDepartmentHome|login|logout|getAdminStatus|adminOverview|adminDbStatus|adminSetDb|deptPerfLog|execVerify|.*Log|.*Info|.*Test|.*Diag|.*Preview|.*Status|.*List|.*Check|costPurPrices|purPoSigs|purPoFile|hrFormInit|mntFormInit|mntFormMine|mntTechView|hrFormFind|hrFormPhotos|hrFormBalance|hrLiffView|hrLiffLoad|hrLiffStatus|hrLiffInfo|hrClockInit|hrClockStamp|hrClockPhoto|hrClockAdmin|apAiRead)$/;
 var RC_TTL_ = 1800;
 var RC_ALL_KEYS_ = null;
 var RC_TARGET_EXTRA_ = { COST: ['PUR', 'RD'], ACC: [] };   // ต้นทุนสินค้าอ่านราคาจากจัดซื้อ + สูตรจาก R&D

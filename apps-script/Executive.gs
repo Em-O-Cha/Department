@@ -14,7 +14,8 @@ var EXEC_BASE_ = { PUR: function (dept, from, to) { return purDashboard_(dept, f
   ACC: function (dept, from, to) { return accDashboard_(dept, from, to, 'po', ''); },
   PROD: function (dept, from, to) { return prdDashboard_(dept, from, to); },
   RD: function (dept, from, to) { return rdDashboard_(dept, from, to); },
-  COST: function () { return costDashData_(); } };
+  COST: function () { return costDashData_(); },
+  MNT: function (dept, from, to) { return mntDashboard_(dept, from, to); } };
 // ลำดับ = ลำดับที่แสดงในหน้า (บนลงล่าง)
 var EXEC_PARTS_ = {
   PUR: [['rises', function (dept, from, to) { return purPriceReport_(purReadBook_(dept), from, to); }],
