@@ -23,7 +23,9 @@ function hrcBook_() {
   if (!dept) throw new Error('ไม่พบฝ่ายบุคคล');
   hrRegister_(); PUR_TABLES_.hr_time = HRT_TABLE_; PUR_TABLES_.hr_faces = HRF_TABLE_;
   PUR_NUM_KEYS_.lateMin = 1; PUR_NUM_KEYS_.earlyMin = 1;
-  var o = { dept: dept, ss: purBook_(dept) };
+  var o = { dept: dept };
+  // เปิดชีตจริงเมื่อใช้เท่านั้น (เปิดชีตใช้เวลา ~1 วินาที · หน้าลงเวลาอ่านจากฐานข้อมูลสำเนา — ผู้ใช้ขอให้เร็ว 28/11/69)
+  Object.defineProperty(o, 'ss', { get: function () { if (!o._ss) o._ss = purBook_(dept); return o._ss; } });
   // อ่านจากฐานข้อมูลสำเนาของฝ่ายบุคคล (Supabase) ถ้าเชื่อมไว้ — เร็วกว่าอ่านชีต · บันทึกยังลงชีตเสมอ (ผู้ใช้ย้ายข้อมูล HR ไป Supabase 27/11/69)
   o.rb = function () { if (!o._rb) o._rb = hrReadBook_(dept, function () { PUR_TABLES_.hr_time = HRT_TABLE_; PUR_TABLES_.hr_faces = HRF_TABLE_; PUR_NUM_KEYS_.lateMin = 1; PUR_NUM_KEYS_.earlyMin = 1; }); return o._rb; };
   return o;
@@ -116,6 +118,12 @@ function hrClockInit(idToken) {
       var p = JSON.parse(hit), rv = C.get(hrcRecKey_(p.emp.id, today));
       if (rv != null) { p.rec = rv === '-' ? null : JSON.parse(rv); p.now = purNow_().slice(11, 16); p.fast = true; return p; }
     } catch (e) {}
+    // คนที่ยังไม่ลงทะเบียน: รายชื่อให้เลือก + บัญชี LINE ที่ลงทะเบียนแล้ว จำไว้ (ล้างเมื่อมีคนลงทะเบียน / HR แก้ค่าตั้ง = HRC_VER)
+    var lk = 'HRCL_' + hrcVer_('HRC_VER') + '_' + today, lh = C.get(lk);
+    if (lh) try {
+      var L = JSON.parse(lh);
+      if (!L.users[u.id]) return Object.assign(L.base, { now: purNow_().slice(11, 16), registered: false, lineName: u.name, people: L.people, leaveUrl: hrcLeaveUrl_(''), fast: true });
+    } catch (e) {}
     var b = hrcBook_(), ss = b.rb(), cfg = hrcCfg_(ss);
     var me = purRead_(ss, 'hr_faces').filter(function (f) { return f.lineUserId === u.id; })[0];
     var day = hrcDay_(cfg, today), base = { ok: true, today: today, now: purNow_().slice(11, 16), day: day,
@@ -128,10 +136,11 @@ function hrClockInit(idToken) {
       hrcPutRec_(emp.id, today, rec);
       return Object.assign(out, { rec: rec });
     }
-    var used = {}; purRead_(ss, 'hr_faces').forEach(function (f) { used[f.empId] = 1; });
+    var used = {}, users = {}; purRead_(ss, 'hr_faces').forEach(function (f) { used[f.empId] = 1; if (f.lineUserId) users[f.lineUserId] = f.empId; });
     var allow = {}; cfg.emps.forEach(function (id) { allow[id] = 1; });
     var list = purRead_(ss, 'hr_emps').filter(function (e) { return allow[e.id] && e.status !== 'ลาออก' && !used[e.id]; }).map(hrcEmpOut_)
       .sort(function (a, b) { return (a.nick || a.name).localeCompare(b.nick || b.name, 'th'); });
+    try { C.put(lk, JSON.stringify({ base: base, people: list, users: users }), 21600); } catch (e) {}
     return Object.assign(base, { registered: false, lineName: u.name, people: list, leaveUrl: hrcLeaveUrl_('') });
   } catch (e) { return { ok: false, error: String(e.message || e) }; }
 }

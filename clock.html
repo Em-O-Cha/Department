@@ -185,7 +185,7 @@
     if (d.today !== t) { d.today = t; d.rec = null; d.day = { unknown: true }; }
     d.cached = true; return d;
   }
-  function sig(d) { return JSON.stringify([d.registered, d.blocked || '', d.emp && d.emp.id, d.emp && d.emp.name, d.rec || null, d.day || null, d.geo || null, d.leaveUrl || '']); }
+  function sig(d) { return JSON.stringify([d.registered, d.blocked || '', d.emp && d.emp.id, d.emp && d.emp.name, d.rec || null, d.day || null, d.geo || null, d.leaveUrl || '', (d.people || []).map(function (p) { return p.id; })]); }
   function boot() {
     var q = new URLSearchParams(location.search), lid = q.get('l') || (lsGet('clk_lid') || '');
     // ปุ่ม "ขอลา" ในเมนู LINE = ลิงก์ LIFF เดียวกัน + ?go=leave → ไปหน้าขอลาเลย (ไม่หาตำแหน่ง / ไม่โหลดระบบตรวจหน้า)
@@ -198,7 +198,7 @@
     }
     if (!S.goLeave) { gpsStart(); loadFace().catch(function () {}); }   // ตำแหน่ง + โมเดลใบหน้าเริ่มโหลดทันทีที่เปิดหน้า
     var cache = !S.goLeave && lsGet('clk_d');
-    if (cache && cache.registered && !cache.blocked) { S.d = fromCache(cache); home(); }
+    if (cache && !cache.blocked) { S.d = fromCache(cache); if (cache.registered) home(); else if (cache.people && cache.people.length) regPage(); }
     // เวลาตอนกดเมนู "ลงเวลา" (เปิดหน้านี้) — ใช้เป็นเวลาเข้างานถ้าสแกนเสร็จภายใน 3 นาที (ผู้ใช้ห่วงว่าเปิดหน้าช้าแล้วจะสาย 27/11/69)
     S.openAt = Date.now(); S.openStamp = S.goLeave ? Promise.resolve(null) : call('hrClockStamp').catch(function () { return null; });
     var getId = lid ? Promise.resolve({ liffId: lid }) : call('hrClockInfo');
@@ -216,10 +216,14 @@
       if (d.leaveUrl) lsSet('clk_leave', d.leaveUrl);
       if (S.goLeave && d.leaveUrl) { location.replace(d.leaveUrl); return; }
       var was = S.d;
-      if (d.registered && !d.blocked) lsSet('clk_d', d); else lsSet('clk_d', null);
+      if (!d.blocked) lsSet('clk_d', d); else lsSet('clk_d', null);
       S.d = d;
       if (d.blocked) return fatal(d.blocked);
-      if (!d.registered) return regPage();
+      if (!d.registered) {
+        // หน้าลงทะเบียนจากข้อมูลในเครื่องแสดงอยู่แล้ว: ไม่วาดทับถ้ากำลังเลือกชื่อ / ถ่ายหน้า
+        if (was && was.cached && !was.registered && (sig(was) === sig(d) || document.querySelector('.pp.sel') || !$('vCam').classList.contains('hidden'))) return;
+        return regPage();
+      }
       // แสดงจากข้อมูลในเครื่องไปแล้ว: วาดใหม่เฉพาะเมื่อข้อมูลต่างกัน และไม่วาดทับตอนกำลังสแกน / แสดงผล
       if (was && was.cached) {
         if (sig(was) === sig(d)) return;
@@ -403,10 +407,10 @@
       var save = function () {
         // มั่นใจ = ทุกคู่ห่างกันไม่เกิน 0.45 (ตรวจซ้ำที่เซิร์ฟเวอร์อีกชั้น)
         closeCam(); busy('กำลังบันทึกใบหน้า…');
-        call('hrClockEnroll', [S.tok, p.id, got, photo]).then(function (r) {
+        S.tokP.then(function (tok) { return call('hrClockEnroll', [tok, p.id, got, photo]); }).then(function (r) {
           unbusy();
           if (!r || !r.ok) return regFail((r && r.error) || 'บันทึกไม่สำเร็จ');
-          S.d.registered = true; S.d.emp = r.emp; S.d.rec = null;
+          S.d.registered = true; S.d.emp = r.emp; S.d.rec = null; S.d.cached = false; lsSet('clk_d', null);
           home('<div class="msg info"><b>ลงทะเบียนใบหน้าเรียบร้อย ✓</b>ต่อไปกด "สแกนหน้า เข้างาน" ได้เลย</div>');
         }).catch(function (e) { unbusy(); regFail('เชื่อมต่อไม่ได้ — ตรวจอินเทอร์เน็ตแล้วลองใหม่'); });
       };
